@@ -1,0 +1,149 @@
+import React, { useState } from 'react';
+import { requestPrivateSession } from '@/lib/submitForms';
+
+const SESSION_TYPES = ['30-minute PT session', '45-minute PT session', '60-minute PT session', 'Intro assessment', 'Private coaching block'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
+const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1pm)', 'Afternoon (1–5pm)', 'After work (5–7pm)', 'Evening (7pm+)', 'Flexible'];
+const GOALS = ['Strength', 'Conditioning', 'Weight loss / body composition', 'Rehab / return to fitness', 'Event preparation', 'Sport performance', 'General health'];
+const EXPERIENCE = ['Complete beginner', 'Some experience', 'Regular trainer', 'Advanced'];
+
+function FieldLabel({ children, required }) {
+  return (
+    <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+      {children}{required && <span className="text-xert-red ml-1">*</span>}
+    </label>
+  );
+}
+function Input({ ...props }) {
+  return (
+    <input {...props}
+      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
+  );
+}
+
+export default function PTRequestForm({ onSuccess }) {
+  const [form, setForm] = useState({
+    full_name: '', email: '', phone: '',
+    requested_session_type: '', preferred_day: '', preferred_time: '',
+    training_goal: '', experience_level: '', notes: '',
+    consent_to_contact: false, company_website: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.full_name.trim()) { setError('Full name is required.'); return; }
+    if (!form.email.trim() || !form.email.includes('@')) { setError('Valid email is required.'); return; }
+    if (!form.phone.trim()) { setError('Phone is required.'); return; }
+    if (!form.requested_session_type) { setError('Please select a session type.'); return; }
+    if (!form.consent_to_contact) { setError('Consent to contact is required.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await requestPrivateSession(form);
+      onSuccess?.();
+    } catch {
+      setError('Submission failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <input type="text" name="company_website" value={form.company_website}
+        onChange={e => set('company_website', e.target.value)}
+        className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
+
+      <div><FieldLabel required>Full name</FieldLabel><Input placeholder="Your name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+      <div><FieldLabel required>Email</FieldLabel><Input type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
+      <div><FieldLabel required>Phone</FieldLabel><Input type="tel" placeholder="Mobile" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+
+      <div>
+        <FieldLabel required>Session type</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {SESSION_TYPES.map(t => (
+            <button type="button" key={t} onClick={() => set('requested_session_type', t)}
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.requested_session_type === t ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <FieldLabel>Preferred day</FieldLabel>
+          <select value={form.preferred_day} onChange={e => set('preferred_day', e.target.value)}
+            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <option value="">Any day</option>
+            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <FieldLabel>Preferred time</FieldLabel>
+          <select value={form.preferred_time} onChange={e => set('preferred_time', e.target.value)}
+            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <option value="">Any time</option>
+            {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Training goal</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {GOALS.map(g => (
+            <button type="button" key={g} onClick={() => set('training_goal', g)}
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.training_goal === g ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              {g}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Experience level</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {EXPERIENCE.map(exp => (
+            <button type="button" key={exp} onClick={() => set('experience_level', exp)}
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.experience_level === exp ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              {exp}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Notes</FieldLabel>
+        <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+          rows={2} placeholder="Anything you'd like the coach to know (optional)"
+          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+      </div>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <div onClick={() => set('consent_to_contact', !form.consent_to_contact)}
+          className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.consent_to_contact ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
+          {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
+        </div>
+        <span className="font-body text-sm text-xert-concrete/80">
+          I consent to XERT contacting me about this PT request. <span className="text-xert-red">*</span>
+        </span>
+      </label>
+
+      {error && (
+        <div className="p-3 border border-xert-red/50 bg-xert-red/10">
+          <p className="font-body text-sm text-xert-red">{error}</p>
+        </div>
+      )}
+
+      <button type="submit" disabled={loading}
+        className="w-full py-4 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+        {loading ? 'Requesting...' : 'Request PT session'}
+      </button>
+    </form>
+  );
+}
