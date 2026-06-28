@@ -1,0 +1,40 @@
+import React from 'react';
+import { motion } from 'framer-motion';
+
+const WORDS = ['Beat Your Best', 'Structure', 'Performance', 'Discipline', 'Event Ready', 'Resilience', 'Kingaroy QLD'];
+
+/**
+ * Infinite horizontal marquee band — strong dynamic movement,
+ * architectural divider between sections.
+ */
+export default function Marquee() {
+  const items = [...WORDS, ...WORDS];
+
+  return (
+    <div
+      className="relative overflow-hidden border-y py-5"
+      style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: '#0d1720' }}
+    >
+      <motion.div
+        className="flex whitespace-nowrap"
+        animate={{ x: ['0%', '-50%'] }}
+        transition={{ duration: 28, ease: 'linear', repeat: Infinity }}
+      >
+        {items.map((w, i) => (
+          <span key={i} className="flex items-center shrink-0">
+            <span
+              className="font-display text-2xl sm:text-3xl uppercase tracking-tight mx-6"
+              style={{ color: i % 2 === 0 ? '#D1DDE6' : 'rgba(123,167,188,0.45)' }}
+            >
+              {w}
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full mx-2" style={{ backgroundColor: '#7BA7BC' }} />
+          </span>
+        ))}
+      </motion.div>
+      {/* Edge fades */}
+      <div className="absolute inset-y-0 left-0 w-24" style={{ background: 'linear-gradient(90deg, #0d1720, transparent)' }} />
+      <div className="absolute inset-y-0 right-0 w-24" style={{ background: 'linear-gradient(270deg, #0d1720, transparent)' }} />
+    </div>
+  );
+}
