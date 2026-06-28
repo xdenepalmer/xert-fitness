@@ -61,21 +61,25 @@ module.exports = {
           ring: 'hsl(var(--sidebar-ring))'
         },
         xert: {
-          black: '#080808',
-          ink: '#111111',
-          charcoal: '#1A1A1A',
-          steel: '#3A3D3B',
-          concrete: '#D8D3CA',
-          offwhite: '#F4F0E8',
+          black: '#000000',
+          navy: '#101820',
+          deep: '#32485A',
+          steel: '#7BA7BC',
+          pale: '#D1DDE6',
+          offwhite: '#F1F3F4',
           white: '#FFFFFF',
-          red: '#E23D28',
-          orange: '#F36A21',
+          // legacy compat
+          ink: '#0d1720',
+          charcoal: '#32485A',
+          concrete: '#D1DDE6',
+          red: '#7BA7BC',
+          orange: '#D1DDE6',
         }
       },
       fontFamily: {
-        heading: ['var(--font-heading)'],
-        body: ['var(--font-body)'],
-        display: ['var(--font-display)'],
+        heading: ['Bebas Neue', 'var(--font-heading)', 'Arial Black', 'sans-serif'],
+        body: ['DM Sans', 'var(--font-body)', 'system-ui', 'sans-serif'],
+        display: ['Bebas Neue', 'var(--font-display)', 'Arial Black', 'sans-serif'],
         mono: ['var(--font-mono)']
       },
       keyframes: {

@@ -8,7 +8,7 @@ export default function ThankYou() {
   const shareUrl = encodeURIComponent(window.location.origin);
 
   return (
-    <div className="bg-xert-black min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
       <main className="flex-1 flex items-center justify-center px-6 py-24">

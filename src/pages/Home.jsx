@@ -21,17 +21,17 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="bg-xert-black min-h-screen">
+    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
-      {/* Announcement banner */}
       {settings.announcement_banner_enabled && settings.announcement_banner_text && (
-        <div className="fixed top-14 left-0 right-0 z-30 bg-xert-red py-2 px-4 text-center">
-          <p className="font-body text-sm text-white">{settings.announcement_banner_text}</p>
+        <div className="fixed top-14 left-0 right-0 z-30 py-2 px-4 text-center"
+          style={{ backgroundColor: '#32485A' }}>
+          <p className="font-body text-sm text-xert-offwhite">{settings.announcement_banner_text}</p>
         </div>
       )}
 
-      <main className={settings.announcement_banner_enabled && settings.announcement_banner_text ? 'pt-0' : ''}>
+      <main>
         <Hero />
         <Countdown
           targetDate={settings.target_launch_date || '2026-08-01'}
@@ -44,17 +44,18 @@ export default function Home() {
         <FounderSection />
         <EoiSelector />
 
-        {/* Final CTA section */}
-        <section className="bg-xert-ink py-20 px-6 text-center">
+        {/* Final CTA */}
+        <section className="py-20 px-6 text-center" style={{ backgroundColor: '#101820', borderTop: '1px solid rgba(123,167,188,0.1)' }}>
           <div className="max-w-xl mx-auto">
-            <h2 className="font-display text-[clamp(2rem,5vw,3rem)] text-xert-offwhite uppercase mb-4">
+            <h2 className="font-display uppercase mb-4 text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)' }}>
               Join the foundation list.
             </h2>
-            <p className="font-body text-base text-xert-concrete/70 mb-8">
+            <p className="font-body leading-relaxed mb-8" style={{ color: 'rgba(209,221,230,0.65)', fontSize: '1rem' }}>
               Foundation interest helps shape class times, coaching demand, soft launch capacity and the first timetable.
             </p>
             <a href="#eoi"
-              className="inline-flex items-center justify-center px-8 py-4 bg-xert-red text-white font-display text-lg uppercase hover:bg-xert-orange transition-colors">
+              className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase"
+              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
               Register interest
             </a>
           </div>

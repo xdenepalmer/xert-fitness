@@ -1,87 +1,50 @@
 import React, { useState } from 'react';
 
 const faqs = [
-  {
-    q: 'When is XERT opening?',
-    a: 'XERT is targeting a soft launch in August. This means limited classes and a staged opening as the facility takes shape. The full facility will open in phases after that. Register your interest now to be kept in the loop.',
-  },
-  {
-    q: 'What does soft launch mean?',
-    a: 'During the soft launch, XERT will open for classes with limited capacity while the full setup continues. Not every part of the facility may be available straight away. This lets us get the standard right before scaling up.',
-  },
-  {
-    q: 'Where is XERT based?',
-    a: 'XERT Fitness is located in Kingaroy, Queensland. Exact address details will be confirmed and shared with foundation members before opening.',
-  },
-  {
-    q: 'Do I need to be fit already?',
-    a: 'No. XERT classes are designed to be scalable. Every movement can be adjusted to your current level. Beginners are coached from the start. You do not need any prior experience to join.',
-  },
-  {
-    q: 'Will there be personal training?',
-    a: 'Yes. Personal training is planned as part of the XERT service. You can register your interest in PT via the foundation form, and we will reach out once the schedule is set.',
-  },
-  {
-    q: 'What kind of classes will run?',
-    a: 'XERT is planning six class formats: XERT Foundation (beginner-friendly), XERT Strength, XERT Engine (conditioning and endurance), XERT Hybrid, XERT Event Prep, and XERT Team sessions.',
-  },
-  {
-    q: 'Will this be CrossFit?',
-    a: 'No. XERT is not affiliated with CrossFit. It is an independently developed functional training program with its own structure, standards and coaching approach.',
-  },
-  {
-    q: 'How many people per class?',
-    a: 'During soft launch, class capacity will be limited — likely around 12 people per session. This allows proper coaching and a quality experience while the facility builds out.',
-  },
-  {
-    q: 'Will there be nutrition or allied health support?',
-    a: 'Allied health and specialist support is part of the XERT vision. We are currently collecting expressions of interest from qualified practitioners. If you are a practitioner, you can register via the partner/allied health form.',
-  },
-  {
-    q: 'Is pricing available yet?',
-    a: 'Membership pricing is not confirmed yet. Foundation members who register interest will receive information first. There will be no payments required in the foundation phase.',
-  },
-  {
-    q: 'Can I register as a trainer?',
-    a: 'Yes. Use the Trainer / Coach interest form to tell us about your qualifications, availability and experience. We will review all applications as coaching positions are confirmed.',
-  },
-  {
-    q: 'Can I register as a specialist or partner?',
-    a: 'Yes. Use the Allied Health / Partner interest form. This is open to physios, nutritionists, psychologists, massage therapists, sports dietitians and other qualified practitioners interested in partnering with XERT.',
-  },
+  { q: "When is XERT opening?", a: "Soft launch is planned for August. We'll open in stages — limited class capacity at first, building out as demand and space allow. Register your foundation interest to be notified first." },
+  { q: "What classes will be available?", a: "XERT will offer structured functional training classes across strength, conditioning, hybrid and event-prep formats. All classes are coach-led and properly programmed. Beginner-friendly options will be available." },
+  { q: "Do I need to be fit to join?", a: "No. XERT is built for all levels — from complete beginners to experienced athletes. Coaches scale every session to the individual. The most important thing is showing up and committing to the process." },
+  { q: "What is the event prep focus?", a: "XERT maintains a 12-month calendar of functional fitness events across South East Queensland — including obstacle races, team challenges, endurance events and more. Members can choose an event to train toward and receive specific programming and support." },
+  { q: "Is there personal training available?", a: "Yes. 1-on-1 personal training sessions will be available in addition to group classes. You can request a PT session through the timetable page." },
+  { q: "What allied health services will be available?", a: "XERT is building relationships with physiotherapists, nutritionists, psychologists and other practitioners who will operate inside the facility. This means recovery, injury management and performance support are available without leaving the building." },
+  { q: "Where is XERT located?", a: "XERT is based in Kingaroy, Queensland — exact address to be confirmed closer to the August soft launch." },
+  { q: "How do I register foundation interest?", a: "Use the form on this page. Foundation interest helps us plan class times, coaching demand and first-stage capacity. It's free to register and carries no financial commitment." },
 ];
 
 export default function FAQ() {
   const [open, setOpen] = useState(null);
 
   return (
-    <section className="bg-xert-black py-20 px-6">
+    <section className="py-20 px-6" style={{ backgroundColor: '#0d1720' }}>
       <div className="max-w-3xl mx-auto">
-        {/* Label */}
-        <div className="flex items-center gap-3 mb-10">
-          <div className="h-px w-6 bg-xert-red" />
-          <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Questions</span>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
+          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>FAQ</span>
         </div>
 
-        <h2 className="font-display text-[clamp(2rem,5vw,3rem)] text-xert-offwhite uppercase mb-10">
-          Common questions.
+        <h2 className="font-display uppercase mb-10" style={{ fontSize: 'clamp(2rem,5vw,3rem)', color: '#F1F3F4' }}>
+          Common Questions.
         </h2>
 
         <div className="space-y-0">
           {faqs.map((faq, i) => (
-            <div key={i} className="border-b border-xert-steel/20">
+            <div key={i} className="border-b" style={{ borderColor: 'rgba(123,167,188,0.12)' }}>
               <button
                 onClick={() => setOpen(open === i ? null : i)}
-                className="w-full flex items-center justify-between py-4 text-left group"
+                className="w-full flex items-center justify-between gap-4 py-5 text-left"
               >
-                <span className="font-body text-base text-xert-offwhite group-hover:text-xert-red transition-colors pr-4">
+                <span className="font-body text-base font-medium" style={{ color: open === i ? '#F1F3F4' : '#D1DDE6' }}>
                   {faq.q}
                 </span>
-                <span className={`font-display text-xert-red text-xl transition-transform shrink-0 ${open === i ? 'rotate-45' : ''}`}>+</span>
+                <span className="shrink-0 font-display text-xl" style={{ color: '#7BA7BC' }}>
+                  {open === i ? '−' : '+'}
+                </span>
               </button>
               {open === i && (
-                <div className="pb-5 pr-8">
-                  <p className="font-body text-sm text-xert-concrete/70 leading-relaxed">{faq.a}</p>
+                <div className="pb-5">
+                  <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.65)' }}>
+                    {faq.a}
+                  </p>
                 </div>
               )}
             </div>

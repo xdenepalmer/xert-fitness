@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 
 const eventCategories = [
   'Functional fitness events',
@@ -10,64 +10,60 @@ const eventCategories = [
   'Military-style endurance challenges',
 ];
 
+const PHOTO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/9db07f8bb_marvin-cors-m2z68_2BuyM-unsplash.jpg';
+
 export default function EventWall() {
-  const stripRef = useRef(null);
-
   return (
-    <section className="relative bg-xert-ink overflow-hidden py-20">
-      {/* Grid pattern */}
-      <div className="absolute inset-0 opacity-5"
-        style={{
-          backgroundImage: 'linear-gradient(#F4F0E8 1px, transparent 1px), linear-gradient(90deg, #F4F0E8 1px, transparent 1px)',
-          backgroundSize: '80px 80px'
-        }}
-      />
+    <section className="relative overflow-hidden py-20" style={{ backgroundColor: '#0d1720' }}>
+      {/* Background photo strip */}
+      <div className="absolute inset-0 opacity-10">
+        <img src={PHOTO} alt="" className="w-full h-full object-cover"
+          style={{ filter: 'saturate(0.3) brightness(0.5)' }} />
+      </div>
 
-      {/* Top accent line */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-xert-red to-xert-orange" />
+      {/* Top accent */}
+      <div className="absolute top-0 left-0 right-0 h-px" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
 
       <div className="relative max-w-5xl mx-auto px-6">
-        {/* Label */}
         <div className="flex items-center gap-3 mb-8">
-          <div className="h-px w-6 bg-xert-orange" />
-          <span className="font-body text-xs text-xert-orange uppercase tracking-[0.2em]">The Goal</span>
+          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
+          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>The Goal</span>
         </div>
 
-        {/* Headline */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           <div>
-            <h2 className="font-display text-[clamp(2.5rem,6vw,4.5rem)] leading-tight text-xert-offwhite uppercase">
+            <h2 className="font-display uppercase"
+              style={{ fontSize: 'clamp(2.5rem,6vw,4.5rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
               Train toward<br />
-              <span className="text-xert-orange">something.</span>
+              <span style={{ color: '#7BA7BC' }}>something.</span>
             </h2>
           </div>
           <div className="flex flex-col justify-end">
-            <p className="font-body text-base text-xert-concrete/70 leading-relaxed mb-6">
+            <p className="font-body text-base leading-relaxed mb-6" style={{ color: 'rgba(209,221,230,0.7)' }}>
               Most people train harder when there is something ahead of them. XERT will build around a calendar of functional fitness, endurance, team and challenge events. Members can choose a goal, understand what it requires and train with more purpose.
             </p>
-            <a href="#eoi"
-              className="inline-flex items-center gap-2 font-body text-sm text-xert-orange hover:text-xert-offwhite transition-colors group">
+            <a href="#eoi" className="inline-flex items-center gap-2 font-body text-sm transition-colors group"
+              style={{ color: '#7BA7BC' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#F1F3F4'}
+              onMouseLeave={e => e.currentTarget.style.color = '#7BA7BC'}>
               <span>Tell us what you'd train for</span>
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
+              <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
             </a>
           </div>
         </div>
 
-        {/* Event category horizontal strip */}
-        <div
-          ref={stripRef}
-          className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2"
-        >
+        {/* Event strip */}
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2">
           {eventCategories.map((cat, i) => (
-            <div
-              key={i}
-              className="flex-shrink-0 px-4 py-3 border border-xert-steel/40 hover:border-xert-orange transition-colors cursor-default"
-            >
-              <span className="font-body text-sm text-xert-concrete/80 whitespace-nowrap">{cat}</span>
+            <div key={i} className="flex-shrink-0 px-4 py-3 border transition-colors cursor-default"
+              style={{ borderColor: 'rgba(123,167,188,0.2)', backgroundColor: 'rgba(50,72,90,0.2)' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'}>
+              <span className="font-body text-sm whitespace-nowrap" style={{ color: 'rgba(209,221,230,0.8)' }}>{cat}</span>
             </div>
           ))}
         </div>
-        <p className="font-body text-xs text-xert-concrete/30 mt-3 text-center lg:text-left">Scroll to see all event categories</p>
+        <p className="font-body text-xs mt-3 text-center lg:text-left" style={{ color: 'rgba(209,221,230,0.25)' }}>Scroll to see all event categories</p>
       </div>
     </section>
   );

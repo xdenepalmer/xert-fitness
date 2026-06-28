@@ -1,128 +1,183 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
-const proofPoints = [
-  'Soft launch August',
-  'Limited foundation capacity',
-  'Group training planned',
-  '1-on-1 PT planned',
-  'Event-prep calendar',
-  'Workshops and specialist support planned',
+// Uploaded training photos
+const PHOTOS = [
+  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/c59c7f1fd_IMG_5040.jpg',
+  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/96b56ee6c_IMG_5041.jpg',
+  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1fb3d6d4e_justin-fisher-k4-H6EO86yY-unsplash.jpg',
+  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1e45b8aa7_marvin-cors-3CQm9H6oJhM-unsplash.jpg',
+  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/9db07f8bb_marvin-cors-m2z68_2BuyM-unsplash.jpg',
 ];
 
+const LOGO_WHITE = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/ffb8ab471_Logo_xert_final-10.jpg';
+const LOGO_FULL_WHITE = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/a1601f524_Logo_xert_final-01.png';
+
+const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Resilience', 'Community', 'Education', 'Preparation'];
+
 export default function Hero() {
+  const [photoIndex, setPhotoIndex] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setPhotoIndex(i => (i + 1) % PHOTOS.length), 5000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <section className="relative min-h-screen bg-xert-black overflow-hidden flex flex-col">
-      {/* Top label bar */}
-      <div className="border-b border-xert-steel/30 px-6 py-3 flex items-center justify-between">
-        <span className="font-body text-xs tracking-[0.2em] text-xert-concrete/60 uppercase">
-          Kingaroy / Functional Fitness / Soft Launch August
-        </span>
-        <span className="hidden sm:block font-body text-xs text-xert-concrete/40 uppercase tracking-widest">
-          Queensland
-        </span>
-      </div>
+    <section className="relative min-h-screen flex flex-col overflow-hidden bg-xert-navy">
+      {/* Background photo with blue-steel grade overlay */}
+      {PHOTOS.map((src, i) => (
+        <div
+          key={src}
+          className="absolute inset-0 transition-opacity duration-1000"
+          style={{ opacity: i === photoIndex ? 1 : 0 }}
+        >
+          <img
+            src={src}
+            alt=""
+            className="w-full h-full object-cover object-center"
+            style={{ filter: 'saturate(0.5) brightness(0.38)' }}
+          />
+        </div>
+      ))}
 
-      {/* Main hero grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 min-h-0">
-        {/* Left — Brand + Copy */}
-        <div className="flex flex-col justify-between px-6 pt-8 pb-8 lg:px-12 lg:pt-12 lg:pb-12 border-r border-xert-steel/20">
-          {/* Wordmark */}
+      {/* Steel-blue gradient overlay — brand direction */}
+      <div className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(160deg, rgba(16,24,32,0.92) 0%, rgba(50,72,90,0.65) 50%, rgba(16,24,32,0.97) 100%)'
+        }}
+      />
+
+      {/* Top fine line */}
+      <div className="absolute top-0 left-0 right-0 h-0.5"
+        style={{ background: 'linear-gradient(90deg, transparent, #7BA7BC, transparent)' }}
+      />
+
+      {/* Nav spacer */}
+      <div className="relative z-10 h-14" />
+
+      {/* Main hero content */}
+      <div className="relative z-10 flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-8 pb-20">
+        <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+
+          {/* Left — brand + copy */}
           <div>
-            <div className="mb-2">
-              <h1 className="font-display text-[clamp(5rem,18vw,11rem)] leading-none tracking-tight text-xert-white font-black uppercase">
-                XERT
-              </h1>
-              <p className="font-display text-[clamp(1.4rem,4vw,2.4rem)] leading-none tracking-[0.15em] text-xert-concrete/70 uppercase -mt-1 ml-1">
-                FITNESS
-              </p>
+            {/* Logo lockup */}
+            <div className="mb-8">
+              <img
+                src={LOGO_FULL_WHITE}
+                alt="XERT Fitness"
+                className="h-16 sm:h-20 w-auto object-contain"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
             </div>
 
-            {/* Accent line */}
-            <div className="flex items-center gap-3 my-6">
-              <div className="h-0.5 w-8 bg-xert-red" />
-              <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Kingaroy, QLD</span>
+            {/* Campaign line */}
+            <div className="mb-6 flex items-center gap-3">
+              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
+              <span className="font-body text-xs uppercase tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Beat Your Best</span>
             </div>
 
-            {/* Headline */}
-            <h2 className="font-display text-[clamp(1.5rem,4vw,2.8rem)] leading-tight text-xert-offwhite uppercase mb-4">
-              Kingaroy functional training,<br />
-              <span className="text-xert-red">built around purpose.</span>
-            </h2>
+            {/* Main headline */}
+            <h1 className="font-display text-[clamp(3rem,10vw,7rem)] leading-[0.9] text-xert-offwhite uppercase mb-6 tracking-tight">
+              Kingaroy<br />
+              <span style={{ color: '#D1DDE6' }}>Functional</span><br />
+              Training.
+            </h1>
 
-            {/* Subheadline */}
-            <p className="font-body text-base text-xert-concrete/80 leading-relaxed max-w-md mb-8">
-              A new functional training facility opening in stages, combining strength, conditioning, endurance, coaching, community and event preparation.
+            {/* Descriptor */}
+            <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
+              Built around purpose. Structured classes, event preparation, personal coaching and allied health — all under one roof.
+            </p>
+            <p className="font-body text-sm leading-relaxed mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
+              Train with structure, build resilience and prepare for more.
             </p>
 
+            {/* Soft launch badge */}
+            <div className="flex items-center gap-3 mb-8">
+              <div className="flex items-center gap-2 px-3 py-1.5 border" style={{ borderColor: 'rgba(123,167,188,0.4)' }}>
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
+                <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>Soft Launch — August</span>
+              </div>
+              <span className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>Limited foundation capacity</span>
+            </div>
+
             {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-10">
+            <div className="flex flex-col sm:flex-row gap-3">
               <a href="#eoi"
-                className="inline-flex items-center justify-center px-6 py-4 bg-xert-red text-white font-display text-lg uppercase tracking-wide hover:bg-xert-orange transition-colors">
-                Register foundation interest
+                className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all"
+                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
+                Register Foundation Interest
               </a>
               <Link to="/timetable"
-                className="inline-flex items-center justify-center px-6 py-4 border border-xert-steel text-xert-concrete font-display text-lg uppercase tracking-wide hover:border-xert-concrete transition-colors">
-                View soft launch plan
+                className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide border transition-all"
+                style={{ borderColor: 'rgba(123,167,188,0.5)', color: '#D1DDE6' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#D1DDE6'; }}>
+                View Soft Launch Plan
               </Link>
             </div>
           </div>
 
-          {/* Proof points */}
-          <div className="grid grid-cols-2 gap-2">
-            {proofPoints.map((point, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-xert-red mt-0.5 text-xs">▸</span>
-                <span className="font-body text-xs text-xert-concrete/70">{point}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right — Visual area */}
-        <div className="relative hidden lg:flex flex-col bg-xert-ink overflow-hidden min-h-[500px]">
-          {/* Training shed composition placeholder */}
-          <div className="absolute inset-0 bg-gradient-to-br from-xert-charcoal via-xert-ink to-xert-black" />
-          
-          {/* Grid lines — industrial feel */}
-          <div className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: 'linear-gradient(#3A3D3B 1px, transparent 1px), linear-gradient(90deg, #3A3D3B 1px, transparent 1px)',
-              backgroundSize: '60px 60px'
-            }}
-          />
-
-          {/* Large XERT mark watermark */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-5">
-            <span className="font-display text-[20rem] leading-none text-white font-black select-none">X</span>
-          </div>
-
-          {/* Stats overlay — bottom of visual */}
-          <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-xert-black/90 to-transparent">
-            <div className="grid grid-cols-3 gap-4 border-t border-xert-steel/30 pt-6">
-              <div>
-                <p className="font-display text-3xl text-xert-red tabular-nums">AUG</p>
-                <p className="font-body text-xs text-xert-concrete/60 uppercase tracking-wider mt-1">Soft Launch</p>
-              </div>
-              <div>
-                <p className="font-display text-3xl text-xert-offwhite tabular-nums">6</p>
-                <p className="font-body text-xs text-xert-concrete/60 uppercase tracking-wider mt-1">Class Types</p>
-              </div>
-              <div>
-                <p className="font-display text-3xl text-xert-orange tabular-nums">1</p>
-                <p className="font-body text-xs text-xert-concrete/60 uppercase tracking-wider mt-1">Location, Kingaroy</p>
+          {/* Right — feature photo */}
+          <div className="hidden lg:block relative">
+            <div className="relative aspect-[3/4] overflow-hidden">
+              <img
+                src={PHOTOS[photoIndex]}
+                alt="XERT Training"
+                className="w-full h-full object-cover transition-opacity duration-700"
+                style={{ filter: 'saturate(0.7) brightness(0.75)' }}
+              />
+              {/* Blue vignette on photo */}
+              <div className="absolute inset-0"
+                style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.3) 0%, transparent 40%, rgba(16,24,32,0.7) 100%)' }}
+              />
+              {/* Photo label */}
+              <div className="absolute bottom-4 left-4 right-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.4)' }} />
+                  <span className="font-body text-xs uppercase tracking-widest" style={{ color: '#7BA7BC' }}>Kingaroy, QLD</span>
+                </div>
               </div>
             </div>
+            {/* BEAT YOUR BEST watermark */}
+            <div className="absolute -right-4 top-1/2 -translate-y-1/2 font-display text-[5rem] leading-none uppercase -rotate-90 origin-right"
+              style={{ color: 'rgba(123,167,188,0.06)', whiteSpace: 'nowrap' }}>
+              Beat Your Best
+            </div>
           </div>
-
-          {/* Corner accent */}
-          <div className="absolute top-0 right-0 w-32 h-1 bg-xert-red" />
-          <div className="absolute top-0 right-0 w-1 h-32 bg-xert-red" />
         </div>
       </div>
 
-      {/* Mobile visual strip */}
-      <div className="lg:hidden h-2 bg-gradient-to-r from-xert-red to-xert-orange" />
+      {/* Values strip */}
+      <div className="relative z-10 border-t" style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(16,24,32,0.85)', backdropFilter: 'blur(8px)' }}>
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-0 overflow-x-auto scrollbar-hide">
+          {VALUES.map((v, i) => (
+            <React.Fragment key={v}>
+              <span className="font-display text-sm uppercase tracking-[0.15em] whitespace-nowrap shrink-0 py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
+              {i < VALUES.length - 1 && <span className="mx-4 shrink-0" style={{ color: 'rgba(123,167,188,0.25)' }}>·</span>}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats bar */}
+      <div className="relative z-10" style={{ backgroundColor: 'rgba(50,72,90,0.6)', backdropFilter: 'blur(8px)' }}>
+        <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
+          {[
+            { label: 'Soft Launch', value: 'August' },
+            { label: 'Class Types', value: '6+' },
+            { label: 'Location', value: 'Kingaroy QLD' },
+          ].map((stat, i) => (
+            <div key={i} className={`px-6 ${i === 0 ? 'pl-0' : ''} ${i === 2 ? 'pr-0' : ''}`}>
+              <p className="font-body text-xs uppercase tracking-wider mb-1" style={{ color: '#7BA7BC' }}>{stat.label}</p>
+              <p className="font-display text-xl text-xert-offwhite uppercase">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

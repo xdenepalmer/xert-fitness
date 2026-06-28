@@ -1,26 +1,26 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+const LOGO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/a1601f524_Logo_xert_final-01.png';
+
 export default function PublicFooter() {
   return (
-    <footer className="bg-xert-ink border-t border-xert-steel/20 py-12 px-6">
+    <footer className="py-12 px-6" style={{ backgroundColor: '#0d1720', borderTop: '1px solid rgba(123,167,188,0.1)' }}>
       <div className="max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
           {/* Brand */}
           <div>
-            <div className="mb-4">
-              <span className="font-display text-3xl text-xert-offwhite font-black uppercase block">XERT</span>
-              <span className="font-display text-xs text-xert-concrete/40 uppercase tracking-widest">FITNESS</span>
-            </div>
-            <p className="font-body text-xs text-xert-concrete/50 leading-relaxed">
+            <img src={LOGO} alt="XERT Fitness" className="h-8 w-auto mb-4 opacity-90"
+              style={{ filter: 'brightness(0) invert(1)' }} />
+            <p className="font-body text-xs leading-relaxed mb-3" style={{ color: 'rgba(209,221,230,0.5)' }}>
               A new functional training facility opening in Kingaroy, Queensland. Soft launch August.
             </p>
-            <p className="font-body text-xs text-xert-concrete/30 mt-3 uppercase tracking-wider">Veteran owned.</p>
+            <p className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(123,167,188,0.4)' }}>Veteran owned. Beat Your Best.</p>
           </div>
 
           {/* Links */}
           <div>
-            <p className="font-display text-xs text-xert-concrete/40 uppercase tracking-widest mb-4">Navigate</p>
+            <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Navigate</p>
             <div className="space-y-2">
               {[
                 { to: '/', label: 'Home' },
@@ -28,30 +28,40 @@ export default function PublicFooter() {
                 { to: '/trainer-interest', label: 'Coach Interest' },
                 { to: '/partner-interest', label: 'Partner / Allied Health' },
               ].map(l => (
-                <Link key={l.to} to={l.to} className="block font-body text-sm text-xert-concrete/60 hover:text-xert-red transition-colors">{l.label}</Link>
+                <Link key={l.to} to={l.to}
+                  className="block font-body text-sm transition-colors"
+                  style={{ color: 'rgba(209,221,230,0.55)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#7BA7BC'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(209,221,230,0.55)'}>
+                  {l.label}
+                </Link>
               ))}
             </div>
           </div>
 
           {/* CTA */}
           <div>
-            <p className="font-display text-xs text-xert-concrete/40 uppercase tracking-widest mb-4">Foundation List</p>
-            <p className="font-body text-sm text-xert-concrete/60 mb-4">
+            <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Foundation List</p>
+            <p className="font-body text-sm mb-4" style={{ color: 'rgba(209,221,230,0.55)' }}>
               Register your interest to help shape the soft launch timetable and class capacity.
             </p>
             <a href="#eoi"
-              className="inline-flex items-center px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+              className="inline-flex items-center px-5 py-2.5 font-display text-sm uppercase tracking-wide transition-all"
+              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
               Register interest
             </a>
           </div>
         </div>
 
-        <div className="border-t border-xert-steel/20 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="font-body text-xs text-xert-concrete/30">
+        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3"
+          style={{ borderTop: '1px solid rgba(123,167,188,0.1)' }}>
+          <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.25)' }}>
             XERT Fitness, Kingaroy QLD. Soft launch August.
           </p>
-          <p className="font-body text-xs text-xert-concrete/20">
-            Train toward something.
+          <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.2)' }}>
+            Beat Your Best.
           </p>
         </div>
       </div>

@@ -1,52 +1,59 @@
 import React from 'react';
 
+const PHOTO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1fb3d6d4e_justin-fisher-k4-H6EO86yY-unsplash.jpg';
+
 const pillars = [
-  { label: 'Functional Strength', desc: 'Movement patterns that transfer to real life and sport.' },
-  { label: 'Conditioning', desc: 'Engine work. Capacity built over time, not in a single session.' },
-  { label: 'Endurance', desc: 'Sustained output. Building the base for events and long days.' },
-  { label: 'Movement Quality', desc: 'Standards matter. Getting it right before adding load.' },
-  { label: 'Scalable Classes', desc: 'Every class can be adjusted. You work at your level.' },
-  { label: 'Team Training', desc: 'Shared goals, shared effort. Community built through work.' },
-  { label: 'Personal Training', desc: 'Private sessions for focused progress and individual coaching.' },
-  { label: 'Event Readiness', desc: 'Training with a goal on the calendar changes everything.' },
+  { label: 'Functional Movement', desc: 'Strength, power and conditioning built on real-world patterns.' },
+  { label: 'Structured Programming', desc: 'Every class is coached and purposefully programmed.' },
+  { label: 'Event-Led Training', desc: 'A 12-month calendar of events gives members real goals.' },
+  { label: 'All Levels Welcome', desc: 'From first-timers to experienced athletes.' },
+  { label: 'Coach-Led Classes', desc: 'No guesswork — your coach leads every session.' },
+  { label: 'Allied Health Integration', desc: 'Recovery and support built into the facility.' },
 ];
 
 export default function TrainingStyle() {
   return (
-    <section className="bg-xert-charcoal py-20 px-6">
+    <section className="py-20 px-6 relative" style={{ backgroundColor: '#101820' }}>
       <div className="max-w-5xl mx-auto">
-        {/* Label */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="h-px w-6 bg-xert-red" />
-          <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Training Style</span>
-        </div>
-
-        {/* Headline */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          <div className="lg:col-span-2">
-            <h2 className="font-display text-[clamp(2rem,5vw,3.8rem)] leading-tight text-xert-offwhite uppercase">
-              Strength.<br />Engine.<br />
-              <span className="text-xert-red">Standards.</span>
+        {/* Header with photo */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16 items-center">
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
+              <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>How We Train</span>
+            </div>
+            <h2 className="font-display uppercase mb-6"
+              style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
+              Structure.<br />
+              <span style={{ color: '#7BA7BC' }}>Purpose.</span><br />
+              Performance.
             </h2>
-          </div>
-          <div className="flex items-end">
-            <p className="font-display text-xl text-xert-concrete/60 uppercase">
-              Serious training,<br />made accessible.
+            <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.7)', fontSize: '0.9375rem' }}>
+              XERT is not a commercial gym. Everything is coached, programmed and built around helping members improve — whether the goal is general fitness, event preparation or strength.
             </p>
           </div>
+          <div className="relative aspect-video lg:aspect-square overflow-hidden">
+            <img src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
+              style={{ filter: 'saturate(0.65) brightness(0.7)' }} />
+            <div className="absolute inset-0"
+              style={{ background: 'linear-gradient(135deg, rgba(16,24,32,0.5) 0%, transparent 60%)' }} />
+            {/* Beat your best overlay */}
+            <div className="absolute bottom-4 left-4">
+              <p className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.6)' }}>Beat Your Best</p>
+            </div>
+          </div>
         </div>
 
-        {/* Pillar grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-xert-steel/20">
+        {/* Pillars */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {pillars.map((p, i) => (
-            <div key={i} className="bg-xert-charcoal p-6 hover:bg-xert-ink transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="font-display text-xs text-xert-red uppercase tracking-widest">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
+            <div key={i} className="p-5 border"
+              style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(50,72,90,0.15)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#7BA7BC' }} />
+                <p className="font-display text-base uppercase text-xert-offwhite">{p.label}</p>
               </div>
-              <h3 className="font-display text-lg text-xert-offwhite uppercase mb-2">{p.label}</h3>
-              <p className="font-body text-xs text-xert-concrete/60 leading-relaxed">{p.desc}</p>
+              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.6)' }}>{p.desc}</p>
             </div>
           ))}
         </div>
