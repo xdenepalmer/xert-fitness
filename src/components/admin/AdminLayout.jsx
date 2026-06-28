@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 const NAV_ITEMS = [
   { key: 'overview', label: 'Overview', icon: '◈' },
@@ -16,6 +18,7 @@ const NAV_ITEMS = [
 
 export default function AdminLayout({ activeSection, onSectionChange, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, signOut } = useSupabaseAuth();
 
   return (
     <div className="min-h-screen bg-xert-black flex">
@@ -48,8 +51,17 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
           ))}
         </nav>
 
-        {/* Public link */}
-        <div className="p-4 border-t border-xert-steel/20">
+        {/* Footer: account + public link */}
+        <div className="p-4 border-t border-xert-steel/20 space-y-3">
+          {user?.email && (
+            <p className="font-body text-xs text-center text-xert-concrete/30 truncate" title={user.email}>{user.email}</p>
+          )}
+          <button
+            onClick={signOut}
+            className="w-full flex items-center justify-center gap-2 py-2 font-body text-xs text-xert-concrete/40 hover:text-xert-offwhite uppercase tracking-wider transition-colors border border-xert-steel/20 hover:border-xert-steel/40"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Sign out
+          </button>
           <Link to="/" className="block text-center font-body text-xs text-xert-concrete/30 hover:text-xert-concrete/60 uppercase tracking-wider transition-colors">
             ← View public site
           </Link>

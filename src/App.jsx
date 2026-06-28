@@ -4,6 +4,8 @@ import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { SupabaseAuthProvider } from '@/lib/SupabaseAuthContext';
+import AdminRoute from '@/components/admin/AdminRoute';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -50,8 +52,8 @@ const AuthenticatedApp = () => {
       {/* ADMIN — currently accessible to any authenticated user.
           IMPORTANT: Implement Supabase RLS + role check before real use.
           See setup notes in the project documentation. */}
-      <Route path="/admin" element={<AdminCommandCentre />} />
-      <Route path="/admin/*" element={<AdminCommandCentre />} />
+      <Route path="/admin" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
@@ -60,13 +62,15 @@ const AuthenticatedApp = () => {
 function App() {
   return (
     <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <ScrollToTop />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
+      <SupabaseAuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <ScrollToTop />
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </SupabaseAuthProvider>
     </AuthProvider>
   );
 }
