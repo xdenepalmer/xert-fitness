@@ -24,9 +24,12 @@ export default function PublicFooter() {
             <div className="space-y-2">
               {[
                 { to: '/', label: 'Home' },
+                { to: '/about', label: 'About XERT' },
+                { to: '/training-guide', label: 'Training Guide' },
                 { to: '/timetable', label: 'Soft Launch / Timetable' },
                 { to: '/trainer-interest', label: 'Coach Interest' },
                 { to: '/partner-interest', label: 'Partner / Allied Health' },
+                { to: '/contact', label: 'Contact' },
               ].map(l => (
                 <Link key={l.to} to={l.to}
                   className="block font-body text-sm transition-colors"

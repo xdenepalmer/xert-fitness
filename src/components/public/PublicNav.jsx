@@ -17,8 +17,9 @@ export default function PublicNav() {
   const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/timetable', label: 'Timetable' },
+    { to: '/about', label: 'About' },
     { to: '/trainer-interest', label: 'Coaches' },
-    { to: '/partner-interest', label: 'Partners' },
+    { to: '/contact', label: 'Contact' },
   ];
 
   const navBg = scrolled

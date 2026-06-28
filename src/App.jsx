@@ -14,6 +14,9 @@ import TrainerInterest from './pages/TrainerInterest';
 import PartnerInterest from './pages/PartnerInterest';
 import SoftLaunchTimetable from './pages/SoftLaunchTimetable';
 import AdminCommandCentre from './pages/AdminCommandCentre';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import TrainingGuide from './pages/TrainingGuide';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -41,6 +44,9 @@ const AuthenticatedApp = () => {
       <Route path="/trainer-interest" element={<TrainerInterest />} />
       <Route path="/partner-interest" element={<PartnerInterest />} />
       <Route path="/timetable" element={<SoftLaunchTimetable />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/contact" element={<Contact />} />
+      <Route path="/training-guide" element={<TrainingGuide />} />
       {/* ADMIN — currently accessible to any authenticated user.
           IMPORTANT: Implement Supabase RLS + role check before real use.
           See setup notes in the project documentation. */}
