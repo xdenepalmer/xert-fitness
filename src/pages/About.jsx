@@ -2,8 +2,20 @@ import React from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import { useSiteContent } from '@/lib/siteContent';
+
+const ABOUT_DEFAULTS = {
+  paragraphs: [
+    'XERT Fitness is a semi-private functional fitness studio based in Kingaroy, Queensland. We exist to help everyday people through to athletes train with structure and purpose. Every class at XERT is coached and deliberately programmed, blending strength, conditioning, movement quality and long-term performance.',
+    'Our programming follows the South East Queensland sporting and fitness calendar, so members always have a real goal ahead of them. Whether you are training for general fitness, preparing for a specific event, or chasing a strength milestone, your coach leads every session and helps you understand what the goal in front of you requires.',
+    'The training system combines structured functional fitness classes, an accessory training area, and support for health, performance, recovery and nutrition. Sessions are scalable, booking-based and designed to maintain coaching quality while helping members train consistently.',
+    'XERT is built around a simple philosophy: train for life, compete for fun. Members choose events, train together and build toward shared goals throughout the year.',
+  ],
+};
 
 export default function About() {
+  const content = useSiteContent('about', ABOUT_DEFAULTS);
+  const paragraphs = content.paragraphs?.length > 0 ? content.paragraphs : ABOUT_DEFAULTS.paragraphs;
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
@@ -18,25 +30,14 @@ export default function About() {
         </h1>
 
         <div className="space-y-5 font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.78)', fontSize: '1.0625rem' }}>
-          <p>
-            XERT Fitness is a semi-private functional fitness studio based in Kingaroy, Queensland. We exist to help everyday people through to athletes train with structure and purpose. Every class at XERT is coached and deliberately programmed, blending strength, conditioning, movement quality and long-term performance.
-        </p>
-        <p>
-          Our programming follows the South East Queensland sporting and fitness calendar, so members always have a real goal ahead of them. Whether you are training for general fitness, preparing for a specific event, or chasing a strength milestone, your coach leads every session and helps you understand what the goal in front of you requires.
-        </p>
-        <p>
-          The training system combines structured functional fitness classes, an accessory training area, and support for health, performance, recovery and nutrition. Sessions are scalable, booking-based and designed to maintain coaching quality while helping members train consistently.
-        </p>
-        <p>
-          XERT is built around a simple philosophy: train for life, compete for fun. Members choose events, train together and build toward shared goals throughout the year.
-        </p>
+          {paragraphs.map((p, i) => <p key={i}>{p}</p>)}
         </div>
 
         <div className="mt-12 pt-8" style={{ borderTop: '1px solid rgba(123,167,188,0.12)' }}>
-          <a href="/#eoi"
+          <a href="/booking"
             className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-            Register Foundation Interest
+            Book Your First Session
           </a>
         </div>
       </main>

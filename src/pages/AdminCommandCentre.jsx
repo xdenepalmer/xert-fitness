@@ -20,7 +20,7 @@ export default function AdminCommandCentre() {
 
   const renderSection = () => {
     switch (section) {
-      case 'overview': return <AdminOverview />;
+      case 'overview': return <AdminOverview onNavigate={setSection} />;
       case 'members': return <LeadTable type="member" />;
       case 'trainers': return <LeadTable type="trainer" />;
       case 'partners': return <LeadTable type="partner" />;
@@ -36,7 +36,7 @@ export default function AdminCommandCentre() {
       case 'availability': return <AvailabilityManager />;
       case 'settings': return <SoftLaunchSettings />;
       case 'campaigns': return <CampaignStats />;
-      default: return <AdminOverview />;
+      default: return <AdminOverview onNavigate={setSection} />;
     }
   };
 

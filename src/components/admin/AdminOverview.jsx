@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import {
+  DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
+  PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
+} from 'lucide-react';
 import AdminStatCard from './AdminStatCard';
-import { getDashboardStats, getSoftLaunchSettings, getDefaultSettings, getBusinessStats } from '@/lib/adminData';
+import {
+  getDashboardStats, getSoftLaunchSettings, getDefaultSettings,
+  getBusinessStats, getAllOrders, adminListMembers,
+} from '@/lib/adminData';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -10,9 +17,26 @@ function getCountdown(targetDate) {
   return `${days}d`;
 }
 
-export default function AdminOverview() {
+function timeAgo(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+const QUICK_ACTIONS = [
+  { key: 'calendar', label: 'New Class', icon: CalendarDays, hint: 'Schedule & publish' },
+  { key: 'coaches', label: 'Add Coach', icon: UserSquare2, hint: 'Team profiles' },
+  { key: 'events', label: 'Add Event', icon: Trophy, hint: 'SE QLD calendar' },
+  { key: 'content', label: 'Edit Site Copy', icon: PenSquare, hint: 'Hero, contact, FAQ' },
+];
+
+export default function AdminOverview({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [biz, setBiz] = useState(null);
+  const [activity, setActivity] = useState(null);
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,10 +46,29 @@ export default function AdminOverview() {
       getDashboardStats(),
       getSoftLaunchSettings(),
       getBusinessStats().catch(() => null),
-    ]).then(([s, cfg, b]) => {
+      Promise.all([getAllOrders().catch(() => []), adminListMembers().catch(() => [])])
+        .then(([orders, members]) => {
+          const feed = [
+            ...orders.slice(0, 6).map(o => ({
+              type: 'order',
+              at: o.paid_at || o.created_at,
+              title: `${o.products?.name || 'Session pack'} — $${((o.amount_cents || 0) / 100).toFixed(2)}`,
+              sub: o.email || 'unknown buyer',
+            })),
+            ...members.slice(0, 6).map(m => ({
+              type: 'member',
+              at: m.joined_at,
+              title: m.full_name || m.email || 'New member',
+              sub: 'Created an account',
+            })),
+          ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 7);
+          return feed;
+        }),
+    ]).then(([s, cfg, b, feed]) => {
       setStats(s);
       if (cfg) setSettings(cfg);
       setBiz(b);
+      setActivity(feed);
       setLoading(false);
     }).catch(e => {
       setError(e.message);
@@ -33,111 +76,172 @@ export default function AdminOverview() {
     });
   }, []);
 
+  const countdown = getCountdown(settings.target_launch_date);
+
   return (
     <div className="p-6 space-y-8">
       {error && (
-        <div className="bg-xert-red/10 border border-xert-red/30 p-4">
-          <p className="font-body text-sm text-xert-red">Supabase error: {error}</p>
-          <p className="font-body text-xs text-xert-concrete/50 mt-1">Check your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables and Supabase table setup.</p>
+        <div className="p-4" style={{ backgroundColor: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)' }}>
+          <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Supabase error: {error}</p>
         </div>
       )}
 
-      {/* Business stats */}
-      <div>
-        <h2 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Business</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <AdminStatCard label="Revenue (total)" value={biz ? `$${(biz.totalRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} accent />
-          <AdminStatCard label="Revenue this month" value={biz ? `$${(biz.monthRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} />
-          <AdminStatCard label="Registered members" value={biz?.memberCount} loading={loading} />
-          <AdminStatCard label="Active class credits" value={biz?.activeCredits} loading={loading} />
+      {/* ── Header strip ── */}
+      <div className="relative p-6 overflow-hidden"
+        style={{
+          background: 'linear-gradient(120deg, rgba(50,72,90,0.4) 0%, rgba(16,24,32,0.7) 60%)',
+          border: '1px solid rgba(123,167,188,0.2)',
+        }}>
+        <div className="absolute inset-0 pointer-events-none" style={{
+          backgroundImage: 'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }} />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-body text-[11px] uppercase tracking-[0.25em] mb-2" style={{ color: '#7BA7BC' }}>
+              {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+            <h2 className="font-display text-3xl uppercase leading-none" style={{ color: '#F1F3F4' }}>
+              Beat Your Best.
+            </h2>
+          </div>
+          {countdown && (
+            <div className="flex items-center gap-3 px-4 py-3"
+              style={{ backgroundColor: 'rgba(123,167,188,0.12)', border: '1px solid rgba(123,167,188,0.35)' }}>
+              <Rocket className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+              <div>
+                <p className="font-display text-xl leading-none tabular-nums" style={{ color: '#F1F3F4' }}>{countdown}</p>
+                <p className="font-body text-[10px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                  to launch · {settings.target_launch_date}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Primary stats */}
+      {/* ── Quick actions ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {QUICK_ACTIONS.map(a => {
+          const Icon = a.icon;
+          return (
+            <button key={a.key} onClick={() => onNavigate?.(a.key)}
+              className="flex items-center gap-3 p-4 text-left transition-all group"
+              style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.16)'}>
+              <div className="w-9 h-9 shrink-0 flex items-center justify-center transition-colors"
+                style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
+                <Icon className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+              </div>
+              <div className="min-w-0">
+                <p className="font-display text-sm uppercase leading-none flex items-center gap-1.5" style={{ color: '#F1F3F4' }}>
+                  {a.label}
+                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />
+                </p>
+                <p className="font-body text-[11px] mt-1 truncate" style={{ color: 'rgba(209,221,230,0.4)' }}>{a.hint}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Business ── */}
       <div>
-        <h2 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Foundation Interest</h2>
+        <h2 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>Business</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <AdminStatCard label="Total member leads" value={stats?.totalMembers} loading={loading} accent />
-          <AdminStatCard label="New this week" value={stats?.newThisWeek} loading={loading} />
-          <AdminStatCard label="Trainer applicants" value={stats?.trainerApplicants} loading={loading} />
-          <AdminStatCard label="Partner enquiries" value={stats?.partnerEnquiries} loading={loading} />
+          <AdminStatCard icon={DollarSign} label="Revenue (total)" value={biz ? `$${(biz.totalRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} accent />
+          <AdminStatCard icon={DollarSign} label="Revenue this month" value={biz ? `$${(biz.monthRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} />
+          <AdminStatCard icon={Users} label="Registered members" value={biz?.memberCount} loading={loading} />
+          <AdminStatCard icon={Ticket} label="Active class credits" value={biz?.activeCredits} loading={loading} />
         </div>
       </div>
 
-      {/* Interest breakdown */}
-      <div>
-        <h2 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Interest Breakdown</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <AdminStatCard label="PT interest" value={stats?.ptInterest} loading={loading} />
-          <AdminStatCard label="Event prep interest" value={stats?.eventPrepInterest} loading={loading} />
-          <AdminStatCard label="Pending bookings" value={stats?.pendingBookings} loading={loading} />
-          <AdminStatCard label="PT requests" value={stats?.ptRequests} loading={loading} />
-        </div>
-      </div>
-
-      {/* Launch status */}
-      <div>
-        <h2 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Launch Status</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <AdminStatCard
-            label="Countdown"
-            value={getCountdown(settings.target_launch_date)}
-            sub={`Target: ${settings.target_launch_date || 'Not set'}`}
-            loading={false}
-            accent
-          />
-          <AdminStatCard label="Soft launch mode" value={settings.soft_launch_mode ? 'ON' : 'OFF'} loading={false} />
-          <AdminStatCard label="Bookings enabled" value={settings.bookings_enabled ? 'YES' : 'NO'} loading={false} />
-          <AdminStatCard label="Waitlisted" value={stats?.waitlistedBookings} loading={loading} />
-        </div>
-      </div>
-
-      {/* Top insights */}
+      {/* ── Activity + insights ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top times */}
-        <div className="bg-xert-ink border border-xert-steel/20 p-5">
-          <h3 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Most Requested Training Times</h3>
-          {loading ? <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-xert-charcoal animate-pulse" />)}</div> :
-            stats?.topTimes?.length > 0 ? (
-              <div className="space-y-3">
-                {stats.topTimes.map((t, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="font-body text-sm text-xert-offwhite">{t.time}</span>
-                    <div className="flex items-center gap-3">
-                      <div className="w-20 h-1.5 bg-xert-steel/20 rounded-full overflow-hidden">
-                        <div className="h-full bg-xert-red rounded-full" style={{ width: `${Math.min(100, (t.count / (stats.topTimes[0]?.count || 1)) * 100)}%` }} />
-                      </div>
-                      <span className="font-display text-sm text-xert-concrete/60 tabular-nums w-6 text-right">{t.count}</span>
-                    </div>
+        {/* Recent activity */}
+        <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+          <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>Recent Activity</h3>
+          {loading ? (
+            <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.4)' }} />)}</div>
+          ) : !activity || activity.length === 0 ? (
+            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
+              Nothing yet — purchases and new members will appear here.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {activity.map((a, i) => (
+                <div key={i} className="flex items-center gap-3 py-2" style={{ borderBottom: i < activity.length - 1 ? '1px solid rgba(123,167,188,0.08)' : 'none' }}>
+                  <div className="w-7 h-7 shrink-0 flex items-center justify-center"
+                    style={{ backgroundColor: a.type === 'order' ? 'rgba(123,167,188,0.18)' : 'rgba(50,72,90,0.4)' }}>
+                    {a.type === 'order'
+                      ? <Receipt className="w-3.5 h-3.5" style={{ color: '#7BA7BC' }} />
+                      : <UserPlus className="w-3.5 h-3.5" style={{ color: 'rgba(209,221,230,0.6)' }} />}
                   </div>
-                ))}
-              </div>
-            ) : <p className="font-body text-sm text-xert-concrete/40">No data yet.</p>
-          }
+                  <div className="flex-1 min-w-0">
+                    <p className="font-body text-sm truncate" style={{ color: '#D1DDE6' }}>{a.title}</p>
+                    <p className="font-body text-[11px] truncate" style={{ color: 'rgba(209,221,230,0.35)' }}>{a.sub}</p>
+                  </div>
+                  <span className="font-body text-[11px] shrink-0 tabular-nums" style={{ color: 'rgba(123,167,188,0.5)' }}>{timeAgo(a.at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Top goals */}
-        <div className="bg-xert-ink border border-xert-steel/20 p-5">
-          <h3 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Most Common Training Goals</h3>
-          {loading ? <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-xert-charcoal animate-pulse" />)}</div> :
-            stats?.topGoals?.length > 0 ? (
+        {/* Launch + pipeline snapshot */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <AdminStatCard icon={ClipboardList} label="Member leads" value={stats?.totalMembers} loading={loading} />
+            <AdminStatCard icon={UserPlus} label="New this week" value={stats?.newThisWeek} loading={loading} />
+            <AdminStatCard icon={CalendarDays} label="Upcoming classes" value={biz?.upcomingClasses} loading={loading} />
+            <AdminStatCard icon={Inbox} label="Pending bookings" value={stats?.pendingBookings} loading={loading} />
+          </div>
+          <button onClick={() => onNavigate?.('members')}
+            className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+            style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.16)'}>
+            <span className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.6)' }}>
+              Review all leads & interest breakdown
+            </span>
+            <ArrowRight className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Top insights ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[
+          { title: 'Most Requested Training Times', rows: stats?.topTimes, keyName: 'time' },
+          { title: 'Most Common Training Goals', rows: stats?.topGoals, keyName: 'goal' },
+        ].map(panel => (
+          <div key={panel.title} className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+            <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>{panel.title}</h3>
+            {loading ? (
+              <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-8 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.4)' }} />)}</div>
+            ) : panel.rows?.length > 0 ? (
               <div className="space-y-3">
-                {stats.topGoals.map((g, i) => (
+                {panel.rows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between">
-                    <span className="font-body text-sm text-xert-offwhite">{g.goal}</span>
+                    <span className="font-body text-sm" style={{ color: '#D1DDE6' }}>{r[panel.keyName]}</span>
                     <div className="flex items-center gap-3">
-                      <div className="w-20 h-1.5 bg-xert-steel/20 rounded-full overflow-hidden">
-                        <div className="h-full bg-xert-orange rounded-full" style={{ width: `${Math.min(100, (g.count / (stats.topGoals[0]?.count || 1)) * 100)}%` }} />
+                      <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
+                        <div className="h-full rounded-full" style={{
+                          backgroundColor: '#7BA7BC',
+                          width: `${Math.min(100, (r.count / (panel.rows[0]?.count || 1)) * 100)}%`,
+                        }} />
                       </div>
-                      <span className="font-display text-sm text-xert-concrete/60 tabular-nums w-6 text-right">{g.count}</span>
+                      <span className="font-display text-sm tabular-nums w-6 text-right" style={{ color: 'rgba(209,221,230,0.5)' }}>{r.count}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="font-body text-sm text-xert-concrete/40">No data yet.</p>
-          }
-        </div>
+            ) : <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No data yet.</p>}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
+

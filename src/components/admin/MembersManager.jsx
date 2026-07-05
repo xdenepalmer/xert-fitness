@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Download } from 'lucide-react';
 import { adminListMembers, adminGrantCredits, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
+import { downloadCsv } from '@/lib/csv';
 
 const inputCls = 'bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 
@@ -82,8 +84,21 @@ export default function MembersManager() {
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Members ({members.length})</h2>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
-          className={`${inputCls} w-64`} />
+        <div className="flex items-center gap-2">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
+            className={`${inputCls} w-64`} />
+          <button
+            onClick={() => downloadCsv(`xert-members-${new Date().toISOString().slice(0, 10)}.csv`, members, [
+              { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
+              { key: 'phone', label: 'Phone' }, { key: 'role', label: 'Role' },
+              { key: 'credits_remaining', label: 'Credits' }, { key: 'bookings_count', label: 'Bookings' },
+              { key: 'total_spent_cents', label: 'Spent (cents)' }, { key: 'joined_at', label: 'Joined' },
+            ])}
+            disabled={members.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
+            <Download className="w-3.5 h-3.5" /> CSV
+          </button>
+        </div>
       </div>
 
       {loading ? (

@@ -8,6 +8,11 @@ import {
   getProducts, startCheckout, getAvailableSessions, bookSession, getMyCredits,
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
+import { useSiteContent } from '@/lib/siteContent';
+
+const BOOKING_DEFAULTS = {
+  intro: 'XERT operates through a booking-based system to maintain coaching quality and controlled class sizes. Initial class sizes are set to 8 people and will gradually increase as the business launches.',
+};
 
 const steps = [
   'Purchase a session pack.',
@@ -41,6 +46,7 @@ export default function Booking() {
   const { session } = useSupabaseAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const pageContent = useSiteContent('booking', BOOKING_DEFAULTS);
 
   const [products, setProducts] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -129,8 +135,7 @@ export default function Booking() {
             <span style={{ color: '#7BA7BC' }}>Structured training.</span>
           </h1>
           <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)' }}>
-            XERT operates through a booking-based system to maintain coaching quality and controlled class sizes.
-            Initial class sizes are set to 8 people and will gradually increase as the business launches.
+            {pageContent.intro}
           </p>
 
           {/* Steps */}

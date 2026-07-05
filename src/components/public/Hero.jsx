@@ -22,6 +22,7 @@ const HERO_DEFAULTS = {
   headline: 'Beat Your Best.',
   subheading: 'Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.',
   supporting: 'Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.',
+  photos: PHOTOS,
 };
 
 export default function Hero() {
@@ -29,6 +30,8 @@ export default function Hero() {
   const { scrollY } = useScroll();
   const content = useSiteContent('hero', HERO_DEFAULTS);
   const headlineWords = (content.headline || HERO_DEFAULTS.headline).split(' ');
+  const photos = content.photos?.length > 0 ? content.photos : PHOTOS;
+  const idx = photoIndex % photos.length;
 
   // Parallax: background drifts slower, content lifts as you scroll.
   const bgY = useTransform(scrollY, [0, 800], [0, 160]);
@@ -36,7 +39,7 @@ export default function Hero() {
   const overlayOpacity = useTransform(scrollY, [0, 500], [1, 0.4]);
 
   useEffect(() => {
-    const t = setInterval(() => setPhotoIndex(i => (i + 1) % PHOTOS.length), 5000);
+    const t = setInterval(() => setPhotoIndex(i => (i + 1) % photos.length), 5000);
     return () => clearInterval(t);
   }, []);
 
@@ -44,11 +47,11 @@ export default function Hero() {
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-xert-navy">
       {/* Background photo with parallax + blue-steel grade */}
       <motion.div className="absolute inset-0" style={{ y: bgY }}>
-        {PHOTOS.map((src, i) => (
+        {photos.map((src, i) => (
           <div
             key={src}
             className="absolute inset-0 transition-opacity duration-[1400ms]"
-            style={{ opacity: i === photoIndex ? 1 : 0 }}
+            style={{ opacity: i === idx ? 1 : 0 }}
           >
             <img
               src={src}
@@ -188,7 +191,7 @@ export default function Hero() {
           >
             <div className="relative aspect-[3/4] overflow-hidden">
               <img
-                src={PHOTOS[photoIndex]}
+                src={photos[idx]}
                 alt="XERT Training"
                 className="w-full h-full object-cover transition-opacity duration-1000"
                 style={{ filter: 'saturate(0.7) brightness(0.75)' }}
@@ -207,9 +210,9 @@ export default function Hero() {
               </div>
               {/* Photo index dots */}
               <div className="absolute top-4 right-4 flex flex-col gap-1.5">
-                {PHOTOS.map((_, i) => (
+                {photos.map((_, i) => (
                   <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-500"
-                    style={{ backgroundColor: i === photoIndex ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
+                    style={{ backgroundColor: i === idx ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
                 ))}
               </div>
             </div>

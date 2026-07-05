@@ -1,24 +1,53 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical } from 'lucide-react';
 import { getAllSiteContent, saveSiteContent } from '@/lib/adminData';
 import { clearSiteContentCache } from '@/lib/siteContent';
+import ImageUploader from '@/components/admin/ImageUploader';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
+// Field types: text · textarea · qa_list · text_list · image_list
 const SECTIONS = [
   {
     key: 'hero',
     title: 'Homepage Hero',
-    description: 'The first thing every visitor sees.',
+    icon: Home,
+    viewPath: '/',
+    description: 'The first thing every visitor sees — headline, copy and the rotating photo carousel.',
     fields: [
       { key: 'headline', label: 'Headline', type: 'text', placeholder: 'Beat Your Best.' },
       { key: 'subheading', label: 'Subheading', type: 'textarea', placeholder: 'Structured functional fitness coaching…' },
       { key: 'supporting', label: 'Supporting line', type: 'textarea', placeholder: 'Semi-private training in Kingaroy…' },
+      { key: 'photos', label: 'Hero photos (rotating carousel)', type: 'image_list', folder: 'hero' },
+    ],
+  },
+  {
+    key: 'booking',
+    title: 'Booking Page Intro',
+    icon: Ticket,
+    viewPath: '/booking',
+    description: 'The heading area on the booking & packs page.',
+    fields: [
+      { key: 'intro', label: 'Intro paragraph', type: 'textarea', placeholder: 'XERT operates through a booking-based system…' },
+    ],
+  },
+  {
+    key: 'about',
+    title: 'About Page',
+    icon: FileText,
+    viewPath: '/about',
+    description: 'The paragraphs on the About XERT page.',
+    fields: [
+      { key: 'paragraphs', label: 'Paragraphs', type: 'text_list', itemLabel: 'Paragraph' },
     ],
   },
   {
     key: 'contact',
     title: 'Contact Details',
-    description: 'Used on the Contact page and site footer.',
+    icon: Phone,
+    viewPath: '/contact',
+    description: 'Used on the Contact page and the site footer.',
     fields: [
       { key: 'email', label: 'Email', type: 'text', placeholder: 'byronhawley@gmail.com' },
       { key: 'phone', label: 'Phone (optional)', type: 'text', placeholder: '04xx xxx xxx' },
@@ -31,6 +60,8 @@ const SECTIONS = [
   {
     key: 'faq',
     title: 'FAQ',
+    icon: HelpCircle,
+    viewPath: '/#',
     description: 'Questions shown on the homepage. Leave empty to use the built-in defaults.',
     fields: [
       { key: 'items', label: 'Questions & answers', type: 'qa_list' },
@@ -43,10 +74,7 @@ const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracki
 
 function QaListEditor({ value, onChange }) {
   const items = Array.isArray(value) ? value : [];
-  const update = (i, field, v) => {
-    const next = items.map((it, idx) => (idx === i ? { ...it, [field]: v } : it));
-    onChange(next);
-  };
+  const update = (i, field, v) => onChange(items.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
   const move = (i, dir) => {
     const j = i + dir;
     if (j < 0 || j >= items.length) return;
@@ -60,7 +88,9 @@ function QaListEditor({ value, onChange }) {
       {items.map((item, i) => (
         <div key={i} className="border border-xert-steel/20 p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="font-body text-xs text-xert-concrete/40 uppercase">Q{i + 1}</span>
+            <span className="flex items-center gap-1.5 font-body text-xs text-xert-concrete/40 uppercase">
+              <GripVertical className="w-3 h-3" /> Q{i + 1}
+            </span>
             <div className="flex gap-1">
               <button onClick={() => move(i, -1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↑</button>
               <button onClick={() => move(i, 1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↓</button>
@@ -80,22 +110,93 @@ function QaListEditor({ value, onChange }) {
   );
 }
 
+function TextListEditor({ value, onChange, itemLabel = 'Item' }) {
+  const items = Array.isArray(value) ? value : [];
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      {items.map((text, i) => (
+        <div key={i} className="border border-xert-steel/20 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-body text-xs text-xert-concrete/40 uppercase">{itemLabel} {i + 1}</span>
+            <div className="flex gap-1">
+              <button onClick={() => move(i, -1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↑</button>
+              <button onClick={() => move(i, 1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↓</button>
+              <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                className="px-2 py-0.5 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">✕</button>
+            </div>
+          </div>
+          <textarea value={text} onChange={e => onChange(items.map((t, idx) => idx === i ? e.target.value : t))}
+            rows={3} className={`${inputCls} resize-none`} />
+        </div>
+      ))}
+      <button onClick={() => onChange([...items, ''])}
+        className="px-4 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
+        + Add {itemLabel.toLowerCase()}
+      </button>
+    </div>
+  );
+}
+
+function ImageListEditor({ value, onChange, folder }) {
+  const items = Array.isArray(value) ? value : [];
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      {items.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {items.map((url, i) => (
+            <div key={`${url}-${i}`} className="relative group border border-xert-steel/20">
+              <div className="aspect-[3/4] overflow-hidden bg-xert-charcoal">
+                <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+              </div>
+              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ backgroundColor: 'rgba(11,18,24,0.85)' }}>
+                <button onClick={() => move(i, -1)} className="px-1.5 text-xs" style={{ color: '#7BA7BC' }}>←</button>
+                <button onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="px-1.5 text-xs" style={{ color: '#f0a1a1' }}>✕</button>
+                <button onClick={() => move(i, 1)} className="px-1.5 text-xs" style={{ color: '#7BA7BC' }}>→</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <ImageUploader value="" onChange={url => { if (url) onChange([...items, url]); }} folder={folder} label="Add photo" />
+    </div>
+  );
+}
+
 function SectionEditor({ section, initial, onSaved }) {
   const [data, setData] = useState(initial || {});
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
-  const set = (k, v) => setData(p => ({ ...p, [k]: v }));
+  const set = (k, v) => { setData(p => ({ ...p, [k]: v })); setDirty(true); };
+  const Icon = section.icon;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Drop empty strings so public fallbacks kick in rather than rendering ''.
       const clean = Object.fromEntries(
         Object.entries(data).filter(([, v]) => v !== '' && v !== null && v !== undefined)
       );
       await saveSiteContent(section.key, clean);
       clearSiteContentCache();
       setSavedAt(new Date());
+      setDirty(false);
       onSaved();
     } catch (e) {
       alert('Save failed: ' + e.message);
@@ -105,20 +206,42 @@ function SectionEditor({ section, initial, onSaved }) {
   };
 
   return (
-    <div className="bg-xert-ink border border-xert-steel/20 p-5">
-      <div className="mb-4">
-        <h3 className="font-display text-lg text-xert-offwhite uppercase">{section.title}</h3>
-        <p className="font-body text-xs text-xert-concrete/40 mt-0.5">{section.description}</p>
+    <div style={{
+      background: 'linear-gradient(145deg, rgba(50,72,90,0.18) 0%, rgba(16,24,32,0.55) 70%)',
+      border: `1px solid ${dirty ? 'rgba(123,167,188,0.5)' : 'rgba(123,167,188,0.16)'}`,
+    }}>
+      {/* Section header */}
+      <div className="flex items-center gap-3 p-5" style={{ borderBottom: '1px solid rgba(123,167,188,0.12)' }}>
+        <div className="w-9 h-9 shrink-0 flex items-center justify-center" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
+          <Icon className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display text-lg text-xert-offwhite uppercase leading-none">{section.title}</h3>
+          <p className="font-body text-xs text-xert-concrete/40 mt-1">{section.description}</p>
+        </div>
+        <Link to={section.viewPath} target="_blank"
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider border transition-colors shrink-0"
+          style={{ borderColor: 'rgba(123,167,188,0.25)', color: 'rgba(123,167,188,0.7)' }}>
+          <ExternalLink className="w-3 h-3" /> View
+        </Link>
       </div>
-      <div className="space-y-4">
+
+      <div className="p-5 space-y-4">
         {section.fields.map(f => (
           <div key={f.key}>
-            <label className={labelCls}>{f.label}</label>
+            {f.type !== 'image_list' && <label className={labelCls}>{f.label}</label>}
             {f.type === 'textarea' ? (
               <textarea value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
                 placeholder={f.placeholder} rows={2} className={`${inputCls} resize-none`} />
             ) : f.type === 'qa_list' ? (
               <QaListEditor value={data[f.key]} onChange={v => set(f.key, v)} />
+            ) : f.type === 'text_list' ? (
+              <TextListEditor value={data[f.key]} onChange={v => set(f.key, v)} itemLabel={f.itemLabel} />
+            ) : f.type === 'image_list' ? (
+              <>
+                <label className={labelCls}>{f.label}</label>
+                <ImageListEditor value={data[f.key]} onChange={v => set(f.key, v)} folder={f.folder || section.key} />
+              </>
             ) : (
               <input value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
                 placeholder={f.placeholder} className={inputCls} />
@@ -126,12 +249,14 @@ function SectionEditor({ section, initial, onSaved }) {
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-3 mt-5">
-        <button onClick={handleSave} disabled={saving}
-          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
-          {saving ? 'Saving…' : 'Save section'}
+
+      <div className="flex items-center gap-3 px-5 pb-5">
+        <button onClick={handleSave} disabled={saving || !dirty}
+          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-40">
+          {saving ? 'Saving…' : dirty ? 'Save section' : 'Saved'}
         </button>
-        {savedAt && <span className="font-body text-xs text-green-400">Saved ✓</span>}
+        {dirty && <span className="font-body text-xs" style={{ color: '#7BA7BC' }}>Unsaved changes</span>}
+        {!dirty && savedAt && <span className="font-body text-xs text-green-400">Live ✓</span>}
       </div>
     </div>
   );
@@ -148,15 +273,18 @@ export default function ContentManager() {
   useEffect(() => { load(); }, []);
 
   if (content === null) {
-    return <div className="p-6 space-y-4">{[1, 2].map(i => <div key={i} className="h-48 bg-xert-ink animate-pulse" />)}</div>;
+    return <div className="p-6 space-y-4">{[1, 2].map(i => <div key={i} className="h-48 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.3)' }} />)}</div>;
   }
 
   return (
     <div className="p-6">
-      <h2 className="font-display text-lg text-xert-offwhite uppercase mb-2">Site Content</h2>
+      <div className="flex items-center gap-3 mb-2">
+        <Image className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Site Content</h2>
+      </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
-        Edit the words on the public site. Empty fields fall back to the built-in copy, so you can&rsquo;t break anything.
-        Changes go live as soon as visitors refresh.
+        Edit the words and photos on the public site. Empty fields fall back to the built-in copy, so you can&rsquo;t
+        break anything. Changes go live as soon as visitors refresh.
       </p>
       <div className="space-y-6">
         {SECTIONS.map(s => (

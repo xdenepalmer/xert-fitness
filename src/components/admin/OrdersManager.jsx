@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Download } from 'lucide-react';
 import { getAllOrders } from '@/lib/adminData';
+import { downloadCsv } from '@/lib/csv';
 
 const STATUS_COLORS = {
   paid: 'text-green-400 border-green-600/40',
@@ -32,7 +34,21 @@ export default function OrdersManager() {
 
   return (
     <div className="p-6">
-      <h2 className="font-display text-lg text-xert-offwhite uppercase mb-6">Orders &amp; Revenue</h2>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Orders &amp; Revenue</h2>
+        <button
+          onClick={() => downloadCsv(`xert-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+            orders.map(o => ({ ...o, product: o.products?.name })), [
+              { key: 'created_at', label: 'Created' }, { key: 'paid_at', label: 'Paid' },
+              { key: 'product', label: 'Product' }, { key: 'email', label: 'Email' },
+              { key: 'amount_cents', label: 'Amount (cents)' }, { key: 'currency', label: 'Currency' },
+              { key: 'status', label: 'Status' },
+            ])}
+          disabled={orders.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
+          <Download className="w-3.5 h-3.5" /> CSV
+        </button>
+      </div>
 
       {/* Revenue summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
