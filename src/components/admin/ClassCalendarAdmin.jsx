@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus } from '@/lib/adminData';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
@@ -28,7 +29,7 @@ function SessionEditor({ session, onSave, onCancel }) {
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
   const handleSave = async () => {
-    if (!form.title.trim()) { alert('Title required.'); return; }
+    if (!form.title.trim()) { toast({ title: 'Title required.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       if (session?.id) {
@@ -38,7 +39,7 @@ function SessionEditor({ session, onSave, onCancel }) {
       }
       onSave();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -172,7 +173,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   const [saving, setSaving] = useState(false);
 
   const handleRepeat = async () => {
-    if (!session.start_time) { alert('This class needs a start time before it can be repeated.'); return; }
+    if (!session.start_time) { toast({ title: 'This class needs a start time before it can be repeated.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       const { id, created_at, updated_at, ...base } = session;
@@ -191,7 +192,7 @@ function RepeatModal({ session, onDone, onCancel }) {
       }
       onDone(count);
     } catch (e) {
-      alert('Repeat failed: ' + e.message);
+      toast({ title: 'Repeat failed', description: e.message, variant: 'destructive' });
       setSaving(false);
     }
   };
@@ -262,6 +263,7 @@ export default function ClassCalendarAdmin() {
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
   const [repeating, setRepeating] = useState(null);
+  const [timeFilter, setTimeFilter] = useState('upcoming');
 
   const load = () => {
     setLoading(true);
@@ -290,29 +292,57 @@ export default function ClassCalendarAdmin() {
       await adminSetBookingStatus(bookingId, status);
       const members = await adminSessionRoster(expandedBookings);
       setRoster(members);
-    } catch (e) { alert('Update failed: ' + e.message); }
+    } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
   };
 
   const handleDuplicate = async (session) => {
     try {
       await duplicateClassSession(session);
       load();
-    } catch (e) { alert('Duplicate failed: ' + e.message); }
+    } catch (e) { toast({ title: 'Duplicate failed', description: e.message, variant: 'destructive' }); }
   };
 
   const handleCancel = async (id) => {
     if (!confirm('Cancel this class?')) return;
-    try { await cancelClassSession(id); load(); } catch (e) { alert('Cancel failed: ' + e.message); }
+    try { await cancelClassSession(id); load(); } catch (e) { toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' }); }
   };
 
   const handleBookingStatus = async (id, status) => {
-    try { await updateBookingStatus(id, status); loadBookings(expandedBookings); } catch (e) { alert('Update failed: ' + e.message); }
+    try { await updateBookingStatus(id, status); loadBookings(expandedBookings); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
   };
+
+  const now = Date.now();
+  const filtered = sessions.filter(s => {
+    if (timeFilter === 'all') return true;
+    const isPast = s.start_time && new Date(s.start_time).getTime() < now;
+    return timeFilter === 'past' ? isPast : !isPast;
+  });
+  const upcomingCount = sessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Class Sessions</h2>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <h2 className="font-display text-lg text-xert-offwhite uppercase">Class Sessions</h2>
+          <div className="flex">
+            {[
+              { key: 'upcoming', label: `Upcoming (${upcomingCount})` },
+              { key: 'past', label: `Past (${sessions.length - upcomingCount})` },
+              { key: 'all', label: 'All' },
+            ].map(t => (
+              <button key={t.key} onClick={() => setTimeFilter(t.key)}
+                className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                style={{
+                  borderColor: timeFilter === t.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
+                  backgroundColor: timeFilter === t.key ? 'rgba(123,167,188,0.12)' : 'transparent',
+                  color: timeFilter === t.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
+                  marginLeft: '-1px',
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
           className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
           + New Class
@@ -321,14 +351,18 @@ export default function ClassCalendarAdmin() {
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-xert-ink animate-pulse" />)}</div>
-      ) : sessions.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No classes yet</p>
-          <p className="font-body text-sm text-xert-concrete/40 mb-6">Create your first class session.</p>
+          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
+            {sessions.length === 0 ? 'No classes yet' : `No ${timeFilter === 'all' ? '' : timeFilter} classes`}
+          </p>
+          <p className="font-body text-sm text-xert-concrete/40 mb-6">
+            {sessions.length === 0 ? 'Create your first class session.' : 'Try another filter or create a new class.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {sessions.map(s => (
+          {filtered.map(s => (
             <div key={s.id} className="bg-xert-ink border border-xert-steel/20">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-4">

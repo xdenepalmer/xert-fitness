@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
 import ImageUploader from '@/components/admin/ImageUploader';
 
@@ -21,14 +22,14 @@ function CoachEditor({ coach, onSave, onCancel }) {
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
   const handleSave = async () => {
-    if (!form.name.trim()) { alert('Name required.'); return; }
+    if (!form.name.trim()) { toast({ title: 'Name required.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       if (coach?.id) await updateCoach(coach.id, form);
       else await createCoach(form);
       onSave();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -116,7 +117,7 @@ export default function CoachesManager() {
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this team member?')) return;
-    try { await deleteCoach(id); load(); } catch (e) { alert('Delete failed: ' + e.message); }
+    try { await deleteCoach(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
   };
 
   return (

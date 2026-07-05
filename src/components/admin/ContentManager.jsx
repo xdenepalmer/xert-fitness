@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical } from 'lucide-react';
+import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
 import { getAllSiteContent, saveSiteContent } from '@/lib/adminData';
 import { clearSiteContentCache } from '@/lib/siteContent';
+import { CONTENT_DEFAULTS } from '@/lib/contentDefaults';
+import { toast } from '@/components/ui/use-toast';
 import ImageUploader from '@/components/admin/ImageUploader';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
@@ -180,12 +182,20 @@ function ImageListEditor({ value, onChange, folder }) {
 }
 
 function SectionEditor({ section, initial, onSaved }) {
-  const [data, setData] = useState(initial || {});
+  // Prefill with the live defaults so the editor always shows what the site
+  // is currently displaying — saved CMS values overlay the defaults.
+  const defaults = CONTENT_DEFAULTS[section.key] || {};
+  const [data, setData] = useState({ ...defaults, ...(initial || {}) });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
   const set = (k, v) => { setData(p => ({ ...p, [k]: v })); setDirty(true); };
   const Icon = section.icon;
+
+  const handleRestore = () => {
+    setData({ ...defaults });
+    setDirty(true);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -198,8 +208,9 @@ function SectionEditor({ section, initial, onSaved }) {
       setSavedAt(new Date());
       setDirty(false);
       onSaved();
+      toast({ title: `${section.title} saved`, description: 'Changes are live on the site.' });
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -255,8 +266,12 @@ function SectionEditor({ section, initial, onSaved }) {
           className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-40">
           {saving ? 'Saving…' : dirty ? 'Save section' : 'Saved'}
         </button>
-        {dirty && <span className="font-body text-xs" style={{ color: '#7BA7BC' }}>Unsaved changes</span>}
-        {!dirty && savedAt && <span className="font-body text-xs text-green-400">Live ✓</span>}
+        <button onClick={handleRestore} title="Reset the fields below to the original site copy"
+          className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-xert-steel/30 font-body text-[10px] uppercase tracking-wider text-xert-concrete/50 hover:border-xert-steel hover:text-xert-offwhite transition-colors">
+          <RotateCcw className="w-3 h-3" /> Restore original copy
+        </button>
+        {dirty && <span className="font-body text-xs ml-auto" style={{ color: '#7BA7BC' }}>Unsaved changes</span>}
+        {!dirty && savedAt && <span className="font-body text-xs text-green-400 ml-auto">Live ✓</span>}
       </div>
     </div>
   );
@@ -268,7 +283,7 @@ export default function ContentManager() {
   const load = () => {
     getAllSiteContent()
       .then(rows => setContent(Object.fromEntries(rows.map(r => [r.key, r.data]))))
-      .catch(e => { alert(e.message); setContent({}); });
+      .catch(e => { toast({ title: 'Could not load content', description: e.message, variant: 'destructive' }); setContent({}); });
   };
   useEffect(() => { load(); }, []);
 

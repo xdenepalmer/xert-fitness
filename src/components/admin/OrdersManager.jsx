@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { Download } from 'lucide-react';
 import { getAllOrders } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
@@ -15,7 +16,7 @@ export default function OrdersManager() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAllOrders().then(d => { setOrders(d); setLoading(false); }).catch(e => { alert(e.message); setLoading(false); });
+    getAllOrders().then(d => { setOrders(d); setLoading(false); }).catch(e => { toast({ title: 'Something went wrong', description: e.message, variant: 'destructive' }); setLoading(false); });
   }, []);
 
   const stats = useMemo(() => {

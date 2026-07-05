@@ -4,15 +4,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import { useSiteContent } from '@/lib/siteContent';
-
-const CONTACT_DEFAULTS = {
-  email: 'byronhawley@gmail.com',
-  phone: '',
-  address: 'Kingaroy, Queensland 4610',
-  instagram_handle: '@xert_fit',
-  instagram_url: 'https://instagram.com/xert_fit',
-  intro: 'Have a question about classes, coaching, allied health partnerships or booking your first session? Reach out and we will help you plan your training.',
-};
+import { CONTACT_DEFAULTS } from '@/lib/contentDefaults';
 
 export default function Contact() {
   const content = useSiteContent('contact', CONTACT_DEFAULTS);

@@ -9,10 +9,7 @@ import {
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
-
-const BOOKING_DEFAULTS = {
-  intro: 'XERT operates through a booking-based system to maintain coaching quality and controlled class sizes. Initial class sizes are set to 8 people and will gradually increase as the business launches.',
-};
+import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 
 const steps = [
   'Purchase a session pack.',

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 export default function SoftLaunchSettings() {
@@ -23,7 +24,7 @@ export default function SoftLaunchSettings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

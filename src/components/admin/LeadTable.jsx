@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getMemberLeads, getTrainerLeads, getPartnerLeads, updateLeadStatus, updateAdminNotes, exportLeadsCsv } from '@/lib/adminData';
 
 const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
@@ -36,7 +37,7 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
       onUpdate();
       onClose();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -130,7 +131,7 @@ export default function LeadTable({ type = 'member' }) {
   const handleExport = async () => {
     try {
       const csv = await exportLeadsCsv(table);
-      if (!csv) { alert('No data to export.'); return; }
+      if (!csv) { toast({ title: 'No data to export.', variant: 'destructive' }); return; }
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -139,7 +140,7 @@ export default function LeadTable({ type = 'member' }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('Export failed: ' + e.message);
+      toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
     }
   };
 

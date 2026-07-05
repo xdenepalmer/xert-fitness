@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getAvailabilityBlocks, createAvailabilityBlock, deleteAvailabilityBlock, getBlackoutPeriods, createBlackoutPeriod, deleteBlackoutPeriod } from '@/lib/adminData';
 
 const BLOCK_TYPES = ['PT available', 'private session available', 'group class available', 'admin only', 'open gym placeholder', 'workshop placeholder'];
@@ -24,24 +25,24 @@ export default function AvailabilityManager() {
 
   const saveBlock = async () => {
     setSaving(true);
-    try { await createAvailabilityBlock(blockForm); load(); setShowBlockForm(false); } catch (e) { alert('Save failed: ' + e.message); }
+    try { await createAvailabilityBlock(blockForm); load(); setShowBlockForm(false); } catch (e) { toast({ title: 'Save failed', description: e.message, variant: 'destructive' }); }
     setSaving(false);
   };
 
   const saveBlackout = async () => {
     setSaving(true);
-    try { await createBlackoutPeriod(blackoutForm); load(); setShowBlackoutForm(false); } catch (e) { alert('Save failed: ' + e.message); }
+    try { await createBlackoutPeriod(blackoutForm); load(); setShowBlackoutForm(false); } catch (e) { toast({ title: 'Save failed', description: e.message, variant: 'destructive' }); }
     setSaving(false);
   };
 
   const deleteBlock = async (id) => {
     if (!confirm('Delete this block?')) return;
-    try { await deleteAvailabilityBlock(id); load(); } catch (e) { alert('Delete failed: ' + e.message); }
+    try { await deleteAvailabilityBlock(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
   };
 
   const deleteBlackout = async (id) => {
     if (!confirm('Delete this blackout?')) return;
-    try { await deleteBlackoutPeriod(id); load(); } catch (e) { alert('Delete failed: ' + e.message); }
+    try { await deleteBlackoutPeriod(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
   };
 
   return (

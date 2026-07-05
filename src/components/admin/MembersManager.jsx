@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { Download } from 'lucide-react';
 import { adminListMembers, adminGrantCredits, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
@@ -17,7 +18,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
       await adminGrantCredits(member.id, sessions, validityDays > 0 ? validityDays : null);
       onDone();
     } catch (e) {
-      alert('Grant failed: ' + e.message);
+      toast({ title: 'Grant failed', description: e.message, variant: 'destructive' });
       setSaving(false);
     }
   };
@@ -63,7 +64,7 @@ export default function MembersManager() {
 
   const load = () => {
     setLoading(true);
-    adminListMembers().then(d => { setMembers(d); setLoading(false); }).catch(e => { alert(e.message); setLoading(false); });
+    adminListMembers().then(d => { setMembers(d); setLoading(false); }).catch(e => { toast({ title: 'Something went wrong', description: e.message, variant: 'destructive' }); setLoading(false); });
   };
   useEffect(() => { load(); }, []);
 
@@ -77,7 +78,7 @@ export default function MembersManager() {
   const handleRole = async (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
     if (!confirm(`${verb} ${m.full_name || m.email}?`)) return;
-    try { await adminSetRole(m.id, role); load(); } catch (e) { alert('Failed: ' + e.message); }
+    try { await adminSetRole(m.id, role); load(); } catch (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
   };
 
   return (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
@@ -29,7 +30,7 @@ export default function PTRequestsTable() {
   useEffect(() => { load(); }, [statusFilter]);
 
   const handleUpdate = async (id, status, adminNotes) => {
-    try { await updatePTRequestStatus(id, status, adminNotes); load(); } catch (e) { alert('Update failed: ' + e.message); }
+    try { await updatePTRequestStatus(id, status, adminNotes); load(); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
   };
 
   return (

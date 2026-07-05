@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent } from '@/lib/adminData';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
@@ -15,7 +16,7 @@ function EventEditor({ event, onSave, onCancel }) {
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
   const handleSave = async () => {
-    if (!form.name.trim()) { alert('Name required.'); return; }
+    if (!form.name.trim()) { toast({ title: 'Name required.', variant: 'destructive' }); return; }
     // Normalise empty date strings to null (Postgres date columns reject '').
     const payload = { ...form, event_date: form.event_date || null, end_date: form.end_date || null, url: form.url || null };
     setSaving(true);
@@ -24,7 +25,7 @@ function EventEditor({ event, onSave, onCancel }) {
       else await createEvent(payload);
       onSave();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -102,6 +103,8 @@ export default function EventsManager() {
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
 
   const load = () => {
     setLoading(true);
@@ -111,29 +114,49 @@ export default function EventsManager() {
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this event?')) return;
-    try { await deleteEvent(id); load(); } catch (e) { alert('Delete failed: ' + e.message); }
+    try { await deleteEvent(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
   };
+
+  const usedCategories = ['all', ...Array.from(new Set(events.map(e => e.category).filter(Boolean))).sort()];
+  const filtered = events.filter(ev => {
+    if (catFilter !== 'all' && ev.category !== catFilter) return false;
+    const q = search.trim().toLowerCase();
+    if (q && !(`${ev.name} ${ev.location || ''}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">SE QLD Event Calendar</h2>
-        <button onClick={() => { setEditing(null); setShowEditor(true); }}
-          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
-          + Add Event
-        </button>
+        <div className="flex items-center gap-2">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…"
+            className="w-48 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+          <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
+            className="bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+            {usedCategories.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}
+          </select>
+          <button onClick={() => { setEditing(null); setShowEditor(true); }}
+            className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+            + Add Event
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
-      ) : events.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No events yet</p>
-          <p className="font-body text-sm text-xert-concrete/40">Add events to the public 2026 calendar.</p>
+          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
+            {events.length === 0 ? 'No events yet' : 'No matches'}
+          </p>
+          <p className="font-body text-sm text-xert-concrete/40">
+            {events.length === 0 ? 'Add events to the public 2026 calendar.' : 'Try a different search or category.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {events.map(ev => (
+          {filtered.map(ev => (
             <div key={ev.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex items-center justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getClassBookings, updateBookingStatus, updateAdminNotes } from '@/lib/adminData';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
@@ -30,7 +31,7 @@ export default function BookingRequestsTable() {
   useEffect(() => { load(); }, [statusFilter]);
 
   const handleStatusUpdate = async (id, status) => {
-    try { await updateBookingStatus(id, status); load(); } catch (e) { alert('Update failed: ' + e.message); }
+    try { await updateBookingStatus(id, status); load(); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
   };
 
   const saveNotes = async () => {
@@ -39,7 +40,7 @@ export default function BookingRequestsTable() {
       await updateAdminNotes('class_bookings', selectedBooking.id, notes);
       setSelectedBooking(null);
       load();
-    } catch (e) { alert('Save failed: ' + e.message); }
+    } catch (e) { toast({ title: 'Save failed', description: e.message, variant: 'destructive' }); }
   };
 
   return (

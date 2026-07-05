@@ -2,15 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useSiteContent } from '@/lib/siteContent';
-
-// Uploaded training photos
-const PHOTOS = [
-  '/assets/hero-training-1.jpg',
-  '/assets/hero-training-2.jpg',
-  '/assets/training-style.jpg',
-  '/assets/training-philosophy.jpg',
-  '/assets/event-calendar.jpg',
-];
+import { HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
 
 const LOGO_FULL_WHITE = '/assets/xert-logo-full.png';
 
@@ -18,19 +10,12 @@ const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Q
 
 const ease = [0.22, 1, 0.36, 1];
 
-const HERO_DEFAULTS = {
-  headline: 'Beat Your Best.',
-  subheading: 'Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.',
-  supporting: 'Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.',
-  photos: PHOTOS,
-};
-
 export default function Hero() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const { scrollY } = useScroll();
   const content = useSiteContent('hero', HERO_DEFAULTS);
   const headlineWords = (content.headline || HERO_DEFAULTS.headline).split(' ');
-  const photos = content.photos?.length > 0 ? content.photos : PHOTOS;
+  const photos = content.photos?.length > 0 ? content.photos : HERO_PHOTOS;
   const idx = photoIndex % photos.length;
 
   // Parallax: background drifts slower, content lifts as you scroll.

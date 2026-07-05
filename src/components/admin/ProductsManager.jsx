@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { getAllProducts, updateProduct } from '@/lib/adminData';
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
@@ -20,7 +21,7 @@ function ProductCard({ product, onSaved }) {
 
   const handleSave = async () => {
     const cents = Math.round(parseFloat(form.price_dollars) * 100);
-    if (!Number.isFinite(cents) || cents <= 0) { alert('Invalid price.'); return; }
+    if (!Number.isFinite(cents) || cents <= 0) { toast({ title: 'Invalid price.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       await updateProduct(product.id, {
@@ -35,7 +36,7 @@ function ProductCard({ product, onSaved }) {
       });
       onSaved();
     } catch (e) {
-      alert('Save failed: ' + e.message);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -110,7 +111,7 @@ export default function ProductsManager() {
 
   const load = () => {
     setLoading(true);
-    getAllProducts().then(d => { setProducts(d); setLoading(false); }).catch(e => { alert(e.message); setLoading(false); });
+    getAllProducts().then(d => { setProducts(d); setLoading(false); }).catch(e => { toast({ title: 'Something went wrong', description: e.message, variant: 'destructive' }); setLoading(false); });
   };
   useEffect(() => { load(); }, []);
 

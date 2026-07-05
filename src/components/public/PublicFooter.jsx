@@ -3,15 +3,9 @@ import { Link } from 'react-router-dom';
 import { Instagram, Mail, MapPin, ShieldCheck } from 'lucide-react';
 import { useSiteContent } from '@/lib/siteContent';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
+import { CONTACT_DEFAULTS } from '@/lib/contentDefaults';
 
 const LOGO = '/assets/xert-logo-full.png';
-
-const CONTACT_DEFAULTS = {
-  email: 'byronhawley@gmail.com',
-  address: 'Kingaroy, Queensland 4610',
-  instagram_handle: '@xert_fit',
-  instagram_url: 'https://instagram.com/xert_fit',
-};
 
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
