@@ -4,16 +4,16 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 
 // Uploaded training photos
 const PHOTOS = [
-  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/c59c7f1fd_IMG_5040.jpg',
-  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/96b56ee6c_IMG_5041.jpg',
-  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1fb3d6d4e_justin-fisher-k4-H6EO86yY-unsplash.jpg',
-  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1e45b8aa7_marvin-cors-3CQm9H6oJhM-unsplash.jpg',
-  'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/9db07f8bb_marvin-cors-m2z68_2BuyM-unsplash.jpg',
+  '/assets/hero-training-1.jpg',
+  '/assets/hero-training-2.jpg',
+  '/assets/training-style.jpg',
+  '/assets/training-philosophy.jpg',
+  '/assets/event-calendar.jpg',
 ];
 
-const LOGO_FULL_WHITE = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/a1601f524_Logo_xert_final-01.png';
+const LOGO_FULL_WHITE = '/assets/xert-logo-full.png';
 
-const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Resilience', 'Community', 'Education', 'Preparation'];
+const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Quality', 'Longevity', 'Community', 'Preparation'];
 
 const ease = [0.22, 1, 0.36, 1];
 
@@ -111,16 +111,16 @@ export default function Hero() {
               transition={{ duration: 0.7, delay: 0.15, ease }}
             >
               <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="font-body text-xs uppercase tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Beat Your Best</span>
+              <span className="font-body text-xs uppercase tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Functional Fitness Training Facility</span>
             </motion.div>
 
             {/* Headline — line-by-line reveal */}
             <h1 className="font-display text-[clamp(3rem,10vw,7rem)] leading-[0.9] text-xert-offwhite uppercase mb-6 tracking-tight overflow-hidden">
-              {['Kingaroy', 'Functional', 'Training.'].map((line, i) => (
+              {['Beat', 'Your', 'Best.'].map((line, i) => (
                 <span key={line} className="block overflow-hidden">
                   <motion.span
                     className="block"
-                    style={{ color: i === 1 ? '#D1DDE6' : undefined }}
+                    style={{ color: i === 2 ? '#7BA7BC' : undefined }}
                     initial={{ y: '110%' }}
                     animate={{ y: '0%' }}
                     transition={{ duration: 0.9, delay: 0.2 + i * 0.12, ease }}
@@ -137,18 +137,18 @@ export default function Hero() {
               transition={{ duration: 0.7, delay: 0.6, ease }}
             >
               <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
-                Built around purpose. Structured classes, event preparation, personal coaching and allied health — all under one roof.
+                Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.
               </p>
               <p className="font-body text-sm leading-relaxed mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
-                Train with structure, build resilience and prepare for more.
+                Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.
               </p>
 
               <div className="flex items-center gap-3 mb-8">
                 <div className="flex items-center gap-2 px-3 py-1.5 border" style={{ borderColor: 'rgba(123,167,188,0.4)' }}>
                   <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
-                  <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>Soft Launch — August</span>
+                  <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>Booking-based semi-private classes</span>
                 </div>
-                <span className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>Limited foundation capacity</span>
+                <span className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>Initial classes capped at 8</span>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
@@ -164,7 +164,7 @@ export default function Hero() {
                   style={{ borderColor: 'rgba(123,167,188,0.5)', color: '#D1DDE6' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#D1DDE6'; }}>
-                  View Soft Launch Plan
+                  View Timetable
                 </Link>
               </div>
             </motion.div>
@@ -228,8 +228,8 @@ export default function Hero() {
       <div className="relative z-10" style={{ backgroundColor: 'rgba(50,72,90,0.6)', backdropFilter: 'blur(8px)' }}>
         <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
           {[
-            { label: 'Soft Launch', value: 'August' },
-            { label: 'Class Types', value: '6+' },
+            { label: 'Coached Model', value: 'Semi-private' },
+            { label: 'Programming', value: '12-week blocks' },
             { label: 'Location', value: 'Kingaroy QLD' },
           ].map((stat, i) => (
             <div key={i} className={`px-6 ${i === 0 ? 'pl-0' : ''} ${i === 2 ? 'pr-0' : ''}`}>

@@ -1,43 +1,63 @@
-# Base44 Project
+# XERT Fitness
 
-Use this repository to run and edit the app locally, then publish changes back through Base44.
-
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+Vite/React frontend for the XERT Fitness website and admin tools. The app is intended to deploy on Vercel and use Supabase for auth, form submissions, class sessions, bookings and admin settings.
 
 ## Prerequisites
 
-1. Clone the repository using the project's Git URL.
-2. Navigate to the project directory.
-3. Install dependencies: `npm install`.
-4. Install the Base44 CLI: `npm install -g base44@latest`.
-
-See the [Base44 CLI docs](https://docs.base44.com/developers/references/cli/get-started/overview) if you want to run Base44 commands directly.
-
-## Run Locally
-
-Run the full local development environment from the project root:
+1. Install Node.js.
+2. Install dependencies:
 
 ```bash
-base44 dev
+npm install
 ```
 
-`base44 dev` starts the local Base44 development backend and, when this app is configured for it, also starts the frontend dev server for you. Use the frontend URL printed by the command.
+## Environment
 
-For example, when the Base44 project config includes a `serveCommand`, `base44 dev` can launch the frontend too:
+The app talks to the **XERT FITNESS** Supabase project (ref `ugmkwoapjcpiucsrxwzt`).
 
-```json5
-{
-  "site": {
-    "serveCommand": "npm run dev"
-  }
-}
+### Client (browser) — required for `npm run dev` and the Vite build
+
+```bash
+VITE_SUPABASE_URL=https://ugmkwoapjcpiucsrxwzt.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_public_key
 ```
 
-In a Base44 project this lives in `base44/config.jsonc`.
+The anon/publishable key is safe to expose in the browser. Find it in
+Supabase → Project Settings → API → Project API keys → `anon public`.
 
-## Run Only The Frontend
+### Server (Vercel serverless `/api` — Stripe checkout & webhook)
 
-If you only want to work on the frontend against the hosted Base44 backend, run:
+Set these in **Vercel Project Settings → Environment Variables** (Production +
+Preview). They are secret and must never be committed or exposed to the client:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=...   # Supabase → Settings → API → service_role (SECRET)
+STRIPE_SECRET_KEY=sk_live_...   # or sk_test_... while testing
+STRIPE_WEBHOOK_SECRET=whsec_...  # from the Stripe webhook endpoint you create
+```
+
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` must also be set in Vercel so the
+build has them. The serverless functions reuse `VITE_SUPABASE_URL` if
+`SUPABASE_URL` is not set.
+
+### Stripe webhook
+
+After deploying, create a Stripe webhook endpoint pointing at
+`https://<your-domain>/api/stripe-webhook` for the `checkout.session.completed`
+event, then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+## Database
+
+The Supabase schema is defined in:
+
+- `src/supabase/rls_policies.sql` — lead/booking tables + Row Level Security
+- `src/supabase/booking_schema.sql` — members, session packs, orders, credits,
+  bookings, coaches, events, and the booking functions
+
+Both are idempotent; run them in the Supabase SQL editor (or apply via the
+project's Postgres connection) to (re)provision the schema.
+
+## Run Locally
 
 ```bash
 npm run dev
@@ -45,33 +65,26 @@ npm run dev
 
 Open the local URL printed by Vite.
 
-## Use The Hosted Backend
-
-For frontend-only development, create or update `.env.local` in the project root:
+## Checks
 
 ```bash
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=https://your-app.base44.app
+npm run lint
+npm run build
 ```
 
-`VITE_BASE44_APP_ID` identifies the Base44 app.
+`npm run typecheck` exists, but this JavaScript project still has broader typing debt in shared UI/admin files.
 
-`VITE_BASE44_APP_BASE_URL` tells the Base44 Vite plugin where to send local `/api` requests. Point it at your deployed Base44 app URL when you want the local frontend to use the hosted backend.
+## Deploy
 
-When you use `base44 dev`, the command injects the local Base44 values for you, so `.env.local` is mainly needed for frontend-only workflows.
+Deploy through the existing Vercel project.
 
-## Publish Your Changes
+Recommended Vercel settings:
 
-After pushing your changes to git, open the Base44 dashboard and publish the app:
+- Framework preset: Vite
+- Install command: `npm install`
+- Build command: `npm run build`
+- Output directory: `dist`
 
-```bash
-base44 dashboard open
-```
+## Supabase
 
-## Docs & Support
-
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
-
-Base44 CLI command reference: [https://docs.base44.com/developers/references/cli/commands/introduction](https://docs.base44.com/developers/references/cli/commands/introduction)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+Database and RLS policy notes live in `src/supabase/rls_policies.sql`.

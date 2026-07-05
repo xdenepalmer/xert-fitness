@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,23 +9,62 @@ import AuthLayout from "@/components/AuthLayout";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
-  const resetToken = searchParams.get("token");
+  const code = searchParams.get("code");
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingLink, setCheckingLink] = useState(true);
+  const [linkValid, setLinkValid] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const prepareSession = async () => {
+      setCheckingLink(true);
+      setError("");
+
+      try {
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        }
+
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        if (active) setLinkValid(Boolean(data.session));
+      } catch (err) {
+        if (active) {
+          setLinkValid(false);
+          setError(err.message || "Password reset link is invalid or expired");
+        }
+      } finally {
+        if (active) setCheckingLink(false);
+      }
+    };
+
+    prepareSession();
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match");
       return;
     }
+
     setLoading(true);
     try {
-      await base44.auth.resetPassword({ resetToken, newPassword });
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
       window.location.href = "/login";
     } catch (err) {
       setError(err.message || "Failed to reset password");
@@ -34,20 +73,39 @@ export default function ResetPassword() {
     }
   };
 
-  if (!resetToken) {
+  if (checkingLink) {
+    return (
+      <AuthLayout
+        icon={Lock}
+        title="Checking reset link"
+        subtitle="One moment while we verify your Supabase session"
+      >
+        <div className="flex justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (!linkValid) {
     return (
       <AuthLayout
         icon={AlertTriangle}
         title="Invalid reset link"
-        subtitle="This password reset link is missing or invalid"
+        subtitle="This password reset link is missing, invalid or expired"
         footer={
           <Link to="/forgot-password" className="text-primary font-medium hover:underline">
             Request a new link
           </Link>
         }
       >
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
         <p className="text-sm text-foreground text-center">
-          The link you used appears to be incomplete. Please request a new password reset email.
+          Please request a new password reset email from the login screen.
         </p>
       </AuthLayout>
     );

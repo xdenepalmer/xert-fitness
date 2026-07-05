@@ -2,7 +2,6 @@ import React from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import TrainerInterestForm from '@/components/public/TrainerInterestForm';
-import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 
 export default function TrainerInterest() {
   return (

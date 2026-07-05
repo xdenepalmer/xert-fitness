@@ -1,14 +1,12 @@
 import React from 'react';
 
 const audiences = [
-  { group: 'Emergency services', descriptor: 'Shift-ready strength and conditioning.' },
-  { group: 'Mine workers', descriptor: 'Durable strength and engine.' },
-  { group: 'Teachers', descriptor: 'Structured training around busy workdays.' },
-  { group: 'Hospital workers', descriptor: 'Community and accountability.' },
-  { group: 'Council / government workers', descriptor: 'Consistent training structure.' },
-  { group: 'Local sports teams', descriptor: 'Team conditioning and fitness blocks.' },
-  { group: 'Beginners', descriptor: 'Coached from the start.' },
-  { group: 'Experienced athletes', descriptor: 'Stronger standards and event goals.' },
+  { group: 'Beginners', descriptor: 'Structure, guidance and scalable coaching from day one.' },
+  { group: 'Busy adults', descriptor: 'Booked sessions that make consistency easier.' },
+  { group: 'Athletes preparing for events', descriptor: 'Training blocks that build toward real demands.' },
+  { group: 'People returning to fitness', descriptor: 'Supportive progression without guesswork.' },
+  { group: 'Local sports teams', descriptor: 'Strength, engine and team conditioning blocks.' },
+  { group: 'Anyone wanting accountability', descriptor: 'A community that trains with purpose.' },
 ];
 
 export default function AudienceRows() {
@@ -22,8 +20,8 @@ export default function AudienceRows() {
 
         <h2 className="font-display uppercase mb-10"
           style={{ fontSize: 'clamp(2rem,5vw,3rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
-          Built for Kingaroy.<br />
-          <span style={{ color: 'rgba(209,221,230,0.45)' }}>All of it.</span>
+          Training for everyday people<br />
+          <span style={{ color: 'rgba(209,221,230,0.45)' }}>through to athletes.</span>
         </h2>
 
         <div>
@@ -48,6 +46,9 @@ export default function AudienceRows() {
             </div>
           ))}
         </div>
+        <p className="font-body text-sm leading-relaxed mt-8 max-w-2xl" style={{ color: 'rgba(209,221,230,0.62)' }}>
+          All sessions are scalable and designed to meet members at their current fitness level.
+        </p>
       </div>
     </section>
   );

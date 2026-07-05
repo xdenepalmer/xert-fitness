@@ -27,10 +27,10 @@ export default function StickyMobileCTA() {
             paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
           }}
         >
-          <a href="#eoi"
+          <a href="/booking"
             className="flex items-center justify-center gap-2 w-full text-center py-3.5 font-display text-base uppercase tracking-wide transition-transform active:scale-[0.98]"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-            Register Foundation Interest
+            Book Your First Session
             <ArrowRight className="w-4 h-4" />
           </a>
         </motion.div>

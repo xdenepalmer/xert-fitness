@@ -1,10 +1,11 @@
 import React from 'react';
-import { Mail, MapPin, Instagram, Facebook } from 'lucide-react';
+import { Mail, MapPin, Instagram } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 
-const CONTACT_EMAIL = 'hello@xertfitness.com.au';
+const CONTACT_EMAIL = 'byronhawley@gmail.com';
+const INSTAGRAM_URL = 'https://instagram.com/xert_fit';
 
 export default function Contact() {
   return (
@@ -21,7 +22,7 @@ export default function Contact() {
         </h1>
 
         <p className="font-body leading-relaxed mb-10" style={{ color: 'rgba(209,221,230,0.75)', fontSize: '1.0625rem', maxWidth: '50ch' }}>
-          Have a question about classes, coaching, allied health partnerships or the August soft launch? Reach out — we'd love to hear from you and help you plan your training.
+          Have a question about classes, coaching, allied health partnerships or booking your first session? Reach out and we will help you plan your training.
         </p>
 
         <div className="space-y-4">
@@ -48,7 +49,7 @@ export default function Contact() {
             </div>
             <div>
               <p className="font-display text-base uppercase text-xert-offwhite leading-none">Location</p>
-              <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.6)' }}>Kingaroy, Queensland</p>
+              <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.6)' }}>Kingaroy, Queensland 4610</p>
             </div>
           </div>
 
@@ -60,14 +61,8 @@ export default function Contact() {
             </div>
             <div className="flex-1">
               <p className="font-display text-base uppercase text-xert-offwhite leading-none mb-2">Follow Along</p>
-              <div className="flex items-center gap-4">
-                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer"
-                  className="font-body text-sm transition-colors" style={{ color: '#7BA7BC' }}>Instagram</a>
-                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer"
-                  className="font-body text-sm transition-colors flex items-center gap-1.5" style={{ color: '#7BA7BC' }}>
-                  <Facebook className="w-3.5 h-3.5" /> Facebook
-                </a>
-              </div>
+              <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer"
+                className="font-body text-sm transition-colors" style={{ color: '#7BA7BC' }}>@xert_fit</a>
             </div>
           </div>
         </div>

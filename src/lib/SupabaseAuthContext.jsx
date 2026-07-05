@@ -5,19 +5,34 @@ const SupabaseAuthContext = createContext();
 
 export const SupabaseAuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
 
+    async function loadProfile(currentSession) {
+      if (!currentSession?.user) {
+        if (active) setProfile(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentSession.user.id)
+        .maybeSingle();
+      if (active) setProfile(data || null);
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
       setSession(data.session);
-      setLoading(false);
+      loadProfile(data.session).finally(() => { if (active) setLoading(false); });
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      loadProfile(newSession);
     });
 
     return () => {
@@ -36,7 +51,17 @@ export const SupabaseAuthProvider = ({ children }) => {
   };
 
   return (
-    <SupabaseAuthContext.Provider value={{ session, user: session?.user || null, loading, signIn, signOut }}>
+    <SupabaseAuthContext.Provider
+      value={{
+        session,
+        user: session?.user || null,
+        profile,
+        isAdmin: profile?.role === 'admin',
+        loading,
+        signIn,
+        signOut,
+      }}
+    >
       {children}
     </SupabaseAuthContext.Provider>
   );

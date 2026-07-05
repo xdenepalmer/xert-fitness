@@ -1,12 +1,11 @@
+import React, { Suspense, lazy } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { SupabaseAuthProvider } from '@/lib/SupabaseAuthContext';
 import AdminRoute from '@/components/admin/AdminRoute';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 
 // Page imports
@@ -15,31 +14,21 @@ import ThankYou from './pages/ThankYou';
 import TrainerInterest from './pages/TrainerInterest';
 import PartnerInterest from './pages/PartnerInterest';
 import SoftLaunchTimetable from './pages/SoftLaunchTimetable';
-import AdminCommandCentre from './pages/AdminCommandCentre';
+// Admin suite is code-split so public visitors never download it.
+const AdminCommandCentre = lazy(() => import('./pages/AdminCommandCentre'));
 import About from './pages/About';
 import Contact from './pages/Contact';
 import TrainingGuide from './pages/TrainingGuide';
+import Coaches from './pages/Coaches';
+import Events from './pages/Events';
+import Booking from './pages/Booking';
+import Account from './pages/Account';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
-const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
-
-  if (isLoadingPublicSettings || isLoadingAuth) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-xert-black">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-2 border-xert-steel/30 border-t-xert-red rounded-full animate-spin" />
-          <span className="font-display text-xs text-xert-concrete/30 uppercase tracking-widest">XERT</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (authError) {
-    if (authError.type === 'user_not_registered') return <UserNotRegisteredError />;
-    if (authError.type === 'auth_required') { navigateToLogin(); return null; }
-  }
-
-  return (
+const AppRoutes = () => (
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/thank-you" element={<ThankYou />} />
@@ -47,31 +36,35 @@ const AuthenticatedApp = () => {
       <Route path="/partner-interest" element={<PartnerInterest />} />
       <Route path="/timetable" element={<SoftLaunchTimetable />} />
       <Route path="/about" element={<About />} />
+      <Route path="/coaches" element={<Coaches />} />
+      <Route path="/events" element={<Events />} />
+      <Route path="/booking" element={<Booking />} />
+      <Route path="/account" element={<Account />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />
-      {/* ADMIN — currently accessible to any authenticated user.
-          IMPORTANT: Implement Supabase RLS + role check before real use.
-          See setup notes in the project documentation. */}
-      <Route path="/admin" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
-      <Route path="/admin/*" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
+      {/* ADMIN — requires a signed-in user whose profiles.role = 'admin'.
+          Promote an admin with the SQL noted in src/supabase/booking_schema.sql. */}
+      <Route path="/admin" element={<AdminRoute><Suspense fallback={null}><AdminCommandCentre /></Suspense></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminRoute><Suspense fallback={null}><AdminCommandCentre /></Suspense></AdminRoute>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
-  );
-};
+);
 
 function App() {
   return (
-    <AuthProvider>
-      <SupabaseAuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <ScrollToTop />
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </SupabaseAuthProvider>
-    </AuthProvider>
+    <SupabaseAuthProvider>
+      <QueryClientProvider client={queryClientInstance}>
+        <Router>
+          <ScrollToTop />
+          <AppRoutes />
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
+    </SupabaseAuthProvider>
   );
 }
 

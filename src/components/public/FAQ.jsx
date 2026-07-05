@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 
 const faqs = [
   { q: "When is XERT opening?", a: "Soft launch is planned for August. We'll open in stages — limited class capacity at first, building out as demand and space allow. Register your foundation interest to be notified first." },
-  { q: "What classes will be available?", a: "XERT will offer structured functional training classes across strength, conditioning, hybrid and event-prep formats. All classes are coach-led and properly programmed. Beginner-friendly options will be available." },
+  { q: "What classes will be available?", a: "XERT offers structured functional training across strength, aerobic capacity, threshold and intensive sessions. Classes follow progressive training blocks and are coached so members understand the purpose of each session." },
   { q: "Do I need to be fit to join?", a: "No. XERT is built for all levels — from complete beginners to experienced athletes. Coaches scale every session to the individual. The most important thing is showing up and committing to the process." },
-  { q: "What is the event prep focus?", a: "XERT maintains a 12-month calendar of functional fitness events across South East Queensland — including obstacle races, team challenges, endurance events and more. Members can choose an event to train toward and receive specific programming and support." },
+  { q: "What is the event prep focus?", a: "XERT follows the South East Queensland sporting and fitness calendar. Members can choose from endurance races, triathlons, trail runs, functional fitness events, local sport and XERT challenges, then train toward those goals together." },
   { q: "Is there personal training available?", a: "Yes. 1-on-1 personal training sessions will be available in addition to group classes. You can request a PT session through the timetable page." },
   { q: "What allied health services will be available?", a: "XERT is building relationships with physiotherapists, nutritionists, psychologists and other practitioners who will operate inside the facility. This means recovery, injury management and performance support are available without leaving the building." },
-  { q: "Where is XERT located?", a: "XERT is based in Kingaroy, Queensland — exact address to be confirmed closer to the August soft launch." },
+  { q: "Where is XERT located?", a: "XERT is based in Kingaroy, Queensland 4610. The facility includes a main class training area, accessory training space, onsite parking, bathroom and changeroom access." },
   { q: "How do I register foundation interest?", a: "Use the form on this page. Foundation interest helps us plan class times, coaching demand and first-stage capacity. It's free to register and carries no financial commitment." },
 ];
 

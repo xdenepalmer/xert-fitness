@@ -1,11 +1,11 @@
 import React from 'react';
 
-const PHOTO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/1fb3d6d4e_justin-fisher-k4-H6EO86yY-unsplash.jpg';
+const PHOTO = '/assets/training-style.jpg';
 
 const pillars = [
   { label: 'Functional Movement', desc: 'Strength, power and conditioning built on real-world patterns.' },
-  { label: 'Structured Programming', desc: 'Every class is coached and purposefully programmed.' },
-  { label: 'Event-Led Training', desc: 'A 12-month calendar of events gives members real goals.' },
+  { label: 'Structured Programming', desc: 'Classes follow progressive 12-week training blocks.' },
+  { label: 'Event-Led Training', desc: 'The 2026 event calendar gives members real goals.' },
   { label: 'All Levels Welcome', desc: 'From first-timers to experienced athletes.' },
   { label: 'Coach-Led Classes', desc: 'No guesswork — your coach leads every session.' },
   { label: 'Allied Health Integration', desc: 'Recovery and support built into the facility.' },
@@ -29,7 +29,7 @@ export default function TrainingStyle() {
               Performance.
             </h2>
             <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.7)', fontSize: '0.9375rem' }}>
-              XERT is not a commercial gym. Everything is coached, programmed and built around helping members improve — whether the goal is general fitness, event preparation or strength.
+              XERT is not a commercial gym. Every session is coached, programmed and built around helping members improve, whether the goal is general fitness, event preparation, strength or long-term health.
             </p>
           </div>
           <div className="relative aspect-video lg:aspect-square overflow-hidden">

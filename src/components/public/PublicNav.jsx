@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
-const LOGO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/a1601f524_Logo_xert_final-01.png';
+const LOGO = '/assets/xert-logo-full.png';
 
 export default function PublicNav() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const { session } = useSupabaseAuth();
 
   useEffect(() => {
     const handle = () => setScrolled(window.scrollY > 20);
@@ -16,9 +18,10 @@ export default function PublicNav() {
 
   const navLinks = [
     { to: '/', label: 'Home' },
+    { href: '/#facility', label: 'Facility' },
     { to: '/timetable', label: 'Timetable' },
-    { to: '/about', label: 'About' },
-    { to: '/trainer-interest', label: 'Coaches' },
+    { to: '/coaches', label: 'Coaches' },
+    { to: '/events', label: 'Events' },
     { to: '/contact', label: 'Contact' },
   ];
 
@@ -38,22 +41,39 @@ export default function PublicNav() {
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-6">
-          {navLinks.map(l => (
-            <Link key={l.to} to={l.to}
-              className="font-body text-sm uppercase tracking-wider transition-colors"
-              style={{ color: location.pathname === l.to ? '#7BA7BC' : 'rgba(209,221,230,0.6)' }}
-              onMouseEnter={e => e.currentTarget.style.color = '#F1F3F4'}
-              onMouseLeave={e => e.currentTarget.style.color = location.pathname === l.to ? '#7BA7BC' : 'rgba(209,221,230,0.6)'}>
-              {l.label}
-            </Link>
-          ))}
-          <a href="#eoi"
-            className="ml-4 px-5 py-2 font-display text-sm uppercase tracking-wide transition-all"
+          {navLinks.map(l => {
+            const active = l.to && location.pathname === l.to;
+            const commonProps = {
+              className: 'font-body text-sm uppercase tracking-wider transition-colors',
+              style: { color: active ? '#7BA7BC' : 'rgba(209,221,230,0.6)' },
+              onMouseEnter: e => e.currentTarget.style.color = '#F1F3F4',
+              onMouseLeave: e => e.currentTarget.style.color = active ? '#7BA7BC' : 'rgba(209,221,230,0.6)',
+            };
+
+            return l.to ? (
+              <Link key={l.to} to={l.to} {...commonProps}>
+                {l.label}
+              </Link>
+            ) : (
+              <a key={l.href} href={l.href} {...commonProps}>
+                {l.label}
+              </a>
+            );
+          })}
+          <Link to={session ? '/account' : '/login'}
+            className="ml-4 font-body text-sm uppercase tracking-wider transition-colors"
+            style={{ color: 'rgba(209,221,230,0.6)' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#F1F3F4'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(209,221,230,0.6)'}>
+            {session ? 'Account' : 'Log In'}
+          </Link>
+          <Link to="/booking"
+            className="px-5 py-2 font-display text-sm uppercase tracking-wide transition-all"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
-            Register Interest
-          </a>
+            Book Now
+          </Link>
         </div>
 
         {/* Mobile hamburger */}
@@ -69,17 +89,30 @@ export default function PublicNav() {
         <div className="md:hidden border-t px-6 py-4 space-y-1"
           style={{ backgroundColor: '#101820', borderColor: 'rgba(123,167,188,0.15)' }}>
           {navLinks.map(l => (
-            <Link key={l.to} to={l.to} onClick={() => setMenuOpen(false)}
-              className="block font-display text-xl uppercase py-2.5 transition-colors"
-              style={{ color: location.pathname === l.to ? '#7BA7BC' : '#D1DDE6' }}>
-              {l.label}
-            </Link>
+            l.to ? (
+              <Link key={l.to} to={l.to} onClick={() => setMenuOpen(false)}
+                className="block font-display text-xl uppercase py-2.5 transition-colors"
+                style={{ color: location.pathname === l.to ? '#7BA7BC' : '#D1DDE6' }}>
+                {l.label}
+              </Link>
+            ) : (
+              <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
+                className="block font-display text-xl uppercase py-2.5 transition-colors"
+                style={{ color: '#D1DDE6' }}>
+                {l.label}
+              </a>
+            )
           ))}
-          <a href="#eoi" onClick={() => setMenuOpen(false)}
+          <Link to={session ? '/account' : '/login'} onClick={() => setMenuOpen(false)}
+            className="block font-display text-xl uppercase py-2.5 transition-colors"
+            style={{ color: '#D1DDE6' }}>
+            {session ? 'Account' : 'Log In'}
+          </Link>
+          <Link to="/booking" onClick={() => setMenuOpen(false)}
             className="block w-full text-center py-3.5 font-display text-base uppercase mt-2"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-            Register Interest
-          </a>
+            Book Now
+          </Link>
         </div>
       )}
     </nav>

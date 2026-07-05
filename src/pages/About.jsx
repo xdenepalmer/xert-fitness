@@ -19,16 +19,16 @@ export default function About() {
 
         <div className="space-y-5 font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.78)', fontSize: '1.0625rem' }}>
           <p>
-            XERT Fitness is a new functional training facility opening in stages in Kingaroy, Queensland. We exist to help everyday people train with structure and purpose — not to be another commercial gym where you guess your way through a workout. Every class at XERT is coached and deliberately programmed, blending strength, power and conditioning built on real-world movement patterns. Our guiding idea is simple: beat your best, one session at a time.
+            XERT Fitness is a semi-private functional fitness studio based in Kingaroy, Queensland. We exist to help everyday people through to athletes train with structure and purpose. Every class at XERT is coached and deliberately programmed, blending strength, conditioning, movement quality and long-term performance.
         </p>
         <p>
-          The facility is built around a twelve-month calendar of functional fitness, endurance, team and challenge events, so members always have a real goal ahead of them. Whether you are training for general fitness, preparing for a specific event, or chasing a strength milestone, your coach leads every session and helps you understand exactly what the goal in front of you requires. Allied health support — recovery, physiotherapy and nutrition partners — is integrated directly into the space, so improvement and longevity sit side by side.
+          Our programming follows the South East Queensland sporting and fitness calendar, so members always have a real goal ahead of them. Whether you are training for general fitness, preparing for a specific event, or chasing a strength milestone, your coach leads every session and helps you understand what the goal in front of you requires.
         </p>
         <p>
-          XERT is for the Kingaroy community in the broadest sense: emergency services and mine workers who need durable, shift-ready conditioning; teachers, hospital staff and council workers who want consistent structure around busy days; local sports teams chasing better conditioning blocks; and complete beginners alongside experienced athletes. Everyone is coached from the start, and standards rise with you.
+          The training system combines structured functional fitness classes, an accessory training area, and support for health, performance, recovery and nutrition. Sessions are scalable, booking-based and designed to maintain coaching quality while helping members train consistently.
         </p>
         <p>
-          XERT Fitness is veteran owned and built on the values of discipline, structure, purpose, performance, resilience, community, education and preparation. We are currently registering foundation interest ahead of our August soft launch — early interest directly shapes class times, coaching demand, capacity and the first timetable.
+          XERT is built around a simple philosophy: train for life, compete for fun. Members choose events, train together and build toward shared goals throughout the year.
         </p>
         </div>
 

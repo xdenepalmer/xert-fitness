@@ -9,13 +9,13 @@
   "theme_color": "#101820",
   "icons": [
     {
-      "src": "https://media.base44.com/images/public/6a4099d07e981f3feabc1113/ffb8ab471_Logo_xert_final-10.jpg",
+      "src": "/assets/xert-manifest-icon.jpg",
       "sizes": "192x192",
       "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "https://media.base44.com/images/public/6a4099d07e981f3feabc1113/ffb8ab471_Logo_xert_final-10.jpg",
+      "src": "/assets/xert-manifest-icon.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"

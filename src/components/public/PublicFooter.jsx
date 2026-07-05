@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const LOGO = 'https://media.base44.com/images/public/6a4099d07e981f3feabc1113/a1601f524_Logo_xert_final-01.png';
+const LOGO = '/assets/xert-logo-full.png';
 
 export default function PublicFooter() {
   return (
@@ -13,9 +13,9 @@ export default function PublicFooter() {
             <img src={LOGO} alt="XERT Fitness" className="h-8 w-auto mb-4 opacity-90"
               style={{ filter: 'brightness(0) invert(1)' }} />
             <p className="font-body text-xs leading-relaxed mb-3" style={{ color: 'rgba(209,221,230,0.5)' }}>
-              A new functional training facility opening in Kingaroy, Queensland. Soft launch August.
+              Semi-private functional fitness coaching in Kingaroy, Queensland. Beat Your Best.
             </p>
-            <p className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(123,167,188,0.4)' }}>Veteran owned. Beat Your Best.</p>
+            <p className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(123,167,188,0.4)' }}>Train with purpose. Compete together.</p>
           </div>
 
           {/* Links */}
@@ -24,9 +24,11 @@ export default function PublicFooter() {
             <div className="space-y-2">
               {[
                 { to: '/', label: 'Home' },
+                { to: '/#facility', label: 'Facility' },
+                { to: '/#events', label: 'Event Calendar' },
                 { to: '/about', label: 'About XERT' },
                 { to: '/training-guide', label: 'Training Guide' },
-                { to: '/timetable', label: 'Soft Launch / Timetable' },
+                { to: '/timetable', label: 'Timetable' },
                 { to: '/trainer-interest', label: 'Coach Interest' },
                 { to: '/partner-interest', label: 'Partner / Allied Health' },
                 { to: '/contact', label: 'Contact' },
@@ -46,9 +48,9 @@ export default function PublicFooter() {
           <div>
             <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Foundation List</p>
             <p className="font-body text-sm mb-4" style={{ color: 'rgba(209,221,230,0.55)' }}>
-              Register your interest to help shape the soft launch timetable and class capacity.
+              Book your first session or register interest to learn more about the XERT training system.
             </p>
-            <a href="#eoi"
+            <a href="/#eoi"
               className="inline-flex items-center px-5 py-2.5 font-display text-sm uppercase tracking-wide transition-all"
               style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
@@ -61,7 +63,7 @@ export default function PublicFooter() {
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3"
           style={{ borderTop: '1px solid rgba(123,167,188,0.1)' }}>
           <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.25)' }}>
-            XERT Fitness, Kingaroy QLD. Soft launch August.
+            XERT Fitness, Kingaroy QLD 4610.
           </p>
           <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.2)' }}>
             Beat Your Best.

@@ -6,7 +6,9 @@ import WhatXertIs from '@/components/public/WhatXertIs';
 import EventWall from '@/components/public/EventWall';
 import TrainingStyle from '@/components/public/TrainingStyle';
 import AudienceRows from '@/components/public/AudienceRows';
+import FacilitySection from '@/components/public/FacilitySection';
 import FounderSection from '@/components/public/FounderSection';
+import SessionPacks from '@/components/public/SessionPacks';
 import EoiSelector from '@/components/public/EoiSelector';
 import FAQ from '@/components/public/FAQ';
 import PublicFooter from '@/components/public/PublicFooter';
@@ -46,13 +48,15 @@ export default function Home() {
         <Marquee />
 
         <Reveal><WhatXertIs /></Reveal>
-        <Reveal><EventWall /></Reveal>
         <Reveal><TrainingStyle /></Reveal>
+        <Reveal><FacilitySection /></Reveal>
+        <Reveal><EventWall /></Reveal>
         <Reveal><AudienceRows /></Reveal>
 
         <Marquee />
 
         <Reveal><FounderSection /></Reveal>
+        <Reveal><SessionPacks /></Reveal>
         <Reveal><EoiSelector /></Reveal>
 
         {/* Final CTA */}
@@ -70,15 +74,15 @@ export default function Home() {
             />
             <div className="max-w-xl mx-auto relative">
               <h2 className="font-display uppercase mb-4 text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)' }}>
-                Join the foundation list.
+                Book your first session.
               </h2>
               <p className="font-body leading-relaxed mb-8" style={{ color: 'rgba(209,221,230,0.65)', fontSize: '1rem' }}>
-                Foundation interest helps shape class times, coaching demand, soft launch capacity and the first timetable.
+                Contact XERT to learn more about the coaching system, class packs and the training block that fits your next goal.
               </p>
-              <a href="#eoi"
+              <a href="/booking"
                 className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase transition-all active:scale-[0.98]"
                 style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-                Register interest
+                Book Your First Session
               </a>
             </div>
           </section>
