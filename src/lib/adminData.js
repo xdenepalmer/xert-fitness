@@ -226,6 +226,135 @@ export async function getDashboardStats() {
   };
 }
 
+// ─── Coaches (admin CRUD) ───────────────────────────────────────────────────
+
+export async function getAllCoaches() {
+  const { data, error } = await supabase
+    .from('coaches')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function createCoach(coach) {
+  const { error } = await supabase.from('coaches').insert([coach]);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateCoach(id, updates) {
+  const { error } = await supabase.from('coaches').update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteCoach(id) {
+  const { error } = await supabase.from('coaches').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ─── Events (admin CRUD) ────────────────────────────────────────────────────
+
+export async function getAllEvents() {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .order('event_date', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function createEvent(event) {
+  const { error } = await supabase.from('events').insert([event]);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateEvent(id, updates) {
+  const { error } = await supabase.from('events').update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteEvent(id) {
+  const { error } = await supabase.from('events').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ─── Members (admin) ─────────────────────────────────────────────────────────
+
+export async function adminListMembers() {
+  const { data, error } = await supabase.rpc('admin_list_members');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function adminGrantCredits(userId, sessions, validityDays) {
+  const { error } = await supabase.rpc('admin_grant_credits', {
+    p_user_id: userId, p_sessions: sessions, p_validity_days: validityDays ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function adminSetRole(userId, role) {
+  const { error } = await supabase.rpc('admin_set_role', { p_user_id: userId, p_role: role });
+  if (error) throw new Error(error.message);
+}
+
+// ─── Class rosters (credit-based bookings) ───────────────────────────────────
+
+export async function adminSessionRoster(sessionId) {
+  const { data, error } = await supabase.rpc('admin_session_roster', { p_session_id: sessionId });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function adminSetBookingStatus(bookingId, status) {
+  const { error } = await supabase.rpc('admin_set_booking_status', {
+    p_booking_id: bookingId, p_status: status,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// ─── Orders (admin) ──────────────────────────────────────────────────────────
+
+export async function getAllOrders() {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, products(name)')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+// ─── Products (admin) ────────────────────────────────────────────────────────
+
+export async function getAllProducts() {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function updateProduct(id, updates) {
+  const { error } = await supabase.from('products').update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ─── Site content (CMS) ──────────────────────────────────────────────────────
+
+export async function getAllSiteContent() {
+  const { data, error } = await supabase.from('site_content').select('*');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function saveSiteContent(key, contentData) {
+  const { error } = await supabase
+    .from('site_content')
+    .upsert({ key, data: contentData, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
+
 export async function exportLeadsCsv(table) {
   const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);

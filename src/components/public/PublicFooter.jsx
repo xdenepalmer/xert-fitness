@@ -1,9 +1,34 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Instagram, Mail, MapPin } from 'lucide-react';
+import { useSiteContent } from '@/lib/siteContent';
 
 const LOGO = '/assets/xert-logo-full.png';
 
+const CONTACT_DEFAULTS = {
+  email: 'byronhawley@gmail.com',
+  address: 'Kingaroy, Queensland 4610',
+  instagram_handle: '@xert_fit',
+  instagram_url: 'https://instagram.com/xert_fit',
+};
+
+const NAV_LINKS = [
+  { to: '/', label: 'Home' },
+  { to: '/#facility', label: 'Facility' },
+  { to: '/timetable', label: 'Timetable' },
+  { to: '/booking', label: 'Book & Buy Packs' },
+  { to: '/coaches', label: 'Coaches' },
+  { to: '/events', label: 'Event Calendar' },
+  { to: '/about', label: 'About XERT' },
+  { to: '/training-guide', label: 'Training Guide' },
+  { to: '/trainer-interest', label: 'Coach Interest' },
+  { to: '/partner-interest', label: 'Partner / Allied Health' },
+  { to: '/contact', label: 'Contact' },
+];
+
 export default function PublicFooter() {
+  const contact = useSiteContent('contact', CONTACT_DEFAULTS);
+
   return (
     <footer className="py-12 px-6" style={{ backgroundColor: '#0d1720', borderTop: '1px solid rgba(123,167,188,0.1)' }}>
       <div className="max-w-5xl mx-auto">
@@ -22,17 +47,7 @@ export default function PublicFooter() {
           <div>
             <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Navigate</p>
             <div className="space-y-2">
-              {[
-                { to: '/', label: 'Home' },
-                { to: '/#facility', label: 'Facility' },
-                { to: '/#events', label: 'Event Calendar' },
-                { to: '/about', label: 'About XERT' },
-                { to: '/training-guide', label: 'Training Guide' },
-                { to: '/timetable', label: 'Timetable' },
-                { to: '/trainer-interest', label: 'Coach Interest' },
-                { to: '/partner-interest', label: 'Partner / Allied Health' },
-                { to: '/contact', label: 'Contact' },
-              ].map(l => (
+              {NAV_LINKS.map(l => (
                 <Link key={l.to} to={l.to}
                   className="block font-body text-sm transition-colors"
                   style={{ color: 'rgba(209,221,230,0.55)' }}
@@ -44,18 +59,36 @@ export default function PublicFooter() {
             </div>
           </div>
 
-          {/* CTA */}
+          {/* Contact + CTA */}
           <div>
-            <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Foundation List</p>
-            <p className="font-body text-sm mb-4" style={{ color: 'rgba(209,221,230,0.55)' }}>
-              Book your first session or register interest to learn more about the XERT training system.
-            </p>
-            <a href="/#eoi"
+            <p className="font-display text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(123,167,188,0.5)' }}>Get In Touch</p>
+            <div className="space-y-2 mb-5">
+              <a href={`mailto:${contact.email}`} className="flex items-center gap-2 font-body text-sm transition-colors"
+                style={{ color: 'rgba(209,221,230,0.55)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#7BA7BC'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(209,221,230,0.55)'}>
+                <Mail className="w-3.5 h-3.5 shrink-0" style={{ color: 'rgba(123,167,188,0.5)' }} />
+                {contact.email}
+              </a>
+              <a href={contact.instagram_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-2 font-body text-sm transition-colors"
+                style={{ color: 'rgba(209,221,230,0.55)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#7BA7BC'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(209,221,230,0.55)'}>
+                <Instagram className="w-3.5 h-3.5 shrink-0" style={{ color: 'rgba(123,167,188,0.5)' }} />
+                {contact.instagram_handle}
+              </a>
+              <p className="flex items-center gap-2 font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: 'rgba(123,167,188,0.5)' }} />
+                {contact.address}
+              </p>
+            </div>
+            <a href="/booking"
               className="inline-flex items-center px-5 py-2.5 font-display text-sm uppercase tracking-wide transition-all"
               style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
-              Register interest
+              Book Your First Session
             </a>
           </div>
         </div>
@@ -63,7 +96,7 @@ export default function PublicFooter() {
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3"
           style={{ borderTop: '1px solid rgba(123,167,188,0.1)' }}>
           <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.25)' }}>
-            XERT Fitness, Kingaroy QLD 4610.
+            © {new Date().getFullYear()} XERT Fitness, Kingaroy QLD 4610. All rights reserved.
           </p>
           <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.2)' }}>
             Beat Your Best.

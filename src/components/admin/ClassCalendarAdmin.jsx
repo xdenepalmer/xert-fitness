@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus } from '@/lib/adminData';
+import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus } from '@/lib/adminData';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -18,7 +18,7 @@ const STATUS_COLORS = {
 function SessionEditor({ session, onSave, onCancel }) {
   const [form, setForm] = useState(session || {
     class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
-    start_time: '', end_time: '', duration_minutes: 60, capacity: 12,
+    start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
     location_zone: 'Main floor', beginner_friendly: false,
     intensity_level: 'Moderate', status: 'draft', public_visible: false,
     booking_mode: 'request_to_book', notes: '',
@@ -172,6 +172,7 @@ export default function ClassCalendarAdmin() {
   const [editingSession, setEditingSession] = useState(null);
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [roster, setRoster] = useState([]);
 
   const load = () => {
     setLoading(true);
@@ -185,10 +186,22 @@ export default function ClassCalendarAdmin() {
 
   const loadBookings = (sessionId) => {
     if (expandedBookings === sessionId) { setExpandedBookings(null); return; }
-    getClassBookings({ class_session_id: sessionId }).then(data => {
-      setBookings(data);
+    Promise.all([
+      getClassBookings({ class_session_id: sessionId }),
+      adminSessionRoster(sessionId).catch(() => []),
+    ]).then(([requests, members]) => {
+      setBookings(requests);
+      setRoster(members);
       setExpandedBookings(sessionId);
     });
+  };
+
+  const handleRosterStatus = async (bookingId, status) => {
+    try {
+      await adminSetBookingStatus(bookingId, status);
+      const members = await adminSessionRoster(expandedBookings);
+      setRoster(members);
+    } catch (e) { alert('Update failed: ' + e.message); }
   };
 
   const handleDuplicate = async (session) => {
@@ -268,6 +281,30 @@ export default function ClassCalendarAdmin() {
               {/* Bookings panel */}
               {expandedBookings === s.id && (
                 <div className="border-t border-xert-steel/20 p-4 bg-xert-charcoal">
+                  {/* Credit-based member roster */}
+                  <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">
+                    Class roster ({roster.filter(r => r.status !== 'cancelled').length}{s.capacity ? `/${s.capacity}` : ''})
+                  </h4>
+                  {roster.length === 0 ? (
+                    <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
+                  ) : (
+                    <div className="space-y-2 mb-5">
+                      {roster.map(r => (
+                        <div key={r.booking_id} className="flex items-center justify-between gap-4 bg-xert-ink p-3">
+                          <div>
+                            <p className="font-body text-sm text-xert-offwhite">{r.full_name || r.email || 'Member'}</p>
+                            <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
+                          </div>
+                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)}
+                            className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
+                            {['confirmed', 'attended', 'no_show', 'cancelled'].map(st => <option key={st} value={st}>{st}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                      <p className="font-body text-xs text-xert-concrete/40">Setting a booking to cancelled returns the member&rsquo;s credit.</p>
+                    </div>
+                  )}
+
                   <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">Booking requests ({bookings.length})</h4>
                   {bookings.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40">No bookings yet.</p>

@@ -5,13 +5,23 @@ import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 const NAV_ITEMS = [
   { key: 'overview', label: 'Overview', icon: '◈' },
-  { key: 'members', label: 'Member Leads', icon: '◉' },
-  { key: 'trainers', label: 'Trainer Applicants', icon: '◎' },
-  { key: 'partners', label: 'Partner Enquiries', icon: '◌' },
+  { heading: 'Members & Money' },
+  { key: 'gym-members', label: 'Members', icon: '◉' },
+  { key: 'orders', label: 'Orders & Revenue', icon: '$' },
+  { key: 'products', label: 'Session Packs', icon: '▤' },
+  { heading: 'Classes' },
   { key: 'calendar', label: 'Class Calendar', icon: '▦' },
   { key: 'bookings', label: 'Booking Requests', icon: '▷' },
   { key: 'pt-requests', label: 'PT Requests', icon: '▸' },
   { key: 'availability', label: 'Availability / Blackouts', icon: '▣' },
+  { heading: 'Site Content' },
+  { key: 'content', label: 'Site Content (CMS)', icon: '✎' },
+  { key: 'coaches', label: 'Coaches & Team', icon: '☰' },
+  { key: 'events', label: 'Event Calendar', icon: '◆' },
+  { heading: 'Launch & Leads' },
+  { key: 'members', label: 'Member Leads', icon: '◍' },
+  { key: 'trainers', label: 'Trainer Applicants', icon: '◎' },
+  { key: 'partners', label: 'Partner Enquiries', icon: '◌' },
   { key: 'settings', label: 'Soft Launch Settings', icon: '⚙' },
   { key: 'campaigns', label: 'Campaign Stats', icon: '◀' },
 ];
@@ -35,19 +45,25 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4">
-          {NAV_ITEMS.map(item => (
-            <button
-              key={item.key}
-              onClick={() => { onSectionChange(item.key); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
-                activeSection === item.key
-                  ? 'bg-xert-charcoal text-xert-offwhite border-l-2 border-xert-red'
-                  : 'text-xert-concrete/50 hover:text-xert-offwhite hover:bg-xert-charcoal/50'
-              }`}
-            >
-              <span className="text-xert-red/70 text-sm">{item.icon}</span>
-              <span className="font-body text-sm">{item.label}</span>
-            </button>
+          {NAV_ITEMS.map((item, i) => (
+            item.heading ? (
+              <p key={`h-${i}`} className="px-5 pt-4 pb-1 font-body text-[10px] text-xert-concrete/30 uppercase tracking-[0.2em]">
+                {item.heading}
+              </p>
+            ) : (
+              <button
+                key={item.key}
+                onClick={() => { onSectionChange(item.key); setSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors ${
+                  activeSection === item.key
+                    ? 'bg-xert-charcoal text-xert-offwhite border-l-2 border-xert-red'
+                    : 'text-xert-concrete/50 hover:text-xert-offwhite hover:bg-xert-charcoal/50'
+                }`}
+              >
+                <span className="text-xert-red/70 text-sm">{item.icon}</span>
+                <span className="font-body text-sm">{item.label}</span>
+              </button>
+            )
           ))}
         </nav>
 

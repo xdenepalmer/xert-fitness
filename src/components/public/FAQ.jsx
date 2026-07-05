@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useSiteContent } from '@/lib/siteContent';
 
-const faqs = [
+const DEFAULT_FAQS = [
   { q: "When is XERT opening?", a: "Soft launch is planned for August. We'll open in stages — limited class capacity at first, building out as demand and space allow. Register your foundation interest to be notified first." },
   { q: "What classes will be available?", a: "XERT offers structured functional training across strength, aerobic capacity, threshold and intensive sessions. Classes follow progressive training blocks and are coached so members understand the purpose of each session." },
   { q: "Do I need to be fit to join?", a: "No. XERT is built for all levels — from complete beginners to experienced athletes. Coaches scale every session to the individual. The most important thing is showing up and committing to the process." },
@@ -13,6 +14,10 @@ const faqs = [
 
 export default function FAQ() {
   const [open, setOpen] = useState(null);
+  const content = useSiteContent('faq', { items: DEFAULT_FAQS });
+  const faqs = (content.items || []).filter(f => f.q && f.a);
+
+  if (faqs.length === 0) return null;
 
   return (
     <section className="py-20 px-6" style={{ backgroundColor: '#0d1720' }}>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
+import { useSiteContent } from '@/lib/siteContent';
 
 // Uploaded training photos
 const PHOTOS = [
@@ -17,9 +18,17 @@ const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Q
 
 const ease = [0.22, 1, 0.36, 1];
 
+const HERO_DEFAULTS = {
+  headline: 'Beat Your Best.',
+  subheading: 'Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.',
+  supporting: 'Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.',
+};
+
 export default function Hero() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const { scrollY } = useScroll();
+  const content = useSiteContent('hero', HERO_DEFAULTS);
+  const headlineWords = (content.headline || HERO_DEFAULTS.headline).split(' ');
 
   // Parallax: background drifts slower, content lifts as you scroll.
   const bgY = useTransform(scrollY, [0, 800], [0, 160]);
@@ -116,11 +125,11 @@ export default function Hero() {
 
             {/* Headline — line-by-line reveal */}
             <h1 className="font-display text-[clamp(3rem,10vw,7rem)] leading-[0.9] text-xert-offwhite uppercase mb-6 tracking-tight overflow-hidden">
-              {['Beat', 'Your', 'Best.'].map((line, i) => (
-                <span key={line} className="block overflow-hidden">
+              {headlineWords.map((line, i) => (
+                <span key={`${line}-${i}`} className="block overflow-hidden">
                   <motion.span
                     className="block"
-                    style={{ color: i === 2 ? '#7BA7BC' : undefined }}
+                    style={{ color: i === headlineWords.length - 1 ? '#7BA7BC' : undefined }}
                     initial={{ y: '110%' }}
                     animate={{ y: '0%' }}
                     transition={{ duration: 0.9, delay: 0.2 + i * 0.12, ease }}
@@ -137,10 +146,10 @@ export default function Hero() {
               transition={{ duration: 0.7, delay: 0.6, ease }}
             >
               <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
-                Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.
+                {content.subheading}
               </p>
               <p className="font-body text-sm leading-relaxed mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
-                Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.
+                {content.supporting}
               </p>
 
               <div className="flex items-center gap-3 mb-8">
@@ -152,13 +161,13 @@ export default function Hero() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <a href="#eoi"
+                <Link to="/booking"
                   className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
                   style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
-                  Register Foundation Interest
-                </a>
+                  Book Your First Session
+                </Link>
                 <Link to="/timetable"
                   className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide border transition-all active:scale-[0.98]"
                   style={{ borderColor: 'rgba(123,167,188,0.5)', color: '#D1DDE6' }}
