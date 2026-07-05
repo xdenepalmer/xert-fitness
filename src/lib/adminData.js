@@ -372,6 +372,35 @@ export async function getBusinessStats() {
   };
 }
 
+// ─── Sidebar badge counts (things needing attention) ─────────────────────────
+
+export async function getAdminBadgeCounts() {
+  const [newLeads, pendingBookings, pendingPT] = await Promise.all([
+    supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+  ]);
+  return {
+    members: newLeads.count || 0,
+    bookings: pendingBookings.count || 0,
+    'pt-requests': pendingPT.count || 0,
+  };
+}
+
+// ─── Member detail (admin drawer) ────────────────────────────────────────────
+
+export async function adminMemberDetail(userId) {
+  const [credits, bookings, orders] = await Promise.all([
+    supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
+    supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }),
+  ]);
+  for (const r of [credits, bookings, orders]) {
+    if (r.error) throw new Error(r.error.message);
+  }
+  return { credits: credits.data || [], bookings: bookings.data || [], orders: orders.data || [] };
+}
+
 // ─── Site content (CMS) ──────────────────────────────────────────────────────
 
 export async function getAllSiteContent() {

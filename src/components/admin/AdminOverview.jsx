@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import {
   DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
   PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
+  CheckCircle2, Circle, Gauge,
 } from 'lucide-react';
 import AdminStatCard from './AdminStatCard';
 import {
   getDashboardStats, getSoftLaunchSettings, getDefaultSettings,
   getBusinessStats, getAllOrders, adminListMembers,
+  getAllCoaches, getAllEvents, getAllSiteContent,
 } from '@/lib/adminData';
+import { getAvailableSessions } from '@/lib/bookingData';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -37,6 +40,8 @@ export default function AdminOverview({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [biz, setBiz] = useState(null);
   const [activity, setActivity] = useState(null);
+  const [launch, setLaunch] = useState(null);
+  const [fillRates, setFillRates] = useState(null);
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -73,6 +78,22 @@ export default function AdminOverview({ onNavigate }) {
     }).catch(e => {
       setError(e.message);
       setLoading(false);
+    });
+
+    // Launch checklist + fill rate load independently (non-blocking).
+    Promise.all([
+      getAllCoaches().catch(() => []),
+      getAllEvents().catch(() => []),
+      getAllSiteContent().catch(() => []),
+      getAvailableSessions().catch(() => []),
+    ]).then(([coaches, events, siteContent, sessions]) => {
+      setFillRates(sessions);
+      setLaunch({
+        coaches: coaches.length > 0,
+        classes: sessions.length > 0,
+        events: events.length > 0,
+        content: siteContent.length > 0,
+      });
     });
   }, []);
 
@@ -119,6 +140,95 @@ export default function AdminOverview({ onNavigate }) {
           )}
         </div>
       </div>
+
+      {/* ── Launch checklist + class fill rate ── */}
+      {launch && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Checklist */}
+          {(() => {
+            const items = [
+              { done: launch.classes, label: 'Schedule & publish your first classes', target: 'calendar' },
+              { done: launch.coaches, label: 'Add your coaching team', target: 'coaches' },
+              { done: launch.events, label: 'Load the 2026 event calendar', target: 'events' },
+              { done: launch.content, label: 'Review site copy & hero photos', target: 'content' },
+              { done: (biz?.memberCount || 0) > 0, label: 'First member signup', target: 'gym-members' },
+              { done: (biz?.paidOrders || 0) > 0, label: 'First pack sale', target: 'orders' },
+            ];
+            const doneCount = items.filter(i => i.done).length;
+            const pct = Math.round((doneCount / items.length) * 100);
+            return (
+              <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                    Launch Checklist
+                  </h3>
+                  <span className="font-display text-sm tabular-nums" style={{ color: '#7BA7BC' }}>{doneCount}/{items.length}</span>
+                </div>
+                <div className="h-1 rounded-full overflow-hidden mb-4" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#7BA7BC' }} />
+                </div>
+                <div className="space-y-1">
+                  {items.map(item => (
+                    <button key={item.label} onClick={() => !item.done && onNavigate?.(item.target)}
+                      className="w-full flex items-center gap-2.5 py-1.5 text-left group"
+                      style={{ cursor: item.done ? 'default' : 'pointer' }}>
+                      {item.done
+                        ? <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: '#7ec98f' }} />
+                        : <Circle className="w-4 h-4 shrink-0" style={{ color: 'rgba(123,167,188,0.4)' }} />}
+                      <span className="font-body text-sm" style={{
+                        color: item.done ? 'rgba(209,221,230,0.35)' : '#D1DDE6',
+                        textDecoration: item.done ? 'line-through' : 'none',
+                      }}>
+                        {item.label}
+                      </span>
+                      {!item.done && (
+                        <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Fill rate */}
+          <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+            <h3 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
+              <Gauge className="w-3.5 h-3.5" /> Upcoming Class Fill
+            </h3>
+            {!fillRates || fillRates.length === 0 ? (
+              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                No published upcoming classes yet — publish classes and live booking numbers appear here.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {fillRates.slice(0, 6).map(s => {
+                  const cap = s.capacity || 0;
+                  const pct = cap > 0 ? Math.min(100, Math.round((Number(s.booked_count) / cap) * 100)) : 0;
+                  return (
+                    <div key={s.id}>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-body text-sm truncate" style={{ color: '#D1DDE6' }}>
+                          {s.title || s.class_type}
+                          <span className="text-[11px] ml-2" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                            {new Date(s.start_time).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </span>
+                        </p>
+                        <span className="font-display text-xs tabular-nums shrink-0" style={{ color: pct >= 100 ? '#e0b36a' : '#7BA7BC' }}>
+                          {s.booked_count}/{cap || '∞'}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#e0b36a' : '#7BA7BC' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Quick actions ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

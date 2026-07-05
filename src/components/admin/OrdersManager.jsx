@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Download } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { getAllOrders } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 
@@ -31,6 +32,28 @@ export default function OrdersManager() {
       paidCount: paid.length,
       monthCount: thisMonth.length,
     };
+  }, [orders]);
+
+  // Daily revenue for the last 30 days.
+  const chartData = useMemo(() => {
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 29; i >= 0; i--) {
+      const day = new Date(today.getTime() - i * 86400000);
+      days.push({
+        key: day.toDateString(),
+        label: day.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+        revenue: 0,
+      });
+    }
+    const byKey = Object.fromEntries(days.map(d => [d.key, d]));
+    for (const o of orders) {
+      if (o.status !== 'paid') continue;
+      const key = new Date(o.paid_at || o.created_at).toDateString();
+      if (byKey[key]) byKey[key].revenue += (o.amount_cents || 0) / 100;
+    }
+    return days;
   }, [orders]);
 
   return (
@@ -65,6 +88,30 @@ export default function OrdersManager() {
           </div>
         ))}
       </div>
+
+      {/* 30-day revenue chart */}
+      {!loading && orders.some(o => o.status === 'paid') && (
+        <div className="mb-8 p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+          <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
+            Revenue — last 30 days
+          </h3>
+          <div style={{ width: '100%', height: 180 }}>
+            <ResponsiveContainer>
+              <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
+                <XAxis dataKey="label" interval={6} tick={{ fill: 'rgba(209,221,230,0.4)', fontSize: 10 }} axisLine={{ stroke: 'rgba(123,167,188,0.2)' }} tickLine={false} />
+                <YAxis tick={{ fill: 'rgba(209,221,230,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(123,167,188,0.08)' }}
+                  contentStyle={{ backgroundColor: '#101820', border: '1px solid rgba(123,167,188,0.3)', fontFamily: 'inherit', fontSize: 12 }}
+                  labelStyle={{ color: '#D1DDE6' }}
+                  formatter={v => [`$${v.toFixed(2)}`, 'Revenue']}
+                />
+                <Bar dataKey="revenue" fill="#7BA7BC" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>

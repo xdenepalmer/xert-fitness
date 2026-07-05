@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
-  Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X,
+  Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
+import { getAdminBadgeCounts } from '@/lib/adminData';
+import CommandPalette from '@/components/admin/CommandPalette';
 
 const LOGO = '/assets/xert-logo-full.png';
 
@@ -61,7 +63,26 @@ const GRID_BG = {
 
 export default function AdminLayout({ activeSection, onSectionChange, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [badges, setBadges] = useState({});
   const { user, profile, signOut } = useSupabaseAuth();
+
+  // ⌘K / Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Attention badges (new leads, pending requests) — refresh on section change.
+  useEffect(() => {
+    getAdminBadgeCounts().then(setBadges).catch(() => {});
+  }, [activeSection]);
 
   const activeLabel = ALL_ITEMS.find(n => n.key === activeSection)?.label || 'Command Centre';
   const initials = (profile?.full_name || user?.email || 'A')
@@ -124,7 +145,13 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
                       style={{ height: active ? '60%' : '0%', backgroundColor: '#7BA7BC' }} />
                     <Icon className="w-4 h-4 shrink-0 transition-colors"
                       style={{ color: active ? '#7BA7BC' : 'rgba(123,167,188,0.45)' }} />
-                    <span className="font-body text-[13px]">{item.label}</span>
+                    <span className="font-body text-[13px] flex-1">{item.label}</span>
+                    {badges[item.key] > 0 && (
+                      <span className="shrink-0 min-w-[1.25rem] px-1 py-0.5 text-center font-body text-[10px] tabular-nums"
+                        style={{ backgroundColor: 'rgba(123,167,188,0.2)', color: '#7BA7BC', border: '1px solid rgba(123,167,188,0.35)' }}>
+                        {badges[item.key]}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -189,13 +216,20 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block font-body text-[11px] uppercase tracking-widest" style={{ color: 'rgba(123,167,188,0.4)' }}>
+            <button onClick={() => setPaletteOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
+              style={{ border: '1px solid rgba(123,167,188,0.25)', color: 'rgba(209,221,230,0.5)' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.25)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden sm:inline px-1.5 py-0.5 text-[9px] font-body uppercase"
+                style={{ border: '1px solid rgba(123,167,188,0.3)', color: 'rgba(123,167,188,0.7)' }}>
+                Ctrl K
+              </kbd>
+            </button>
+            <span className="hidden md:block font-body text-[11px] uppercase tracking-widest" style={{ color: 'rgba(123,167,188,0.4)' }}>
               {new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
-            </span>
-            <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1 font-body text-[10px] uppercase tracking-wider"
-              style={{ border: '1px solid rgba(123,167,188,0.25)', color: '#7BA7BC' }}>
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
-              Live
             </span>
           </div>
         </header>
@@ -208,6 +242,8 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
           </div>
         </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} />
     </div>
   );
 }
