@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Mail, MapPin } from 'lucide-react';
+import { Instagram, Mail, MapPin, ShieldCheck } from 'lucide-react';
 import { useSiteContent } from '@/lib/siteContent';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 const LOGO = '/assets/xert-logo-full.png';
 
@@ -28,6 +29,7 @@ const NAV_LINKS = [
 
 export default function PublicFooter() {
   const contact = useSiteContent('contact', CONTACT_DEFAULTS);
+  const { isAdmin } = useSupabaseAuth();
 
   return (
     <footer className="py-12 px-6" style={{ backgroundColor: '#0d1720', borderTop: '1px solid rgba(123,167,188,0.1)' }}>
@@ -98,9 +100,21 @@ export default function PublicFooter() {
           <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.25)' }}>
             © {new Date().getFullYear()} XERT Fitness, Kingaroy QLD 4610. All rights reserved.
           </p>
-          <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.2)' }}>
-            Beat Your Best.
-          </p>
+          <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Link to="/admin"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border font-body text-xs uppercase tracking-wider transition-colors"
+                style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(123,167,188,0.7)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#7BA7BC'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.3)'; e.currentTarget.style.color = 'rgba(123,167,188,0.7)'; }}>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Admin
+              </Link>
+            )}
+            <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.2)' }}>
+              Beat Your Best.
+            </p>
+          </div>
         </div>
       </div>
     </footer>
