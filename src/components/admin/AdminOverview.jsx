@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminStatCard from './AdminStatCard';
-import { getDashboardStats, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { getDashboardStats, getSoftLaunchSettings, getDefaultSettings, getBusinessStats } from '@/lib/adminData';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -12,6 +12,7 @@ function getCountdown(targetDate) {
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
+  const [biz, setBiz] = useState(null);
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,9 +21,11 @@ export default function AdminOverview() {
     Promise.all([
       getDashboardStats(),
       getSoftLaunchSettings(),
-    ]).then(([s, cfg]) => {
+      getBusinessStats().catch(() => null),
+    ]).then(([s, cfg, b]) => {
       setStats(s);
       if (cfg) setSettings(cfg);
+      setBiz(b);
       setLoading(false);
     }).catch(e => {
       setError(e.message);
@@ -39,12 +42,15 @@ export default function AdminOverview() {
         </div>
       )}
 
-      {/* Security warning */}
-      <div className="bg-yellow-900/20 border border-yellow-600/30 p-4">
-        <p className="font-body text-sm text-yellow-400 font-semibold mb-1">⚠ Admin Area — Security Notice</p>
-        <p className="font-body text-xs text-yellow-400/70 leading-relaxed">
-          This admin area is currently accessible to any user. Before real operational use, implement Supabase RLS policies and add route-level authentication. See setup notes below.
-        </p>
+      {/* Business stats */}
+      <div>
+        <h2 className="font-display text-xs text-xert-concrete/40 uppercase tracking-wider mb-4">Business</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <AdminStatCard label="Revenue (total)" value={biz ? `$${(biz.totalRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} accent />
+          <AdminStatCard label="Revenue this month" value={biz ? `$${(biz.monthRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} />
+          <AdminStatCard label="Registered members" value={biz?.memberCount} loading={loading} />
+          <AdminStatCard label="Active class credits" value={biz?.activeCredits} loading={loading} />
+        </div>
       </div>
 
       {/* Primary stats */}

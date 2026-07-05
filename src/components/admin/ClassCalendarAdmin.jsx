@@ -165,6 +165,94 @@ function SessionEditor({ session, onSave, onCancel }) {
   );
 }
 
+function RepeatModal({ session, onDone, onCancel }) {
+  const [intervalDays, setIntervalDays] = useState(8); // 4-on/4-off cycle
+  const [count, setCount] = useState(4);
+  const [keepPublished, setKeepPublished] = useState(session.status === 'published');
+  const [saving, setSaving] = useState(false);
+
+  const handleRepeat = async () => {
+    if (!session.start_time) { alert('This class needs a start time before it can be repeated.'); return; }
+    setSaving(true);
+    try {
+      const { id, created_at, updated_at, ...base } = session;
+      for (let i = 1; i <= count; i++) {
+        const offsetMs = i * intervalDays * 86400000;
+        const copy = {
+          ...base,
+          start_time: new Date(new Date(session.start_time).getTime() + offsetMs).toISOString(),
+          end_time: session.end_time
+            ? new Date(new Date(session.end_time).getTime() + offsetMs).toISOString()
+            : session.end_time,
+          status: keepPublished ? session.status : 'draft',
+          public_visible: keepPublished ? session.public_visible : false,
+        };
+        await createClassSession(copy);
+      }
+      onDone(count);
+    } catch (e) {
+      alert('Repeat failed: ' + e.message);
+      setSaving(false);
+    }
+  };
+
+  const preview = session.start_time
+    ? Array.from({ length: Math.min(count, 3) }, (_, i) =>
+        new Date(new Date(session.start_time).getTime() + (i + 1) * intervalDays * 86400000)
+          .toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }))
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
+        <div className="p-6 border-b border-xert-steel/20">
+          <h3 className="font-display text-xl text-xert-offwhite uppercase">Repeat Class</h3>
+          <p className="font-body text-xs text-xert-concrete/50 mt-1">{session.title}</p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Every … days</label>
+              <select value={intervalDays} onChange={e => setIntervalDays(+e.target.value)}
+                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+                <option value={1}>1 (daily)</option>
+                <option value={2}>2</option>
+                <option value={7}>7 (weekly)</option>
+                <option value={8}>8 (4-on / 4-off cycle)</option>
+                <option value={14}>14 (fortnightly)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Copies</label>
+              <input type="number" min="1" max="26" value={count} onChange={e => setCount(Math.max(1, Math.min(26, +e.target.value)))}
+                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+            </div>
+          </div>
+          {preview.length > 0 && (
+            <p className="font-body text-xs text-xert-concrete/40">
+              Next dates: {preview.join(', ')}{count > 3 ? '…' : ''}
+            </p>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <div onClick={() => setKeepPublished(!keepPublished)}
+              className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${keepPublished ? 'border-green-500 bg-green-500' : 'border-xert-steel/50'}`}>
+              {keepPublished && <span className="text-white text-xs">✓</span>}
+            </div>
+            <span className="font-body text-sm text-xert-concrete/80">Copies keep this class&rsquo;s publish status</span>
+          </label>
+        </div>
+        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
+          <button onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">Cancel</button>
+          <button onClick={handleRepeat} disabled={saving}
+            className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            {saving ? 'Creating…' : `Create ${count} copies`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClassCalendarAdmin() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +261,7 @@ export default function ClassCalendarAdmin() {
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [repeating, setRepeating] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -268,6 +357,10 @@ export default function ClassCalendarAdmin() {
                       className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                       Dupe
                     </button>
+                    <button onClick={() => setRepeating(s)}
+                      className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
+                      Repeat…
+                    </button>
                     {s.status !== 'cancelled' && (
                       <button onClick={() => handleCancel(s.id)}
                         className="px-3 py-1.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
@@ -336,6 +429,14 @@ export default function ClassCalendarAdmin() {
           session={editingSession}
           onSave={() => { setShowEditor(false); load(); }}
           onCancel={() => setShowEditor(false)}
+        />
+      )}
+
+      {repeating && (
+        <RepeatModal
+          session={repeating}
+          onDone={() => { setRepeating(null); load(); }}
+          onCancel={() => setRepeating(null)}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
+import ImageUploader from '@/components/admin/ImageUploader';
 
 const CATEGORIES = [
   { value: 'coach', label: 'Coach' },
@@ -71,10 +72,7 @@ function CoachEditor({ coach, onSave, onCancel }) {
               <input value={form.currently_training_for || ''} onChange={e => set('currently_training_for', e.target.value)} placeholder="e.g. Hyrox Melbourne" className={inputCls} />
             </div>
           </div>
-          <div>
-            <label className={labelCls}>Photo URL</label>
-            <input value={form.photo_url || ''} onChange={e => set('photo_url', e.target.value)} placeholder="https://…" className={inputCls} />
-          </div>
+          <ImageUploader value={form.photo_url || ''} onChange={v => set('photo_url', v)} folder="coaches" label="Photo" />
           <div>
             <label className={labelCls}>Social link</label>
             <input value={form.social_url || ''} onChange={e => set('social_url', e.target.value)} placeholder="https://instagram.com/…" className={inputCls} />
@@ -142,6 +140,15 @@ export default function CoachesManager() {
         <div className="space-y-2">
           {coaches.map(c => (
             <div key={c.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex items-start justify-between gap-4">
+              <div className="w-12 h-14 shrink-0 border border-xert-steel/20 bg-xert-charcoal overflow-hidden flex items-center justify-center">
+                {c.photo_url ? (
+                  <img src={c.photo_url} alt={c.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-display text-lg text-xert-concrete/20 uppercase">
+                    {(c.name || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('')}
+                  </span>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/60 px-2 py-0.5 uppercase">

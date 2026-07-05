@@ -340,6 +340,38 @@ export async function updateProduct(id, updates) {
   if (error) throw new Error(error.message);
 }
 
+// ─── Business stats (admin overview) ─────────────────────────────────────────
+
+export async function getBusinessStats() {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const nowIso = new Date().toISOString();
+
+  const [orders, members, credits, upcoming] = await Promise.all([
+    supabase.from('orders').select('amount_cents, status, paid_at, created_at').eq('status', 'paid'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('credit_batches').select('remaining, expires_at').gt('remaining', 0),
+    supabase.from('class_sessions').select('id', { count: 'exact', head: true })
+      .eq('status', 'published').gte('start_time', nowIso),
+  ]);
+
+  const paid = orders.data || [];
+  const monthPaid = paid.filter(o => new Date(o.paid_at || o.created_at) >= monthStart);
+  const activeCredits = (credits.data || [])
+    .filter(c => !c.expires_at || new Date(c.expires_at) > new Date())
+    .reduce((s, c) => s + (c.remaining || 0), 0);
+
+  return {
+    totalRevenueCents: paid.reduce((s, o) => s + (o.amount_cents || 0), 0),
+    monthRevenueCents: monthPaid.reduce((s, o) => s + (o.amount_cents || 0), 0),
+    paidOrders: paid.length,
+    memberCount: members.count || 0,
+    activeCredits,
+    upcomingClasses: upcoming.count || 0,
+  };
+}
+
 // ─── Site content (CMS) ──────────────────────────────────────────────────────
 
 export async function getAllSiteContent() {
