@@ -3,7 +3,7 @@ import { AlertTriangle, Download } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
+import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -38,7 +38,11 @@ const STATUS_COLORS = {
 };
 
 function SessionEditor({ session, blackouts, onSave, onCancel }) {
-  const [form, setForm] = useState(session || {
+  const [form, setForm] = useState(() => session ? {
+    ...session,
+    start_time: toDateTimeLocalInput(session.start_time),
+    end_time: toDateTimeLocalInput(session.end_time),
+  } : {
     class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
     start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
     location_zone: 'Main floor', beginner_friendly: false,

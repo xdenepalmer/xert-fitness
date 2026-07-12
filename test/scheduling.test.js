@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, repeatedClassSessionCopies, sessionEndTime } from '../src/lib/scheduling.js';
+import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
 
 test('normalizes explicit availability and blackout payloads', () => {
   const block = normalizeAvailabilityBlock({
@@ -60,6 +60,14 @@ test('uses a class end time when supplied and validates time ranges', () => {
   assert.equal(hasValidTimeRange('', session.end_time), false);
 });
 
+test('round-trips stored timestamps through a datetime-local editor value', () => {
+  const iso = '2026-08-01T08:35:00.000Z';
+  const editorValue = toDateTimeLocalInput(iso);
+  assert.match(editorValue, /^\d{4}-\d{2}-\d{2}T\d{2}:35$/);
+  assert.equal(new Date(editorValue).getTime(), Date.parse(iso));
+  assert.equal(toDateTimeLocalInput('not-a-date'), '');
+});
+
 test('rejects unsafe published class data before it reaches the timetable', () => {
   const validClass = {
     title: 'XERT Foundation',
@@ -71,10 +79,34 @@ test('rejects unsafe published class data before it reaches the timetable', () =
     end_time: '2026-08-01T09:00:00.000Z',
   };
 
-  assert.equal(classSessionValidationError(validClass), null);
-  assert.equal(classSessionValidationError({ ...validClass, start_time: '' }), 'A published class needs a start time.');
-  assert.equal(classSessionValidationError({ ...validClass, capacity: 0 }), 'Capacity must be a whole number of at least 1.');
-  assert.equal(classSessionValidationError({ ...validClass, end_time: '2026-08-01T07:30:00.000Z' }), 'Class end time must be after its start time.');
+  const fullClass = {
+    ...validClass,
+    class_type: 'XERT Strength', booking_mode: 'instant_book', intensity_level: 'High',
+  };
+  const beforeClass = Date.parse('2026-07-01T00:00:00.000Z');
+  assert.equal(classSessionValidationError(fullClass, { now: beforeClass }), null);
+  assert.equal(classSessionValidationError({ ...fullClass, start_time: '' }, { now: beforeClass }), 'A published class needs a start time.');
+  assert.equal(classSessionValidationError({ ...fullClass, capacity: 0 }, { now: beforeClass }), 'Capacity must be a whole number of at least 1.');
+  assert.equal(classSessionValidationError({ ...fullClass, end_time: '2026-08-01T07:30:00.000Z' }, { now: beforeClass }), 'Class end time must be after its start time.');
+});
+
+test('normalizes an explicit class mutation payload and strips database metadata', () => {
+  const payload = normalizeClassSession({
+    id: 'database-id', created_at: 'old', booked_count: 4, spots_left: 4,
+    class_type: 'XERT Strength', title: ' Strength Block ', description: ' ', coach_name: ' Byron ',
+    start_time: '2026-08-01T08:00:00.000Z', end_time: '2026-08-01T09:00:00.000Z',
+    duration_minutes: '60', capacity: '8', location_zone: ' Main floor ', beginner_friendly: true,
+    intensity_level: 'High', status: 'draft', public_visible: true,
+    booking_mode: 'request_to_book', notes: ' Technique focus ',
+  }, { now: Date.parse('2026-07-01T00:00:00.000Z') });
+
+  assert.equal(payload.title, 'Strength Block');
+  assert.equal(payload.coach_name, 'Byron');
+  assert.equal(payload.description, null);
+  assert.equal(payload.public_visible, false);
+  assert.equal(payload.duration_minutes, 60);
+  assert.equal('id' in payload, false);
+  assert.equal('booked_count' in payload, false);
 });
 
 test('builds a complete repeat block for one atomic insert', () => {

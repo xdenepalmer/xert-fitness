@@ -2,6 +2,10 @@ const GROUP_CLASS_BLACKOUT_AFFECTS = new Set(['all', 'group_classes', 'facility_
 const AVAILABILITY_BLOCK_TYPES = new Set(['PT available', 'private session available', 'group class available', 'admin only', 'open gym placeholder', 'workshop placeholder']);
 const BLACKOUT_AFFECTS = new Set(['all', 'group_classes', 'pt_only', 'facility_only', 'coach_only']);
 const BLACKOUT_REASONS = new Set(['full day unavailable', 'partial day unavailable', 'recurring unavailable', 'personal work', 'facility maintenance', 'equipment install', 'private event', 'soft launch restricted']);
+const CLASS_TYPES = new Set(['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team']);
+const CLASS_STATUSES = new Set(['draft', 'published', 'full', 'cancelled', 'completed']);
+const BOOKING_MODES = new Set(['interest_only', 'request_to_book', 'instant_book']);
+const INTENSITY_LEVELS = new Set(['Low', 'Moderate', 'High', 'Very high']);
 
 function timestamp(value) {
   const valueMs = new Date(value).getTime();
@@ -23,6 +27,13 @@ function normalizedTimestamp(value, label) {
 function optionalText(value) {
   const normalized = String(value || '').trim();
   return normalized || null;
+}
+
+export function toDateTimeLocalInput(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function normalizeAvailabilityBlock(form = {}) {
@@ -57,32 +68,51 @@ export function normalizeBlackoutPeriod(form = {}) {
   };
 }
 
-export function classSessionValidationError(session) {
-  if (!session?.title?.trim()) return 'A class title is required.';
+export function normalizeClassSession(session = {}, { now = Date.now() } = {}) {
+  const title = String(session.title || '').trim();
+  if (!title) throw new Error('A class title is required.');
+  if (!CLASS_TYPES.has(session.class_type)) throw new Error('Choose a valid class type.');
+  if (!CLASS_STATUSES.has(session.status)) throw new Error('Choose a valid class status.');
+  if (!BOOKING_MODES.has(session.booking_mode)) throw new Error('Choose a valid booking mode.');
+  if (!INTENSITY_LEVELS.has(session.intensity_level)) throw new Error('Choose a valid intensity level.');
 
   const capacity = Number(session.capacity);
-  if (!Number.isInteger(capacity) || capacity < 1) {
-    return 'Capacity must be a whole number of at least 1.';
-  }
-
+  if (!Number.isInteger(capacity) || capacity < 1) throw new Error('Capacity must be a whole number of at least 1.');
   const duration = Number(session.duration_minutes);
-  if (!Number.isInteger(duration) || duration < 1) {
-    return 'Duration must be a whole number of at least 1 minute.';
-  }
+  if (!Number.isInteger(duration) || duration < 1) throw new Error('Duration must be a whole number of at least 1 minute.');
 
-  const hasStartTime = Boolean(session.start_time);
-  const hasEndTime = Boolean(session.end_time);
-  if (session.status === 'published' && !hasStartTime) {
-    return 'A published class needs a start time.';
-  }
-  if (hasStartTime && timestamp(session.start_time) === null) {
-    return 'Use a valid class start time.';
-  }
-  if (hasEndTime && !hasValidTimeRange(session.start_time, session.end_time)) {
-    return 'Class end time must be after its start time.';
-  }
+  const startTime = session.start_time ? normalizedTimestamp(session.start_time, 'Class start time') : null;
+  const endTime = session.end_time ? normalizedTimestamp(session.end_time, 'Class end time') : null;
+  if (session.status === 'published' && !startTime) throw new Error('A published class needs a start time.');
+  if (session.status === 'published' && Date.parse(startTime) <= now) throw new Error('A published class must start in the future.');
+  if (endTime && !hasValidTimeRange(startTime, endTime)) throw new Error('Class end time must be after its start time.');
 
-  return null;
+  return {
+    class_type: session.class_type,
+    title,
+    description: optionalText(session.description),
+    coach_name: optionalText(session.coach_name),
+    start_time: startTime,
+    end_time: endTime,
+    duration_minutes: duration,
+    capacity,
+    location_zone: optionalText(session.location_zone),
+    beginner_friendly: Boolean(session.beginner_friendly),
+    intensity_level: session.intensity_level,
+    status: session.status,
+    public_visible: session.status === 'published' && Boolean(session.public_visible),
+    booking_mode: session.booking_mode,
+    notes: optionalText(session.notes),
+  };
+}
+
+export function classSessionValidationError(session, options) {
+  try {
+    normalizeClassSession(session, options);
+    return null;
+  } catch (error) {
+    return error.message;
+  }
 }
 
 export function sessionEndTime(session) {

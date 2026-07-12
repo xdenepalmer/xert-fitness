@@ -4,6 +4,7 @@ import { assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
+import { normalizeClassSession } from './scheduling';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -73,21 +74,25 @@ export async function getClassSessions(publicOnly = false) {
 }
 
 export async function createClassSession(sessionData) {
-  const { data, error } = await supabase.from('class_sessions').insert([sessionData]).select().single();
+  const payload = normalizeClassSession(sessionData);
+  const { data, error } = await supabase.from('class_sessions').insert([payload]).select().single();
   if (error) throw new Error(error.message);
   return data;
 }
 
 export async function createClassSessions(sessionData) {
-  const { data, error } = await supabase.from('class_sessions').insert(sessionData).select();
+  if (!Array.isArray(sessionData) || sessionData.length === 0) throw new Error('Create at least one class session.');
+  const payload = sessionData.map(item => normalizeClassSession(item));
+  const { data, error } = await supabase.from('class_sessions').insert(payload).select();
   if (error) throw new Error(error.message);
   return data || [];
 }
 
 export async function updateClassSession(id, updates) {
+  const payload = normalizeClassSession(updates);
   const { error } = await supabase
     .from('class_sessions')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({ ...payload, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw new Error(error.message);
 }
@@ -101,11 +106,11 @@ export async function cancelClassSession(id) {
 }
 
 export async function duplicateClassSession(session) {
-  const { id, created_at, updated_at, ...rest } = session;
   return createClassSession({
-    ...rest,
+    ...session,
     status: 'draft',
-    title: `${rest.title} (copy)`
+    public_visible: false,
+    title: `${session.title} (copy)`
   });
 }
 
