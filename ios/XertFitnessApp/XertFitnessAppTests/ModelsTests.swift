@@ -36,6 +36,36 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testClassInterestRequestPreservesSessionAndNormalizesContactDetails() throws {
+        let sessionID = UUID()
+        let request = try ClassInterestRequest(
+            sessionID: sessionID,
+            fullName: "  Alex Runner ",
+            email: " ALEX@EXAMPLE.COM ",
+            phone: " 0400 123 456 ",
+            trainingLevel: "Some gym experience",
+            notes: "  Knee history  "
+        )
+
+        XCTAssertEqual(request.class_session_id, sessionID)
+        XCTAssertEqual(request.full_name, "Alex Runner")
+        XCTAssertEqual(request.email, "alex@example.com")
+        XCTAssertEqual(request.phone, "0400 123 456")
+        XCTAssertEqual(request.training_level, "Some gym experience")
+        XCTAssertEqual(request.notes, "Knee history")
+        XCTAssertTrue(request.consent_to_contact)
+        XCTAssertEqual(request.status, "requested")
+    }
+
+    func testClassInterestRequestRejectsMissingContactDetails() {
+        XCTAssertThrowsError(try ClassInterestRequest(
+            sessionID: UUID(),
+            fullName: "",
+            email: "alex@example.com",
+            phone: "0400 123 456"
+        ))
+    }
+
     func testPublicDataCacheRoundTripsAndRejectsExpiredData() throws {
         let suiteName = "PublicDataCacheTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

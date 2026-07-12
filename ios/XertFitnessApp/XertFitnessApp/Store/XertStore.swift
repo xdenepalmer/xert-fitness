@@ -20,6 +20,7 @@ final class XertStore: ObservableObject {
     @Published var updatingEventGoalID: UUID?
     @Published var isDeletingAccount = false
     @Published var isRequestingPrivateSession = false
+    @Published var isRequestingClassInterest = false
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -323,6 +324,20 @@ final class XertStore: ObservableObject {
         defer { isRequestingPrivateSession = false }
         do {
             try await api.requestPrivateSession(request)
+            return true
+        } catch {
+            present(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func requestClassInterest(_ request: ClassInterestRequest) async -> Bool {
+        isRequestingClassInterest = true
+        errorMessage = nil
+        defer { isRequestingClassInterest = false }
+        do {
+            try await api.requestClassInterest(request)
             return true
         } catch {
             present(error)

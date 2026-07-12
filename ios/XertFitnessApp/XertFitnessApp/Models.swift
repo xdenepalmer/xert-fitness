@@ -248,6 +248,44 @@ struct PrivateSessionRequest: Encodable, Equatable {
     }
 }
 
+struct ClassInterestRequest: Encodable, Equatable {
+    let class_session_id: UUID
+    let full_name: String
+    let email: String
+    let phone: String
+    let training_level: String?
+    let notes: String?
+    let consent_to_contact: Bool
+    let status: String
+
+    init(
+        sessionID: UUID,
+        fullName: String,
+        email: String,
+        phone: String,
+        trainingLevel: String = "",
+        notes: String = ""
+    ) throws {
+        let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else { throw APIError(message: "Enter your full name.") }
+        guard normalizedEmail.contains("@"), normalizedEmail.contains(".") else {
+            throw APIError(message: "Enter a valid email address.")
+        }
+        guard !normalizedPhone.isEmpty else { throw APIError(message: "Enter your mobile number.") }
+
+        class_session_id = sessionID
+        full_name = normalizedName
+        email = normalizedEmail
+        phone = normalizedPhone
+        training_level = trainingLevel.trimmedNilIfEmpty
+        self.notes = notes.trimmedNilIfEmpty
+        consent_to_contact = true
+        status = "requested"
+    }
+}
+
 private extension String {
     var trimmedNilIfEmpty: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)

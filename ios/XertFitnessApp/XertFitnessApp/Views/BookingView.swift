@@ -3,7 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.openURL) private var openURL
-    @State private var isShowingPTRequest = false
+    @State private var activeSheet: BookingSheet?
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -106,7 +106,7 @@ struct BookingView: View {
                                     .foregroundStyle(.xertSteel)
                                 } else if session.booking_mode == "interest_only" {
                                     Button {
-                                        openURL(AppConfig.webURL(path: "timetable"))
+                                        activeSheet = .classInterest(session)
                                     } label: {
                                         Label("Register interest", systemImage: "person.2")
                                             .frame(maxWidth: .infinity)
@@ -143,7 +143,7 @@ struct BookingView: View {
                     Text("Request one-on-one coaching around your goals and availability.")
                         .foregroundStyle(.secondary)
                     Button {
-                        isShowingPTRequest = true
+                        activeSheet = .privateSession
                     } label: {
                         Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
                     }
@@ -153,13 +153,24 @@ struct BookingView: View {
             .refreshable {
                 await store.refresh()
             }
-            .sheet(isPresented: $isShowingPTRequest) {
-                PrivateSessionRequestView(
-                    initialName: store.profile?.full_name ?? "",
-                    initialEmail: store.authSession?.user?.email ?? store.profile?.email ?? "",
-                    initialPhone: store.profile?.phone ?? ""
-                )
-                .environmentObject(store)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .privateSession:
+                    PrivateSessionRequestView(
+                        initialName: initialName,
+                        initialEmail: initialEmail,
+                        initialPhone: initialPhone
+                    )
+                    .environmentObject(store)
+                case .classInterest(let session):
+                    ClassInterestRequestView(
+                        session: session,
+                        initialName: initialName,
+                        initialEmail: initialEmail,
+                        initialPhone: initialPhone
+                    )
+                    .environmentObject(store)
+                }
             }
         }
     }
@@ -170,6 +181,22 @@ struct BookingView: View {
                 .filter { $0.status == "requested" || $0.status == "confirmed" }
                 .map { ($0.session_id, $0) }
         )
+    }
+
+    private var initialName: String { store.profile?.full_name ?? "" }
+    private var initialEmail: String { store.authSession?.user?.email ?? store.profile?.email ?? "" }
+    private var initialPhone: String { store.profile?.phone ?? "" }
+}
+
+private enum BookingSheet: Identifiable {
+    case privateSession
+    case classInterest(ClassSession)
+
+    var id: String {
+        switch self {
+        case .privateSession: return "private-session"
+        case .classInterest(let session): return "class-interest-\(session.id.uuidString)"
+        }
     }
 }
 
@@ -309,6 +336,137 @@ private struct PrivateSessionRequestView: View {
             )
             Task {
                 let succeeded = await store.requestPrivateSession(request)
+                if succeeded {
+                    submitted = true
+                } else {
+                    validationMessage = store.errorMessage ?? "The request could not be sent. Please try again."
+                    store.errorMessage = nil
+                }
+            }
+        } catch {
+            validationMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct ClassInterestRequestView: View {
+    @EnvironmentObject private var store: XertStore
+    @Environment(\.dismiss) private var dismiss
+    let session: ClassSession
+    @State private var fullName: String
+    @State private var email: String
+    @State private var phone: String
+    @State private var trainingLevel = ""
+    @State private var notes = ""
+    @State private var consentsToContact = false
+    @State private var validationMessage: String?
+    @State private var submitted = false
+
+    private let trainingLevels = ["New / beginner", "Some gym experience", "Regular trainer", "Advanced"]
+
+    init(session: ClassSession, initialName: String, initialEmail: String, initialPhone: String) {
+        self.session = session
+        _fullName = State(initialValue: initialName)
+        _email = State(initialValue: initialEmail)
+        _phone = State(initialValue: initialPhone)
+    }
+
+    var body: some View {
+        NavigationStack {
+            if submitted {
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.xertSteel)
+                    Text("Interest Registered")
+                        .font(.title2.bold())
+                    Text("The XERT team will contact you about \(session.title).")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.xertSteel)
+                }
+                .padding(32)
+            } else {
+                Form {
+                    Section("Selected Class") {
+                        Text(session.title).font(.headline)
+                        Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.secondary)
+                        if let coach = session.coach_name {
+                            Label(coach, systemImage: "person")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section("Contact") {
+                        TextField("Full name", text: $fullName)
+                            .textContentType(.name)
+                        TextField("Email", text: $email)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                        TextField("Mobile number", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                    }
+
+                    Section("Training") {
+                        Picker("Training level", selection: $trainingLevel) {
+                            Text("Choose a level").tag("")
+                            ForEach(trainingLevels, id: \.self) { Text($0).tag($0) }
+                        }
+                        TextField("Notes for the coach", text: $notes, axis: .vertical)
+                            .lineLimit(2...5)
+                    }
+
+                    Section {
+                        Toggle("XERT may contact me about this class", isOn: $consentsToContact)
+                        if let validationMessage {
+                            Text(validationMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                        Button {
+                            submit()
+                        } label: {
+                            HStack {
+                                Label("Register Interest", systemImage: "paperplane.fill")
+                                Spacer()
+                                if store.isRequestingClassInterest { ProgressView() }
+                            }
+                        }
+                        .disabled(store.isRequestingClassInterest)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Class Interest")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+            }
+        }
+    }
+
+    private func submit() {
+        validationMessage = nil
+        guard consentsToContact else {
+            validationMessage = "Consent to contact is required."
+            return
+        }
+        do {
+            let request = try ClassInterestRequest(
+                sessionID: session.id,
+                fullName: fullName,
+                email: email,
+                phone: phone,
+                trainingLevel: trainingLevel,
+                notes: notes
+            )
+            Task {
+                let succeeded = await store.requestClassInterest(request)
                 if succeeded {
                     submitted = true
                 } else {
