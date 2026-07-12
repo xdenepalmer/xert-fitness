@@ -21,6 +21,12 @@ struct AccountView: View {
         NavigationStack {
             Form {
                 if store.isSignedIn {
+                    if store.isUsingStaleMemberData {
+                        Section {
+                            StaleMemberDataNotice()
+                        }
+                    }
+
                     Section("Membership") {
                         HStack {
                             Text("Signed in")

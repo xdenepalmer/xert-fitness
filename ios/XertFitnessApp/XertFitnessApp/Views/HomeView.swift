@@ -9,6 +9,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     CachedPublicDataNotice()
+                    StaleMemberDataNotice()
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("XERT Fitness")

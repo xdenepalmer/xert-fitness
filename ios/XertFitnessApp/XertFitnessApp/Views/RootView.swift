@@ -96,3 +96,20 @@ struct CachedPublicDataNotice: View {
         }
     }
 }
+
+struct StaleMemberDataNotice: View {
+    @EnvironmentObject private var store: XertStore
+
+    var body: some View {
+        if store.isUsingStaleMemberData, let updatedAt = store.memberDataUpdatedAt {
+            Label {
+                Text("Account data last updated \(updatedAt.formatted(date: .omitted, time: .shortened))")
+            } icon: {
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .accessibilityLabel("Account data could not refresh. Last updated \(updatedAt.formatted(date: .long, time: .shortened))")
+        }
+    }
+}

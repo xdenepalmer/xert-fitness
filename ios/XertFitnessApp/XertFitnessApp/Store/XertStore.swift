@@ -22,6 +22,8 @@ final class XertStore: ObservableObject {
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
+    @Published private(set) var isUsingStaleMemberData = false
+    @Published private(set) var memberDataUpdatedAt: Date?
 
     private let api = XertAPI()
     private var sessionRefreshTask: Task<AuthSession, Error>?
@@ -123,23 +125,26 @@ final class XertStore: ObservableObject {
             async let bookingRequest = api.bookings(session: authSession)
             async let profileRequest = api.profile(session: authSession)
             async let eventGoalRequest = api.eventGoals(session: authSession)
+            var creditsLoaded = false
+            var bookingsLoaded = false
+            var profileLoaded = false
             do {
                 credits = try await creditRequest
+                creditsLoaded = true
             } catch {
-                credits = []
                 present(error)
             }
             do {
                 bookings = try await bookingRequest
                 await ClassReminderScheduler.shared.sync(bookings: bookings)
+                bookingsLoaded = true
             } catch {
-                bookings = []
                 present(error)
             }
             do {
                 profile = try await profileRequest
+                profileLoaded = true
             } catch {
-                profile = nil
                 present(error)
             }
             do {
@@ -148,13 +153,21 @@ final class XertStore: ObservableObject {
             } catch {
                 // Event goals are optional until the companion Supabase upgrade
                 // is applied; keep the rest of the member account available.
-                eventGoalIDs = []
+            }
+
+            if creditsLoaded && bookingsLoaded && profileLoaded {
+                memberDataUpdatedAt = Date()
+                isUsingStaleMemberData = false
+            } else {
+                isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
         } else {
             credits = []
             bookings = []
             profile = nil
             eventGoalIDs = []
+            memberDataUpdatedAt = nil
+            isUsingStaleMemberData = false
             await ClassReminderScheduler.shared.clearAll()
         }
     }
@@ -211,6 +224,8 @@ final class XertStore: ObservableObject {
         bookings = []
         profile = nil
         eventGoalIDs = []
+        memberDataUpdatedAt = nil
+        isUsingStaleMemberData = false
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -233,6 +248,8 @@ final class XertStore: ObservableObject {
             bookings = []
             profile = nil
             eventGoalIDs = []
+            memberDataUpdatedAt = nil
+            isUsingStaleMemberData = false
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
             return true
