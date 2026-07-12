@@ -6,6 +6,8 @@ import { clearSiteContentCache } from '@/lib/siteContent';
 import { CONTENT_DEFAULTS } from '@/lib/contentDefaults';
 import { toast } from '@/components/ui/use-toast';
 import ImageUploader from '@/components/admin/ImageUploader';
+import AdminLoadError from '@/components/admin/AdminLoadError';
+import { normalizeSiteContent } from '@/lib/siteContentAdmin';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
@@ -74,7 +76,7 @@ const SECTIONS = [
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
 
-function QaListEditor({ value, onChange }) {
+function QaListEditor({ value, onChange, idPrefix }) {
   const items = Array.isArray(value) ? value : [];
   const update = (i, field, v) => onChange(items.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
   const move = (i, dir) => {
@@ -94,17 +96,19 @@ function QaListEditor({ value, onChange }) {
               <GripVertical className="w-3 h-3" /> Q{i + 1}
             </span>
             <div className="flex gap-1">
-              <button onClick={() => move(i, -1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↑</button>
-              <button onClick={() => move(i, 1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↓</button>
-              <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                className="px-2 py-0.5 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">✕</button>
+              <button type="button" aria-label={`Move question ${i + 1} up`} onClick={() => move(i, -1)} disabled={i === 0} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8593;</button>
+              <button type="button" aria-label={`Move question ${i + 1} down`} onClick={() => move(i, 1)} disabled={i === items.length - 1} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8595;</button>
+              <button type="button" aria-label={`Remove question ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                className="min-w-11 min-h-11 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">&#10005;</button>
             </div>
           </div>
-          <input value={item.q || ''} onChange={e => update(i, 'q', e.target.value)} placeholder="Question" className={inputCls} />
-          <textarea value={item.a || ''} onChange={e => update(i, 'a', e.target.value)} placeholder="Answer" rows={2} className={`${inputCls} resize-none`} />
+          <label htmlFor={`${idPrefix}-${i}-question`} className="sr-only">Question {i + 1}</label>
+          <input id={`${idPrefix}-${i}-question`} value={item.q || ''} onChange={e => update(i, 'q', e.target.value)} placeholder="Question" className={inputCls} />
+          <label htmlFor={`${idPrefix}-${i}-answer`} className="sr-only">Answer {i + 1}</label>
+          <textarea id={`${idPrefix}-${i}-answer`} value={item.a || ''} onChange={e => update(i, 'a', e.target.value)} placeholder="Answer" rows={2} className={`${inputCls} resize-none`} />
         </div>
       ))}
-      <button onClick={() => onChange([...items, { q: '', a: '' }])}
+      <button type="button" onClick={() => onChange([...items, { q: '', a: '' }])}
         className="px-4 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
         + Add question
       </button>
@@ -112,7 +116,7 @@ function QaListEditor({ value, onChange }) {
   );
 }
 
-function TextListEditor({ value, onChange, itemLabel = 'Item' }) {
+function TextListEditor({ value, onChange, itemLabel = 'Item', idPrefix }) {
   const items = Array.isArray(value) ? value : [];
   const move = (i, dir) => {
     const j = i + dir;
@@ -129,17 +133,18 @@ function TextListEditor({ value, onChange, itemLabel = 'Item' }) {
           <div className="flex items-center justify-between">
             <span className="font-body text-xs text-xert-concrete/40 uppercase">{itemLabel} {i + 1}</span>
             <div className="flex gap-1">
-              <button onClick={() => move(i, -1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↑</button>
-              <button onClick={() => move(i, 1)} className="px-2 py-0.5 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel">↓</button>
-              <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                className="px-2 py-0.5 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">✕</button>
+              <button type="button" aria-label={`Move ${itemLabel.toLowerCase()} ${i + 1} up`} onClick={() => move(i, -1)} disabled={i === 0} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8593;</button>
+              <button type="button" aria-label={`Move ${itemLabel.toLowerCase()} ${i + 1} down`} onClick={() => move(i, 1)} disabled={i === items.length - 1} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8595;</button>
+              <button type="button" aria-label={`Remove ${itemLabel.toLowerCase()} ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                className="min-w-11 min-h-11 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">&#10005;</button>
             </div>
           </div>
-          <textarea value={text} onChange={e => onChange(items.map((t, idx) => idx === i ? e.target.value : t))}
+          <label htmlFor={`${idPrefix}-${i}`} className="sr-only">{itemLabel} {i + 1}</label>
+          <textarea id={`${idPrefix}-${i}`} value={text} onChange={e => onChange(items.map((t, idx) => idx === i ? e.target.value : t))}
             rows={3} className={`${inputCls} resize-none`} />
         </div>
       ))}
-      <button onClick={() => onChange([...items, ''])}
+      <button type="button" onClick={() => onChange([...items, ''])}
         className="px-4 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
         + Add {itemLabel.toLowerCase()}
       </button>
@@ -166,11 +171,11 @@ function ImageListEditor({ value, onChange, folder }) {
               <div className="aspect-[3/4] overflow-hidden bg-xert-charcoal">
                 <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
               </div>
-              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity"
                 style={{ backgroundColor: 'rgba(11,18,24,0.85)' }}>
-                <button onClick={() => move(i, -1)} className="px-1.5 text-xs" style={{ color: '#7BA7BC' }}>←</button>
-                <button onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="px-1.5 text-xs" style={{ color: '#f0a1a1' }}>✕</button>
-                <button onClick={() => move(i, 1)} className="px-1.5 text-xs" style={{ color: '#7BA7BC' }}>→</button>
+                <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={i === 0} onClick={() => move(i, -1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30" style={{ color: '#7BA7BC' }}>&#8592;</button>
+                <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs" style={{ color: '#f0a1a1' }}>&#10005;</button>
+                <button type="button" aria-label={`Move photo ${i + 1} right`} disabled={i === items.length - 1} onClick={() => move(i, 1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30" style={{ color: '#7BA7BC' }}>&#8594;</button>
               </div>
             </div>
           ))}
@@ -200,9 +205,7 @@ function SectionEditor({ section, initial, onSaved }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const clean = Object.fromEntries(
-        Object.entries(data).filter(([, v]) => v !== '' && v !== null && v !== undefined)
-      );
+      const clean = normalizeSiteContent(section.key, data);
       await saveSiteContent(section.key, clean);
       clearSiteContentCache();
       setSavedAt(new Date());
@@ -240,21 +243,23 @@ function SectionEditor({ section, initial, onSaved }) {
       <div className="p-5 space-y-4">
         {section.fields.map(f => (
           <div key={f.key}>
-            {f.type !== 'image_list' && <label className={labelCls}>{f.label}</label>}
+            {['text', 'textarea'].includes(f.type)
+              ? <label htmlFor={`${section.key}-${f.key}`} className={labelCls}>{f.label}</label>
+              : f.type !== 'image_list' && <p className={labelCls}>{f.label}</p>}
             {f.type === 'textarea' ? (
-              <textarea value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+              <textarea id={`${section.key}-${f.key}`} value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
                 placeholder={f.placeholder} rows={2} className={`${inputCls} resize-none`} />
             ) : f.type === 'qa_list' ? (
-              <QaListEditor value={data[f.key]} onChange={v => set(f.key, v)} />
+              <QaListEditor value={data[f.key]} onChange={v => set(f.key, v)} idPrefix={`${section.key}-${f.key}`} />
             ) : f.type === 'text_list' ? (
-              <TextListEditor value={data[f.key]} onChange={v => set(f.key, v)} itemLabel={f.itemLabel} />
+              <TextListEditor value={data[f.key]} onChange={v => set(f.key, v)} itemLabel={f.itemLabel} idPrefix={`${section.key}-${f.key}`} />
             ) : f.type === 'image_list' ? (
               <>
                 <label className={labelCls}>{f.label}</label>
                 <ImageListEditor value={data[f.key]} onChange={v => set(f.key, v)} folder={f.folder || section.key} />
               </>
             ) : (
-              <input value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+              <input id={`${section.key}-${f.key}`} value={data[f.key] || ''} onChange={e => set(f.key, e.target.value)}
                 placeholder={f.placeholder} className={inputCls} />
             )}
           </div>
@@ -262,11 +267,11 @@ function SectionEditor({ section, initial, onSaved }) {
       </div>
 
       <div className="flex items-center gap-3 px-5 pb-5">
-        <button onClick={handleSave} disabled={saving || !dirty}
+        <button type="button" onClick={handleSave} disabled={saving || !dirty}
           className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-40">
           {saving ? 'Saving…' : dirty ? 'Save section' : 'Saved'}
         </button>
-        <button onClick={handleRestore} title="Reset the fields below to the original site copy"
+        <button type="button" onClick={handleRestore} title="Reset the fields below to the original site copy"
           className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-xert-steel/30 font-body text-[10px] uppercase tracking-wider text-xert-concrete/50 hover:border-xert-steel hover:text-xert-offwhite transition-colors">
           <RotateCcw className="w-3 h-3" /> Restore original copy
         </button>
@@ -279,15 +284,22 @@ function SectionEditor({ section, initial, onSaved }) {
 
 export default function ContentManager() {
   const [content, setContent] = useState(null);
+  const [loadError, setLoadError] = useState('');
 
-  const load = () => {
-    getAllSiteContent()
-      .then(rows => setContent(Object.fromEntries(rows.map(r => [r.key, r.data]))))
-      .catch(e => { toast({ title: 'Could not load content', description: e.message, variant: 'destructive' }); setContent({}); });
+  const load = async () => {
+    setLoadError('');
+    try {
+      const rows = await getAllSiteContent();
+      setContent(Object.fromEntries(rows.map(r => [r.key, r.data])));
+    } catch (error) {
+      setLoadError(error.message);
+      toast({ title: 'Could not load content', description: error.message, variant: 'destructive' });
+    }
   };
   useEffect(() => { load(); }, []);
 
   if (content === null) {
+    if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
     return <div className="p-6 space-y-4">{[1, 2].map(i => <div key={i} className="h-48 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.3)' }} />)}</div>;
   }
 

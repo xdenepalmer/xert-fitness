@@ -38,7 +38,7 @@ export default function ImageUploader({ value, onChange, folder = 'misc', label 
 
   return (
     <div>
-      <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">{label}</label>
+      <p className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">{label}</p>
       <div className="flex items-start gap-3">
         {/* Preview */}
         <div className="w-20 h-24 shrink-0 border border-xert-steel/30 bg-xert-charcoal overflow-hidden flex items-center justify-center">
@@ -62,11 +62,12 @@ export default function ImageUploader({ value, onChange, folder = 'misc', label 
               </button>
             )}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          <input ref={fileRef} type="file" accept="image/*" aria-label={`Upload ${label.toLowerCase()}`} className="hidden"
             onChange={e => handleFile(e.target.files?.[0])} />
 
           {/* URL fallback */}
-          <input value={value || ''} onChange={e => onChange(e.target.value)}
+          <label className="sr-only" htmlFor={`image-url-${folder}`}>{label} URL</label>
+          <input id={`image-url-${folder}`} value={value || ''} onChange={e => onChange(e.target.value)}
             placeholder="…or paste an image URL"
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red" />
           {error && <p className="font-body text-xs text-xert-red">{error}</p>}
