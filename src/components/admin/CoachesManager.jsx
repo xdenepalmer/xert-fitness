@@ -110,7 +110,7 @@ function CoachEditor({ coach, onSave, onCancel }) {
   );
 }
 
-export default function CoachesManager() {
+export default function CoachesManager({ initialAction, onIntentHandled }) {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -130,6 +130,13 @@ export default function CoachesManager() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setEditing(null);
+    setShowEditor(true);
+    onIntentHandled?.();
+  }, [initialAction, onIntentHandled]);
 
   const handleDelete = async (coach) => {
     if (!confirm(`Delete ${coach.name}? This removes them from the public Coaches page.`)) return;

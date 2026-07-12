@@ -245,7 +245,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
   );
 }
 
-export default function MembersManager() {
+export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const { user } = useSupabaseAuth();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -278,6 +278,14 @@ export default function MembersManager() {
     setViewing(null);
     setGranting(null);
   }, [creditFilter, roleFilter, search]);
+
+  useEffect(() => {
+    if (!initialMemberId || loading) return;
+    const member = members.find(item => item.id === initialMemberId);
+    if (member) setViewing(member);
+    else toast({ title: 'Member not found', description: 'This member may have been removed or is no longer accessible.', variant: 'destructive' });
+    onIntentHandled?.();
+  }, [initialMemberId, loading, members, onIntentHandled]);
 
   const handleRole = async (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';

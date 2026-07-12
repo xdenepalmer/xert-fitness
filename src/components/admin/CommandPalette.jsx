@@ -50,8 +50,8 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
     }
   }, [open, members]);
 
-  const run = (sectionKey) => {
-    onNavigate(sectionKey);
+  const run = (sectionKey, params) => {
+    onNavigate(sectionKey, params);
     onOpenChange(false);
   };
 
@@ -65,7 +65,7 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
           {QUICK_COMMANDS.map(c => {
             const Icon = c.icon;
             return (
-              <CommandItem key={`q-${c.label}`} onSelect={() => run(c.key)}>
+              <CommandItem key={`q-${c.label}`} onSelect={() => run(c.key, { action: 'create' })}>
                 <Icon className="text-xert-steel" />
                 <span>{c.label}</span>
               </CommandItem>
@@ -93,7 +93,7 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
           <CommandGroup heading="Members">
             {members.slice(0, 50).map(m => (
               <CommandItem key={m.id} value={`member ${m.full_name || ''} ${m.email || ''}`}
-                onSelect={() => run('gym-members')}>
+                onSelect={() => run('gym-members', { member: m.id })}>
                 <User className="text-xert-steel" />
                 <span>{m.full_name || m.email}</span>
                 <span className="ml-auto text-xs text-muted-foreground">

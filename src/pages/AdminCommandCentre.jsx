@@ -34,14 +34,19 @@ export default function AdminCommandCentre() {
   const navigate = useNavigate();
   const section = getAdminSectionFromPath(location.pathname);
   const canonicalPath = getAdminSectionPath(section);
+  const intent = new URLSearchParams(location.search);
 
   useEffect(() => {
     if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
   }, [canonicalPath, location.pathname, navigate]);
 
-  const setSection = useCallback(nextSection => {
-    navigate(getAdminSectionPath(nextSection));
+  const setSection = useCallback((nextSection, params) => {
+    navigate(getAdminSectionPath(nextSection, params));
   }, [navigate]);
+
+  const consumeIntent = useCallback(() => {
+    navigate(canonicalPath, { replace: true });
+  }, [canonicalPath, navigate]);
 
   const renderSection = () => {
     switch (section) {
@@ -50,10 +55,10 @@ export default function AdminCommandCentre() {
       case 'members': return <LeadTable type="member" />;
       case 'trainers': return <LeadTable type="trainer" />;
       case 'partners': return <LeadTable type="partner" />;
-      case 'calendar': return <ClassCalendarAdmin />;
-      case 'coaches': return <CoachesManager />;
-      case 'events': return <EventsManager />;
-      case 'gym-members': return <MembersManager />;
+      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
       case 'orders': return <OrdersManager />;
       case 'products': return <ProductsManager />;
       case 'content': return <ContentManager />;

@@ -199,7 +199,7 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
   );
 }
 
-export default function EventsManager() {
+export default function EventsManager({ initialAction, onIntentHandled }) {
   const [events, setEvents] = useState([]);
   const [goalCounts, setGoalCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -260,6 +260,13 @@ export default function EventsManager() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setEditing(null);
+    setShowEditor(true);
+    onIntentHandled?.();
+  }, [initialAction, onIntentHandled]);
 
   const handleDelete = async event => {
     const goalCount = goalCounts[event.id] || 0;

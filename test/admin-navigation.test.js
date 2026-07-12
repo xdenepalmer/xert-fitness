@@ -30,3 +30,11 @@ test('canonicalises unknown sections without exposing arbitrary paths', () => {
   assert.equal(getAdminSectionPath('events'), '/admin/events');
   assert.equal(getAdminSectionPath('not-a-tool'), '/admin');
 });
+
+test('builds encoded deep-action paths and omits empty values', () => {
+  assert.equal(
+    getAdminSectionPath('gym-members', { member: 'member/id 42', ignored: '' }),
+    '/admin/gym-members?member=member%2Fid+42'
+  );
+  assert.equal(getAdminSectionPath('events', { action: 'create' }), '/admin/events?action=create');
+});

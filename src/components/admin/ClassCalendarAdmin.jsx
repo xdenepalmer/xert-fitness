@@ -274,7 +274,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   );
 }
 
-export default function ClassCalendarAdmin() {
+export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
@@ -309,6 +309,13 @@ export default function ClassCalendarAdmin() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setEditingSession(null);
+    setShowEditor(true);
+    onIntentHandled?.();
+  }, [initialAction, onIntentHandled]);
 
   const refreshBookings = async (sessionId) => {
     const [requests, members] = await Promise.all([

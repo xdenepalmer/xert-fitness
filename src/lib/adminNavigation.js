@@ -33,7 +33,12 @@ export function getAdminSectionFromPath(pathname) {
   return isAdminSection(segments[1]) ? segments[1] : DEFAULT_ADMIN_SECTION;
 }
 
-export function getAdminSectionPath(section) {
+export function getAdminSectionPath(section, params = {}) {
   const safeSection = isAdminSection(section) ? section : DEFAULT_ADMIN_SECTION;
-  return safeSection === DEFAULT_ADMIN_SECTION ? '/admin' : `/admin/${safeSection}`;
+  const pathname = safeSection === DEFAULT_ADMIN_SECTION ? '/admin' : `/admin/${safeSection}`;
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim()) search.set(key, String(value));
+  });
+  return search.size ? `${pathname}?${search}` : pathname;
 }
