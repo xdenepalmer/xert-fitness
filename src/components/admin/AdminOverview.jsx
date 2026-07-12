@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
   PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
-  CheckCircle2, Circle, Gauge, RefreshCw,
+  AlertTriangle, CheckCircle2, Circle, Gauge, RefreshCw,
 } from 'lucide-react';
 import AdminStatCard from './AdminStatCard';
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/lib/adminData';
 import { getAvailableSessions } from '@/lib/bookingData';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
+import { activityFromSettled, readinessFromSettled } from '@/lib/adminOverview';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -49,6 +50,7 @@ export default function AdminOverview({ onNavigate }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
   const [businessWarning, setBusinessWarning] = useState('');
+  const [partialWarning, setPartialWarning] = useState('');
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
@@ -61,12 +63,10 @@ export default function AdminOverview({ onNavigate }) {
     else setRefreshing(true);
     setError('');
     setBusinessWarning('');
+    setPartialWarning('');
 
-    const readinessRequest = Promise.all([
-      getAllCoaches().catch(() => []),
-      getAllEvents().catch(() => []),
-      getAllSiteContent().catch(() => []),
-      getAvailableSessions().catch(() => [])
+    const readinessRequest = Promise.allSettled([
+      getAllCoaches(), getAllEvents(), getAllSiteContent(), getAvailableSessions()
     ]);
 
     try {
@@ -76,42 +76,27 @@ export default function AdminOverview({ onNavigate }) {
         getBusinessStats()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error })),
-        Promise.all([getAllOrders().catch(() => []), adminListMembers().catch(() => [])])
-          .then(([orders, members]) => [
-            ...orders.slice(0, 6).map(o => ({
-              type: 'order',
-              at: o.paid_at || o.created_at,
-              title: `${o.products?.name || 'Session pack'} — $${((o.amount_cents || 0) / 100).toFixed(2)}`,
-              sub: o.email || 'unknown buyer'
-            })),
-            ...members.slice(0, 6).map(m => ({
-              type: 'member',
-              at: m.joined_at,
-              title: m.full_name || m.email || 'New member',
-              sub: 'Created an account'
-            }))
-          ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 7))
+        Promise.allSettled([getAllOrders(), adminListMembers()]).then(activityFromSettled)
       ]);
       if (requestId !== requestIdRef.current) return;
       setStats(s);
       if (cfg) setSettings(cfg);
       setBiz(businessResult.data);
       setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
-      setActivity(feed);
+      setActivity(feed.feed);
+      if (feed.errors.length) setPartialWarning(`Recent activity incomplete: ${feed.errors.join(' | ')}`);
       setLastUpdated(new Date());
     } catch (loadError) {
       if (requestId === requestIdRef.current) setError(loadError.message);
     }
 
-    const [coaches, events, siteContent, sessions] = await readinessRequest;
+    const readiness = readinessFromSettled(await readinessRequest);
     if (requestId === requestIdRef.current) {
-      setFillRates(sessions);
-      setLaunch({
-        coaches: coaches.length > 0,
-        classes: sessions.length > 0,
-        events: events.length > 0,
-        content: siteContent.length > 0
-      });
+      setFillRates(readiness.data.classes);
+      setLaunch(readiness.launch);
+      if (readiness.errors.length) {
+        setPartialWarning(current => [current, `Readiness incomplete: ${readiness.errors.join(' | ')}`].filter(Boolean).join(' '));
+      }
       setLoading(false);
       setRefreshing(false);
       lastRefreshAtRef.current = Date.now();
@@ -158,6 +143,12 @@ export default function AdminOverview({ onNavigate }) {
       {businessWarning && (
         <div className="p-4" style={{ backgroundColor: 'rgba(224,179,106,0.1)', border: '1px solid rgba(224,179,106,0.28)' }}>
           <p className="font-body text-sm" style={{ color: '#e0b36a' }}>{businessWarning}</p>
+        </div>
+      )}
+      {partialWarning && (
+        <div role="status" className="p-4 flex items-start gap-3" style={{ backgroundColor: 'rgba(224,179,106,0.1)', border: '1px solid rgba(224,179,106,0.28)' }}>
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#e0b36a' }} />
+          <p className="font-body text-sm" style={{ color: '#e0b36a' }}>{partialWarning}</p>
         </div>
       )}
 
@@ -235,19 +226,21 @@ export default function AdminOverview({ onNavigate }) {
                 </div>
                 <div className="space-y-1">
                   {items.map(item => (
-                    <button key={item.label} onClick={() => !item.done && onNavigate?.(item.target)}
+                    <button type="button" key={item.label} disabled={item.done === null} onClick={() => item.done === false && onNavigate?.(item.target)}
                       className="w-full flex items-center gap-2.5 py-1.5 text-left group"
                       style={{ cursor: item.done ? 'default' : 'pointer' }}>
-                      {item.done
+                      {item.done === true
                         ? <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: '#7ec98f' }} />
-                        : <Circle className="w-4 h-4 shrink-0" style={{ color: 'rgba(123,167,188,0.4)' }} />}
+                        : item.done === null
+                          ? <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#e0b36a' }} />
+                          : <Circle className="w-4 h-4 shrink-0" style={{ color: 'rgba(123,167,188,0.4)' }} />}
                       <span className="font-body text-sm" style={{
-                        color: item.done ? 'rgba(209,221,230,0.35)' : '#D1DDE6',
-                        textDecoration: item.done ? 'line-through' : 'none',
+                        color: item.done === true ? 'rgba(209,221,230,0.35)' : item.done === null ? '#e0b36a' : '#D1DDE6',
+                        textDecoration: item.done === true ? 'line-through' : 'none',
                       }}>
                         {item.label}
                       </span>
-                      {!item.done && (
+                      {item.done === false && (
                         <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />
                       )}
                     </button>
@@ -262,7 +255,9 @@ export default function AdminOverview({ onNavigate }) {
             <h3 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
               <Gauge className="w-3.5 h-3.5" /> Upcoming Class Fill
             </h3>
-            {!fillRates || fillRates.length === 0 ? (
+            {fillRates === null ? (
+              <p className="font-body text-sm" style={{ color: '#e0b36a' }}>Class fill data is unavailable. Refresh the dashboard to retry.</p>
+            ) : fillRates.length === 0 ? (
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
                 No published upcoming classes yet — publish classes and live booking numbers appear here.
               </p>

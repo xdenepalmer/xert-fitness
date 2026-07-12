@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { getOperationsHealth } from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const STATUS_STYLE = {
   ok: {
@@ -43,12 +44,16 @@ const ROUTES = {
 export default function OperationsHealth({ onNavigate }) {
   const [checks, setChecks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       setChecks(await getOperationsHealth());
     } catch (error) {
+      setChecks([]);
+      setLoadError(error.message);
       toast({ title: 'Health check failed', description: error.message, variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -111,7 +116,9 @@ export default function OperationsHealth({ onNavigate }) {
         ))}
       </div>
 
-      {loading ? (
+      {loadError && <AdminLoadError message={loadError} onRetry={load} />}
+
+      {loadError ? null : loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {[1, 2, 3, 4].map(i => <div key={i} className="h-36 bg-xert-ink animate-pulse" />)}
         </div>
