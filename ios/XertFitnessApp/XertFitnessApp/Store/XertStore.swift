@@ -8,6 +8,7 @@ final class XertStore: ObservableObject {
     @Published var events: [EventItem] = []
     @Published var credits: [CreditBatch] = []
     @Published var bookings: [BookingItem] = []
+    @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
     @Published var isLoading = false
@@ -16,6 +17,7 @@ final class XertStore: ObservableObject {
     @Published var cancellingBookingID: UUID?
     @Published var isSavingProfile = false
     @Published var isRequestingPasswordReset = false
+    @Published var updatingEventGoalID: UUID?
 
     private let api = XertAPI()
 
@@ -78,6 +80,7 @@ final class XertStore: ObservableObject {
             async let creditRequest = api.credits(session: authSession)
             async let bookingRequest = api.bookings(session: authSession)
             async let profileRequest = api.profile(session: authSession)
+            async let eventGoalRequest = api.eventGoals(session: authSession)
             do {
                 credits = try await creditRequest
             } catch {
@@ -97,10 +100,19 @@ final class XertStore: ObservableObject {
                 profile = nil
                 present(error)
             }
+            do {
+                let loadedEventGoals = try await eventGoalRequest
+                eventGoalIDs = Set(loadedEventGoals.map(\.event_id))
+            } catch {
+                // Event goals are optional until the companion Supabase upgrade
+                // is applied; keep the rest of the member account available.
+                eventGoalIDs = []
+            }
         } else {
             credits = []
             bookings = []
             profile = nil
+            eventGoalIDs = []
             await ClassReminderScheduler.shared.clearAll()
         }
     }
@@ -154,6 +166,7 @@ final class XertStore: ObservableObject {
         credits = []
         bookings = []
         profile = nil
+        eventGoalIDs = []
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -192,6 +205,31 @@ final class XertStore: ObservableObject {
             await refresh()
         } catch {
             errorMessage = friendlyBookingError(error.localizedDescription)
+        }
+    }
+
+    func toggleEventGoal(_ event: EventItem) async {
+        guard let authSession else {
+            errorMessage = "Sign in to choose an event training goal."
+            return
+        }
+        guard let eventID = event.id else {
+            errorMessage = "This calendar event will be available to track once it is loaded in XERT."
+            return
+        }
+
+        updatingEventGoalID = eventID
+        defer { updatingEventGoalID = nil }
+        do {
+            if eventGoalIDs.contains(eventID) {
+                try await api.removeEventGoal(session: authSession, eventID: eventID)
+                eventGoalIDs.remove(eventID)
+            } else {
+                try await api.addEventGoal(session: authSession, eventID: eventID)
+                eventGoalIDs.insert(eventID)
+            }
+        } catch {
+            present(error)
         }
     }
 

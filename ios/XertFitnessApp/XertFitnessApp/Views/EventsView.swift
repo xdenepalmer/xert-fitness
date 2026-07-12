@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventsView: View {
     @EnvironmentObject private var store: XertStore
+    let onNavigate: (Int) -> Void
 
     var body: some View {
         NavigationStack {
@@ -9,6 +10,14 @@ struct EventsView: View {
                 Section {
                     Text("XERT programming follows the South East Queensland sporting and fitness calendar.")
                         .foregroundStyle(.secondary)
+                }
+
+                if store.isSignedIn, !trainingGoals.isEmpty {
+                    Section("Your Training Goals") {
+                        ForEach(trainingGoals, id: \.stableID) { event in
+                            Label(event.name, systemImage: "target")
+                        }
+                    }
                 }
 
                 Section("Coming Up") {
@@ -47,6 +56,29 @@ struct EventsView: View {
                                     }
                                     .tint(.xertSteel)
                                 }
+                                if !event.isComplete, let eventID = event.id {
+                                    if store.isSignedIn {
+                                        Button {
+                                            Task { await store.toggleEventGoal(event) }
+                                        } label: {
+                                            Label(
+                                                trainingGoalLabel(for: event),
+                                                systemImage: "target"
+                                            )
+                                            .font(.subheadline.weight(.semibold))
+                                        }
+                                        .disabled(store.updatingEventGoalID == eventID)
+                                        .tint(.xertSteel)
+                                    } else {
+                                        Button {
+                                            onNavigate(3)
+                                        } label: {
+                                            Label("Sign in to train for this", systemImage: "person.crop.circle")
+                                                .font(.subheadline.weight(.semibold))
+                                        }
+                                        .tint(.xertSteel)
+                                    }
+                                }
                             }
                             .padding(.vertical, 4)
                         }
@@ -71,5 +103,18 @@ struct EventsView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         guard let date = formatter.date(from: value) else { return value }
         return date.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    private var trainingGoals: [EventItem] {
+        store.events.filter { event in
+            guard let id = event.id else { return false }
+            return store.eventGoalIDs.contains(id)
+        }
+    }
+
+    private func trainingGoalLabel(for event: EventItem) -> String {
+        guard let id = event.id else { return "Train for this" }
+        if store.updatingEventGoalID == id { return "Saving goal..." }
+        return store.eventGoalIDs.contains(id) ? "Training goal" : "Train for this"
     }
 }

@@ -94,6 +94,10 @@ struct EventItem: Identifiable, Codable, Hashable {
     }()
 }
 
+struct EventGoal: Codable, Hashable {
+    let event_id: UUID
+}
+
 struct CreditBatch: Identifiable, Codable, Hashable {
     let id: UUID
     let total: Int

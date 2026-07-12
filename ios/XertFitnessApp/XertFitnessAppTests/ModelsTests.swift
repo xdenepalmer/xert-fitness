@@ -110,6 +110,16 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(completedEvent.externalURL)
     }
 
+    func testEventGoalDecodesTheSupabaseEventID() throws {
+        let data = """
+        { "event_id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60" }
+        """.data(using: .utf8)!
+
+        let goal = try JSONDecoder().decode(EventGoal.self, from: data)
+
+        XCTAssertEqual(goal.event_id.uuidString, "C5747DAD-2E89-4D55-AD63-5732D8D67A60")
+    }
+
     func testClassReminderPlannerOnlySchedulesFutureConfirmedBookings() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let confirmed = booking(status: "confirmed", startTime: now.addingTimeInterval(4 * 60 * 60))

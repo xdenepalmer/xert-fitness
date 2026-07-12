@@ -10,7 +10,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("XERT Fitness")
-                            .font(.system(size: 44, weight: .black, design: .condensed))
+                            .font(.system(size: 44, weight: .black, design: .default))
                             .foregroundStyle(.xertOffWhite)
                         Text("Train with purpose. Compete together.")
                             .font(.title3.weight(.semibold))

@@ -113,6 +113,53 @@ final class XertAPI {
         )
     }
 
+    func eventGoals(session auth: AuthSession) async throws -> [EventGoal] {
+        try await restRequest(
+            path: "/rest/v1/member_event_goals",
+            queryItems: [
+                URLQueryItem(name: "select", value: "event_id"),
+                URLQueryItem(name: "order", value: "created_at.desc")
+            ],
+            auth: auth
+        )
+    }
+
+    func addEventGoal(session auth: AuthSession, eventID: UUID) async throws {
+        guard let userID = auth.user?.id else {
+            throw APIError(message: "Your XERT session needs you to sign in again.")
+        }
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/member_event_goals",
+            queryItems: [URLQueryItem(name: "on_conflict", value: "user_id,event_id")]
+        )
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("resolution=ignore-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(EventGoalMutation(user_id: userID, event_id: eventID))
+        try await perform(request)
+    }
+
+    func removeEventGoal(session auth: AuthSession, eventID: UUID) async throws {
+        guard let userID = auth.user?.id else {
+            throw APIError(message: "Your XERT session needs you to sign in again.")
+        }
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/member_event_goals",
+            queryItems: [
+                URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString)"),
+                URLQueryItem(name: "event_id", value: "eq.\(eventID.uuidString)")
+            ]
+        )
+        request.httpMethod = "DELETE"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        try await perform(request)
+    }
+
     func credits(session auth: AuthSession) async throws -> [CreditBatch] {
         try await restRequest(
             path: "/rest/v1/credit_batches",
@@ -305,6 +352,11 @@ private struct ProfileUpdate: Encodable {
     let full_name: String?
     let phone: String?
     let updated_at: String
+}
+
+private struct EventGoalMutation: Encodable {
+    let user_id: UUID
+    let event_id: UUID
 }
 
 private extension String {
