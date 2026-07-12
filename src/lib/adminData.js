@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
+import { assertSupabaseResponses } from './supabaseResults';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,7 @@ export async function getDashboardStats() {
     supabase.from('session_bookings').select('id, status', { count: 'exact' }),
     supabase.from('private_session_requests').select('id, status', { count: 'exact' }),
   ]);
+  assertSupabaseResponses([members, trainers, partners, newMembers, bookings, memberBookings, ptRequests]);
 
   const memberData = members.data || [];
   const bookingData = bookings.data || [];
@@ -426,6 +428,7 @@ export async function getBusinessStats() {
     supabase.from('class_sessions').select('id', { count: 'exact', head: true })
       .eq('status', 'published').gte('start_time', nowIso),
   ]);
+  assertSupabaseResponses([orders, members, credits, upcoming]);
 
   const paid = orders.data || [];
   const monthPaid = paid.filter(o => new Date(o.paid_at || o.created_at) >= monthStart);
@@ -452,6 +455,7 @@ export async function getAdminBadgeCounts() {
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
   ]);
+  assertSupabaseResponses([newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT]);
   return {
     members: newLeads.count || 0,
     bookings: (pendingLegacyBookings.count || 0) + (pendingMemberBookings.count || 0),

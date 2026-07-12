@@ -45,12 +45,16 @@ export default function AdminOverview({ onNavigate }) {
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [businessWarning, setBusinessWarning] = useState('');
 
   useEffect(() => {
+    setBusinessWarning('');
     Promise.all([
       getDashboardStats(),
       getSoftLaunchSettings(),
-      getBusinessStats().catch(() => null),
+      getBusinessStats()
+        .then(data => ({ data, error: null }))
+        .catch(error => ({ data: null, error })),
       Promise.all([getAllOrders().catch(() => []), adminListMembers().catch(() => [])])
         .then(([orders, members]) => {
           const feed = [
@@ -69,10 +73,13 @@ export default function AdminOverview({ onNavigate }) {
           ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 7);
           return feed;
         }),
-    ]).then(([s, cfg, b, feed]) => {
+    ]).then(([s, cfg, businessResult, feed]) => {
       setStats(s);
       if (cfg) setSettings(cfg);
-      setBiz(b);
+      setBiz(businessResult.data);
+      if (businessResult.error) {
+        setBusinessWarning(`Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}`);
+      }
       setActivity(feed);
       setLoading(false);
     }).catch(e => {
@@ -104,6 +111,11 @@ export default function AdminOverview({ onNavigate }) {
       {error && (
         <div className="p-4" style={{ backgroundColor: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)' }}>
           <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Supabase error: {error}</p>
+        </div>
+      )}
+      {businessWarning && (
+        <div className="p-4" style={{ backgroundColor: 'rgba(224,179,106,0.1)', border: '1px solid rgba(224,179,106,0.28)' }}>
+          <p className="font-body text-sm" style={{ color: '#e0b36a' }}>{businessWarning}</p>
         </div>
       )}
 
