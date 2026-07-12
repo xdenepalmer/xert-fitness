@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blackoutsOverlappingSession, hasValidTimeRange, sessionEndTime } from '../src/lib/scheduling.js';
+import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, sessionEndTime } from '../src/lib/scheduling.js';
 
 test('detects only blackouts that affect an overlapping group class', () => {
   const session = {
@@ -31,4 +31,21 @@ test('uses a class end time when supplied and validates time ranges', () => {
   assert.equal(hasValidTimeRange(session.start_time, session.end_time), true);
   assert.equal(hasValidTimeRange(session.end_time, session.start_time), false);
   assert.equal(hasValidTimeRange('', session.end_time), false);
+});
+
+test('rejects unsafe published class data before it reaches the timetable', () => {
+  const validClass = {
+    title: 'XERT Foundation',
+    capacity: 8,
+    duration_minutes: 60,
+    status: 'published',
+    public_visible: true,
+    start_time: '2026-08-01T08:00:00.000Z',
+    end_time: '2026-08-01T09:00:00.000Z',
+  };
+
+  assert.equal(classSessionValidationError(validClass), null);
+  assert.equal(classSessionValidationError({ ...validClass, start_time: '' }), 'A published class needs a start time.');
+  assert.equal(classSessionValidationError({ ...validClass, capacity: 0 }), 'Capacity must be a whole number of at least 1.');
+  assert.equal(classSessionValidationError({ ...validClass, end_time: '2026-08-01T07:30:00.000Z' }), 'Class end time must be after its start time.');
 });

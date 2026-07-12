@@ -3,7 +3,7 @@ import { AlertTriangle, Download } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { blackoutsOverlappingSession } from '@/lib/scheduling';
+import { blackoutsOverlappingSession, classSessionValidationError } from '@/lib/scheduling';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -50,7 +50,11 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
   const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
 
   const handleSave = async () => {
-    if (!form.title.trim()) { toast({ title: 'Title required.', variant: 'destructive' }); return; }
+    const validationError = classSessionValidationError(form);
+    if (validationError) {
+      toast({ title: validationError, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       if (session?.id) {
@@ -113,14 +117,14 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
             </div>
             <div>
               <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Duration (min)</label>
-              <input type="number" value={form.duration_minutes} onChange={e => set('duration_minutes', +e.target.value)}
+              <input type="number" min="1" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', +e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Capacity</label>
-              <input type="number" value={form.capacity} onChange={e => set('capacity', +e.target.value)}
+              <input type="number" min="1" step="1" value={form.capacity} onChange={e => set('capacity', +e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
             <div>

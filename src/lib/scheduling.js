@@ -11,6 +11,34 @@ export function hasValidTimeRange(startTime, endTime) {
   return startMs !== null && endMs !== null && endMs > startMs;
 }
 
+export function classSessionValidationError(session) {
+  if (!session?.title?.trim()) return 'A class title is required.';
+
+  const capacity = Number(session.capacity);
+  if (!Number.isInteger(capacity) || capacity < 1) {
+    return 'Capacity must be a whole number of at least 1.';
+  }
+
+  const duration = Number(session.duration_minutes);
+  if (!Number.isInteger(duration) || duration < 1) {
+    return 'Duration must be a whole number of at least 1 minute.';
+  }
+
+  const hasStartTime = Boolean(session.start_time);
+  const hasEndTime = Boolean(session.end_time);
+  if (session.status === 'published' && !hasStartTime) {
+    return 'A published class needs a start time.';
+  }
+  if (hasStartTime && timestamp(session.start_time) === null) {
+    return 'Use a valid class start time.';
+  }
+  if (hasEndTime && !hasValidTimeRange(session.start_time, session.end_time)) {
+    return 'Class end time must be after its start time.';
+  }
+
+  return null;
+}
+
 export function sessionEndTime(session) {
   const startMs = timestamp(session?.start_time);
   if (startMs === null) return null;

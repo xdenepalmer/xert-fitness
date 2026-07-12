@@ -137,6 +137,28 @@ alter table public.class_sessions
   add constraint class_sessions_booking_mode_check
   check (booking_mode in ('instant_book', 'request_to_book', 'interest_only'));
 
+-- Keep timetable data usable even when it is created outside the admin UI.
+alter table public.class_sessions
+  drop constraint if exists class_sessions_positive_capacity_check;
+alter table public.class_sessions
+  add constraint class_sessions_positive_capacity_check
+  check (capacity is null or capacity > 0) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_positive_duration_check;
+alter table public.class_sessions
+  add constraint class_sessions_positive_duration_check
+  check (duration_minutes is null or duration_minutes > 0) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_valid_time_range_check;
+alter table public.class_sessions
+  add constraint class_sessions_valid_time_range_check
+  check (end_time is null or (start_time is not null and end_time > start_time)) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_published_start_time_check;
+alter table public.class_sessions
+  add constraint class_sessions_published_start_time_check
+  check (status <> 'published' or start_time is not null) not valid;
+
 alter table public.session_bookings
   drop constraint if exists session_bookings_status_check;
 alter table public.session_bookings

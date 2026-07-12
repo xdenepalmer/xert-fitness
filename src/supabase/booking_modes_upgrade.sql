@@ -36,6 +36,28 @@ alter table public.session_bookings
   add constraint session_bookings_status_check
   check (status in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'));
 
+-- Keep live timetable records valid on databases that predate these checks.
+alter table public.class_sessions
+  drop constraint if exists class_sessions_positive_capacity_check;
+alter table public.class_sessions
+  add constraint class_sessions_positive_capacity_check
+  check (capacity is null or capacity > 0) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_positive_duration_check;
+alter table public.class_sessions
+  add constraint class_sessions_positive_duration_check
+  check (duration_minutes is null or duration_minutes > 0) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_valid_time_range_check;
+alter table public.class_sessions
+  add constraint class_sessions_valid_time_range_check
+  check (end_time is null or (start_time is not null and end_time > start_time)) not valid;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_published_start_time_check;
+alter table public.class_sessions
+  add constraint class_sessions_published_start_time_check
+  check (status <> 'published' or start_time is not null) not valid;
+
 -- Requested and confirmed bookings reserve capacity. Other statuses do not.
 drop index if exists public.session_bookings_unique_active;
 create unique index session_bookings_unique_active
