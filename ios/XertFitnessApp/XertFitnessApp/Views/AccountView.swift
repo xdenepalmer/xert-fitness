@@ -24,226 +24,14 @@ struct AccountView: View {
         NavigationStack {
             Form {
                 if store.isSignedIn {
-                    if store.isUsingStaleMemberData {
-                        Section {
-                            StaleMemberDataNotice()
-                        }
-                    }
-                    if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals]) {
-                        Section {
-                            DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals])
-                        }
-                    }
-
-                    Section("Membership") {
-                        HStack {
-                            Text("Signed in")
-                            Spacer()
-                            Text(store.authSession?.user?.email ?? "Member")
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack {
-                            Text("Credits")
-                            Spacer()
-                            Text("\(store.creditTotal)")
-                                .foregroundStyle(.xertSteel)
-                                .fontWeight(.bold)
-                        }
-                    }
-
-                    Section("Account Details") {
-                        TextField("Full name", text: $fullName)
-                            .textContentType(.name)
-                            .focused($focusedProfileField, equals: .fullName)
-                            .submitLabel(.next)
-                            .onSubmit { focusedProfileField = .phone }
-                        TextField("Mobile number", text: $phone)
-                            .textContentType(.telephoneNumber)
-                            .keyboardType(.phonePad)
-                            .focused($focusedProfileField, equals: .phone)
-                        Button {
-                            Task {
-                                let saved = await store.updateProfile(fullName: fullName, phone: phone)
-                                didSaveProfile = saved
-                                if saved { focusedProfileField = nil }
-                            }
-                        } label: {
-                            HStack {
-                                Text(store.isSavingProfile ? "Saving..." : "Save Account Details")
-                                Spacer()
-                                if store.isSavingProfile {
-                                    ProgressView()
-                                }
-                            }
-                        }
-                        .disabled(store.isSavingProfile)
-                        .onChange(of: fullName) { _ in didSaveProfile = false }
-                        .onChange(of: phone) { _ in didSaveProfile = false }
-
-                        if didSaveProfile {
-                            Label("Account details saved", systemImage: "checkmark.circle.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.xertSteel)
-                        }
-                    }
-
-                    Section {
-                        Button("Sign Out", role: .destructive) {
-                            store.signOut()
-                        }
-                    }
-
-                    Section("Account Control") {
-                        Button("Delete Account", role: .destructive) {
-                            showingDeleteConfirmation = true
-                        }
-                        .disabled(store.isDeletingAccount)
-                        Text("Permanently removes your profile, credits, bookings and training goals. This cannot be undone.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    legalSection
-
-                    Section("Purchase History") {
-                        if store.orders.isEmpty {
-                            Text("No purchases yet.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(store.orders) { order in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(alignment: .firstTextBaseline) {
-                                        Text(order.products?.name ?? "Session pack")
-                                            .font(.headline)
-                                        Spacer()
-                                        Text(order.displayAmount)
-                                            .font(.headline.monospacedDigit())
-                                            .foregroundStyle(.xertSteel)
-                                    }
-                                    HStack {
-                                        Text(order.activityDate.formatted(date: .abbreviated, time: .omitted))
-                                        Spacer()
-                                        Text(order.displayStatus.uppercased())
-                                            .font(.caption2.weight(.bold))
-                                            .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.secondary)
-                                    }
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
-
-                    if store.bookings.isEmpty {
-                        Section("Bookings") {
-                            Text("No bookings yet.")
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        if !timeline.pending.isEmpty {
-                            Section("Requests & Waitlist") {
-                                bookingRows(timeline.pending)
-                            }
-                        }
-                        if !timeline.upcoming.isEmpty {
-                            Section("Upcoming Classes") {
-                                bookingRows(timeline.upcoming)
-                            }
-                        }
-                        if !timeline.history.isEmpty {
-                            Section("Booking History") {
-                                bookingRows(timeline.history)
-                            }
-                        }
-                    }
+                    signedInSections(timeline: timeline)
                 } else {
-                    Section(isCreatingAccount ? "Create Account" : "Sign In") {
-                        if isCreatingAccount {
-                            TextField("Full name", text: $fullName)
-                                .textContentType(.name)
-                                .submitLabel(.next)
-                            TextField("Mobile number (optional)", text: $phone)
-                                .textContentType(.telephoneNumber)
-                                .keyboardType(.phonePad)
-                                .submitLabel(.next)
-                        }
-                        TextField("Email", text: $email)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .onChange(of: email) { _ in passwordResetSent = false }
-                        SecureField("Password", text: $password)
-                            .textContentType(isCreatingAccount ? .newPassword : .password)
-
-                        if isCreatingAccount {
-                            SecureField("Confirm password", text: $passwordConfirmation)
-                                .textContentType(.newPassword)
-                            Toggle("I agree to the Terms and acknowledge the Privacy Policy", isOn: $acceptedAccountTerms)
-                            HStack(spacing: 16) {
-                                Link("Terms of Use", destination: AppConfig.webURL(path: "terms"))
-                                Link("Privacy Policy", destination: AppConfig.webURL(path: "privacy"))
-                            }
-                            .font(.footnote)
-                        }
-
-                        Button {
-                            Task {
-                                if isCreatingAccount {
-                                    await store.signUp(
-                                        fullName: fullName,
-                                        email: email,
-                                        phone: phone,
-                                        password: password,
-                                        confirmation: passwordConfirmation,
-                                        acceptedTerms: acceptedAccountTerms
-                                    )
-                                } else {
-                                    await store.signIn(email: email, password: password)
-                                }
-                            }
-                        } label: {
-                            Text(isCreatingAccount ? "Create Account" : "Sign In")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .disabled(authActionDisabled)
-
-                        if !isCreatingAccount {
-                            Button {
-                                Task {
-                                    passwordResetSent = await store.requestPasswordReset(email: email)
-                                }
-                            } label: {
-                                HStack {
-                                    Text(store.isRequestingPasswordReset ? "Sending reset link..." : "Forgot password?")
-                                    Spacer()
-                                    if store.isRequestingPasswordReset {
-                                        ProgressView()
-                                    }
-                                }
-                            }
-                            .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isRequestingPasswordReset)
-
-                            if passwordResetSent {
-                                Text("If an XERT account uses this email, a reset link is on its way.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-
-                    Section {
-                        Button(isCreatingAccount ? "Already have an account?" : "Create a member account") {
-                            isCreatingAccount.toggle()
-                            passwordConfirmation = ""
-                            acceptedAccountTerms = false
-                        }
-                    }
-
-                    legalSection
+                    signedOutSections
                 }
             }
+            .xertListBackground()
             .navigationTitle("Account")
+            .navigationBarTitleDisplayMode(.large)
             .refreshable {
                 await store.refresh()
             }
@@ -284,6 +72,392 @@ struct AccountView: View {
         }
     }
 
+    // MARK: - Signed-in profile
+
+    @ViewBuilder
+    private func signedInSections(timeline: BookingTimeline) -> some View {
+        if store.isUsingStaleMemberData {
+            Section {
+                StaleMemberDataNotice()
+            }
+            .listRowBackground(Color.xertInk)
+        }
+        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals]) {
+            Section {
+                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals])
+            }
+            .listRowBackground(Color.xertInk)
+        }
+
+        membershipSection
+        accountDetailsSection
+        signOutSection
+        accountControlSection
+        legalSection
+        purchaseHistorySection
+        bookingSections(timeline: timeline)
+    }
+
+    private var membershipSection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Credits")
+                        .xertEyebrow()
+                    Text("\(store.creditTotal)")
+                        .xertDisplay(34)
+                }
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                .padding(14)
+                .xertCardStyle()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Signed in")
+                        .xertEyebrow()
+                    Text(store.authSession?.user?.email ?? "Member")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.xertPale)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                .padding(14)
+                .xertCardStyle()
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            .listRowSeparator(.hidden)
+        } header: {
+            Text("Membership").xertEyebrow()
+        }
+    }
+
+    private var accountDetailsSection: some View {
+        Section {
+            TextField("Full name", text: $fullName)
+                .textContentType(.name)
+                .focused($focusedProfileField, equals: .fullName)
+                .submitLabel(.next)
+                .onSubmit { focusedProfileField = .phone }
+                .foregroundStyle(Color.xertOffWhite)
+                .tint(Color.xertSteel)
+            TextField("Mobile number", text: $phone)
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .focused($focusedProfileField, equals: .phone)
+                .foregroundStyle(Color.xertOffWhite)
+                .tint(Color.xertSteel)
+            Button {
+                Task {
+                    let saved = await store.updateProfile(fullName: fullName, phone: phone)
+                    didSaveProfile = saved
+                    if saved { focusedProfileField = nil }
+                }
+            } label: {
+                HStack {
+                    Text(store.isSavingProfile ? "Saving..." : "Save Account Details")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                    Spacer()
+                    if store.isSavingProfile {
+                        ProgressView()
+                            .tint(Color.xertPale)
+                    }
+                }
+            }
+            .disabled(store.isSavingProfile)
+            .onChange(of: fullName) { _ in didSaveProfile = false }
+            .onChange(of: phone) { _ in didSaveProfile = false }
+
+            if didSaveProfile {
+                Label("Account details saved", systemImage: "checkmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.xertSteel)
+            }
+        } header: {
+            Text("Account Details").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var signOutSection: some View {
+        Section {
+            Button("Sign Out", role: .destructive) {
+                store.signOut()
+            }
+            .buttonStyle(.xertGhost)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    private var accountControlSection: some View {
+        Section {
+            Button("Delete Account", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
+            .disabled(store.isDeletingAccount)
+            Text("Permanently removes your profile, credits, bookings and training goals. This cannot be undone.")
+                .font(.footnote)
+                .foregroundStyle(Color.xertMuted)
+        } header: {
+            Text("Account Control").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var purchaseHistorySection: some View {
+        Section {
+            if store.orders.isEmpty {
+                Text("No purchases yet.")
+                    .foregroundStyle(Color.xertMuted)
+            } else {
+                ForEach(store.orders) { order in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(order.products?.name ?? "Session pack")
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Spacer()
+                            Text(order.displayAmount)
+                                .font(.headline.monospacedDigit())
+                                .foregroundStyle(.xertSteel)
+                        }
+                        HStack {
+                            Text(order.activityDate.formatted(date: .abbreviated, time: .omitted))
+                                .foregroundStyle(Color.xertPale)
+                            Spacer()
+                            Text(order.displayStatus.uppercased())
+                                .font(.caption2.weight(.bold))
+                                .tracking(1.2)
+                                .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.xertMuted)
+                        }
+                        .font(.subheadline)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        } header: {
+            Text("Purchase History").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private func bookingSections(timeline: BookingTimeline) -> some View {
+        if store.bookings.isEmpty {
+            Section {
+                Text("No bookings yet.")
+                    .foregroundStyle(Color.xertMuted)
+            } header: {
+                Text("Bookings").xertEyebrow()
+            }
+            .listRowBackground(Color.xertInk)
+        } else {
+            if !timeline.pending.isEmpty {
+                Section {
+                    bookingRows(timeline.pending)
+                } header: {
+                    Text("Requests & Waitlist").xertEyebrow()
+                }
+                .listRowBackground(Color.xertInk)
+            }
+            if !timeline.upcoming.isEmpty {
+                Section {
+                    bookingRows(timeline.upcoming)
+                } header: {
+                    Text("Upcoming Classes").xertEyebrow()
+                }
+                .listRowBackground(Color.xertInk)
+            }
+            if !timeline.history.isEmpty {
+                Section {
+                    bookingRows(timeline.history)
+                } header: {
+                    Text("Booking History").xertEyebrow()
+                }
+                .listRowBackground(Color.xertInk)
+            }
+        }
+    }
+
+    // MARK: - Signed-out member access
+
+    @ViewBuilder
+    private var signedOutSections: some View {
+        // Each interactive element gets its OWN row: custom ButtonStyles do not
+        // isolate their tap target inside a list row, so sharing a row would let
+        // taps on the logo/headline/padding trigger the primary auth action.
+        Section {
+            memberAccessHero
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                .listRowSeparator(.hidden)
+
+            if isCreatingAccount {
+                termsAgreement
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowSeparator(.hidden)
+            }
+
+            primaryAuthButton
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowSeparator(.hidden)
+
+            if !isCreatingAccount {
+                forgotPasswordControls
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowSeparator(.hidden)
+            }
+        }
+
+        Section {
+            Button(isCreatingAccount ? "Already have an account?" : "Create a member account") {
+                isCreatingAccount.toggle()
+                passwordConfirmation = ""
+                acceptedAccountTerms = false
+            }
+            .buttonStyle(.xertGhost)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            .listRowSeparator(.hidden)
+        }
+
+        legalSection
+    }
+
+    private var memberAccessHero: some View {
+        VStack(spacing: 22) {
+            XertLogoHeader(height: 34)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 10)
+
+            VStack(spacing: 8) {
+                Text(isCreatingAccount ? "Join XERT" : "Member Access")
+                    .xertDisplay(36)
+                    .multilineTextAlignment(.center)
+                Text(isCreatingAccount
+                    ? "Create your member account to book classes and track goals."
+                    : "Sign in to manage your bookings, credits and training goals.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertMuted)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+
+            credentialFields
+        }
+    }
+
+    private var credentialFields: some View {
+        VStack(spacing: 12) {
+            if isCreatingAccount {
+                TextField("Full name", text: $fullName)
+                    .textContentType(.name)
+                    .submitLabel(.next)
+                    .xertAccountField()
+                TextField("Mobile number (optional)", text: $phone)
+                    .textContentType(.telephoneNumber)
+                    .keyboardType(.phonePad)
+                    .submitLabel(.next)
+                    .xertAccountField()
+            }
+            TextField("Email", text: $email)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .onChange(of: email) { _ in passwordResetSent = false }
+                .xertAccountField()
+            SecureField("Password", text: $password)
+                .textContentType(isCreatingAccount ? .newPassword : .password)
+                .xertAccountField()
+            if isCreatingAccount {
+                SecureField("Confirm password", text: $passwordConfirmation)
+                    .textContentType(.newPassword)
+                    .xertAccountField()
+            }
+        }
+    }
+
+    private var termsAgreement: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("I agree to the Terms and acknowledge the Privacy Policy", isOn: $acceptedAccountTerms)
+                .font(.footnote)
+                .foregroundStyle(Color.xertPale)
+                .tint(Color.xertSteel)
+            HStack(spacing: 16) {
+                Link("Terms of Use", destination: AppConfig.webURL(path: "terms"))
+                Link("Privacy Policy", destination: AppConfig.webURL(path: "privacy"))
+            }
+            .font(.footnote)
+            .tint(Color.xertSteel)
+            // Borderless keeps each link individually tappable inside the row
+            // instead of letting a row tap activate them.
+            .buttonStyle(.borderless)
+        }
+        .padding(14)
+        .xertCardStyle()
+    }
+
+    private var primaryAuthButton: some View {
+        Button {
+            Task {
+                if isCreatingAccount {
+                    await store.signUp(
+                        fullName: fullName,
+                        email: email,
+                        phone: phone,
+                        password: password,
+                        confirmation: passwordConfirmation,
+                        acceptedTerms: acceptedAccountTerms
+                    )
+                } else {
+                    await store.signIn(email: email, password: password)
+                }
+            }
+        } label: {
+            Text(isCreatingAccount ? "Create Account" : "Sign In")
+        }
+        .buttonStyle(.xertPrimary)
+        .disabled(authActionDisabled)
+        .opacity(authActionDisabled ? 0.55 : 1)
+    }
+
+    private var forgotPasswordControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                Task {
+                    passwordResetSent = await store.requestPasswordReset(email: email)
+                }
+            } label: {
+                HStack {
+                    Text(store.isRequestingPasswordReset ? "Sending reset link..." : "Forgot password?")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                    Spacer()
+                    if store.isRequestingPasswordReset {
+                        ProgressView()
+                            .tint(Color.xertPale)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isRequestingPasswordReset)
+
+            if passwordResetSent {
+                Text("If an XERT account uses this email, a reset link is on its way.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertMuted)
+            }
+        }
+    }
+
+    // MARK: - Shared helpers
+
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
@@ -306,11 +480,13 @@ struct AccountView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(booking.title)
                     .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
                 Text(booking.start_time.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.xertPale)
                 Text(booking.stateLabel.uppercased())
                     .font(.caption2.weight(.bold))
+                    .tracking(1.2)
                     .foregroundStyle(.xertSteel)
                 if booking.isCancellable() {
                     Button(booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking", role: .destructive) {
@@ -324,11 +500,34 @@ struct AccountView: View {
     }
 
     private var legalSection: some View {
-        Section("Legal & Support") {
+        Section {
             Link("Privacy Policy", destination: AppConfig.webURL(path: "privacy"))
             Link("Terms of Use", destination: AppConfig.webURL(path: "terms"))
             Link("Contact XERT Support", destination: AppConfig.webURL(path: "contact"))
+        } header: {
+            Text("Legal & Support").xertEyebrow()
         }
+        .listRowBackground(Color.xertInk)
+        .tint(Color.xertSteel)
+    }
+}
+
+// MARK: - Brand input field
+
+private extension View {
+    /// Dark brand input: ink surface, hairline steel border, sharp 2pt corners.
+    func xertAccountField() -> some View {
+        textFieldStyle(.plain)
+            .font(.subheadline)
+            .foregroundStyle(Color.xertOffWhite)
+            .tint(Color.xertSteel)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(Color.xertInk)
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(Color.xertSteel.opacity(0.3), lineWidth: 1)
+            )
     }
 }
 

@@ -30,6 +30,12 @@
     <string>XERT adds the fitness events you choose to your calendar.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>XERT adds the fitness events you choose to your calendar.</string>
+    <key>UIUserInterfaceStyle</key>
+    <string>Dark</string>
+    <key>UIAppFonts</key>
+    <array>
+        <string>BebasNeue-Regular.ttf</string>
+    </array>
     <key>UILaunchScreen</key>
     <dict>
         <key>UIColorName</key>

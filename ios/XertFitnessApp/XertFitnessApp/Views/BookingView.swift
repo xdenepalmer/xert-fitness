@@ -9,152 +9,16 @@ struct BookingView: View {
     var body: some View {
         NavigationStack {
             List {
-                if store.isUsingCachedPublicData {
-                    Section {
-                        CachedPublicDataNotice()
-                    }
-                }
-                if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .credits, .bookings]) {
-                    Section {
-                        DataAvailabilityNotice(sources: [.products, .sessions, .credits, .bookings])
-                    }
-                }
-
-                Section("Credits") {
-                    if store.isSignedIn {
-                        HStack {
-                            Text("Available credits")
-                            Spacer()
-                            Text("\(store.creditTotal)")
-                                .foregroundStyle(.xertSteel)
-                                .fontWeight(.bold)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Sign in to book classes and buy packs.")
-                                .foregroundStyle(.secondary)
-                            Button("Sign in or create an account") {
-                                onNavigate(3)
-                            }
-                        }
-                    }
-                }
-
-                Section("Buy Session Packs") {
-                    ForEach(store.products) { product in
-                        Button {
-                            guard store.isSignedIn else {
-                                onNavigate(3)
-                                return
-                            }
-                            Task {
-                                if let url = await store.checkoutURL(for: product) {
-                                    openURL(url)
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(product.name)
-                                        .foregroundStyle(.primary)
-                                    Text("\(product.sessionsCount) sessions")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(product.displayPrice)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.xertSteel)
-                            }
-                        }
-                    }
-                }
-
-                Section("Upcoming Classes") {
-                    if store.sessions.isEmpty {
-                        Text("No published classes yet.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(store.sessions) { session in
-                            let booking = activeBookings[session.id]
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(alignment: .top) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(session.title)
-                                            .font(.headline)
-                                        Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if let spots = session.spots_left {
-                                        Text("\(spots) left")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(spots > 0 ? .xertSteel : .red)
-                                    }
-                                }
-
-                                HStack {
-                                    Label(session.coach_name ?? "Coach TBC", systemImage: "person")
-                                    Spacer()
-                                    Label(session.location_zone ?? "XERT", systemImage: "mappin")
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                                if let booking {
-                                    Label(
-                                        booking.stateLabel,
-                                        systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
-                                    )
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.xertSteel)
-                                } else if session.booking_mode == "interest_only" {
-                                    Button {
-                                        activeSheet = .classInterest(session)
-                                    } label: {
-                                        Label("Register interest", systemImage: "person.2")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.xertSteel)
-                                } else {
-                                    Button {
-                                        if store.isSignedIn {
-                                            Task { await store.book(session) }
-                                        } else {
-                                            onNavigate(3)
-                                        }
-                                    } label: {
-                                        Label(
-                                            store.isSignedIn
-                                                ? (session.booking_mode == "request_to_book" ? "Request spot" : "Book class")
-                                                : "Sign in to book",
-                                            systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle"
-                                        )
-                                        .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.xertSteel)
-                                    .disabled((session.spots_left ?? 1) == 0 || store.bookingSessionID == session.id)
-                                }
-                            }
-                            .padding(.vertical, 6)
-                        }
-                    }
-                }
-
-                Section("Personal Training") {
-                    Text("Request one-on-one coaching around your goals and availability.")
-                        .foregroundStyle(.secondary)
-                    Button {
-                        activeSheet = .privateSession
-                    } label: {
-                        Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
-                    }
-                }
+                noticeSections
+                creditsSection
+                packsSection
+                classesSection
+                personalTrainingSection
             }
+            .tint(.xertSteel)
+            .xertListBackground()
             .navigationTitle("Book")
+            .navigationBarTitleDisplayMode(.large)
             .refreshable {
                 await store.refresh()
             }
@@ -178,6 +42,215 @@ struct BookingView: View {
                 }
             }
         }
+    }
+
+    // MARK: Sections
+
+    @ViewBuilder
+    private var noticeSections: some View {
+        if store.isUsingCachedPublicData {
+            Section {
+                CachedPublicDataNotice()
+            }
+            .listRowBackground(Color.xertInk)
+            .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+        }
+        if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .credits, .bookings]) {
+            Section {
+                DataAvailabilityNotice(sources: [.products, .sessions, .credits, .bookings])
+            }
+            .listRowBackground(Color.xertInk)
+            .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+        }
+    }
+
+    private var creditsSection: some View {
+        Section {
+            if store.isSignedIn {
+                HStack {
+                    Text("Available credits")
+                        .foregroundStyle(Color.xertOffWhite)
+                    Spacer()
+                    Text("\(store.creditTotal)")
+                        .foregroundStyle(.xertSteel)
+                        .fontWeight(.bold)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sign in to book classes and buy packs.")
+                        .foregroundStyle(Color.xertMuted)
+                    Button("Sign in or create an account") {
+                        onNavigate(3)
+                    }
+                    .buttonStyle(.xertPrimary)
+                }
+                .padding(.vertical, 4)
+            }
+        } header: {
+            Text("Credits").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var packsSection: some View {
+        Section {
+            ForEach(store.products) { product in
+                Button {
+                    guard store.isSignedIn else {
+                        onNavigate(3)
+                        return
+                    }
+                    Task {
+                        if let url = await store.checkoutURL(for: product) {
+                            openURL(url)
+                        }
+                    }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(product.name)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Text("\(product.sessionsCount) sessions")
+                                .font(.caption)
+                                .foregroundStyle(Color.xertMuted)
+                        }
+                        Spacer()
+                        Text(product.displayPrice)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.xertSteel)
+                    }
+                }
+            }
+        } header: {
+            Text("Buy Session Packs").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var classesSection: some View {
+        Section {
+            if store.sessions.isEmpty {
+                Text("No published classes yet.")
+                    .foregroundStyle(Color.xertMuted)
+                    .listRowBackground(Color.xertInk)
+            } else {
+                ForEach(store.sessions) { session in
+                    sessionCard(for: session)
+                }
+            }
+        } header: {
+            Text("Upcoming Classes").xertEyebrow()
+        }
+    }
+
+    private var personalTrainingSection: some View {
+        Section {
+            Text("Request one-on-one coaching around your goals and availability.")
+                .foregroundStyle(Color.xertPale)
+            Button {
+                activeSheet = .privateSession
+            } label: {
+                Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
+            }
+            .buttonStyle(.xertGhost)
+        } header: {
+            Text("Personal Training").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    // MARK: Session cards
+
+    private func sessionCard(for session: ClassSession) -> some View {
+        let booking = activeBookings[session.id]
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.title)
+                        .xertDisplay(20)
+                    Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale)
+                }
+                Spacer()
+                if let spots = session.spots_left {
+                    spotsChip(spots)
+                }
+            }
+
+            HStack {
+                Label(session.coach_name ?? "Coach TBC", systemImage: "person")
+                Spacer()
+                Label(session.location_zone ?? "XERT", systemImage: "mappin")
+            }
+            .font(.caption)
+            .foregroundStyle(Color.xertPale)
+
+            sessionAction(for: session, booking: booking)
+        }
+        .padding(14)
+        .xertCardStyle()
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+    }
+
+    @ViewBuilder
+    private func sessionAction(for session: ClassSession, booking: BookingItem?) -> some View {
+        if let booking {
+            Label(
+                booking.stateLabel,
+                systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.xertSteel)
+        } else if session.booking_mode == "interest_only" {
+            Button {
+                activeSheet = .classInterest(session)
+            } label: {
+                Label("Register interest", systemImage: "person.2")
+            }
+            .buttonStyle(.xertGhost)
+        } else {
+            let isBookingDisabled = (session.spots_left ?? 1) == 0 || store.bookingSessionID == session.id
+            Button {
+                if store.isSignedIn {
+                    Task { await store.book(session) }
+                } else {
+                    onNavigate(3)
+                }
+            } label: {
+                Label(
+                    store.isSignedIn
+                        ? (session.booking_mode == "request_to_book" ? "Request spot" : "Book class")
+                        : "Sign in to book",
+                    systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle"
+                )
+            }
+            .buttonStyle(.xertPrimary)
+            .disabled(isBookingDisabled)
+            .opacity(isBookingDisabled ? 0.5 : 1)
+        }
+    }
+
+    private func spotsChip(_ spots: Int) -> some View {
+        let tone: Color = spots > 0 ? .xertSteel : .red
+        return Text("\(spots) left")
+            .font(.caption2.weight(.bold))
+            .textCase(.uppercase)
+            .tracking(1)
+            .foregroundStyle(tone)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 2))
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(tone.opacity(0.5), lineWidth: 1)
+            )
+            .accessibilityLabel(spots > 0 ? "\(spots) spots left" : "No spots left")
     }
 
     private var activeBookings: [UUID: BookingItem] {
@@ -235,89 +308,149 @@ private struct PrivateSessionRequestView: View {
 
     var body: some View {
         NavigationStack {
-            if submitted {
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.xertSteel)
-                    Text("Request Received")
-                        .font(.title2.bold())
-                    Text("The XERT team will contact you to confirm availability.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                    Button("Done") { dismiss() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.xertSteel)
+            Group {
+                if submitted {
+                    confirmationView
+                } else {
+                    requestForm
                 }
-                .padding(32)
-            } else {
-                Form {
-                    Section("Contact") {
-                        TextField("Full name", text: $fullName)
-                            .textContentType(.name)
-                        TextField("Email", text: $email)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                        TextField("Mobile number", text: $phone)
-                            .textContentType(.telephoneNumber)
-                            .keyboardType(.phonePad)
-                    }
-
-                    Section("Session") {
-                        Picker("Session type", selection: $sessionType) {
-                            Text("Choose a session").tag("")
-                            ForEach(sessionTypes, id: \.self) { Text($0).tag($0) }
-                        }
-                        Picker("Preferred day", selection: $preferredDay) {
-                            Text("Any day").tag("")
-                            ForEach(days, id: \.self) { Text($0).tag($0) }
-                        }
-                        Picker("Preferred time", selection: $preferredTime) {
-                            Text("Any time").tag("")
-                            ForEach(times, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
-
-                    Section("Training") {
-                        Picker("Goal", selection: $trainingGoal) {
-                            Text("Choose a goal").tag("")
-                            ForEach(goals, id: \.self) { Text($0).tag($0) }
-                        }
-                        Picker("Experience", selection: $experienceLevel) {
-                            Text("Choose a level").tag("")
-                            ForEach(experience, id: \.self) { Text($0).tag($0) }
-                        }
-                        TextField("Notes for your coach", text: $notes, axis: .vertical)
-                            .lineLimit(2...5)
-                    }
-
-                    Section {
-                        Toggle("XERT may contact me about this request", isOn: $consentsToContact)
-                        if let validationMessage {
-                            Text(validationMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                        Button {
-                            submit()
-                        } label: {
-                            HStack {
-                                Label("Send PT Request", systemImage: "paperplane.fill")
-                                Spacer()
-                                if store.isRequestingPrivateSession { ProgressView() }
-                            }
-                        }
-                        .disabled(store.isRequestingPrivateSession)
-                    }
+            }
+            .navigationTitle("Personal Training")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .tint(.xertSteel)
                 }
             }
         }
-        .navigationTitle("Personal Training")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { dismiss() }
+    }
+
+    private var confirmationView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.xertSteel)
+            Text("Request Received")
+                .xertDisplay(30)
+            Text("The XERT team will contact you to confirm availability.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.xertPale)
+            Button("Done") { dismiss() }
+                .buttonStyle(.xertPrimary)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xertScreenBackground()
+    }
+
+    private var requestForm: some View {
+        Form {
+            contactSection
+            sessionSection
+            trainingSection
+            submitSection
+        }
+        .tint(.xertSteel)
+        .xertListBackground()
+    }
+
+    private var contactSection: some View {
+        Section {
+            TextField("Full name", text: $fullName)
+                .textContentType(.name)
+                .foregroundStyle(Color.xertOffWhite)
+            TextField("Email", text: $email)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .foregroundStyle(Color.xertOffWhite)
+            TextField("Mobile number", text: $phone)
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .foregroundStyle(Color.xertOffWhite)
+        } header: {
+            Text("Contact").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var sessionSection: some View {
+        Section {
+            Picker("Session type", selection: $sessionType) {
+                Text("Choose a session").tag("")
+                ForEach(sessionTypes, id: \.self) { Text($0).tag($0) }
             }
+            Picker("Preferred day", selection: $preferredDay) {
+                Text("Any day").tag("")
+                ForEach(days, id: \.self) { Text($0).tag($0) }
+            }
+            Picker("Preferred time", selection: $preferredTime) {
+                Text("Any time").tag("")
+                ForEach(times, id: \.self) { Text($0).tag($0) }
+            }
+        } header: {
+            Text("Session").xertEyebrow()
+        }
+        .foregroundStyle(Color.xertOffWhite)
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var trainingSection: some View {
+        Section {
+            Picker("Goal", selection: $trainingGoal) {
+                Text("Choose a goal").tag("")
+                ForEach(goals, id: \.self) { Text($0).tag($0) }
+            }
+            .foregroundStyle(Color.xertOffWhite)
+            Picker("Experience", selection: $experienceLevel) {
+                Text("Choose a level").tag("")
+                ForEach(experience, id: \.self) { Text($0).tag($0) }
+            }
+            .foregroundStyle(Color.xertOffWhite)
+            TextField("Notes for your coach", text: $notes, axis: .vertical)
+                .lineLimit(2...5)
+                .foregroundStyle(Color.xertOffWhite)
+        } header: {
+            Text("Training").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var submitSection: some View {
+        Section {
+            Toggle("XERT may contact me about this request", isOn: $consentsToContact)
+                .tint(.xertSteel)
+                .foregroundStyle(Color.xertOffWhite)
+                .listRowBackground(Color.xertInk)
+                .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+            if let validationMessage {
+                Text(validationMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .listRowBackground(Color.xertInk)
+                    .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+            }
+            Button {
+                submit()
+            } label: {
+                HStack {
+                    Label("Send PT Request", systemImage: "paperplane.fill")
+                    Spacer()
+                    if store.isRequestingPrivateSession {
+                        ProgressView()
+                            .tint(Color.xertNavy)
+                    }
+                }
+            }
+            .buttonStyle(.xertPrimary)
+            .disabled(store.isRequestingPrivateSession)
+            .opacity(store.isRequestingPrivateSession ? 0.5 : 1)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -378,80 +511,142 @@ private struct ClassInterestRequestView: View {
 
     var body: some View {
         NavigationStack {
-            if submitted {
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.xertSteel)
-                    Text("Interest Registered")
-                        .font(.title2.bold())
-                    Text("The XERT team will contact you about \(session.title).")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                    Button("Done") { dismiss() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.xertSteel)
+            Group {
+                if submitted {
+                    confirmationView
+                } else {
+                    requestForm
                 }
-                .padding(32)
-            } else {
-                Form {
-                    Section("Selected Class") {
-                        Text(session.title).font(.headline)
-                        Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
-                            .foregroundStyle(.secondary)
-                        if let coach = session.coach_name {
-                            Label(coach, systemImage: "person")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section("Contact") {
-                        TextField("Full name", text: $fullName)
-                            .textContentType(.name)
-                        TextField("Email", text: $email)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                        TextField("Mobile number", text: $phone)
-                            .textContentType(.telephoneNumber)
-                            .keyboardType(.phonePad)
-                    }
-
-                    Section("Training") {
-                        Picker("Training level", selection: $trainingLevel) {
-                            Text("Choose a level").tag("")
-                            ForEach(trainingLevels, id: \.self) { Text($0).tag($0) }
-                        }
-                        TextField("Notes for the coach", text: $notes, axis: .vertical)
-                            .lineLimit(2...5)
-                    }
-
-                    Section {
-                        Toggle("XERT may contact me about this class", isOn: $consentsToContact)
-                        if let validationMessage {
-                            Text(validationMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                        Button {
-                            submit()
-                        } label: {
-                            HStack {
-                                Label("Register Interest", systemImage: "paperplane.fill")
-                                Spacer()
-                                if store.isRequestingClassInterest { ProgressView() }
-                            }
-                        }
-                        .disabled(store.isRequestingClassInterest)
-                    }
+            }
+            .navigationTitle("Class Interest")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .tint(.xertSteel)
                 }
             }
         }
-        .navigationTitle("Class Interest")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { dismiss() }
+    }
+
+    private var confirmationView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.xertSteel)
+            Text("Interest Registered")
+                .xertDisplay(30)
+            Text("The XERT team will contact you about \(session.title).")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.xertPale)
+            Button("Done") { dismiss() }
+                .buttonStyle(.xertPrimary)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xertScreenBackground()
+    }
+
+    private var requestForm: some View {
+        Form {
+            selectedClassSection
+            contactSection
+            trainingSection
+            submitSection
+        }
+        .tint(.xertSteel)
+        .xertListBackground()
+    }
+
+    private var selectedClassSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(session.title)
+                    .xertDisplay(20)
+                Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
+                    .foregroundStyle(Color.xertPale)
+                if let coach = session.coach_name {
+                    Label(coach, systemImage: "person")
+                        .foregroundStyle(Color.xertPale)
+                }
             }
+            .padding(.vertical, 2)
+        } header: {
+            Text("Selected Class").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var contactSection: some View {
+        Section {
+            TextField("Full name", text: $fullName)
+                .textContentType(.name)
+                .foregroundStyle(Color.xertOffWhite)
+            TextField("Email", text: $email)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .foregroundStyle(Color.xertOffWhite)
+            TextField("Mobile number", text: $phone)
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .foregroundStyle(Color.xertOffWhite)
+        } header: {
+            Text("Contact").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var trainingSection: some View {
+        Section {
+            Picker("Training level", selection: $trainingLevel) {
+                Text("Choose a level").tag("")
+                ForEach(trainingLevels, id: \.self) { Text($0).tag($0) }
+            }
+            .foregroundStyle(Color.xertOffWhite)
+            TextField("Notes for the coach", text: $notes, axis: .vertical)
+                .lineLimit(2...5)
+                .foregroundStyle(Color.xertOffWhite)
+        } header: {
+            Text("Training").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var submitSection: some View {
+        Section {
+            Toggle("XERT may contact me about this class", isOn: $consentsToContact)
+                .tint(.xertSteel)
+                .foregroundStyle(Color.xertOffWhite)
+                .listRowBackground(Color.xertInk)
+                .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+            if let validationMessage {
+                Text(validationMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .listRowBackground(Color.xertInk)
+                    .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+            }
+            Button {
+                submit()
+            } label: {
+                HStack {
+                    Label("Register Interest", systemImage: "paperplane.fill")
+                    Spacer()
+                    if store.isRequestingClassInterest {
+                        ProgressView()
+                            .tint(Color.xertNavy)
+                    }
+                }
+            }
+            .buttonStyle(.xertPrimary)
+            .disabled(store.isRequestingClassInterest)
+            .opacity(store.isRequestingClassInterest ? 0.5 : 1)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
