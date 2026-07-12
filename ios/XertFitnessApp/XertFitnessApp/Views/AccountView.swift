@@ -8,6 +8,7 @@ struct AccountView: View {
     @State private var fullName = ""
     @State private var phone = ""
     @State private var didSaveProfile = false
+    @State private var passwordResetSent = false
     @State private var bookingToCancel: BookingItem?
     @FocusState private var focusedProfileField: ProfileField?
 
@@ -109,6 +110,7 @@ struct AccountView: View {
                             .textContentType(.emailAddress)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
+                            .onChange(of: email) { _ in passwordResetSent = false }
                         SecureField("Password", text: $password)
                             .textContentType(isCreatingAccount ? .newPassword : .password)
 
@@ -125,6 +127,29 @@ struct AccountView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .disabled(email.isEmpty || password.count < 6 || store.isLoading)
+
+                        if !isCreatingAccount {
+                            Button {
+                                Task {
+                                    passwordResetSent = await store.requestPasswordReset(email: email)
+                                }
+                            } label: {
+                                HStack {
+                                    Text(store.isRequestingPasswordReset ? "Sending reset link..." : "Forgot password?")
+                                    Spacer()
+                                    if store.isRequestingPasswordReset {
+                                        ProgressView()
+                                    }
+                                }
+                            }
+                            .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isRequestingPasswordReset)
+
+                            if passwordResetSent {
+                                Text("If an XERT account uses this email, a reset link is on its way.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
 
                     Section {

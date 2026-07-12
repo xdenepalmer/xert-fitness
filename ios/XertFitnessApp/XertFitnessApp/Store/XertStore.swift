@@ -15,6 +15,7 @@ final class XertStore: ObservableObject {
     @Published var bookingSessionID: UUID?
     @Published var cancellingBookingID: UUID?
     @Published var isSavingProfile = false
+    @Published var isRequestingPasswordReset = false
 
     private let api = XertAPI()
 
@@ -125,6 +126,25 @@ final class XertStore: ObservableObject {
             await refresh()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func requestPasswordReset(email: String) async -> Bool {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedEmail.isEmpty else {
+            errorMessage = "Enter your email address to request a password reset."
+            return false
+        }
+
+        isRequestingPasswordReset = true
+        defer { isRequestingPasswordReset = false }
+        do {
+            try await api.requestPasswordReset(email: normalizedEmail)
+            return true
+        } catch {
+            present(error)
+            return false
         }
     }
 

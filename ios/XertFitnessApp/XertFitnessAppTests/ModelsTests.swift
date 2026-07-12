@@ -67,6 +67,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(profile.email)
     }
 
+    func testPasswordRecoveryUsesTheWebResetRoute() {
+        XCTAssertEqual(AppConfig.webURL(path: "reset-password").path, "/reset-password")
+    }
+
     func testFallbackCalendarCarriesTheFull2026Program() {
         XCTAssertEqual(XertEventCalendar.fallback.count, 20)
         XCTAssertEqual(XertEventCalendar.fallback.first?.name, "Gold Coast Marathon")

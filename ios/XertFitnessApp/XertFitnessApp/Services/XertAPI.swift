@@ -56,6 +56,14 @@ final class XertAPI {
         return response.session
     }
 
+    func requestPasswordReset(email: String) async throws {
+        let _: EmptyObject = try await authRequest(
+            path: "/auth/v1/recover",
+            queryItems: [URLQueryItem(name: "redirect_to", value: AppConfig.webURL(path: "reset-password").absoluteString)],
+            body: ["email": email]
+        )
+    }
+
     func refresh(session auth: AuthSession) async throws -> AuthSession {
         guard let refreshToken = auth.refresh_token, !refreshToken.isEmpty else {
             throw APIError(message: "Your XERT session needs you to sign in again.")
@@ -292,6 +300,7 @@ final class XertAPI {
 }
 
 private struct EmptyBody: Encodable {}
+private struct EmptyObject: Decodable {}
 private struct ProfileUpdate: Encodable {
     let full_name: String?
     let phone: String?
