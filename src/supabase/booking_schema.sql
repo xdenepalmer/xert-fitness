@@ -278,7 +278,7 @@ begin
   if exists (
     select 1 from session_bookings
     where user_id = v_user and class_session_id = p_session_id
-      and status in ('requested', 'confirmed')
+      and status in ('requested', 'confirmed', 'waitlisted')
   ) then
     raise exception 'ALREADY_BOOKED';
   end if;
@@ -309,8 +309,8 @@ begin
   return v_booking;
 end; $$;
 
--- Cancel a confirmed booking or a pending request. Pending requests always
--- release their reserved credit; confirmed bookings retain the 12-hour policy.
+-- Cancel a confirmed booking, pending request, or waitlist place. Waitlisted
+-- places have already released their credit and must never refund it twice.
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -328,12 +328,12 @@ begin
     where b.id = p_booking_id and b.user_id = v_user
     for update;
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
-  if v_status not in ('requested', 'confirmed') then raise exception 'NOT_CANCELLABLE'; end if;
+  if v_status not in ('requested', 'confirmed', 'waitlisted') then raise exception 'NOT_CANCELLABLE'; end if;
 
   update session_bookings set status = 'cancelled', cancelled_at = now()
     where id = p_booking_id;
 
-  if (v_status = 'requested' or v_start - now() > interval '12 hours') and v_batch is not null then
+  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours')) and v_batch is not null then
     update credit_batches set remaining = remaining + 1
       where id = v_batch and (expires_at is null or expires_at > now());
   end if;

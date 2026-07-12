@@ -112,7 +112,11 @@ export default function Account() {
       await cancelBooking(booking.booking_id);
       toast({
         title: 'Booking cancelled',
-        description: cancellationReturnsCredit(booking) ? 'Your class credit has been returned.' : 'Cancelled within 12 hours of the class, so the credit was used.'
+        description: booking.status === 'waitlisted'
+          ? 'You have been removed from the waitlist.'
+          : cancellationReturnsCredit(booking)
+            ? 'Your class credit has been returned.'
+            : 'Cancelled within 12 hours of the class, so the credit was used.'
       });
       await refresh();
     } catch (e) {
@@ -226,7 +230,7 @@ export default function Account() {
   }
 
   const now = Date.now();
-  const pending = bookings.filter(b => b.status === 'requested' && new Date(b.start_time).getTime() > now);
+  const pending = bookings.filter(b => ['requested', 'waitlisted'].includes(b.status) && new Date(b.start_time).getTime() > now);
   const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time).getTime() > now);
   const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time).getTime() <= now);
   const displayName = profileForm.full_name.trim() || user?.email;
@@ -462,7 +466,7 @@ export default function Account() {
         {pending.length > 0 && (
           <section className="mb-10">
             <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
-              Awaiting Confirmation
+              Requests &amp; Waitlist
             </h2>
             <div className="space-y-3">
               {pending.map(b => (
@@ -477,7 +481,9 @@ export default function Account() {
                       {b.coach_name ? ` · Coach ${b.coach_name}` : ''}
                     </p>
                     <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.75)' }}>
-                      Your credit is reserved while XERT reviews this request.
+                      {b.status === 'waitlisted'
+                        ? 'You are on the waitlist. No class credit is currently reserved.'
+                        : 'Your credit is reserved while XERT reviews this request.'}
                     </p>
                   </div>
                   <button
@@ -490,7 +496,7 @@ export default function Account() {
                     }}
                   >
                     {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                    Cancel request
+                    {b.status === 'waitlisted' ? 'Leave waitlist' : 'Cancel request'}
                   </button>
                 </div>
               ))}

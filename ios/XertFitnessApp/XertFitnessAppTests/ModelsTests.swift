@@ -312,6 +312,20 @@ final class ModelsTests: XCTestCase {
             startTime: now.addingTimeInterval(12 * 60 * 60),
             now: now
         ))
+        XCTAssertFalse(BookingCancellationPolicy.returnsCredit(
+            status: "waitlisted",
+            startTime: now.addingTimeInterval(24 * 60 * 60),
+            now: now
+        ))
+    }
+
+    func testWaitlistedBookingRemainsVisibleAndCanBeWithdrawn() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let waitlisted = booking(status: "waitlisted", startTime: now.addingTimeInterval(60 * 60))
+
+        XCTAssertTrue(waitlisted.isActiveClassPlace)
+        XCTAssertTrue(waitlisted.isCancellable(now: now))
+        XCTAssertEqual(waitlisted.stateLabel, "Waitlisted")
     }
 
     private func booking(status: String, startTime: Date) -> BookingItem {

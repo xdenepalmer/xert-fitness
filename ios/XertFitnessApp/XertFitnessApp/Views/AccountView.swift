@@ -112,7 +112,7 @@ struct AccountView: View {
                                     Text(booking.status.uppercased())
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.xertSteel)
-                                    if booking.isCancellable {
+                                    if booking.isCancellable() {
                                         Button("Cancel booking", role: .destructive) {
                                             bookingToCancel = booking
                                         }
@@ -236,11 +236,10 @@ struct AccountView: View {
 }
 
 private extension BookingItem {
-    var isCancellable: Bool {
-        (status == "requested" || status == "confirmed") && start_time > Date()
-    }
-
     var cancellationMessage: String {
+        if status == "waitlisted" {
+            return "This will remove you from the waitlist for \(title). No class credit is currently reserved."
+        }
         if BookingCancellationPolicy.returnsCredit(status: status, startTime: start_time) {
             return "This will remove you from \(title) and return your class credit."
         }

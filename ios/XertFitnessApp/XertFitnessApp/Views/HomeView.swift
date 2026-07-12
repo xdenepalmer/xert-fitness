@@ -40,7 +40,7 @@ struct HomeView: View {
                                         .font(.headline)
                                         .foregroundStyle(.xertOffWhite)
                                     Spacer()
-                                    Text(booking.status == "requested" ? "REQUESTED" : "CONFIRMED")
+                                    Text(booking.stateLabel.uppercased())
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.xertSteel)
                                 }
@@ -140,7 +140,7 @@ struct HomeView: View {
 
     private var nextBooking: BookingItem? {
         store.bookings
-            .filter { ["requested", "confirmed"].contains($0.status) && $0.start_time > Date() }
+            .filter { $0.isActiveClassPlace && $0.start_time > Date() }
             .sorted { $0.start_time < $1.start_time }
             .first
     }

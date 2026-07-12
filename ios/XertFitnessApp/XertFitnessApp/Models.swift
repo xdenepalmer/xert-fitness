@@ -150,6 +150,23 @@ struct BookingItem: Identifiable, Codable, Hashable {
     let end_time: Date?
     let location_zone: String?
     let intensity_level: String?
+
+    var isActiveClassPlace: Bool {
+        ["requested", "confirmed", "waitlisted"].contains(status)
+    }
+
+    var stateLabel: String {
+        switch status {
+        case "requested": return "Request sent"
+        case "confirmed": return "Booked"
+        case "waitlisted": return "Waitlisted"
+        default: return status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    func isCancellable(now: Date = Date()) -> Bool {
+        isActiveClassPlace && start_time > now
+    }
 }
 
 struct AuthSession: Codable, Hashable {

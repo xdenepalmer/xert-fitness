@@ -99,8 +99,8 @@ struct BookingView: View {
 
                                 if let booking {
                                     Label(
-                                        booking.status == "requested" ? "Request sent" : "Booked",
-                                        systemImage: booking.status == "requested" ? "clock" : "checkmark.circle"
+                                        booking.stateLabel,
+                                        systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
                                     )
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.xertSteel)
@@ -178,7 +178,7 @@ struct BookingView: View {
     private var activeBookings: [UUID: BookingItem] {
         Dictionary(
             uniqueKeysWithValues: store.bookings
-                .filter { $0.status == "requested" || $0.status == "confirmed" }
+                .filter(\.isActiveClassPlace)
                 .map { ($0.session_id, $0) }
         )
     }

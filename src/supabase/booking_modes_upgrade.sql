@@ -96,7 +96,7 @@ begin
     select 1 from public.session_bookings
     where user_id = v_user
       and class_session_id = p_session_id
-      and status in ('requested', 'confirmed')
+      and status in ('requested', 'confirmed', 'waitlisted')
   ) then
     raise exception 'ALREADY_BOOKED';
   end if;
@@ -146,13 +146,13 @@ begin
     where b.id = p_booking_id and b.user_id = v_user
     for update;
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
-  if v_status not in ('requested', 'confirmed') then raise exception 'NOT_CANCELLABLE'; end if;
+  if v_status not in ('requested', 'confirmed', 'waitlisted') then raise exception 'NOT_CANCELLABLE'; end if;
 
   update public.session_bookings
   set status = 'cancelled', cancelled_at = now()
   where id = p_booking_id;
 
-  if (v_status = 'requested' or v_start - now() > interval '12 hours') and v_batch is not null then
+  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours')) and v_batch is not null then
     update public.credit_batches
     set remaining = remaining + 1
     where id = v_batch and (expires_at is null or expires_at > now());
