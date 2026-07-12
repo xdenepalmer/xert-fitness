@@ -183,6 +183,45 @@ struct BookingItem: Identifiable, Codable, Hashable {
     func isCancellable(now: Date = Date()) -> Bool {
         isActiveClassPlace && start_time > now
     }
+
+    func timelineSection(now: Date = Date()) -> BookingTimelineSection {
+        guard start_time > now else { return .history }
+        switch status {
+        case "requested", "waitlisted": return .pending
+        case "confirmed": return .upcoming
+        default: return .history
+        }
+    }
+}
+
+enum BookingTimelineSection: Equatable {
+    case pending
+    case upcoming
+    case history
+}
+
+struct BookingTimeline: Equatable {
+    let pending: [BookingItem]
+    let upcoming: [BookingItem]
+    let history: [BookingItem]
+
+    init(bookings: [BookingItem], now: Date = Date()) {
+        var pending: [BookingItem] = []
+        var upcoming: [BookingItem] = []
+        var history: [BookingItem] = []
+
+        for booking in bookings {
+            switch booking.timelineSection(now: now) {
+            case .pending: pending.append(booking)
+            case .upcoming: upcoming.append(booking)
+            case .history: history.append(booking)
+            }
+        }
+
+        self.pending = pending
+        self.upcoming = upcoming
+        self.history = history
+    }
 }
 
 struct AuthSession: Codable, Hashable {

@@ -6,6 +6,7 @@ import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
+import { partitionAccountBookings } from '@/lib/accountBookings';
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 
@@ -229,10 +230,7 @@ export default function Account() {
     );
   }
 
-  const now = Date.now();
-  const pending = bookings.filter(b => ['requested', 'waitlisted'].includes(b.status) && new Date(b.start_time).getTime() > now);
-  const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time).getTime() > now);
-  const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time).getTime() <= now);
+  const { pending, upcoming, history: past } = partitionAccountBookings(bookings);
   const displayName = profileForm.full_name.trim() || user?.email;
 
   return (

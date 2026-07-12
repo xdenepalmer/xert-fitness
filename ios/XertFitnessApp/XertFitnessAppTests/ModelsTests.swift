@@ -334,6 +334,23 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(waitlisted.stateLabel, "Waitlisted")
     }
 
+    func testBookingTimelineSectionsAreMutuallyExclusive() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let bookings = [
+            booking(status: "requested", startTime: now.addingTimeInterval(60)),
+            booking(status: "waitlisted", startTime: now.addingTimeInterval(60)),
+            booking(status: "confirmed", startTime: now.addingTimeInterval(60)),
+            booking(status: "confirmed", startTime: now.addingTimeInterval(-60)),
+            booking(status: "cancelled", startTime: now.addingTimeInterval(60))
+        ]
+        let timeline = BookingTimeline(bookings: bookings, now: now)
+
+        XCTAssertEqual(timeline.pending.count, 2)
+        XCTAssertEqual(timeline.upcoming.count, 1)
+        XCTAssertEqual(timeline.history.count, 2)
+        XCTAssertEqual(timeline.pending.count + timeline.upcoming.count + timeline.history.count, bookings.count)
+    }
+
     private func booking(status: String, startTime: Date) -> BookingItem {
         BookingItem(
             booking_id: UUID(),

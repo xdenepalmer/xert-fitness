@@ -18,6 +18,7 @@ struct AccountView: View {
     }
 
     var body: some View {
+        let timeline = BookingTimeline(bookings: store.bookings)
         NavigationStack {
             Form {
                 if store.isSignedIn {
@@ -102,29 +103,25 @@ struct AccountView: View {
 
                     legalSection
 
-                    Section("Bookings") {
-                        if store.bookings.isEmpty {
+                    if store.bookings.isEmpty {
+                        Section("Bookings") {
                             Text("No bookings yet.")
                                 .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(store.bookings) { booking in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(booking.title)
-                                        .font(.headline)
-                                    Text(booking.start_time.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    Text(booking.status.uppercased())
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.xertSteel)
-                                    if booking.isCancellable() {
-                                        Button("Cancel booking", role: .destructive) {
-                                            bookingToCancel = booking
-                                        }
-                                        .disabled(store.cancellingBookingID == booking.id)
-                                    }
-                                }
-                                .padding(.vertical, 4)
+                        }
+                    } else {
+                        if !timeline.pending.isEmpty {
+                            Section("Requests & Waitlist") {
+                                bookingRows(timeline.pending)
+                            }
+                        }
+                        if !timeline.upcoming.isEmpty {
+                            Section("Upcoming Classes") {
+                                bookingRows(timeline.upcoming)
+                            }
+                        }
+                        if !timeline.history.isEmpty {
+                            Section("Booking History") {
+                                bookingRows(timeline.history)
                             }
                         }
                     }
@@ -229,6 +226,29 @@ struct AccountView: View {
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
+    }
+
+    @ViewBuilder
+    private func bookingRows(_ bookings: [BookingItem]) -> some View {
+        ForEach(bookings) { booking in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(booking.title)
+                    .font(.headline)
+                Text(booking.start_time.formatted(date: .abbreviated, time: .shortened))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(booking.stateLabel.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.xertSteel)
+                if booking.isCancellable() {
+                    Button(booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking", role: .destructive) {
+                        bookingToCancel = booking
+                    }
+                    .disabled(store.cancellingBookingID == booking.id)
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     private var legalSection: some View {
