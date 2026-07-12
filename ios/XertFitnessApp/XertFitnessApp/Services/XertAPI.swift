@@ -119,7 +119,7 @@ final class XertAPI {
 
     func profile(session auth: AuthSession) async throws -> MemberProfile? {
         var queryItems = [
-            URLQueryItem(name: "select", value: "id,full_name,phone,email"),
+            URLQueryItem(name: "select", value: "id,full_name,phone"),
             URLQueryItem(name: "limit", value: "1"),
         ]
         if let userID = auth.user?.id {

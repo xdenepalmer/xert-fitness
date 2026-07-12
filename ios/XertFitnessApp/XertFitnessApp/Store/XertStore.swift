@@ -79,10 +79,14 @@ final class XertStore: ObservableObject {
             async let profileRequest = api.profile(session: authSession)
             do {
                 credits = try await creditRequest
+            } catch {
+                credits = []
+                present(error)
+            }
+            do {
                 bookings = try await bookingRequest
                 await ClassReminderScheduler.shared.sync(bookings: bookings)
             } catch {
-                credits = []
                 bookings = []
                 present(error)
             }
