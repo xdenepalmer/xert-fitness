@@ -115,6 +115,7 @@ create table if not exists public.orders (
   created_at                  timestamptz not null default now(),
   paid_at                     timestamptz
 );
+create index if not exists orders_status_created_idx on public.orders(status, created_at desc, id desc);
 
 
 -- ── credit_batches (session credits with expiry) ────────────────────────────
@@ -129,6 +130,7 @@ create table if not exists public.credit_batches (
   created_at  timestamptz not null default now()
 );
 create index if not exists credit_batches_user_idx on public.credit_batches(user_id);
+create index if not exists credit_batches_active_idx on public.credit_batches(id) where remaining > 0;
 
 
 -- ── session_bookings (member bookings that consume a credit) ─────────────────

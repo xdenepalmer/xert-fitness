@@ -511,12 +511,40 @@ export async function getBusinessStats() {
   monthStart.setHours(0, 0, 0, 0);
   const nowIso = new Date().toISOString();
 
-  const [orders, members, credits, upcoming] = await Promise.all([supabase.from('orders').select('amount_cents, status, paid_at, created_at').eq('status', 'paid'), supabase.from('profiles').select('id', { count: 'exact', head: true }), supabase.from('credit_batches').select('remaining, expires_at').gt('remaining', 0), supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('start_time', nowIso)]);
-  assertSupabaseResponses([orders, members, credits, upcoming]);
+  const pageSize = 500;
+  const paidOrders = collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    const { data, count, error } = await supabase
+      .from('orders')
+      .select('id, amount_cents, paid_at, created_at', { count: 'exact' })
+      .eq('status', 'paid')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
+  const creditBatches = collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    const { data, count, error } = await supabase
+      .from('credit_batches')
+      .select('id, remaining, expires_at', { count: 'exact' })
+      .gt('remaining', 0)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
+  const [paid, members, credits, upcoming] = await Promise.all([
+    paidOrders,
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    creditBatches,
+    supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('start_time', nowIso)
+  ]);
+  assertSupabaseResponses([members, upcoming]);
 
-  const paid = orders.data || [];
   const monthPaid = paid.filter(o => new Date(o.paid_at || o.created_at) >= monthStart);
-  const activeCredits = (credits.data || []).filter(c => !c.expires_at || new Date(c.expires_at) > new Date()).reduce((s, c) => s + (c.remaining || 0), 0);
+  const activeCredits = credits.filter(c => !c.expires_at || new Date(c.expires_at) > new Date()).reduce((s, c) => s + (c.remaining || 0), 0);
 
   return {
     totalRevenueCents: paid.reduce((s, o) => s + (o.amount_cents || 0), 0),
