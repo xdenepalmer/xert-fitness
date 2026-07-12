@@ -18,7 +18,7 @@ struct RootView: View {
                 }
                 .tag(1)
 
-            EventsView()
+            EventsView(onNavigate: { selectedTab = $0 })
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
@@ -49,6 +49,11 @@ extension Color {
     static let xertInk = Color(red: 11 / 255, green: 18 / 255, blue: 24 / 255)
     static let xertSteel = Color(red: 123 / 255, green: 167 / 255, blue: 188 / 255)
     static let xertOffWhite = Color(red: 241 / 255, green: 243 / 255, blue: 244 / 255)
+}
+
+extension ShapeStyle where Self == Color {
+    static var xertSteel: Color { Color.xertSteel }
+    static var xertOffWhite: Color { Color.xertOffWhite }
 }
 
 struct XertSection<Content: View>: View {
