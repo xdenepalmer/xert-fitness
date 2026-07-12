@@ -13,8 +13,6 @@ workflows:
           source: false
       cancel_previous_builds: true
     environment:
-      groups:
-        - xert_ios
       xcode: latest
       cocoapods: default
       node: 22
@@ -27,18 +25,20 @@ workflows:
       - name: Write XERT runtime configuration
         script: |
           set -e
-          : "${SUPABASE_URL:?Add SUPABASE_URL to the xert_ios Codemagic environment group.}"
-          : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY to the xert_ios Codemagic environment group.}"
-          : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL to the xert_ios Codemagic environment group.}"
+          # Verification only compiles and runs unit tests, so live service values
+          # are optional here. Release builds below remain strict.
+          SUPABASE_URL_VALUE="${SUPABASE_URL:-https://placeholder.supabase.co}"
+          SUPABASE_ANON_KEY_VALUE="${SUPABASE_ANON_KEY:-placeholder-anon-key}"
+          VERCEL_BASE_URL_VALUE="${VERCEL_BASE_URL:-https://example.com}"
 
           escape_xcconfig_url() {
             printf '%s' "$1" | sed 's#//#/$()/#'
           }
 
           cat > "$CM_BUILD_DIR/$IOS_DIRECTORY/Config.xcconfig" <<EOF
-          SUPABASE_URL = $(escape_xcconfig_url "$SUPABASE_URL")
-          SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY
-          VERCEL_BASE_URL = $(escape_xcconfig_url "$VERCEL_BASE_URL")
+          SUPABASE_URL = $(escape_xcconfig_url "$SUPABASE_URL_VALUE")
+          SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY_VALUE
+          VERCEL_BASE_URL = $(escape_xcconfig_url "$VERCEL_BASE_URL_VALUE")
           EOF
       - name: Install XcodeGen when needed
         script: |
@@ -76,8 +76,6 @@ workflows:
       groups:
         # Contains the stable distribution certificate private key.
         - appstore
-        # Contains project runtime values only.
-        - xert_ios
       xcode: latest
       cocoapods: default
       node: 22
@@ -90,9 +88,9 @@ workflows:
       - name: Write XERT runtime configuration
         script: |
           set -e
-          : "${SUPABASE_URL:?Add SUPABASE_URL to the xert_ios Codemagic environment group.}"
-          : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY to the xert_ios Codemagic environment group.}"
-          : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL to the xert_ios Codemagic environment group.}"
+          : "${SUPABASE_URL:?Add SUPABASE_URL as a Codemagic application environment variable.}"
+          : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY as a Codemagic application environment variable.}"
+          : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL as a Codemagic application environment variable.}"
 
           escape_xcconfig_url() {
             printf '%s' "$1" | sed 's#//#/$()/#'
