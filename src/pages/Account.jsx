@@ -5,6 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getMyCredits, getMyBookings, getMyOrders, cancelBooking, updateMyProfile } from '@/lib/bookingData';
+import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { useToast } from '@/components/ui/use-toast';
 
 function formatDateTime(iso) {
@@ -30,6 +31,7 @@ export default function Account() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
+  const [cancellationTarget, setCancellationTarget] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   const [savingProfile, setSavingProfile] = useState(false);
@@ -60,6 +62,15 @@ export default function Account() {
     });
   }, [profile]);
 
+  useEffect(() => {
+    if (!cancellationTarget) return undefined;
+    const dismissOnEscape = event => {
+      if (event.key === 'Escape') setCancellationTarget(null);
+    };
+    window.addEventListener('keydown', dismissOnEscape);
+    return () => window.removeEventListener('keydown', dismissOnEscape);
+  }, [cancellationTarget]);
+
   // After a Stripe purchase the webhook may land a moment after redirect —
   // poll briefly so the new credits appear without a manual refresh.
   useEffect(() => {
@@ -72,12 +83,9 @@ export default function Account() {
     setCancellingId(booking.booking_id);
     try {
       await cancelBooking(booking.booking_id);
-      const hoursOut = (new Date(booking.start_time).getTime() - Date.now()) / 36e5;
       toast({
         title: 'Booking cancelled',
-        description: booking.status === 'requested'
-          ? 'Your request was cancelled and the reserved credit has been returned.'
-          : hoursOut > 12
+        description: cancellationReturnsCredit(booking)
           ? 'Your class credit has been returned.'
           : 'Cancelled within 12 hours of the class, so the credit was used.',
       });
@@ -87,6 +95,13 @@ export default function Account() {
     } finally {
       setCancellingId(null);
     }
+  };
+
+  const confirmCancellation = () => {
+    if (!cancellationTarget) return;
+    const booking = cancellationTarget;
+    setCancellationTarget(null);
+    void handleCancel(booking);
   };
 
   const handleProfileSave = async (event) => {
@@ -295,7 +310,7 @@ export default function Account() {
                     </p>
                   </div>
                   <button
-                    onClick={() => handleCancel(b)}
+                    onClick={() => setCancellationTarget(b)}
                     disabled={cancellingId === b.booking_id}
                     className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
                     style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.6)' }}>
@@ -341,7 +356,7 @@ export default function Account() {
                     </p>
                   </div>
                   <button
-                    onClick={() => handleCancel(b)}
+                    onClick={() => setCancellationTarget(b)}
                     disabled={cancellingId === b.booking_id}
                     className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
                     style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.6)' }}>
@@ -414,6 +429,28 @@ export default function Account() {
       </main>
 
       <PublicFooter />
+      {cancellationTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="cancel-booking-title" aria-describedby="cancel-booking-description" onMouseDown={event => { if (event.target === event.currentTarget) setCancellationTarget(null); }}>
+          <div className="w-full max-w-md border p-6" style={{ borderColor: 'rgba(123,167,188,0.3)', backgroundColor: '#101820' }}>
+            <h2 id="cancel-booking-title" className="font-display text-2xl uppercase text-xert-offwhite">Cancel booking?</h2>
+            <p id="cancel-booking-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
+              {cancellationMessage(cancellationTarget)}
+            </p>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
+              <button type="button" autoFocus onClick={() => setCancellationTarget(null)}
+                className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider transition-colors"
+                style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.65)' }}>
+                Keep booking
+              </button>
+              <button type="button" onClick={confirmCancellation}
+                className="px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors"
+                style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+                Cancel booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

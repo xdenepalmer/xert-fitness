@@ -1,0 +1,14 @@
+export const CREDIT_REFUND_LEAD_TIME_MS = 12 * 60 * 60 * 1000;
+
+export function cancellationReturnsCredit(booking, now = Date.now()) {
+  if (booking.status === 'requested') return true;
+  return new Date(booking.start_time).getTime() - now > CREDIT_REFUND_LEAD_TIME_MS;
+}
+
+export function cancellationMessage(booking, now = Date.now()) {
+  const className = booking.title || booking.class_type || 'this class';
+  if (cancellationReturnsCredit(booking, now)) {
+    return `This will remove you from ${className} and return your class credit.`;
+  }
+  return `This will remove you from ${className}. Confirmed bookings cancelled within 12 hours do not return a class credit.`;
+}
