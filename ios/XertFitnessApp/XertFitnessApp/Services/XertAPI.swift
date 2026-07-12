@@ -171,6 +171,17 @@ final class XertAPI {
         )
     }
 
+    func orders(session auth: AuthSession) async throws -> [OrderItem] {
+        try await restRequest(
+            path: "/rest/v1/orders",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,status,amount_cents,currency,created_at,paid_at,products(name)"),
+                URLQueryItem(name: "order", value: "created_at.desc")
+            ],
+            auth: auth
+        )
+    }
+
     func profile(session auth: AuthSession) async throws -> MemberProfile? {
         var queryItems = [
             URLQueryItem(name: "select", value: "id,full_name,phone"),

@@ -29,9 +29,9 @@ struct AccountView: View {
                             StaleMemberDataNotice()
                         }
                     }
-                    if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .profile, .eventGoals]) {
+                    if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals]) {
                         Section {
-                            DataAvailabilityNotice(sources: [.credits, .bookings, .profile, .eventGoals])
+                            DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals])
                         }
                     }
 
@@ -104,6 +104,36 @@ struct AccountView: View {
                     }
 
                     legalSection
+
+                    Section("Purchase History") {
+                        if store.orders.isEmpty {
+                            Text("No purchases yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(store.orders) { order in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(alignment: .firstTextBaseline) {
+                                        Text(order.products?.name ?? "Session pack")
+                                            .font(.headline)
+                                        Spacer()
+                                        Text(order.displayAmount)
+                                            .font(.headline.monospacedDigit())
+                                            .foregroundStyle(.xertSteel)
+                                    }
+                                    HStack {
+                                        Text(order.activityDate.formatted(date: .abbreviated, time: .omitted))
+                                        Spacer()
+                                        Text(order.displayStatus.uppercased())
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.secondary)
+                                    }
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
 
                     if store.bookings.isEmpty {
                         Section("Bookings") {

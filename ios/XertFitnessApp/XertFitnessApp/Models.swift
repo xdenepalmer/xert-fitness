@@ -1,7 +1,7 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, credits, bookings, profile, eventGoals
+    case products, sessions, events, credits, bookings, orders, profile, eventGoals
 
     var displayName: String {
         switch self {
@@ -10,6 +10,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .events: return "event calendar"
         case .credits: return "class credits"
         case .bookings: return "your bookings"
+        case .orders: return "purchase history"
         case .profile: return "member profile"
         case .eventGoals: return "training goals"
         }
@@ -143,6 +144,32 @@ struct CreditBatch: Identifiable, Codable, Hashable {
     let total: Int
     let remaining: Int
     let expires_at: Date?
+}
+
+struct OrderProduct: Codable, Hashable {
+    let name: String
+}
+
+struct OrderItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    let status: String
+    let amount_cents: Int?
+    let currency: String?
+    let created_at: Date
+    let paid_at: Date?
+    let products: OrderProduct?
+
+    var displayAmount: String {
+        let normalizedCode = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let code = normalizedCode?.isEmpty == false ? normalizedCode ?? "AUD" : "AUD"
+        return (Double(amount_cents ?? 0) / 100).formatted(.currency(code: code))
+    }
+
+    var displayStatus: String {
+        status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var activityDate: Date { paid_at ?? created_at }
 }
 
 struct MemberProfile: Identifiable, Codable, Hashable {

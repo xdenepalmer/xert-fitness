@@ -31,9 +31,10 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 7)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 8)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
+        XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
     }
 
     func testPrivateSessionRequestNormalizesRequiredAndOptionalFields() throws {
@@ -166,6 +167,29 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertEqual(batch.total, 10)
         XCTAssertEqual(batch.remaining, 7)
+    }
+
+    func testOrderDecodesPurchaseHistoryAndFormatsMemberFacingValues() throws {
+        let data = """
+        {
+          "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "status": "paid",
+          "amount_cents": 4800,
+          "currency": "aud",
+          "created_at": "2026-07-12T01:00:00Z",
+          "paid_at": "2026-07-12T01:01:00Z",
+          "products": { "name": "4 Class Starter Pack" }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let order = try decoder.decode(OrderItem.self, from: data)
+
+        XCTAssertEqual(order.products?.name, "4 Class Starter Pack")
+        XCTAssertTrue(order.displayAmount.contains("48"))
+        XCTAssertEqual(order.displayStatus, "Paid")
+        XCTAssertEqual(order.activityDate, try XCTUnwrap(order.paid_at))
     }
 
     func testMemberProfileDecodesTheWebProfileColumns() throws {

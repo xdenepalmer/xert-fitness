@@ -8,6 +8,7 @@ final class XertStore: ObservableObject {
     @Published var events: [EventItem] = []
     @Published var credits: [CreditBatch] = []
     @Published var bookings: [BookingItem] = []
+    @Published var orders: [OrderItem] = []
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
@@ -128,10 +129,12 @@ final class XertStore: ObservableObject {
         if let authSession = memberSession {
             async let creditRequest = api.credits(session: authSession)
             async let bookingRequest = api.bookings(session: authSession)
+            async let orderRequest = api.orders(session: authSession)
             async let profileRequest = api.profile(session: authSession)
             async let eventGoalRequest = api.eventGoals(session: authSession)
             var creditsLoaded = false
             var bookingsLoaded = false
+            var ordersLoaded = false
             var profileLoaded = false
             do {
                 credits = try await creditRequest
@@ -145,6 +148,12 @@ final class XertStore: ObservableObject {
                 bookingsLoaded = true
             } catch {
                 unavailableDataSources.insert(.bookings)
+            }
+            do {
+                orders = try await orderRequest
+                ordersLoaded = true
+            } catch {
+                unavailableDataSources.insert(.orders)
             }
             do {
                 profile = try await profileRequest
@@ -161,7 +170,7 @@ final class XertStore: ObservableObject {
                 // is applied; keep the rest of the member account available.
             }
 
-            if creditsLoaded && bookingsLoaded && profileLoaded {
+            if creditsLoaded && bookingsLoaded && ordersLoaded && profileLoaded {
                 memberDataUpdatedAt = Date()
                 isUsingStaleMemberData = false
             } else {
@@ -170,6 +179,7 @@ final class XertStore: ObservableObject {
         } else {
             credits = []
             bookings = []
+            orders = []
             profile = nil
             eventGoalIDs = []
             memberDataUpdatedAt = nil
@@ -243,11 +253,12 @@ final class XertStore: ObservableObject {
         authSession = nil
         credits = []
         bookings = []
+        orders = []
         profile = nil
         eventGoalIDs = []
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
-        unavailableDataSources.subtract([.credits, .bookings, .profile, .eventGoals])
+        unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals])
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -268,11 +279,12 @@ final class XertStore: ObservableObject {
             self.authSession = nil
             credits = []
             bookings = []
+            orders = []
             profile = nil
             eventGoalIDs = []
             memberDataUpdatedAt = nil
             isUsingStaleMemberData = false
-            unavailableDataSources.subtract([.credits, .bookings, .profile, .eventGoals])
+            unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals])
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
             return true
