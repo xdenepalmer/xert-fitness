@@ -53,11 +53,13 @@ create policy "admin_insert_admin_settings" on public.admin_settings
 
 -- ── availability_blocks / blackout_periods: admin-only entirely ─────────────
 drop policy if exists "admin_all_availability_blocks" on public.availability_blocks;
-create policy "admin_all_availability_blocks" on public.availability_blocks
+drop policy if exists "admins_manage_availability_blocks" on public.availability_blocks;
+create policy "admins_manage_availability_blocks" on public.availability_blocks
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "admin_all_blackout_periods" on public.blackout_periods;
-create policy "admin_all_blackout_periods" on public.blackout_periods
+drop policy if exists "admins_manage_blackout_periods" on public.blackout_periods;
+create policy "admins_manage_blackout_periods" on public.blackout_periods
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- ============================================================================

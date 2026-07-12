@@ -98,22 +98,6 @@ create policy "admin_insert_admin_settings" on public.admin_settings
   for insert to authenticated with check (true);
 
 
--- ── Admin-only tables (no public access at all) ─────────────────────────────
--- availability_blocks, blackout_periods → admins only, every operation.
--- ----------------------------------------------------------------------------
-
--- availability_blocks -------------------------------------------------------
-alter table public.availability_blocks enable row level security;
-drop policy if exists "admin_all_availability_blocks" on public.availability_blocks;
-create policy "admin_all_availability_blocks" on public.availability_blocks
-  for all to authenticated using (true) with check (true);
-
--- blackout_periods ----------------------------------------------------------
-alter table public.blackout_periods enable row level security;
-drop policy if exists "admin_all_blackout_periods" on public.blackout_periods;
-create policy "admin_all_blackout_periods" on public.blackout_periods
-  for all to authenticated using (true) with check (true);
-
 -- ============================================================================
 -- Done. After running:
 --   • Public forms still submit (anon INSERT allowed).

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Download } from 'lucide-react';
+import { AlertTriangle, Download } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus } from '@/lib/adminData';
+import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
+import { blackoutsOverlappingSession } from '@/lib/scheduling';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -35,7 +36,7 @@ const STATUS_COLORS = {
   completed: 'text-xert-concrete/40 border-xert-steel/30',
 };
 
-function SessionEditor({ session, onSave, onCancel }) {
+function SessionEditor({ session, blackouts, onSave, onCancel }) {
   const [form, setForm] = useState(session || {
     class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
     start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
@@ -46,6 +47,7 @@ function SessionEditor({ session, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
 
   const handleSave = async () => {
     if (!form.title.trim()) { toast({ title: 'Title required.', variant: 'destructive' }); return; }
@@ -136,6 +138,14 @@ function SessionEditor({ session, onSave, onCancel }) {
               </select>
             </div>
           </div>
+          {overlappingBlackouts.length > 0 && (
+            <div role="alert" className="border border-xert-orange/40 bg-xert-orange/10 p-3 flex gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-xert-orange" />
+              <p className="font-body text-xs leading-relaxed text-xert-concrete/80">
+                This class overlaps a blackout: {overlappingBlackouts.map(blackout => blackout.reason).join(', ')}.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Coach name</label>
@@ -281,16 +291,28 @@ export default function ClassCalendarAdmin() {
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [blackouts, setBlackouts] = useState([]);
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    getClassSessions(false).then(data => {
-      setSessions(data);
+    try {
+      const [loadedSessions, loadedBlackouts] = await Promise.all([
+        getClassSessions(false),
+        getBlackoutPeriods().catch(error => {
+          toast({ title: 'Blackout checks unavailable', description: error.message, variant: 'destructive' });
+          return [];
+        }),
+      ]);
+      setSessions(loadedSessions);
+      setBlackouts(loadedBlackouts);
+    } catch (error) {
+      toast({ title: 'Could not load class sessions', description: error.message, variant: 'destructive' });
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -434,7 +456,9 @@ export default function ClassCalendarAdmin() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(s => (
+          {filtered.map(s => {
+            const sessionBlackouts = blackoutsOverlappingSession(s, blackouts);
+            return (
             <div key={s.id} className="bg-xert-ink border border-xert-steel/20">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-4">
@@ -450,6 +474,12 @@ export default function ClassCalendarAdmin() {
                       {s.class_type} · {s.start_time ? new Date(s.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'No time set'}
                       {s.coach_name ? ` · ${s.coach_name}` : ''} · Cap: {s.capacity}
                     </p>
+                    {sessionBlackouts.length > 0 && (
+                      <p className="mt-2 inline-flex items-center gap-1.5 font-body text-xs text-xert-orange">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Blackout overlap: {sessionBlackouts.map(blackout => blackout.reason).join(', ')}
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2 shrink-0 flex-wrap justify-end">
                     <button onClick={() => loadBookings(s.id)}
@@ -534,13 +564,15 @@ export default function ClassCalendarAdmin() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {showEditor && (
         <SessionEditor
           session={editingSession}
+          blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}
           onCancel={() => setShowEditor(false)}
         />
