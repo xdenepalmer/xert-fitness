@@ -89,6 +89,8 @@ struct AccountView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    legalSection
+
                     Section("Bookings") {
                         if store.bookings.isEmpty {
                             Text("No bookings yet.")
@@ -168,6 +170,8 @@ struct AccountView: View {
                             isCreatingAccount.toggle()
                         }
                     }
+
+                    legalSection
                 }
             }
             .navigationTitle("Account")
@@ -214,6 +218,14 @@ struct AccountView: View {
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
+    }
+
+    private var legalSection: some View {
+        Section("Legal & Support") {
+            Link("Privacy Policy", destination: AppConfig.webURL(path: "privacy"))
+            Link("Terms of Use", destination: AppConfig.webURL(path: "terms"))
+            Link("Contact XERT Support", destination: AppConfig.webURL(path: "contact"))
+        }
     }
 }
 

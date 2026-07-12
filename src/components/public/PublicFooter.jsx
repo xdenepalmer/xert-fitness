@@ -95,6 +95,8 @@ export default function PublicFooter() {
             © {new Date().getFullYear()} XERT Fitness, Kingaroy QLD 4610. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
+            <Link to="/privacy" className="font-body text-xs transition-colors" style={{ color: 'rgba(209,221,230,0.4)' }}>Privacy</Link>
+            <Link to="/terms" className="font-body text-xs transition-colors" style={{ color: 'rgba(209,221,230,0.4)' }}>Terms</Link>
             {isAdmin && (
               <Link to="/admin"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 border font-body text-xs uppercase tracking-wider transition-colors"

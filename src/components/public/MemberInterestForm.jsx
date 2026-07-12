@@ -235,7 +235,7 @@ export default function MemberInterestForm() {
               {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
             </div>
             <span className="font-body text-sm text-xert-concrete/80">
-              I consent to XERT Fitness contacting me about my interest and the soft launch. <span className="text-xert-red">*</span>
+              I consent to XERT Fitness contacting me about my interest and the soft launch as described in the <a href="/privacy" className="underline text-xert-steel">Privacy Policy</a>. <span className="text-xert-red">*</span>
             </span>
           </label>
 

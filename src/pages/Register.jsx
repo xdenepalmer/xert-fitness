@@ -225,6 +225,9 @@ export default function Register() {
             "Create account"
           )}
         </Button>
+        <p className="text-xs text-center text-muted-foreground leading-relaxed">
+          By creating an account, you agree to the <Link to="/terms" className="underline">Terms of Use</Link> and acknowledge the <Link to="/privacy" className="underline">Privacy Policy</Link>.
+        </p>
       </form>
     </AuthLayout>
   );
