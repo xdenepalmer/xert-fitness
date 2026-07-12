@@ -104,7 +104,10 @@ export default function OrdersManager() {
                   cursor={{ fill: 'rgba(123,167,188,0.08)' }}
                   contentStyle={{ backgroundColor: '#101820', border: '1px solid rgba(123,167,188,0.3)', fontFamily: 'inherit', fontSize: 12 }}
                   labelStyle={{ color: '#D1DDE6' }}
-                  formatter={v => [`$${v.toFixed(2)}`, 'Revenue']}
+                  formatter={value => {
+                    const amount = Array.isArray(value) ? value[0] : value;
+                    return [`$${Number(amount).toFixed(2)}`, 'Revenue'];
+                  }}
                 />
                 <Bar dataKey="revenue" fill="#7BA7BC" radius={[2, 2, 0, 0]} />
               </BarChart>

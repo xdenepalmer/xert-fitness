@@ -6,7 +6,7 @@ const STEPS = ['Contact', 'Experience', 'Details', 'Confirm'];
 const SPECIALTIES = ['Strength & conditioning', 'Endurance', 'Olympic lifting', 'Gymnastics', 'Nutrition', 'Rehabilitation', 'Youth training', 'Sport specific', 'Group fitness', 'Mindset / mental performance'];
 const AVAILABILITY = ['Early morning', 'Mid-morning', 'Lunch', 'Afternoon', 'After work', 'Evening', 'Weekends', 'Flexible'];
 
-function FieldLabel({ children, required }) {
+function FieldLabel({ children, required = false }) {
   return (
     <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
       {children}{required && <span className="text-xert-red ml-1">*</span>}

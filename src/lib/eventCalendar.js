@@ -66,6 +66,7 @@ export function formatEventRange(event) {
   if (event.date_label) return event.date_label;
   const start = parseCalendarDate(event.event_date);
   if (!start) return 'Date TBC';
+  /** @type {Intl.DateTimeFormatOptions} */
   const opts = { day: 'numeric', month: 'short' };
 
   if (event.end_date && event.end_date !== event.event_date) {

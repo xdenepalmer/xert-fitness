@@ -1,3 +1,4 @@
+// @ts-nocheck -- cmdk's polymorphic JavaScript wrappers are isolated here.
 import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,

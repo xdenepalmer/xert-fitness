@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function AdminStatCard({ label, value, sub, accent = false, loading = false, icon: Icon }) {
+export default function AdminStatCard({ label, value, sub = null, accent = false, loading = false, icon: Icon }) {
   return (
     <div
       className="relative p-5 overflow-hidden transition-all group"

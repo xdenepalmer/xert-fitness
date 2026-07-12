@@ -30,7 +30,7 @@ function MultiSelect({ options, value = [], onChange }) {
   );
 }
 
-function FieldLabel({ children, required }) {
+function FieldLabel({ children, required = false }) {
   return (
     <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
       {children}{required && <span className="text-xert-red ml-1">*</span>}

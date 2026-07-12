@@ -335,7 +335,7 @@ export async function seedXertEventCalendar() {
     region: event.region,
     sort_order: event.sort_order,
     published: true,
-    url: event.url || null,
+    url: (/** @type {{ url?: string }} */ (event)).url || null,
   }));
 
   const { error } = await supabase.from('events').insert(payload);

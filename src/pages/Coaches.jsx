@@ -97,10 +97,11 @@ export default function Coaches() {
   const groups = useMemo(() => {
     const coachesList = coaches.filter(c => (c.category || 'coach') === 'coach');
     const allied = coaches.filter(c => (c.category || 'coach') !== 'coach');
-    const out = [];
-    if (coachesList.length) out.push(['coach', coachesList]);
-    if (allied.length) out.push(['allied', allied]);
-    return out;
+    /** @type {{ key: string, coaches: any[] }[]} */
+    const sections = [];
+    if (coachesList.length) sections.push({ key: 'coach', coaches: coachesList });
+    if (allied.length) sections.push({ key: 'allied', coaches: allied });
+    return sections;
   }, [coaches]);
 
   return (
@@ -140,13 +141,13 @@ export default function Coaches() {
               </div>
             )}
 
-            {!loading && !error && groups.map(([key, list]) => (
-              <section key={key} className="mb-12">
+            {!loading && !error && groups.map(section => (
+              <section key={section.key} className="mb-12">
                 <h2 className="font-display text-2xl uppercase mb-5" style={{ color: 'rgba(209,221,230,0.85)' }}>
-                  {key === 'coach' ? CATEGORY_LABELS.coach : 'Health, Recovery & Performance'}
+                  {section.key === 'coach' ? CATEGORY_LABELS.coach : 'Health, Recovery & Performance'}
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {list.map(c => <CoachCard key={c.id} coach={c} />)}
+                  {section.coaches.map(c => <CoachCard key={c.id} coach={c} />)}
                 </div>
               </section>
             ))}

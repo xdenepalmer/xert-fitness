@@ -72,7 +72,7 @@ export default function Account() {
     setCancellingId(booking.booking_id);
     try {
       await cancelBooking(booking.booking_id);
-      const hoursOut = (new Date(booking.start_time) - Date.now()) / 36e5;
+      const hoursOut = (new Date(booking.start_time).getTime() - Date.now()) / 36e5;
       toast({
         title: 'Booking cancelled',
         description: booking.status === 'requested'
@@ -140,9 +140,9 @@ export default function Account() {
   }
 
   const now = Date.now();
-  const pending = bookings.filter(b => b.status === 'requested' && new Date(b.start_time) > now);
-  const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time) > now);
-  const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time) <= now);
+  const pending = bookings.filter(b => b.status === 'requested' && new Date(b.start_time).getTime() > now);
+  const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time).getTime() > now);
+  const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time).getTime() <= now);
   const displayName = profileForm.full_name.trim() || user?.email;
 
   return (

@@ -45,7 +45,7 @@ export default function BookingRequestsTable() {
           createdAt: booking.created_at,
           session: booking.class_sessions,
         })),
-      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setBookings(rows);
       setLoading(false);
     }).catch(error => {

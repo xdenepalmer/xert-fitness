@@ -14,14 +14,14 @@ import { getAvailableSessions } from '@/lib/bookingData';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
-  const diff = new Date(targetDate) - new Date();
+  const diff = new Date(targetDate).getTime() - Date.now();
   if (diff <= 0) return 'Launched';
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   return `${days}d`;
 }
 
 function timeAgo(iso) {
-  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
@@ -66,7 +66,7 @@ export default function AdminOverview({ onNavigate }) {
               title: m.full_name || m.email || 'New member',
               sub: 'Created an account',
             })),
-          ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 7);
+          ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 7);
           return feed;
         }),
     ]).then(([s, cfg, b, feed]) => {
@@ -354,4 +354,3 @@ export default function AdminOverview({ onNavigate }) {
     </div>
   );
 }
-

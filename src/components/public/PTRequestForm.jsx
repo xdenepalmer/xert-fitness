@@ -7,7 +7,7 @@ const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1
 const GOALS = ['Strength', 'Conditioning', 'Weight loss / body composition', 'Rehab / return to fitness', 'Event preparation', 'Sport performance', 'General health'];
 const EXPERIENCE = ['Complete beginner', 'Some experience', 'Regular trainer', 'Advanced'];
 
-function FieldLabel({ children, required }) {
+function FieldLabel({ children, required = false }) {
   return (
     <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
       {children}{required && <span className="text-xert-red ml-1">*</span>}
