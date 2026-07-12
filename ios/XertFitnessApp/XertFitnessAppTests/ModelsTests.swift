@@ -110,6 +110,42 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(completedEvent.externalURL)
     }
 
+    func testEventLifecycleUsesDeterministicQueenslandDayBoundaries() {
+        let event = calendarEvent(
+            name: "Two Day Event",
+            start: "2026-07-04",
+            end: "2026-07-05"
+        )
+
+        XCTAssertEqual(event.lifecycle(on: queenslandDate(2026, 7, 3, 23, 59)), .upcoming)
+        XCTAssertEqual(event.lifecycle(on: queenslandDate(2026, 7, 4, 12, 0)), .happeningNow)
+        XCTAssertEqual(event.lifecycle(on: queenslandDate(2026, 7, 5, 23, 59)), .happeningNow)
+        XCTAssertEqual(event.lifecycle(on: queenslandDate(2026, 7, 6, 0, 1)), .complete)
+    }
+
+    func testCalendarSectionsGroupMonthsAndRespectAdminOrder() {
+        let referenceDate = queenslandDate(2026, 7, 1, 12, 0)
+        let events = [
+            calendarEvent(name: "Second", start: "2026-07-13", order: 2),
+            calendarEvent(name: "August", start: "2026-08-02", order: 3),
+            calendarEvent(name: "First", start: "2026-07-13", order: 1),
+            calendarEvent(name: "Past", start: "2026-06-01", order: 0)
+        ]
+
+        let upcoming = XertEventCalendar.sections(
+            from: events,
+            includeCompleted: false,
+            referenceDate: referenceDate
+        )
+
+        XCTAssertEqual(upcoming.map(\.title), ["July 2026", "August 2026"])
+        XCTAssertEqual(upcoming[0].events.map(\.name), ["First", "Second"])
+        XCTAssertEqual(
+            XertEventCalendar.sections(from: events, includeCompleted: true, referenceDate: referenceDate).first?.title,
+            "June 2026"
+        )
+    }
+
     func testEventGoalDecodesTheSupabaseEventID() throws {
         let data = """
         { "event_id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60" }
@@ -171,5 +207,43 @@ final class ModelsTests: XCTestCase {
             location_zone: nil,
             intensity_level: nil
         )
+    }
+
+    private func calendarEvent(
+        name: String,
+        start: String?,
+        end: String? = nil,
+        order: Int = 0
+    ) -> EventItem {
+        EventItem(
+            id: UUID(),
+            name: name,
+            category: "run",
+            event_date: start,
+            end_date: end,
+            location: "Queensland",
+            region: "South East Queensland",
+            url: nil,
+            published: true,
+            sort_order: order
+        )
+    }
+
+    private func queenslandDate(
+        _ year: Int,
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int,
+        _ minute: Int
+    ) -> Date {
+        DateComponents(
+            calendar: EventItem.calendar,
+            timeZone: EventItem.calendar.timeZone,
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute
+        ).date!
     }
 }

@@ -55,9 +55,17 @@ struct EventItem: Identifiable, Codable, Hashable {
         id?.uuidString ?? "\(name)-\(event_date ?? "tbc")"
     }
 
-    var isComplete: Bool {
-        guard let finalDate = eventDate(end_date) ?? eventDate(event_date) else { return false }
-        return Self.calendar.startOfDay(for: finalDate) < Self.calendar.startOfDay(for: Date())
+    var startDate: Date? { eventDate(event_date) }
+    var finalDate: Date? { eventDate(end_date) ?? startDate }
+
+    var isComplete: Bool { lifecycle() == .complete }
+
+    func lifecycle(on referenceDate: Date = Date()) -> EventLifecycle {
+        guard let startDate, let finalDate else { return .dateTBC }
+        let referenceDay = Self.calendar.startOfDay(for: referenceDate)
+        if referenceDay > Self.calendar.startOfDay(for: finalDate) { return .complete }
+        if referenceDay >= Self.calendar.startOfDay(for: startDate) { return .happeningNow }
+        return .upcoming
     }
 
     var externalURL: URL? {
@@ -78,7 +86,7 @@ struct EventItem: Identifiable, Codable, Hashable {
         return Self.dateFormatter.date(from: value)
     }
 
-    private static let calendar: Calendar = {
+    static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
         return calendar
@@ -92,6 +100,22 @@ struct EventItem: Identifiable, Codable, Hashable {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
+
+enum EventLifecycle: Equatable {
+    case dateTBC
+    case upcoming
+    case happeningNow
+    case complete
+
+    var label: String {
+        switch self {
+        case .dateTBC: return "Date TBC"
+        case .upcoming: return "Coming up"
+        case .happeningNow: return "Happening now"
+        case .complete: return "Complete"
+        }
+    }
 }
 
 struct EventGoal: Codable, Hashable {

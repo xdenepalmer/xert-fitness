@@ -1,5 +1,12 @@
 import Foundation
 
+struct EventMonthSection: Identifiable, Equatable {
+    let title: String
+    var events: [EventItem]
+
+    var id: String { title }
+}
+
 enum XertEventCalendar {
     static let fallback: [EventItem] = [
         event("Gold Coast Marathon", "run", "2026-07-04", "2026-07-05", "Gold Coast", 1),
@@ -23,6 +30,50 @@ enum XertEventCalendar {
         event("Cricket Season", "sport", "2026-12-01", nil, "South East Queensland", 19),
         event("XERT Team Competition", "xert", "2026-12-05", nil, "Kingaroy", 20),
     ]
+
+    static func sections(
+        from events: [EventItem],
+        includeCompleted: Bool,
+        referenceDate: Date = Date()
+    ) -> [EventMonthSection] {
+        let visible = events
+            .filter { includeCompleted || $0.lifecycle(on: referenceDate) != .complete }
+            .sorted(by: eventComesBefore)
+
+        var sections: [EventMonthSection] = []
+        for event in visible {
+            let title = event.startDate.map { monthFormatter.string(from: $0) } ?? "Date TBC"
+            if sections.last?.title == title {
+                sections[sections.count - 1].events.append(event)
+            } else {
+                sections.append(EventMonthSection(title: title, events: [event]))
+            }
+        }
+        return sections
+    }
+
+    private static func eventComesBefore(_ lhs: EventItem, _ rhs: EventItem) -> Bool {
+        switch (lhs.startDate, rhs.startDate) {
+        case let (left?, right?) where left != right:
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            let orderDifference = (lhs.sort_order ?? 0) - (rhs.sort_order ?? 0)
+            return orderDifference == 0 ? lhs.name < rhs.name : orderDifference < 0
+        }
+    }
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = EventItem.calendar
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = EventItem.calendar.timeZone
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
 
     private static func event(
         _ name: String,

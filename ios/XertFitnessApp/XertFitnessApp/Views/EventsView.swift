@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventsView: View {
     @EnvironmentObject private var store: XertStore
+    @State private var showCompleted = false
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -20,67 +21,25 @@ struct EventsView: View {
                     }
                 }
 
-                Section("Coming Up") {
-                    let events = store.events
-                        .filter { $0.event_date != nil && !$0.isComplete }
-                        .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
+                Section {
+                    Picker("Calendar range", selection: $showCompleted) {
+                        Text("Upcoming").tag(false)
+                        Text("All events").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
 
-                    if events.isEmpty {
-                        Text("No upcoming events yet.")
+                if monthSections.isEmpty {
+                    Section {
+                        Text(showCompleted ? "No calendar events yet." : "No upcoming events yet.")
                             .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(events, id: \.stableID) { event in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text(event.name)
-                                        .font(.headline)
-                                    Spacer()
-                                    Text((event.category ?? "event").uppercased())
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.xertSteel)
-                                }
-                                if let date = event.event_date {
-                                    Text(dateLabel(start: date, end: event.end_date))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if let location = event.location {
-                                    Label(location, systemImage: "mappin")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if let url = event.externalURL {
-                                    Link(destination: url) {
-                                        Label("Event details", systemImage: "arrow.up.right.square")
-                                            .font(.subheadline.weight(.semibold))
-                                    }
-                                    .tint(.xertSteel)
-                                }
-                                if !event.isComplete, let eventID = event.id {
-                                    if store.isSignedIn {
-                                        Button {
-                                            Task { await store.toggleEventGoal(event) }
-                                        } label: {
-                                            Label(
-                                                trainingGoalLabel(for: event),
-                                                systemImage: "target"
-                                            )
-                                            .font(.subheadline.weight(.semibold))
-                                        }
-                                        .disabled(store.updatingEventGoalID == eventID)
-                                        .tint(.xertSteel)
-                                    } else {
-                                        Button {
-                                            onNavigate(3)
-                                        } label: {
-                                            Label("Sign in to train for this", systemImage: "person.crop.circle")
-                                                .font(.subheadline.weight(.semibold))
-                                        }
-                                        .tint(.xertSteel)
-                                    }
-                                }
+                    }
+                } else {
+                    ForEach(monthSections) { section in
+                        Section(section.title) {
+                            ForEach(section.events, id: \.stableID) { event in
+                                eventRow(event)
                             }
-                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -90,6 +49,67 @@ struct EventsView: View {
                 await store.refresh()
             }
         }
+    }
+
+    @ViewBuilder
+    private func eventRow(_ event: EventItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(event.name)
+                    .font(.headline)
+                Spacer()
+                Text((event.category ?? "event").uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.xertSteel)
+            }
+            HStack(spacing: 8) {
+                if let date = event.event_date {
+                    Text(dateLabel(start: date, end: event.end_date))
+                } else {
+                    Text(EventLifecycle.dateTBC.label)
+                }
+                if event.lifecycle() == .happeningNow {
+                    Text(EventLifecycle.happeningNow.label)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.xertSteel)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            if let location = event.location {
+                Label(location, systemImage: "mappin")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let url = event.externalURL {
+                Link(destination: url) {
+                    Label("Event details", systemImage: "arrow.up.right.square")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .tint(.xertSteel)
+            }
+            if !event.isComplete, let eventID = event.id {
+                if store.isSignedIn {
+                    Button {
+                        Task { await store.toggleEventGoal(event) }
+                    } label: {
+                        Label(trainingGoalLabel(for: event), systemImage: "target")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .disabled(store.updatingEventGoalID == eventID)
+                    .tint(.xertSteel)
+                } else {
+                    Button {
+                        onNavigate(3)
+                    } label: {
+                        Label("Sign in to train for this", systemImage: "person.crop.circle")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .tint(.xertSteel)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func dateLabel(start: String, end: String?) -> String {
@@ -106,10 +126,16 @@ struct EventsView: View {
     }
 
     private var trainingGoals: [EventItem] {
-        store.events.filter { event in
-            guard let id = event.id else { return false }
-            return store.eventGoalIDs.contains(id)
-        }
+        store.events
+            .filter { event in
+                guard let id = event.id else { return false }
+                return store.eventGoalIDs.contains(id)
+            }
+            .sorted { ($0.startDate ?? .distantFuture) < ($1.startDate ?? .distantFuture) }
+    }
+
+    private var monthSections: [EventMonthSection] {
+        XertEventCalendar.sections(from: store.events, includeCompleted: showCompleted)
     }
 
     private func trainingGoalLabel(for event: EventItem) -> String {

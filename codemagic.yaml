@@ -58,14 +58,7 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
-          SIMULATOR_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { print $2; exit }')"
-          test -n "$SIMULATOR_ID"
-          xcodebuild test \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
-            -resultBundlePath build/test-results.xcresult \
-            CODE_SIGNING_ALLOWED=NO
+          bash ci/run-swift-tests.sh
     artifacts:
       - ios/XertFitnessApp/build/test-results.xcresult
       - /tmp/xcodebuild_logs/*.log
@@ -121,14 +114,7 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
-          SIMULATOR_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { print $2; exit }')"
-          test -n "$SIMULATOR_ID"
-          xcodebuild test \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
-            -resultBundlePath build/test-results.xcresult \
-            CODE_SIGNING_ALLOWED=NO
+          bash ci/run-swift-tests.sh
       - name: Set up code signing (reuse the shared distribution certificate)
         script: |
           set -e
