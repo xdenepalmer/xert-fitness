@@ -5,6 +5,7 @@ import test from 'node:test';
 const nav = readFileSync(new URL('../src/components/public/PublicNav.jsx', import.meta.url), 'utf8');
 const memberForm = readFileSync(new URL('../src/components/public/MemberInterestForm.jsx', import.meta.url), 'utf8');
 const events = readFileSync(new URL('../src/pages/Events.jsx', import.meta.url), 'utf8');
+const stickyMobileCta = readFileSync(new URL('../src/components/public/StickyMobileCTA.jsx', import.meta.url), 'utf8');
 const formSources = [
   '../src/components/public/TrainerInterestForm.jsx',
   '../src/components/public/PartnerInterestForm.jsx',
@@ -33,6 +34,13 @@ test('event filters and actions provide full-size mobile targets', () => {
   assert.ok((events.match(/min-h-11/g) || []).length >= 5);
   assert.match(events, /Add to calendar/);
   assert.match(events, /Train for this/);
+});
+
+test('the shared mobile booking action avoids a page reload and respects reduced motion', () => {
+  assert.match(stickyMobileCta, /<Link to="\/booking"/);
+  assert.match(stickyMobileCta, /motion-reduce:transition-none/);
+  assert.match(stickyMobileCta, /requestAnimationFrame/);
+  assert.doesNotMatch(stickyMobileCta, /framer-motion/);
 });
 
 test('every remaining acquisition form names custom inputs and non-input controls', () => {
