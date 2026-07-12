@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, sessionEndTime } from '../src/lib/scheduling.js';
+import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, repeatedClassSessionCopies, sessionEndTime } from '../src/lib/scheduling.js';
 
 test('detects only blackouts that affect an overlapping group class', () => {
   const session = {
@@ -48,4 +48,25 @@ test('rejects unsafe published class data before it reaches the timetable', () =
   assert.equal(classSessionValidationError({ ...validClass, start_time: '' }), 'A published class needs a start time.');
   assert.equal(classSessionValidationError({ ...validClass, capacity: 0 }), 'Capacity must be a whole number of at least 1.');
   assert.equal(classSessionValidationError({ ...validClass, end_time: '2026-08-01T07:30:00.000Z' }), 'Class end time must be after its start time.');
+});
+
+test('builds a complete repeat block for one atomic insert', () => {
+  const session = {
+    id: 'original',
+    title: 'XERT Strength',
+    start_time: '2026-08-01T08:00:00.000Z',
+    end_time: '2026-08-01T09:00:00.000Z',
+    status: 'published',
+    public_visible: true,
+    created_at: '2026-07-01T00:00:00.000Z',
+  };
+
+  const copies = repeatedClassSessionCopies(session, { intervalDays: 8, count: 2, keepPublished: false });
+
+  assert.equal(copies.length, 2);
+  assert.deepEqual(copies.map(copy => copy.start_time), ['2026-08-09T08:00:00.000Z', '2026-08-17T08:00:00.000Z']);
+  assert.equal(copies[0].end_time, '2026-08-09T09:00:00.000Z');
+  assert.equal(copies[0].status, 'draft');
+  assert.equal(copies[0].public_visible, false);
+  assert.equal('id' in copies[0], false);
 });

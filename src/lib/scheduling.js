@@ -67,3 +67,28 @@ export function blackoutsOverlappingSession(session, blackouts = []) {
       && blackoutEndMs > startMs;
   });
 }
+
+export function repeatedClassSessionCopies(session, { intervalDays, count, keepPublished }) {
+  const startMs = timestamp(session?.start_time);
+  const interval = Number(intervalDays);
+  const copyCount = Number(count);
+  if (startMs === null) throw new Error('This class needs a valid start time before it can be repeated.');
+  if (!Number.isInteger(interval) || interval < 1) throw new Error('Repeat interval must be at least one day.');
+  if (!Number.isInteger(copyCount) || copyCount < 1) throw new Error('Create at least one class copy.');
+
+  const endMs = timestamp(session.end_time);
+  if (session.end_time && endMs === null) throw new Error('This class has an invalid end time.');
+
+  const { id, created_at, updated_at, ...base } = session;
+  const intervalMs = interval * 24 * 60 * 60 * 1000;
+  return Array.from({ length: copyCount }, (_, index) => {
+    const offsetMs = (index + 1) * intervalMs;
+    return {
+      ...base,
+      start_time: new Date(startMs + offsetMs).toISOString(),
+      end_time: endMs === null ? null : new Date(endMs + offsetMs).toISOString(),
+      status: keepPublished ? session.status : 'draft',
+      public_visible: keepPublished ? session.public_visible : false,
+    };
+  });
+}

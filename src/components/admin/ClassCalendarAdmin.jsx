@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Download } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { blackoutsOverlappingSession, classSessionValidationError } from '@/lib/scheduling';
+import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -209,21 +209,9 @@ function RepeatModal({ session, onDone, onCancel }) {
     if (!session.start_time) { toast({ title: 'This class needs a start time before it can be repeated.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
-      const { id, created_at, updated_at, ...base } = session;
-      for (let i = 1; i <= count; i++) {
-        const offsetMs = i * intervalDays * 86400000;
-        const copy = {
-          ...base,
-          start_time: new Date(new Date(session.start_time).getTime() + offsetMs).toISOString(),
-          end_time: session.end_time
-            ? new Date(new Date(session.end_time).getTime() + offsetMs).toISOString()
-            : session.end_time,
-          status: keepPublished ? session.status : 'draft',
-          public_visible: keepPublished ? session.public_visible : false,
-        };
-        await createClassSession(copy);
-      }
-      onDone(count);
+      const copies = repeatedClassSessionCopies(session, { intervalDays, count, keepPublished });
+      await createClassSessions(copies);
+      onDone(copies.length);
     } catch (e) {
       toast({ title: 'Repeat failed', description: e.message, variant: 'destructive' });
       setSaving(false);

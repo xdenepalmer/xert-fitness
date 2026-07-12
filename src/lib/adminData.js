@@ -56,6 +56,12 @@ export async function createClassSession(sessionData) {
   return data;
 }
 
+export async function createClassSessions(sessionData) {
+  const { data, error } = await supabase.from('class_sessions').insert(sessionData).select();
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 export async function updateClassSession(id, updates) {
   const { error } = await supabase.from('class_sessions').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw new Error(error.message);
