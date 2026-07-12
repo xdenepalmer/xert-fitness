@@ -53,14 +53,33 @@ export function normalizeProductAdminInput(form) {
     throw new Error('Stripe Price ID must begin with price_ and contain only letters and numbers.');
   }
 
+  const currency = String(form.currency || 'aud').trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(currency)) {
+    throw new Error('Currency must be a 3-letter code such as AUD.');
+  }
+  const sortOrder = Number(form.sort_order ?? 0);
+  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0) {
+    throw new Error('Display order must be a whole number of 0 or greater.');
+  }
+
   return {
     name,
     description: String(form.description || '').trim() || null,
     price_cents: priceCents,
     sessions_count: sessionsCount,
     validity_days: validityDays,
+    currency,
+    sort_order: sortOrder,
     featured: Boolean(form.featured),
     active: Boolean(form.active),
     stripe_price_id: stripePriceId || null,
   };
+}
+
+export function normalizeProductCreateInput(form) {
+  const slug = String(form.slug || '').trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80) {
+    throw new Error('Slug must use lowercase letters, numbers and single hyphens.');
+  }
+  return { slug, ...normalizeProductAdminInput(form) };
 }

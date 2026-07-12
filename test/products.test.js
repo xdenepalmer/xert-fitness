@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatPackPrice, formatPackValidity, normalizeProductAdminInput, packCta } from '../src/lib/products.js';
+import { formatPackPrice, formatPackValidity, normalizeProductAdminInput, normalizeProductCreateInput, packCta } from '../src/lib/products.js';
 
 test('formats the administrator-managed product values for Australian members', () => {
   assert.equal(formatPackPrice(4800, 'aud'), '$48.00');
@@ -22,6 +22,8 @@ test('normalizes the product editor payload without leaking database fields', ()
     price_dollars: '48.00',
     sessions_count: '4',
     validity_days: '28',
+    currency: ' AUD ',
+    sort_order: '2',
     featured: 1,
     active: true,
     stripe_price_id: ' price_ABC123 ',
@@ -31,17 +33,36 @@ test('normalizes the product editor payload without leaking database fields', ()
     price_cents: 4800,
     sessions_count: 4,
     validity_days: 28,
+    currency: 'aud',
+    sort_order: 2,
     featured: true,
     active: true,
     stripe_price_id: 'price_ABC123',
   });
 });
 
+test('normalizes a safe new product slug and complete checkout configuration', () => {
+  const product = normalizeProductCreateInput({
+    slug: ' Seasonal-8 ', name: 'Seasonal Pack', description: '', price_dollars: '88',
+    sessions_count: 8, validity_days: 56, currency: 'aud', sort_order: 4,
+    featured: false, active: false, stripe_price_id: '',
+  });
+
+  assert.equal(product.slug, 'seasonal-8');
+  assert.equal(product.price_cents, 8800);
+  assert.equal(product.currency, 'aud');
+  assert.equal(product.active, false);
+  assert.throws(() => normalizeProductCreateInput({ ...product, slug: '../unsafe', price_dollars: '88' }), /Slug/);
+});
+
 test('rejects ambiguous prices and malformed Stripe price IDs', () => {
   const valid = {
     name: 'Starter Pack', price_dollars: '48.00', sessions_count: 4,
     validity_days: 28, featured: false, active: true, stripe_price_id: '',
+    currency: 'aud', sort_order: 0,
   };
   assert.throws(() => normalizeProductAdminInput({ ...valid, price_dollars: '48.009' }), /2 decimal places/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, stripe_price_id: 'prod_ABC123' }), /price_/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'dollars' }), /3-letter/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, sort_order: -1 }), /Display order/);
 });

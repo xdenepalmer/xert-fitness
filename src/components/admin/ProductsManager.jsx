@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { getAllProducts, updateProduct } from '@/lib/adminData';
-import { normalizeProductAdminInput } from '@/lib/products';
+import { X } from 'lucide-react';
+import { createProduct, getAllProducts, updateProduct } from '@/lib/adminData';
+import { normalizeProductAdminInput, normalizeProductCreateInput } from '@/lib/products';
 import AdminLoadError from './AdminLoadError';
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
@@ -14,6 +15,8 @@ function ProductCard({ product, onSaved }) {
     price_dollars: (product.price_cents / 100).toFixed(2),
     sessions_count: product.sessions_count,
     validity_days: product.validity_days,
+    currency: product.currency || 'aud',
+    sort_order: product.sort_order ?? 0,
     featured: product.featured,
     active: product.active,
     stripe_price_id: product.stripe_price_id || '',
@@ -51,10 +54,18 @@ function ProductCard({ product, onSaved }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div>
           <label htmlFor={`product-${product.id}-price`} className={labelCls}>Price (AUD)</label>
           <input id={`product-${product.id}-price`} inputMode="decimal" value={form.price_dollars} onChange={e => set('price_dollars', e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label htmlFor={`product-${product.id}-currency`} className={labelCls}>Currency</label>
+          <input id={`product-${product.id}-currency`} maxLength={3} value={form.currency} onChange={e => set('currency', e.target.value.toLowerCase())} className={inputCls} />
+        </div>
+        <div>
+          <label htmlFor={`product-${product.id}-order`} className={labelCls}>Display order</label>
+          <input id={`product-${product.id}-order`} type="number" min="0" step="1" value={form.sort_order} onChange={e => set('sort_order', e.target.value)} className={inputCls} />
         </div>
         <div>
           <label htmlFor={`product-${product.id}-sessions`} className={labelCls}>Sessions</label>
@@ -104,10 +115,87 @@ function ProductCard({ product, onSaved }) {
   );
 }
 
+const emptyProduct = () => ({
+  slug: '', name: '', description: '', price_dollars: '', sessions_count: 1,
+  validity_days: 28, currency: 'aud', sort_order: 0, featured: false,
+  active: false, stripe_price_id: '',
+});
+
+function NewProductDialog({ onClose, onCreated }) {
+  const [form, setForm] = useState(emptyProduct);
+  const [saving, setSaving] = useState(false);
+  const set = (field, value) => setForm(current => ({ ...current, [field]: value }));
+
+  useEffect(() => {
+    const closeOnEscape = event => {
+      if (event.key === 'Escape' && !saving) onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose, saving]);
+
+  const save = async () => {
+    let product;
+    try {
+      product = normalizeProductCreateInput(form);
+    } catch (error) {
+      toast({ title: 'Check this pack', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await createProduct(product);
+      await onCreated();
+      toast({ title: 'Session pack created', description: `${product.name} is ready in the catalogue.` });
+      onClose();
+    } catch (error) {
+      toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="new-product-title" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-xert-ink border border-xert-steel/20">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 p-5 bg-xert-ink border-b border-xert-steel/20">
+          <h3 id="new-product-title" className="font-display text-xl text-xert-offwhite uppercase">New Session Pack</h3>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close new session pack" title="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
+        </header>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label htmlFor="new-product-name" className={labelCls}>Name</label><input id="new-product-name" autoFocus value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} /></div>
+            <div><label htmlFor="new-product-slug" className={labelCls}>Slug</label><input id="new-product-slug" value={form.slug} onChange={e => set('slug', e.target.value.toLowerCase())} placeholder="seasonal-8" className={inputCls} /></div>
+          </div>
+          <div><label htmlFor="new-product-description" className={labelCls}>Description</label><textarea id="new-product-description" rows={2} value={form.description} onChange={e => set('description', e.target.value)} className={`${inputCls} resize-none`} /></div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div><label htmlFor="new-product-price" className={labelCls}>Price</label><input id="new-product-price" inputMode="decimal" value={form.price_dollars} onChange={e => set('price_dollars', e.target.value)} className={inputCls} /></div>
+            <div><label htmlFor="new-product-currency" className={labelCls}>Currency</label><input id="new-product-currency" maxLength={3} value={form.currency} onChange={e => set('currency', e.target.value.toLowerCase())} className={inputCls} /></div>
+            <div><label htmlFor="new-product-sessions" className={labelCls}>Sessions</label><input id="new-product-sessions" type="number" min="1" value={form.sessions_count} onChange={e => set('sessions_count', e.target.value)} className={inputCls} /></div>
+            <div><label htmlFor="new-product-validity" className={labelCls}>Validity</label><input id="new-product-validity" type="number" min="1" value={form.validity_days} onChange={e => set('validity_days', e.target.value)} className={inputCls} /></div>
+            <div><label htmlFor="new-product-order" className={labelCls}>Order</label><input id="new-product-order" type="number" min="0" value={form.sort_order} onChange={e => set('sort_order', e.target.value)} className={inputCls} /></div>
+          </div>
+          <div><label htmlFor="new-product-stripe" className={labelCls}>Stripe Price ID (optional)</label><input id="new-product-stripe" value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} /></div>
+          <div className="flex flex-wrap gap-5">
+            <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.featured} onChange={e => set('featured', e.target.checked)} /> Featured</label>
+            <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} /> Active and purchasable</label>
+          </div>
+          <p className="font-body text-xs text-xert-concrete/45">New packs start inactive unless explicitly enabled. The slug becomes the permanent checkout identifier.</p>
+        </div>
+        <footer className="flex gap-3 p-5 border-t border-xert-steel/20">
+          <button type="button" onClick={onClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
+          <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-11 bg-xert-red text-white font-display text-sm uppercase disabled:opacity-40">{saving ? 'Creating...' : 'Create pack'}</button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductsManager() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -125,7 +213,10 @@ export default function ProductsManager() {
 
   return (
     <div className="p-6">
-      <h2 className="font-display text-lg text-xert-offwhite uppercase mb-2">Session Packs</h2>
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Session Packs</h2>
+        <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase">+ Add Pack</button>
+      </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
         Price changes apply to new purchases immediately. Existing credits are unaffected.
       </p>
@@ -140,6 +231,7 @@ export default function ProductsManager() {
             : products.map(p => <ProductCard key={p.id} product={p} onSaved={load} />)}
         </div>
       )}
+      {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={load} />}
     </div>
   );
 }

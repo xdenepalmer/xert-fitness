@@ -545,6 +545,11 @@ export async function getAllProducts() {
   return data || [];
 }
 
+export async function createProduct(product) {
+  const { error } = await supabase.from('products').insert([product]);
+  if (error) throw new Error(error.message);
+}
+
 export async function updateProduct(id, updates) {
   const { error } = await supabase.from('products').update(updates).eq('id', id);
   if (error) throw new Error(error.message);
