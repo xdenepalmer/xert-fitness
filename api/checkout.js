@@ -23,6 +23,28 @@ export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '') {
   return url.origin;
 }
 
+function isPositiveInteger(value) {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The product table is the server-side authority for price and credits. Keep
+ * this validation here as a deployment-safe backstop while database migrations
+ * roll out, so malformed admin data never reaches Stripe or credit fulfilment.
+ */
+export function assertCheckoutProduct(product) {
+  const currency = String(product?.currency || 'aud');
+  if (
+    !product ||
+    !isPositiveInteger(product.price_cents) ||
+    !isPositiveInteger(product.sessions_count) ||
+    !isPositiveInteger(product.validity_days) ||
+    !/^[a-z]{3}$/i.test(currency)
+  ) {
+    throw new Error('Product configuration is invalid.');
+  }
+}
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -58,12 +80,13 @@ export default async function handler(request) {
       .eq('active', true)
       .single();
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
+    assertCheckoutProduct(product);
 
     const lineItem = product.stripe_price_id
       ? { price: product.stripe_price_id, quantity: 1 }
       : {
           price_data: {
-            currency: product.currency || 'aud',
+            currency: product.currency.toLowerCase(),
             unit_amount: product.price_cents,
             product_data: {
               name: product.name,

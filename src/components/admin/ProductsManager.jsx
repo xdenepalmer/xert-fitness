@@ -22,14 +22,20 @@ function ProductCard({ product, onSaved }) {
   const handleSave = async () => {
     const cents = Math.round(parseFloat(form.price_dollars) * 100);
     if (!Number.isFinite(cents) || cents <= 0) { toast({ title: 'Invalid price.', variant: 'destructive' }); return; }
+    const sessions = Number(form.sessions_count);
+    if (!Number.isSafeInteger(sessions) || sessions <= 0) { toast({ title: 'Sessions must be a whole number of at least 1.', variant: 'destructive' }); return; }
+    const validityDays = Number(form.validity_days);
+    if (!Number.isSafeInteger(validityDays) || validityDays <= 0) { toast({ title: 'Validity must be a whole number of at least 1 day.', variant: 'destructive' }); return; }
+    const name = form.name.trim();
+    if (!name) { toast({ title: 'A pack name is required.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       await updateProduct(product.id, {
-        name: form.name,
+        name,
         description: form.description || null,
         price_cents: cents,
-        sessions_count: +form.sessions_count,
-        validity_days: +form.validity_days,
+        sessions_count: sessions,
+        validity_days: validityDays,
         featured: form.featured,
         active: form.active,
         stripe_price_id: form.stripe_price_id.trim() || null,

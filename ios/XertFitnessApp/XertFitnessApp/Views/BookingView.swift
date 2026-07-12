@@ -3,6 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.openURL) private var openURL
+    let onNavigate: (Int) -> Void
 
     var body: some View {
         NavigationStack {
@@ -17,14 +18,23 @@ struct BookingView: View {
                                 .fontWeight(.bold)
                         }
                     } else {
-                        Text("Sign in from Account to book classes and buy packs.")
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Sign in to book classes and buy packs.")
+                                .foregroundStyle(.secondary)
+                            Button("Sign in or create an account") {
+                                onNavigate(3)
+                            }
+                        }
                     }
                 }
 
                 Section("Buy Session Packs") {
                     ForEach(store.products) { product in
                         Button {
+                            guard store.isSignedIn else {
+                                onNavigate(3)
+                                return
+                            }
                             Task {
                                 if let url = await store.checkoutURL(for: product) {
                                     openURL(url)
@@ -98,10 +108,16 @@ struct BookingView: View {
                                     .tint(.xertSteel)
                                 } else {
                                     Button {
-                                        Task { await store.book(session) }
+                                        if store.isSignedIn {
+                                            Task { await store.book(session) }
+                                        } else {
+                                            onNavigate(3)
+                                        }
                                     } label: {
                                         Label(
-                                            session.booking_mode == "request_to_book" ? "Request spot" : "Book class",
+                                            store.isSignedIn
+                                                ? (session.booking_mode == "request_to_book" ? "Request spot" : "Book class")
+                                                : "Sign in to book",
                                             systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle"
                                         )
                                         .frame(maxWidth: .infinity)

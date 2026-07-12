@@ -12,7 +12,7 @@ struct RootView: View {
                 }
                 .tag(0)
 
-            BookingView()
+            BookingView(onNavigate: { selectedTab = $0 })
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
