@@ -20,6 +20,8 @@ final class XertStore: ObservableObject {
     @Published var updatingEventGoalID: UUID?
     @Published var isDeletingAccount = false
     @Published private(set) var hasBootstrapped = false
+    @Published private(set) var isUsingCachedPublicData = false
+    @Published private(set) var publicDataUpdatedAt: Date?
 
     private let api = XertAPI()
     private var sessionRefreshTask: Task<AuthSession, Error>?
@@ -33,6 +35,13 @@ final class XertStore: ObservableObject {
     }
 
     func bootstrap() async {
+        if let cached = PublicDataCache.load() {
+            products = cached.products
+            sessions = cached.sessions
+            events = cached.events
+            publicDataUpdatedAt = cached.savedAt
+            isUsingCachedPublicData = true
+        }
         authSession = KeychainStore.loadSession()
         if let authSession, authSession.refresh_token != nil {
             do {
@@ -57,27 +66,45 @@ final class XertStore: ObservableObject {
         async let sessionRequest = api.sessions()
         async let eventRequest = api.events()
 
+        var productsLoaded = false
+        var sessionsLoaded = false
+        var eventsLoaded = false
+
         do {
             products = try await productRequest
+            productsLoaded = true
         } catch {
-            products = []
-            present(error)
+            if products.isEmpty { present(error) }
         }
 
         do {
             sessions = try await sessionRequest
+            sessionsLoaded = true
         } catch {
-            sessions = []
-            present(error)
+            if sessions.isEmpty { present(error) }
         }
 
         do {
             let loadedEvents = try await eventRequest
             events = loadedEvents.isEmpty ? XertEventCalendar.fallback : loadedEvents
+            eventsLoaded = true
         } catch {
             // The app still carries the published 2026 training calendar when
             // the events table has not been seeded yet.
-            events = XertEventCalendar.fallback
+            if events.isEmpty { events = XertEventCalendar.fallback }
+        }
+
+        if productsLoaded && sessionsLoaded && eventsLoaded {
+            let snapshot = PublicDataSnapshot(
+                products: products,
+                sessions: sessions,
+                events: events
+            )
+            PublicDataCache.save(snapshot)
+            publicDataUpdatedAt = snapshot.savedAt
+            isUsingCachedPublicData = false
+        } else {
+            isUsingCachedPublicData = publicDataUpdatedAt != nil
         }
 
         var memberSession: AuthSession?

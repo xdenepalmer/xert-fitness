@@ -8,6 +8,12 @@ struct BookingView: View {
     var body: some View {
         NavigationStack {
             List {
+                if store.isUsingCachedPublicData {
+                    Section {
+                        CachedPublicDataNotice()
+                    }
+                }
+
                 Section("Credits") {
                     if store.isSignedIn {
                         HStack {

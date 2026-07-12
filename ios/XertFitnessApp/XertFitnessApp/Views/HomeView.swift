@@ -8,6 +8,8 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    CachedPublicDataNotice()
+
                     VStack(alignment: .leading, spacing: 10) {
                         Text("XERT Fitness")
                             .font(.system(size: 44, weight: .black, design: .default))

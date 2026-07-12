@@ -79,3 +79,20 @@ struct XertSection<Content: View>: View {
         .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
     }
 }
+
+struct CachedPublicDataNotice: View {
+    @EnvironmentObject private var store: XertStore
+
+    var body: some View {
+        if store.isUsingCachedPublicData, let updatedAt = store.publicDataUpdatedAt {
+            Label {
+                Text("Offline data from \(updatedAt.formatted(date: .abbreviated, time: .shortened))")
+            } icon: {
+                Image(systemName: "wifi.slash")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.xertSteel)
+            .accessibilityLabel("Showing saved data from \(updatedAt.formatted(date: .long, time: .shortened))")
+        }
+    }
+}

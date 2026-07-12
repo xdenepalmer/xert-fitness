@@ -10,6 +10,12 @@ struct EventsView: View {
     var body: some View {
         NavigationStack {
             List {
+                if store.isUsingCachedPublicData {
+                    Section {
+                        CachedPublicDataNotice()
+                    }
+                }
+
                 Section {
                     Text("XERT programming follows the South East Queensland sporting and fitness calendar.")
                         .foregroundStyle(.secondary)

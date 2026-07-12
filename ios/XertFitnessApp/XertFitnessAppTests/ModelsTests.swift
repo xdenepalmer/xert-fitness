@@ -2,6 +2,39 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testPublicDataCacheRoundTripsAndRejectsExpiredData() throws {
+        let suiteName = "PublicDataCacheTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let product = Product(
+            slug: "starter-4",
+            name: "Starter Pack",
+            description: nil,
+            sessionsCount: 4,
+            price_cents: 4800,
+            active: true,
+            sort_order: 1
+        )
+        let snapshot = PublicDataSnapshot(
+            savedAt: savedAt,
+            products: [product],
+            sessions: [],
+            events: []
+        )
+
+        PublicDataCache.save(snapshot, defaults: defaults)
+
+        XCTAssertEqual(
+            PublicDataCache.load(defaults: defaults, now: savedAt.addingTimeInterval(60)),
+            snapshot
+        )
+        XCTAssertNil(PublicDataCache.load(
+            defaults: defaults,
+            now: savedAt.addingTimeInterval(PublicDataCache.maximumAge + 1)
+        ))
+    }
+
     func testProductDecodesTheWebSessionCountColumn() throws {
         let data = """
         {
