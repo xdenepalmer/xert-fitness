@@ -249,6 +249,66 @@ begin
   end if;
 end; $$;
 
+-- When XERT cancels a class, outstanding member bookings are invalidated and
+-- requested/confirmed bookings return their reserved credit. The session row
+-- is locked first so a concurrent booking cannot slip in during cancellation.
+create or replace function public.admin_cancel_class_session(p_session_id uuid)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  v_status text;
+  v_cancelled_count integer := 0;
+  v_enquiry_cancelled_count integer := 0;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+
+  select status into v_status
+    from public.class_sessions
+    where id = p_session_id
+    for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if v_status = 'completed' then raise exception 'SESSION_ALREADY_COMPLETED'; end if;
+
+  with cancelled_bookings as (
+    update public.session_bookings
+       set status = 'cancelled', cancelled_at = now()
+     where class_session_id = p_session_id
+       and status in ('requested', 'confirmed', 'waitlisted')
+     returning credit_batch_id, status
+  ), restored_credits as (
+    update public.credit_batches credits
+       set remaining = credits.remaining + refunds.credit_count
+      from (
+        select credit_batch_id, count(*)::integer as credit_count
+          from cancelled_bookings
+         where status in ('requested', 'confirmed')
+           and credit_batch_id is not null
+         group by credit_batch_id
+      ) refunds
+     where credits.id = refunds.credit_batch_id
+     returning credits.id
+  )
+  select count(*) into v_cancelled_count from cancelled_bookings;
+
+  if to_regclass('public.class_bookings') is not null then
+    execute $query$
+      update public.class_bookings
+         set status = 'cancelled'
+       where class_session_id = $1
+         and status in ('requested', 'confirmed', 'waitlisted')
+    $query$ using p_session_id;
+    get diagnostics v_enquiry_cancelled_count = row_count;
+  end if;
+
+  update public.class_sessions
+     set status = 'cancelled', updated_at = now()
+   where id = p_session_id;
+
+  return v_cancelled_count + v_enquiry_cancelled_count;
+end; $$;
+
+revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
+grant execute on function public.admin_cancel_class_session(uuid) to authenticated;
+
 revoke execute on function public.sessions_with_availability() from public;
 revoke execute on function public.book_session(uuid) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;

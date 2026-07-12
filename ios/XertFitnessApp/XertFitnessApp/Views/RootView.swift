@@ -2,28 +2,33 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
-            HomeView()
+        TabView(selection: $selectedTab) {
+            HomeView(onNavigate: { selectedTab = $0 })
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
+                .tag(0)
 
             BookingView()
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
+                .tag(1)
 
             EventsView()
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
+                .tag(2)
 
             AccountView()
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
                 }
+                .tag(3)
         }
         .tint(.xertSteel)
         .alert("XERT", isPresented: Binding(

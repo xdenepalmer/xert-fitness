@@ -69,7 +69,11 @@ export async function updateClassSession(id, updates) {
 }
 
 export async function cancelClassSession(id) {
-  return updateClassSession(id, { status: 'cancelled' });
+  const { data, error } = await supabase.rpc('admin_cancel_class_session', {
+    p_session_id: id,
+  });
+  if (error) throw new Error(error.message);
+  return data || 0;
 }
 
 export async function duplicateClassSession(session) {

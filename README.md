@@ -61,7 +61,8 @@ The Supabase schema is defined in:
 - `src/supabase/rls_hardening.sql` — role-gated admin RLS policies
 - `src/supabase/booking_modes_upgrade.sql` — one-time upgrade for an existing
   deployment: instant bookings, staff-confirmed requests, and interest-only
-  classes now behave differently end to end
+  classes now behave differently end to end; re-run it to add transactional
+  staff class cancellation with automatic member credit returns
 - `src/supabase/payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
   that guarantees a paid order grants at most one credit batch
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar

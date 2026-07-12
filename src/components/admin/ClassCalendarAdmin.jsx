@@ -287,6 +287,8 @@ export default function ClassCalendarAdmin() {
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
+  const [sessionToCancel, setSessionToCancel] = useState(null);
+  const [isCancellingSession, setIsCancellingSession] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -354,9 +356,31 @@ export default function ClassCalendarAdmin() {
     } catch (e) { toast({ title: 'Duplicate failed', description: e.message, variant: 'destructive' }); }
   };
 
-  const handleCancel = async (id) => {
-    if (!confirm('Cancel this class?')) return;
-    try { await cancelClassSession(id); load(); } catch (e) { toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' }); }
+  const handleCancel = async () => {
+    const session = sessionToCancel;
+    if (!session) return;
+    setIsCancellingSession(true);
+    try {
+      const affectedBookings = await cancelClassSession(session.id);
+      const noun = affectedBookings === 1 ? 'booking' : 'bookings';
+      toast({
+        title: 'Class cancelled',
+        description: affectedBookings
+          ? `${affectedBookings} ${noun} cancelled. Reserved member credits were returned.`
+          : 'No active bookings needed to be cancelled.',
+      });
+      if (expandedBookings === session.id) {
+        setExpandedBookings(null);
+        setBookings([]);
+        setRoster([]);
+      }
+      setSessionToCancel(null);
+      load();
+    } catch (e) {
+      toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsCancellingSession(false);
+    }
   };
 
   const handleBookingStatus = async (id, status) => {
@@ -491,7 +515,7 @@ export default function ClassCalendarAdmin() {
                       Repeat…
                     </button>
                     {s.status !== 'cancelled' && (
-                      <button onClick={() => handleCancel(s.id)}
+                      <button onClick={() => setSessionToCancel(s)}
                         className="px-3 py-1.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
                         Cancel
                       </button>
@@ -576,6 +600,41 @@ export default function ClassCalendarAdmin() {
           onDone={() => { setRepeating(null); load(); }}
           onCancel={() => setRepeating(null)}
         />
+      )}
+
+      {sessionToCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div
+            className="w-full max-w-md border border-xert-steel/30 bg-xert-ink p-6 text-xert-offwhite"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cancel-class-title"
+            aria-describedby="cancel-class-description"
+          >
+            <h3 id="cancel-class-title" className="font-display text-xl uppercase text-xert-offwhite">Cancel this class?</h3>
+            <p id="cancel-class-description" className="mt-3 font-body text-sm leading-relaxed text-xert-concrete/70">
+              {sessionToCancel.title} will be removed from the timetable. All active bookings will be cancelled and any reserved class credits returned.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isCancellingSession}
+                onClick={() => setSessionToCancel(null)}
+                className="border border-xert-steel/40 px-4 py-2.5 font-display text-xs uppercase text-xert-concrete/70 transition-colors hover:bg-xert-charcoal hover:text-xert-offwhite disabled:opacity-50"
+              >
+                Keep class
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingSession}
+                onClick={handleCancel}
+                className="bg-xert-red px-4 py-2.5 font-display text-xs uppercase text-white transition-colors hover:bg-xert-orange disabled:opacity-50"
+              >
+                {isCancellingSession ? 'Cancelling...' : 'Cancel class'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

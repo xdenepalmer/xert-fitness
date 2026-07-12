@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: XertStore
+    let onNavigate: (Int) -> Void
 
     var body: some View {
         NavigationStack {
@@ -20,11 +21,78 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 8)
 
-                    XertSection(title: "Today") {
+                    XertSection(title: "At a glance") {
                         HStack(spacing: 14) {
                             MetricView(value: "\(store.sessions.count)", label: "Classes")
                             MetricView(value: "\(store.creditTotal)", label: "Credits")
                             MetricView(value: "\(store.events.count)", label: "Events")
+                        }
+                    }
+
+                    XertSection(title: "Next up") {
+                        if let booking = nextBooking {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(booking.title)
+                                        .font(.headline)
+                                        .foregroundStyle(.xertOffWhite)
+                                    Spacer()
+                                    Text(booking.status == "requested" ? "REQUESTED" : "CONFIRMED")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.xertSteel)
+                                }
+                                Text(booking.start_time.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.7))
+                                if let location = booking.location_zone {
+                                    Label(location, systemImage: "mappin")
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.55))
+                                }
+                                Button("View bookings") {
+                                    onNavigate(3)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.xertSteel)
+                            }
+                        } else if store.isSignedIn {
+                            EmptyAction(
+                                message: "No class booked yet.",
+                                actionTitle: "Browse classes",
+                                action: { onNavigate(1) }
+                            )
+                        } else {
+                            EmptyAction(
+                                message: "Sign in to manage bookings and credits.",
+                                actionTitle: "Sign in",
+                                action: { onNavigate(3) }
+                            )
+                        }
+                    }
+
+                    XertSection(title: "Next event") {
+                        if let event = nextEvent {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(event.name)
+                                    .font(.headline)
+                                    .foregroundStyle(.xertOffWhite)
+                                Text(event.event_date ?? "Date to be confirmed")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.7))
+                                if let location = event.location {
+                                    Label(location, systemImage: "mappin")
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.55))
+                                }
+                                Button("View event calendar") {
+                                    onNavigate(2)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.xertSteel)
+                            }
+                        } else {
+                            Text("The event calendar is being prepared.")
+                                .foregroundStyle(.white.opacity(0.7))
                         }
                     }
 
@@ -46,6 +114,11 @@ struct HomeView: View {
                             }
                             .padding(.vertical, 6)
                         }
+                        Button("View session packs") {
+                            onNavigate(1)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.xertSteel)
                     }
                 }
                 .padding()
@@ -60,6 +133,20 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var nextBooking: BookingItem? {
+        store.bookings
+            .filter { ["requested", "confirmed"].contains($0.status) && $0.start_time > Date() }
+            .sorted { $0.start_time < $1.start_time }
+            .first
+    }
+
+    private var nextEvent: EventItem? {
+        store.events
+            .filter { !$0.isComplete }
+            .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
+            .first
     }
 }
 
@@ -77,5 +164,21 @@ private struct MetricView: View {
                 .foregroundStyle(.xertSteel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct EmptyAction: View {
+    let message: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(message)
+                .foregroundStyle(.white.opacity(0.7))
+            Button(actionTitle, action: action)
+                .buttonStyle(.bordered)
+                .tint(.xertSteel)
+        }
     }
 }
