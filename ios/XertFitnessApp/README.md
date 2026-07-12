@@ -1,6 +1,6 @@
 # XERT Fitness SwiftUI App
 
-This folder contains a SwiftUI iOS companion app scaffold for the Vercel/Supabase XERT Fitness web app. It uses Supabase REST/Auth directly with `URLSession`, so there is no extra SDK requirement.
+This folder contains the SwiftUI iOS companion app for the Vercel/Supabase XERT Fitness web app. It uses Supabase REST/Auth directly with `URLSession`, so there is no extra SDK requirement.
 
 ## Setup
 
@@ -39,3 +39,22 @@ The included `Info.plist` already contains these xcconfig substitutions:
 
 The app expects the same Supabase schema used by the web app in `src/supabase/booking_schema.sql`. Apply
 `src/supabase/booking_modes_upgrade.sql` to the deployed project before using request-to-book classes in either app.
+
+## Codemagic
+
+The repository-root `codemagic.yaml` has two macOS workflows:
+
+- `ios-verify` runs on pushes and pull requests to `main`; it generates the XcodeGen project and executes the Swift unit tests on an available iPhone simulator without code signing.
+- `ios-testflight` is a manual, signed TestFlight release workflow. It runs the same tests, increments the App Store build number, creates an IPA, and uploads it to TestFlight.
+
+In Codemagic Team settings, create an environment variable group named `xert_ios` with these secure values:
+
+```text
+SUPABASE_URL
+SUPABASE_ANON_KEY
+VERCEL_BASE_URL
+```
+
+The signed release workflow also loads the shared `appstore` group. It expects the secure `CERTIFICATE_PRIVATE_KEY` supplied by the team (with compatible legacy fallback names) and reuses that key to fetch the existing App Store distribution certificate rather than creating another certificate.
+
+Create or use the shared App Store Connect integration named `codemagic`, then enable **Push Notifications** for `com.xertfitness.app` in Apple Developer and fetch its App Store provisioning profile. The release guard verifies `aps-environment` and `application-identifier` in the signed IPA before TestFlight upload, so it intentionally fails when the App ID/profile is missing that capability.

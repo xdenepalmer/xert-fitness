@@ -1,0 +1,194 @@
+workflows:
+  ios-verify:
+    name: XERT iOS Verify
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: false
+      cancel_previous_builds: true
+    environment:
+      groups:
+        - xert_ios
+      xcode: latest
+      cocoapods: default
+      node: 22
+      vars:
+        BUNDLE_ID: com.xertfitness.app
+        IOS_DIRECTORY: ios/XertFitnessApp
+        XCODE_PROJECT: XertFitness.xcodeproj
+        XCODE_SCHEME: XertFitness
+    scripts:
+      - name: Write XERT runtime configuration
+        script: |
+          set -e
+          : "${SUPABASE_URL:?Add SUPABASE_URL to the xert_ios Codemagic environment group.}"
+          : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY to the xert_ios Codemagic environment group.}"
+          : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL to the xert_ios Codemagic environment group.}"
+
+          escape_xcconfig_url() {
+            printf '%s' "$1" | sed 's#//#/$()/#'
+          }
+
+          cat > "$CM_BUILD_DIR/$IOS_DIRECTORY/Config.xcconfig" <<EOF
+          SUPABASE_URL = $(escape_xcconfig_url "$SUPABASE_URL")
+          SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY
+          VERCEL_BASE_URL = $(escape_xcconfig_url "$VERCEL_BASE_URL")
+          EOF
+      - name: Install XcodeGen when needed
+        script: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+      - name: Generate Xcode project
+        script: |
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          xcodegen generate
+      - name: Run Swift unit tests
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          SIMULATOR_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { print $2; exit }')"
+          test -n "$SIMULATOR_ID"
+          xcodebuild test \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -resultBundlePath build/test-results.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - ios/XertFitnessApp/build/test-results.xcresult
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-testflight:
+    name: XERT iOS TestFlight
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    integrations:
+      # Shared-team App Store Connect API key integration.
+      app_store_connect: codemagic
+    environment:
+      groups:
+        # Contains the stable distribution certificate private key.
+        - appstore
+        # Contains project runtime values only.
+        - xert_ios
+      xcode: latest
+      cocoapods: default
+      node: 22
+      vars:
+        BUNDLE_ID: com.xertfitness.app
+        IOS_DIRECTORY: ios/XertFitnessApp
+        XCODE_PROJECT: XertFitness.xcodeproj
+        XCODE_SCHEME: XertFitness
+    scripts:
+      - name: Write XERT runtime configuration
+        script: |
+          set -e
+          : "${SUPABASE_URL:?Add SUPABASE_URL to the xert_ios Codemagic environment group.}"
+          : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY to the xert_ios Codemagic environment group.}"
+          : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL to the xert_ios Codemagic environment group.}"
+
+          escape_xcconfig_url() {
+            printf '%s' "$1" | sed 's#//#/$()/#'
+          }
+
+          cat > "$CM_BUILD_DIR/$IOS_DIRECTORY/Config.xcconfig" <<EOF
+          SUPABASE_URL = $(escape_xcconfig_url "$SUPABASE_URL")
+          SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY
+          VERCEL_BASE_URL = $(escape_xcconfig_url "$VERCEL_BASE_URL")
+          EOF
+      - name: Install XcodeGen when needed
+        script: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+      - name: Generate Xcode project
+        script: |
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          xcodegen generate
+      - name: Run Swift unit tests
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          SIMULATOR_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { print $2; exit }')"
+          test -n "$SIMULATOR_ID"
+          xcodebuild test \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -resultBundlePath build/test-results.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Set up code signing (reuse the shared distribution certificate)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          keychain initialize
+          SIGNING_KEY="${CERTIFICATE_PRIVATE_KEY:-${CERT_PRIVATE_KEY:-$IOS_DISTRIBUTION_PRIVATE_KEY}}"
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error:: No signing key set - add CERTIFICATE_PRIVATE_KEY as a Secure var in group 'appstore'."
+            exit 1
+          fi
+          CERT_KEY="$(mktemp)"
+          trap 'rm -f "$CERT_KEY"' EXIT
+          printf '%s' "$SIGNING_KEY" > "$CERT_KEY"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key=@file:"$CERT_KEY" \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Stamp incrementing build number
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          agvtool new-version -all "$(date +%s)"
+      - name: Build signed IPA
+        script: |
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+      - name: Verify signed entitlements (release truth)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          IPA_PATH="$(find build/ios/ipa -name '*.ipa' -print -quit)"
+          if [ -z "$IPA_PATH" ]; then
+            echo "::error:: no IPA under build/ios/ipa"
+            exit 1
+          fi
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          unzip -q "$IPA_PATH" -d "$WORK"
+          APP_PATH="$(find "$WORK/Payload" -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error:: no .app inside IPA Payload"
+            exit 1
+          fi
+
+          codesign -d --entitlements :- "$APP_PATH" > "$WORK/entitlements.plist"
+          cat "$WORK/entitlements.plist"
+          grep -q "aps-environment" "$WORK/entitlements.plist" || {
+            echo "::error:: Missing aps-environment entitlement!"
+            exit 1
+          }
+          grep -q "application-identifier" "$WORK/entitlements.plist" || {
+            echo "::error:: Missing application-identifier entitlement!"
+            exit 1
+          }
+          echo "Entitlements verified: aps-environment + application-identifier present."
+    artifacts:
+      - ios/XertFitnessApp/build/test-results.xcresult
+      - ios/XertFitnessApp/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

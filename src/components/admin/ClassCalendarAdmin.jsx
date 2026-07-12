@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus } from '@/lib/adminData';
+import { downloadCsv } from '@/lib/csv';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -14,6 +16,15 @@ function rosterStatusOptions(status) {
     return [status, 'requested', 'confirmed'];
   }
   return ['confirmed', 'attended', 'no_show', 'cancelled'];
+}
+
+function rosterExportFilename(session) {
+  const className = (session.title || 'class')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const date = session.start_time?.slice(0, 10) || 'undated';
+  return `xert-roster-${className || 'class'}-${date}.csv`;
 }
 
 const STATUS_COLORS = {
@@ -272,6 +283,7 @@ export default function ClassCalendarAdmin() {
   const [roster, setRoster] = useState([]);
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
+  const [updatingBookingId, setUpdatingBookingId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -283,24 +295,42 @@ export default function ClassCalendarAdmin() {
 
   useEffect(() => { load(); }, []);
 
-  const loadBookings = (sessionId) => {
-    if (expandedBookings === sessionId) { setExpandedBookings(null); return; }
-    Promise.all([
+  const refreshBookings = async (sessionId) => {
+    const [requests, members] = await Promise.all([
       getClassBookings({ class_session_id: sessionId }),
       adminSessionRoster(sessionId).catch(() => []),
-    ]).then(([requests, members]) => {
-      setBookings(requests);
-      setRoster(members);
+    ]);
+    setBookings(requests);
+    setRoster(members);
+  };
+
+  const loadBookings = async (sessionId) => {
+    if (expandedBookings === sessionId) {
+      setExpandedBookings(null);
+      setBookings([]);
+      setRoster([]);
+      return;
+    }
+    try {
+      await refreshBookings(sessionId);
       setExpandedBookings(sessionId);
-    });
+    } catch (e) {
+      toast({ title: 'Could not load class bookings', description: e.message, variant: 'destructive' });
+    }
   };
 
   const handleRosterStatus = async (bookingId, status) => {
+    const sessionId = expandedBookings;
+    if (!sessionId) return;
+    setUpdatingBookingId(bookingId);
     try {
       await adminSetBookingStatus(bookingId, status);
-      const members = await adminSessionRoster(expandedBookings);
-      setRoster(members);
-    } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
+      await refreshBookings(sessionId);
+    } catch (e) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUpdatingBookingId(null);
+    }
   };
 
   const handleDuplicate = async (session) => {
@@ -316,7 +346,41 @@ export default function ClassCalendarAdmin() {
   };
 
   const handleBookingStatus = async (id, status) => {
-    try { await updateBookingStatus(id, status); loadBookings(expandedBookings); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
+    const sessionId = expandedBookings;
+    if (!sessionId) return;
+    setUpdatingBookingId(id);
+    try {
+      await updateBookingStatus(id, status);
+      await refreshBookings(sessionId);
+    } catch (e) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUpdatingBookingId(null);
+    }
+  };
+
+  const exportRoster = (session) => {
+    downloadCsv(
+      rosterExportFilename(session),
+      roster.map(member => ({
+        class_title: session.title || 'XERT class',
+        class_starts_at: session.start_time ? new Date(session.start_time).toLocaleString('en-AU') : '',
+        name: member.full_name || '',
+        email: member.email || '',
+        phone: member.phone || '',
+        status: member.status,
+        booked_at: member.booked_at ? new Date(member.booked_at).toLocaleString('en-AU') : '',
+      })),
+      [
+        { key: 'class_title', label: 'Class' },
+        { key: 'class_starts_at', label: 'Class starts' },
+        { key: 'name', label: 'Member' },
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Mobile' },
+        { key: 'status', label: 'Booking status' },
+        { key: 'booked_at', label: 'Booked at' },
+      ]
+    );
   };
 
   const now = Date.now();
@@ -418,9 +482,16 @@ export default function ClassCalendarAdmin() {
               {expandedBookings === s.id && (
                 <div className="border-t border-xert-steel/20 p-4 bg-xert-charcoal">
                   {/* Credit-based member roster */}
-                  <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">
-                    Class roster ({roster.filter(r => ['requested', 'confirmed'].includes(r.status)).length}{s.capacity ? `/${s.capacity}` : ''})
-                  </h4>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h4 className="font-display text-sm text-xert-concrete/60 uppercase">
+                      Class roster ({roster.filter(r => ['requested', 'confirmed'].includes(r.status)).length}{s.capacity ? `/${s.capacity}` : ''})
+                    </h4>
+                    <button onClick={() => exportRoster(s)} disabled={roster.length === 0}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
+                      <Download className="w-3.5 h-3.5" />
+                      Export roster
+                    </button>
+                  </div>
                   {roster.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
                   ) : (
@@ -431,7 +502,7 @@ export default function ClassCalendarAdmin() {
                             <p className="font-body text-sm text-xert-offwhite">{r.full_name || r.email || 'Member'}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                           </div>
-                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)}
+                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {rosterStatusOptions(r.status).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
@@ -452,7 +523,7 @@ export default function ClassCalendarAdmin() {
                             <p className="font-body text-sm text-xert-offwhite">{b.full_name}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.training_level}</p>
                           </div>
-                          <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)}
+                          <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={updatingBookingId === b.id}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
