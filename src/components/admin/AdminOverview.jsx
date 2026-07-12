@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
   PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
-  CheckCircle2, Circle, Gauge,
+  CheckCircle2, Circle, Gauge, RefreshCw,
 } from 'lucide-react';
 import AdminStatCard from './AdminStatCard';
 import {
@@ -11,6 +11,7 @@ import {
   getAllCoaches, getAllEvents, getAllSiteContent,
 } from '@/lib/adminData';
 import { getAvailableSessions } from '@/lib/bookingData';
+import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -44,65 +45,106 @@ export default function AdminOverview({ onNavigate }) {
   const [fillRates, setFillRates] = useState(null);
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
   const [businessWarning, setBusinessWarning] = useState('');
+  const requestIdRef = useRef(0);
+  const requestInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(Number.NaN);
 
-  useEffect(() => {
+  const load = useCallback(async ({ initial = false } = {}) => {
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+    const requestId = ++requestIdRef.current;
+    if (initial) setLoading(true);
+    else setRefreshing(true);
+    setError('');
     setBusinessWarning('');
-    Promise.all([
-      getDashboardStats(),
-      getSoftLaunchSettings(),
-      getBusinessStats()
-        .then(data => ({ data, error: null }))
-        .catch(error => ({ data: null, error })),
-      Promise.all([getAllOrders().catch(() => []), adminListMembers().catch(() => [])])
-        .then(([orders, members]) => {
-          const feed = [
+
+    const readinessRequest = Promise.all([
+      getAllCoaches().catch(() => []),
+      getAllEvents().catch(() => []),
+      getAllSiteContent().catch(() => []),
+      getAvailableSessions().catch(() => [])
+    ]);
+
+    try {
+      const [s, cfg, businessResult, feed] = await Promise.all([
+        getDashboardStats(),
+        getSoftLaunchSettings(),
+        getBusinessStats()
+          .then(data => ({ data, error: null }))
+          .catch(error => ({ data: null, error })),
+        Promise.all([getAllOrders().catch(() => []), adminListMembers().catch(() => [])])
+          .then(([orders, members]) => [
             ...orders.slice(0, 6).map(o => ({
               type: 'order',
               at: o.paid_at || o.created_at,
               title: `${o.products?.name || 'Session pack'} — $${((o.amount_cents || 0) / 100).toFixed(2)}`,
-              sub: o.email || 'unknown buyer',
+              sub: o.email || 'unknown buyer'
             })),
             ...members.slice(0, 6).map(m => ({
               type: 'member',
               at: m.joined_at,
               title: m.full_name || m.email || 'New member',
-              sub: 'Created an account',
-            })),
-          ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 7);
-          return feed;
-        }),
-    ]).then(([s, cfg, businessResult, feed]) => {
+              sub: 'Created an account'
+            }))
+          ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 7))
+      ]);
+      if (requestId !== requestIdRef.current) return;
       setStats(s);
       if (cfg) setSettings(cfg);
       setBiz(businessResult.data);
-      if (businessResult.error) {
-        setBusinessWarning(`Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}`);
-      }
+      setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
       setActivity(feed);
-      setLoading(false);
-    }).catch(e => {
-      setError(e.message);
-      setLoading(false);
-    });
+      setLastUpdated(new Date());
+    } catch (loadError) {
+      if (requestId === requestIdRef.current) setError(loadError.message);
+    }
 
-    // Launch checklist + fill rate load independently (non-blocking).
-    Promise.all([
-      getAllCoaches().catch(() => []),
-      getAllEvents().catch(() => []),
-      getAllSiteContent().catch(() => []),
-      getAvailableSessions().catch(() => []),
-    ]).then(([coaches, events, siteContent, sessions]) => {
+    const [coaches, events, siteContent, sessions] = await readinessRequest;
+    if (requestId === requestIdRef.current) {
       setFillRates(sessions);
       setLaunch({
         coaches: coaches.length > 0,
         classes: sessions.length > 0,
         events: events.length > 0,
-        content: siteContent.length > 0,
+        content: siteContent.length > 0
       });
-    });
+      setLoading(false);
+      setRefreshing(false);
+      lastRefreshAtRef.current = Date.now();
+    }
+    requestInFlightRef.current = false;
   }, []);
+
+  useEffect(() => {
+    void load({ initial: true });
+    return () => {
+      requestIdRef.current += 1;
+      requestInFlightRef.current = false;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (shouldRefreshAdminData({
+        visibilityState: document.visibilityState,
+        lastRefreshAt: lastRefreshAtRef.current,
+        minimumAgeMs: ADMIN_OVERVIEW_REFRESH_INTERVAL_MS
+      })) {
+        void load();
+      }
+    };
+
+    const intervalId = window.setInterval(refreshWhenVisible, ADMIN_OVERVIEW_REFRESH_INTERVAL_MS);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [load]);
 
   const countdown = getCountdown(settings.target_launch_date);
 
@@ -138,7 +180,18 @@ export default function AdminOverview({ onNavigate }) {
               Beat Your Best.
             </h2>
           </div>
-          {countdown && (
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex items-center gap-2">
+              {lastUpdated && (
+                <span className="font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }} aria-live="polite">
+                  Updated {lastUpdated.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
+              <button type="button" onClick={() => void load()} disabled={loading || refreshing} aria-label="Refresh dashboard" title="Refresh dashboard" className="p-2 border border-xert-steel/25 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            {countdown && (
             <div className="flex items-center gap-3 px-4 py-3"
               style={{ backgroundColor: 'rgba(123,167,188,0.12)', border: '1px solid rgba(123,167,188,0.35)' }}>
               <Rocket className="w-5 h-5" style={{ color: '#7BA7BC' }} />
@@ -149,7 +202,8 @@ export default function AdminOverview({ onNavigate }) {
                 </p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

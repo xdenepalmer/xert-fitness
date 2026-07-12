@@ -3,6 +3,8 @@ import SwiftUI
 struct EventsView: View {
     @EnvironmentObject private var store: XertStore
     @State private var showCompleted = false
+    @State private var addingToCalendarID: String?
+    @State private var calendarNotice: CalendarNotice?
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -48,6 +50,13 @@ struct EventsView: View {
             .refreshable {
                 await store.refresh()
             }
+            .alert(item: $calendarNotice) { notice in
+                Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 
@@ -86,6 +95,19 @@ struct EventsView: View {
                     Label("Event details", systemImage: "arrow.up.right.square")
                         .font(.subheadline.weight(.semibold))
                 }
+                .tint(.xertSteel)
+            }
+            if event.startDate != nil {
+                Button {
+                    Task { await addToCalendar(event) }
+                } label: {
+                    Label(
+                        addingToCalendarID == event.stableID ? "Adding..." : "Add to Calendar",
+                        systemImage: "calendar.badge.plus"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                }
+                .disabled(addingToCalendarID != nil)
                 .tint(.xertSteel)
             }
             if !event.isComplete, let eventID = event.id {
@@ -143,4 +165,27 @@ struct EventsView: View {
         if store.updatingEventGoalID == id { return "Saving goal..." }
         return store.eventGoalIDs.contains(id) ? "Training goal" : "Train for this"
     }
+
+    @MainActor
+    private func addToCalendar(_ event: EventItem) async {
+        addingToCalendarID = event.stableID
+        defer { addingToCalendarID = nil }
+        do {
+            let result = try await EventCalendarWriter.add(event)
+            calendarNotice = result == .added
+                ? CalendarNotice(title: "Added to Calendar", message: "\(event.name) is now in your calendar.")
+                : CalendarNotice(title: "Already in Calendar", message: "\(event.name) is already saved in your calendar.")
+        } catch {
+            calendarNotice = CalendarNotice(
+                title: "Could Not Add Event",
+                message: error.localizedDescription
+            )
+        }
+    }
+}
+
+private struct CalendarNotice: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }

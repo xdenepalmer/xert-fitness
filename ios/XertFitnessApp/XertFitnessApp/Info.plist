@@ -26,6 +26,10 @@
     <string>$(SUPABASE_ANON_KEY)</string>
     <key>VERCEL_BASE_URL</key>
     <string>$(VERCEL_BASE_URL)</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>XERT adds the fitness events you choose to your calendar.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>XERT adds the fitness events you choose to your calendar.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>

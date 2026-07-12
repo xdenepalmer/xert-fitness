@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
+import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import CommandPalette from '@/components/admin/CommandPalette';
 
 const LOGO = '/assets/xert-logo-full.png';
@@ -84,21 +85,44 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Attention badges (new leads, pending requests) — refresh on section change.
+  // Keep attention counts current without polling while the admin tab is hidden.
   useEffect(() => {
     let active = true;
-    getAdminBadgeCounts()
-      .then(data => {
+    let requestInFlight = false;
+    let lastRefreshAt = Number.NaN;
+
+    const refreshBadges = async () => {
+      if (requestInFlight || !active) return;
+      requestInFlight = true;
+      try {
+        const data = await getAdminBadgeCounts();
         if (!active) return;
         setBadges(data);
         setBadgesUnavailable(false);
-      })
-      .catch(() => {
+      } catch {
         if (!active) return;
         setBadges({});
         setBadgesUnavailable(true);
-      });
-    return () => { active = false; };
+      } finally {
+        requestInFlight = false;
+        lastRefreshAt = Date.now();
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (shouldRefreshAdminData({ visibilityState: document.visibilityState, lastRefreshAt })) {
+        void refreshBadges();
+      }
+    };
+
+    void refreshBadges();
+    const intervalId = window.setInterval(refreshWhenVisible, ADMIN_BADGE_REFRESH_INTERVAL_MS);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [activeSection]);
 
   const activeLabel = ALL_ITEMS.find(n => n.key === activeSection)?.label || 'Command Centre';
