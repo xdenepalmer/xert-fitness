@@ -70,9 +70,11 @@ export default function AdminOverview({ onNavigate }) {
     ]);
 
     try {
-      const [s, cfg, businessResult, feed] = await Promise.all([
+      const [s, settingsResult, businessResult, feed] = await Promise.all([
         getDashboardStats(),
-        getSoftLaunchSettings(),
+        getSoftLaunchSettings()
+          .then(data => ({ data, error: null }))
+          .catch(error => ({ data: null, error })),
         getBusinessStats()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error })),
@@ -80,11 +82,20 @@ export default function AdminOverview({ onNavigate }) {
       ]);
       if (requestId !== requestIdRef.current) return;
       setStats(s);
-      if (cfg) setSettings(cfg);
+      if (s.errors?.length) {
+        setPartialWarning(current => [current, `Dashboard metrics incomplete: ${s.errors.join(' | ')}`].filter(Boolean).join(' '));
+      }
+      if (s.insightsSampled) {
+        setPartialWarning(current => [current, `Interest insights use the latest ${s.insightSampleSize.toLocaleString('en-AU')} of ${s.totalMembers.toLocaleString('en-AU')} leads.`].filter(Boolean).join(' '));
+      }
+      if (settingsResult.data) setSettings(settingsResult.data);
+      if (settingsResult.error) {
+        setPartialWarning(current => [current, `Launch settings unavailable: ${settingsResult.error.message || 'check Supabase permissions.'}`].filter(Boolean).join(' '));
+      }
       setBiz(businessResult.data);
       setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
       setActivity(feed.feed);
-      if (feed.errors.length) setPartialWarning(`Recent activity incomplete: ${feed.errors.join(' | ')}`);
+      if (feed.errors.length) setPartialWarning(current => [current, `Recent activity incomplete: ${feed.errors.join(' | ')}`].filter(Boolean).join(' '));
       setLastUpdated(new Date());
     } catch (loadError) {
       if (requestId === requestIdRef.current) setError(loadError.message);

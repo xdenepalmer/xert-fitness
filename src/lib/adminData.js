@@ -6,6 +6,7 @@ import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
 import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
+import { dashboardMetricsFromSettled } from './adminMetrics';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -251,60 +252,22 @@ export async function getDashboardStats() {
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoIso = weekAgo.toISOString();
 
-  const [members, trainers, partners, newMembers, bookings, memberBookings, ptRequests] = await Promise.all([
+  const results = await Promise.allSettled([
     supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', {
       count: 'exact'
-    }),
-    supabase.from('trainer_interest').select('id', { count: 'exact' }),
-    supabase.from('partner_interest').select('id', { count: 'exact' }),
-    supabase.from('member_interest').select('id', { count: 'exact' }).gte('created_at', weekAgoIso),
-    supabase.from('class_bookings').select('id, status', { count: 'exact' }),
-    supabase.from('session_bookings').select('id, status', { count: 'exact' }),
-    supabase.from('private_session_requests').select('id, status', { count: 'exact' })
+    }).range(0, 999),
+    supabase.from('trainer_interest').select('id', { count: 'exact', head: true }),
+    supabase.from('partner_interest').select('id', { count: 'exact', head: true }),
+    supabase.from('member_interest').select('id', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
+    supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('interested_in_pt', true),
+    supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('interested_in_event_prep', true),
+    supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true })
   ]);
-  assertSupabaseResponses([members, trainers, partners, newMembers, bookings, memberBookings, ptRequests]);
-
-  const memberData = members.data || [];
-  const bookingData = bookings.data || [];
-  const memberBookingData = memberBookings.data || [];
-
-  // Most requested class times
-  const timeCounts = {};
-  memberData.forEach(m => {
-    (m.preferred_training_times || []).forEach(t => {
-      timeCounts[t] = (timeCounts[t] || 0) + 1;
-    });
-  });
-  const topTimes = Object.entries(timeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([t, c]) => ({ time: t, count: c }));
-
-  // Most common goals
-  const goalCounts = {};
-  memberData.forEach(m => {
-    (m.main_training_goals || []).forEach(g => {
-      goalCounts[g] = (goalCounts[g] || 0) + 1;
-    });
-  });
-  const topGoals = Object.entries(goalCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([g, c]) => ({ goal: g, count: c }));
-
-  return {
-    totalMembers: members.count || 0,
-    newThisWeek: newMembers.count || 0,
-    trainerApplicants: trainers.count || 0,
-    partnerEnquiries: partners.count || 0,
-    ptInterest: memberData.filter(m => m.interested_in_pt).length,
-    eventPrepInterest: memberData.filter(m => m.interested_in_event_prep).length,
-    topTimes,
-    topGoals,
-    pendingBookings: bookingData.filter(b => b.status === 'requested').length + memberBookingData.filter(b => b.status === 'requested').length,
-    waitlistedBookings: bookingData.filter(b => b.status === 'waitlisted').length + memberBookingData.filter(b => b.status === 'waitlisted').length,
-    ptRequests: ptRequests.count || 0
-  };
+  return dashboardMetricsFromSettled(results);
 }
 
 // ─── Coaches (admin CRUD) ───────────────────────────────────────────────────
