@@ -71,6 +71,20 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(AppConfig.webURL(path: "reset-password").path, "/reset-password")
     }
 
+    func testWebBaseURLAcceptsAHostnameAndRejectsUnsafeSchemes() {
+        XCTAssertEqual(
+            AppConfig.normalizedWebBaseURL("xert-fitness.vercel.app")?.absoluteString,
+            "https://xert-fitness.vercel.app"
+        )
+        XCTAssertNil(AppConfig.normalizedWebBaseURL("javascript:alert('no')"))
+    }
+
+    func testWebRoutesReplaceAnAccidentalBasePath() {
+        let base = AppConfig.normalizedWebBaseURL("https://xert-fitness.vercel.app/preview-token")!
+
+        XCTAssertEqual(AppConfig.webURL(baseURL: base, path: "/reset-password/").absoluteString, "https://xert-fitness.vercel.app/reset-password")
+    }
+
     func testFallbackCalendarCarriesTheFull2026Program() {
         XCTAssertEqual(XertEventCalendar.fallback.count, 20)
         XCTAssertEqual(XertEventCalendar.fallback.first?.name, "Gold Coast Marathon")

@@ -19,8 +19,7 @@ enum AppConfig {
     static var vercelBaseURL: URL {
         guard
             let raw = Bundle.main.object(forInfoDictionaryKey: "VERCEL_BASE_URL") as? String,
-            let url = URL(string: raw),
-            !raw.isEmpty
+            let url = normalizedWebBaseURL(raw)
         else {
             return URL(string: "https://example.com")!
         }
@@ -28,7 +27,39 @@ enum AppConfig {
     }
 
     static func webURL(path: String) -> URL {
-        guard !path.isEmpty else { return vercelBaseURL }
-        return vercelBaseURL.appendingPathComponent(path)
+        webURL(baseURL: vercelBaseURL, path: path)
+    }
+
+    static func webURL(baseURL: URL, path: String) -> URL {
+        guard !path.isEmpty else { return baseURL }
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return baseURL
+        }
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = "/\(cleanPath)"
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? baseURL
+    }
+
+    static func normalizedWebBaseURL(_ rawValue: String) -> URL? {
+        let raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        if !raw.contains("://"), URLComponents(string: raw)?.scheme != nil {
+            return nil
+        }
+        let candidate = raw.contains("://") ? raw : "https://\(raw)"
+        guard
+            var components = URLComponents(string: candidate),
+            let scheme = components.scheme?.lowercased(),
+            scheme == "https" || scheme == "http",
+            components.host != nil
+        else {
+            return nil
+        }
+        components.scheme = scheme
+        components.query = nil
+        components.fragment = nil
+        return components.url
     }
 }
