@@ -49,9 +49,9 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-end">
-      <div className="bg-xert-ink border-l border-xert-steel/20 w-full sm:max-w-md h-full overflow-y-auto p-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="lead-detail-title" className="bg-xert-ink border-l border-xert-steel/20 w-full sm:max-w-md h-full overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">Lead Detail</h3>
+          <h3 id="lead-detail-title" className="font-display text-xl text-xert-offwhite uppercase">Lead Detail</h3>
           <button type="button" onClick={onClose} title="Close lead details" aria-label="Close lead details" className="p-1.5 text-xert-concrete/40 hover:text-xert-offwhite"><X className="w-5 h-5" /></button>
         </div>
 
@@ -83,8 +83,8 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
 
         {/* Status update */}
         <div className="mb-4">
-          <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Status</label>
-          <select value={status} onChange={e => setStatus(e.target.value)}
+          <label htmlFor="lead-status" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Status</label>
+          <select id="lead-status" value={status} onChange={e => setStatus(e.target.value)}
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
             {statuses.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
@@ -92,13 +92,13 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
 
         {/* Notes */}
         <div className="mb-6">
-          <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Admin notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
+          <label htmlFor="lead-notes" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Admin notes</label>
+          <textarea id="lead-notes" maxLength={5000} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
             placeholder="Internal notes..."
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
         </div>
 
-        <button onClick={save} disabled={saving}
+        <button type="button" onClick={save} disabled={saving}
           className="w-full py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
           {saving ? 'Saving...' : 'Save changes'}
         </button>
@@ -131,6 +131,9 @@ export default function LeadTable({ type = 'member' }) {
       setLeads(data);
     } catch (e) {
       setError(e.message);
+      setLeads([]);
+      setSelectedIds(new Set());
+      setSelectedLead(null);
     } finally {
       setLoading(false);
     }
@@ -177,11 +180,13 @@ export default function LeadTable({ type = 'member' }) {
     <div className="p-6">
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <input
+        <label htmlFor={`${type}-lead-search`} className="sr-only">Search leads by name or email</label>
+        <input id={`${type}-lead-search`}
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search name or email..."
           className="flex-1 bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+        <label htmlFor={`${type}-lead-status-filter`} className="sr-only">Filter leads by status</label>
+        <select id={`${type}-lead-status-filter`} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
           <option value="">All statuses</option>
           {statuses.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}

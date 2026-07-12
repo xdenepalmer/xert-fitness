@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertSupabaseResponses } from './supabaseResults';
-import { normalizeLeadSearch } from './adminLeads';
+import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -36,18 +36,22 @@ export async function getPartnerLeads(filters = {}) {
 }
 
 export async function updateLeadStatus(table, id, status) {
-  const { error } = await supabase.from(table).update({ status }).eq('id', id);
+  const mutation = validateLeadMutation(table, status, [id]);
+  const { error } = await supabase.from(mutation.table).update({ status: mutation.status }).eq('id', mutation.ids[0]);
   if (error) throw new Error(error.message);
 }
 
 export async function updateLead(table, id, updates) {
-  const { error } = await supabase.from(table).update(updates).eq('id', id);
+  const mutation = normalizeLeadUpdate(table, updates);
+  const validatedId = validateLeadMutation(table, mutation.updates.status, [id]).ids[0];
+  const { error } = await supabase.from(mutation.table).update(mutation.updates).eq('id', validatedId);
   if (error) throw new Error(error.message);
 }
 
 export async function updateLeadStatuses(table, ids, status) {
   if (!ids?.length) return;
-  const { error } = await supabase.from(table).update({ status }).in('id', ids);
+  const mutation = validateLeadMutation(table, status, ids);
+  const { error } = await supabase.from(mutation.table).update({ status: mutation.status }).in('id', mutation.ids);
   if (error) throw new Error(error.message);
 }
 

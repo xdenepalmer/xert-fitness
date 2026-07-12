@@ -12,3 +12,29 @@ export function selectedLeadIds(current, id, checked) {
   else next.delete(id);
   return next;
 }
+
+export const LEAD_STATUSES = {
+  member_interest: ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'],
+  trainer_interest: ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'],
+  partner_interest: ['new', 'reviewing', 'contacted', 'meeting', 'approved', 'not_suitable', 'archived'],
+};
+
+export function validateLeadMutation(table, status, ids = []) {
+  const statuses = LEAD_STATUSES[table];
+  if (!statuses) throw new Error('Unsupported lead type.');
+  if (!statuses.includes(status)) throw new Error(`Invalid ${table.replace('_interest', '')} lead status.`);
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id.trim())) {
+    throw new Error('Lead selection contains an invalid ID.');
+  }
+  return { table, status, ids: [...new Set(ids.map(id => id.trim()))] };
+}
+
+export function normalizeLeadUpdate(table, updates) {
+  const mutation = validateLeadMutation(table, updates?.status);
+  const adminNotes = String(updates?.admin_notes || '').trim();
+  if (adminNotes.length > 5000) throw new Error('Admin notes must be 5,000 characters or fewer.');
+  return {
+    table: mutation.table,
+    updates: { status: mutation.status, admin_notes: adminNotes || null },
+  };
+}
