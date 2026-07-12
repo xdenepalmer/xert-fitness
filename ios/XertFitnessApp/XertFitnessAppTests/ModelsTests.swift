@@ -2,6 +2,34 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
+        let request = try MemberSignUpRequest(
+            fullName: "  Alex Runner  ",
+            email: " ALEX@Example.COM ",
+            phone: " 0400 111 222 ",
+            password: "strong-pass",
+            confirmation: "strong-pass",
+            acceptedTerms: true
+        )
+
+        XCTAssertEqual(request.email, "alex@example.com")
+        XCTAssertEqual(request.data.full_name, "Alex Runner")
+        XCTAssertEqual(request.data.phone, "0400 111 222")
+
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+        let metadata = object?["data"] as? [String: Any]
+        XCTAssertEqual(metadata?["full_name"] as? String, "Alex Runner")
+        XCTAssertEqual(metadata?["phone"] as? String, "0400 111 222")
+    }
+
+    func testMemberSignUpRequiresValidMatchingCredentialsAndLegalConsent() {
+        XCTAssertThrowsError(try signUp(fullName: "", acceptedTerms: true))
+        XCTAssertThrowsError(try signUp(email: "invalid", acceptedTerms: true))
+        XCTAssertThrowsError(try signUp(password: "short", confirmation: "short", acceptedTerms: true))
+        XCTAssertThrowsError(try signUp(confirmation: "different", acceptedTerms: true))
+        XCTAssertThrowsError(try signUp(acceptedTerms: false))
+    }
+
     func testDataSourceLabelsAreMemberFacingAndComplete() {
         XCTAssertEqual(Set(XertDataSource.allCases).count, 7)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
@@ -365,6 +393,24 @@ final class ModelsTests: XCTestCase {
             end_time: nil,
             location_zone: nil,
             intensity_level: nil
+        )
+    }
+
+    private func signUp(
+        fullName: String = "Alex Runner",
+        email: String = "alex@example.com",
+        phone: String = "",
+        password: String = "strong-pass",
+        confirmation: String = "strong-pass",
+        acceptedTerms: Bool
+    ) throws -> MemberSignUpRequest {
+        try MemberSignUpRequest(
+            fullName: fullName,
+            email: email,
+            phone: phone,
+            password: password,
+            confirmation: confirmation,
+            acceptedTerms: acceptedTerms
         )
     }
 

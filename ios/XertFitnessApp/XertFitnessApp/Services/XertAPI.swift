@@ -50,9 +50,8 @@ final class XertAPI {
         return session
     }
 
-    func signUp(email: String, password: String) async throws -> AuthSession? {
-        let body = ["email": email, "password": password]
-        let response: AuthResponse = try await authRequest(path: "/auth/v1/signup", body: body)
+    func signUp(_ signUp: MemberSignUpRequest) async throws -> AuthSession? {
+        let response: AuthResponse = try await authRequest(path: "/auth/v1/signup", body: signUp)
         return response.session
     }
 

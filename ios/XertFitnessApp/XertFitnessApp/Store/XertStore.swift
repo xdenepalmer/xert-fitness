@@ -184,13 +184,28 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func signUp(email: String, password: String) async {
+    func signUp(
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        confirmation: String,
+        acceptedTerms: Bool
+    ) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
-            guard let session = try await api.signUp(email: email, password: password) else {
+            let request = try MemberSignUpRequest(
+                fullName: fullName,
+                email: email,
+                phone: phone,
+                password: password,
+                confirmation: confirmation,
+                acceptedTerms: acceptedTerms
+            )
+            guard let session = try await api.signUp(request) else {
                 errorMessage = "Check your email to confirm your XERT account, then sign in."
                 return
             }

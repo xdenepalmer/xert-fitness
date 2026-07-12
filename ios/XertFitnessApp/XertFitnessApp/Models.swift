@@ -267,6 +267,50 @@ struct AuthResponse: Codable {
     }
 }
 
+struct MemberSignUpRequest: Encodable, Equatable {
+    struct Metadata: Encodable, Equatable {
+        let full_name: String
+        let phone: String?
+    }
+
+    let email: String
+    let password: String
+    let data: Metadata
+
+    init(
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        confirmation: String,
+        acceptedTerms: Bool
+    ) throws {
+        let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalizedName.isEmpty, normalizedName.count <= 100 else {
+            throw APIError(message: "Enter your full name (up to 100 characters).")
+        }
+        guard normalizedEmail.contains("@"), normalizedEmail.contains("."), normalizedEmail.count <= 254 else {
+            throw APIError(message: "Enter a valid email address.")
+        }
+        guard password.count >= 8 else {
+            throw APIError(message: "Use at least 8 characters for your password.")
+        }
+        guard password == confirmation else {
+            throw APIError(message: "Passwords do not match.")
+        }
+        guard acceptedTerms else {
+            throw APIError(message: "Agree to the Terms of Use and acknowledge the Privacy Policy to create an account.")
+        }
+
+        self.email = normalizedEmail
+        self.password = password
+        self.data = Metadata(full_name: normalizedName, phone: normalizedPhone.isEmpty ? nil : normalizedPhone)
+    }
+}
+
 struct CheckoutResponse: Codable {
     let url: URL
 }

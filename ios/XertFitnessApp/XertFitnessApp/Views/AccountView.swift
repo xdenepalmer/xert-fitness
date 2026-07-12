@@ -4,7 +4,9 @@ struct AccountView: View {
     @EnvironmentObject private var store: XertStore
     @State private var email = ""
     @State private var password = ""
+    @State private var passwordConfirmation = ""
     @State private var isCreatingAccount = false
+    @State private var acceptedAccountTerms = false
     @State private var fullName = ""
     @State private var phone = ""
     @State private var didSaveProfile = false
@@ -127,6 +129,15 @@ struct AccountView: View {
                     }
                 } else {
                     Section(isCreatingAccount ? "Create Account" : "Sign In") {
+                        if isCreatingAccount {
+                            TextField("Full name", text: $fullName)
+                                .textContentType(.name)
+                                .submitLabel(.next)
+                            TextField("Mobile number (optional)", text: $phone)
+                                .textContentType(.telephoneNumber)
+                                .keyboardType(.phonePad)
+                                .submitLabel(.next)
+                        }
                         TextField("Email", text: $email)
                             .textContentType(.emailAddress)
                             .keyboardType(.emailAddress)
@@ -135,10 +146,28 @@ struct AccountView: View {
                         SecureField("Password", text: $password)
                             .textContentType(isCreatingAccount ? .newPassword : .password)
 
+                        if isCreatingAccount {
+                            SecureField("Confirm password", text: $passwordConfirmation)
+                                .textContentType(.newPassword)
+                            Toggle("I agree to the Terms and acknowledge the Privacy Policy", isOn: $acceptedAccountTerms)
+                            HStack(spacing: 16) {
+                                Link("Terms of Use", destination: AppConfig.webURL(path: "terms"))
+                                Link("Privacy Policy", destination: AppConfig.webURL(path: "privacy"))
+                            }
+                            .font(.footnote)
+                        }
+
                         Button {
                             Task {
                                 if isCreatingAccount {
-                                    await store.signUp(email: email, password: password)
+                                    await store.signUp(
+                                        fullName: fullName,
+                                        email: email,
+                                        phone: phone,
+                                        password: password,
+                                        confirmation: passwordConfirmation,
+                                        acceptedTerms: acceptedAccountTerms
+                                    )
                                 } else {
                                     await store.signIn(email: email, password: password)
                                 }
@@ -147,7 +176,7 @@ struct AccountView: View {
                             Text(isCreatingAccount ? "Create Account" : "Sign In")
                                 .frame(maxWidth: .infinity)
                         }
-                        .disabled(email.isEmpty || password.count < 6 || store.isLoading)
+                        .disabled(authActionDisabled)
 
                         if !isCreatingAccount {
                             Button {
@@ -176,6 +205,8 @@ struct AccountView: View {
                     Section {
                         Button(isCreatingAccount ? "Already have an account?" : "Create a member account") {
                             isCreatingAccount.toggle()
+                            passwordConfirmation = ""
+                            acceptedAccountTerms = false
                         }
                     }
 
@@ -226,6 +257,17 @@ struct AccountView: View {
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
+    }
+
+    private var authActionDisabled: Bool {
+        if store.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        if !isCreatingAccount { return password.count < 6 }
+        return fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || password.count < 8
+            || passwordConfirmation != password
+            || !acceptedAccountTerms
     }
 
     @ViewBuilder
