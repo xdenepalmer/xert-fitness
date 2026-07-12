@@ -3,6 +3,7 @@ import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
 import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { normalizeCoachInput } from '@/lib/coachAdmin';
 
 const CATEGORIES = [
   { value: 'coach', label: 'Coach' },
@@ -22,12 +23,20 @@ function CoachEditor({ coach, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
+  useEffect(() => {
+    const closeOnEscape = event => {
+      if (event.key === 'Escape' && !saving) onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onCancel, saving]);
+
   const handleSave = async () => {
-    if (!form.name.trim()) { toast({ title: 'Name required.', variant: 'destructive' }); return; }
     setSaving(true);
     try {
-      if (coach?.id) await updateCoach(coach.id, form);
-      else await createCoach(form);
+      const payload = normalizeCoachInput(form);
+      if (coach?.id) await updateCoach(coach.id, payload);
+      else await createCoach(payload);
       onSave();
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
@@ -38,64 +47,61 @@ function CoachEditor({ coach, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="coach-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">{coach?.id ? 'Edit' : 'New'} Team Member</h3>
-          <button onClick={onCancel} className="text-xert-concrete/40 hover:text-xert-offwhite text-xl">✕</button>
+          <h3 id="coach-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{coach?.id ? 'Edit' : 'New'} Team Member</h3>
+          <button type="button" onClick={onCancel} aria-label="Close team member editor" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">✕</button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Name *</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
+              <label htmlFor="coach-name" className={labelCls}>Name *</label>
+              <input id="coach-name" required autoFocus value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Category</label>
-              <select value={form.category} onChange={e => set('category', e.target.value)} className={inputCls}>
+              <label htmlFor="coach-category" className={labelCls}>Category</label>
+              <select id="coach-category" value={form.category} onChange={e => set('category', e.target.value)} className={inputCls}>
                 {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className={labelCls}>Role (e.g. Owner / Head Coach)</label>
-            <input value={form.role || ''} onChange={e => set('role', e.target.value)} className={inputCls} />
+            <label htmlFor="coach-role" className={labelCls}>Role (e.g. Owner / Head Coach)</label>
+            <input id="coach-role" value={form.role || ''} onChange={e => set('role', e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>Bio</label>
-            <textarea value={form.bio || ''} onChange={e => set('bio', e.target.value)} rows={3} className={`${inputCls} resize-none`} />
+            <label htmlFor="coach-bio" className={labelCls}>Bio</label>
+            <textarea id="coach-bio" value={form.bio || ''} onChange={e => set('bio', e.target.value)} rows={3} className={`${inputCls} resize-none`} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Experience</label>
-              <input value={form.experience || ''} onChange={e => set('experience', e.target.value)} placeholder="e.g. 8 years coaching" className={inputCls} />
+              <label htmlFor="coach-experience" className={labelCls}>Experience</label>
+              <input id="coach-experience" value={form.experience || ''} onChange={e => set('experience', e.target.value)} placeholder="e.g. 8 years coaching" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Currently training for</label>
-              <input value={form.currently_training_for || ''} onChange={e => set('currently_training_for', e.target.value)} placeholder="e.g. Hyrox Melbourne" className={inputCls} />
+              <label htmlFor="coach-training-for" className={labelCls}>Currently training for</label>
+              <input id="coach-training-for" value={form.currently_training_for || ''} onChange={e => set('currently_training_for', e.target.value)} placeholder="e.g. Hyrox Melbourne" className={inputCls} />
             </div>
           </div>
           <ImageUploader value={form.photo_url || ''} onChange={v => set('photo_url', v)} folder="coaches" label="Photo" />
           <div>
-            <label className={labelCls}>Social link</label>
-            <input value={form.social_url || ''} onChange={e => set('social_url', e.target.value)} placeholder="https://instagram.com/…" className={inputCls} />
+            <label htmlFor="coach-social" className={labelCls}>Social link</label>
+            <input id="coach-social" type="url" value={form.social_url || ''} onChange={e => set('social_url', e.target.value)} placeholder="https://instagram.com/…" className={inputCls} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
             <div>
-              <label className={labelCls}>Sort order</label>
-              <input type="number" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
+              <label htmlFor="coach-sort-order" className={labelCls}>Sort order</label>
+              <input id="coach-sort-order" type="number" min="0" step="1" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer pb-2">
-              <div onClick={() => set('published', !form.published)}
-                className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${form.published ? 'border-green-500 bg-green-500' : 'border-xert-steel/50'}`}>
-                {form.published && <span className="text-white text-xs">✓</span>}
-              </div>
+            <label className="flex min-h-11 items-center gap-2 cursor-pointer pb-2">
+              <input type="checkbox" checked={Boolean(form.published)} onChange={e => set('published', e.target.checked)} className="w-5 h-5 accent-green-500" />
               <span className="font-body text-sm text-xert-concrete/80">Published (visible on site)</span>
             </label>
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -110,6 +116,7 @@ export default function CoachesManager() {
   const [loadError, setLoadError] = useState('');
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -124,9 +131,18 @@ export default function CoachesManager() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this team member?')) return;
-    try { await deleteCoach(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
+  const handleDelete = async (coach) => {
+    if (!confirm(`Delete ${coach.name}? This removes them from the public Coaches page.`)) return;
+    setDeletingId(coach.id);
+    try {
+      await deleteCoach(coach.id);
+      toast({ title: 'Team member deleted', description: `${coach.name} was removed.` });
+      await load();
+    } catch (e) {
+      toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -174,10 +190,10 @@ export default function CoachesManager() {
                 <p className="font-body text-xs text-xert-concrete/50">{[c.role, c.experience].filter(Boolean).join(' · ')}</p>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={() => { setEditing(c); setShowEditor(true); }}
-                  className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">Edit</button>
-                <button onClick={() => handleDelete(c.id)}
-                  className="px-3 py-1.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">Delete</button>
+                <button onClick={() => { setEditing(c); setShowEditor(true); }} disabled={deletingId !== null}
+                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
+                <button onClick={() => handleDelete(c)} disabled={deletingId !== null}
+                  className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">{deletingId === c.id ? 'Deleting...' : 'Delete'}</button>
               </div>
             </div>
           ))}
