@@ -36,6 +36,13 @@ STRIPE_SECRET_KEY=sk_live_...   # or sk_test_... while testing
 STRIPE_WEBHOOK_SECRET=whsec_...  # from the Stripe webhook endpoint you create
 ```
 
+Set this non-secret server configuration as well, using the canonical public
+website URL (without a trailing slash):
+
+```bash
+APP_BASE_URL=https://your-domain.example
+```
+
 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` must also be set in Vercel so the
 build has them. The serverless functions reuse `VITE_SUPABASE_URL` if
 `SUPABASE_URL` is not set.
@@ -58,7 +65,8 @@ The Supabase schema is defined in:
   roster functions
 - `src/supabase/availability_schema.sql` — staff availability and blackout
   records, validation, and admin-only access
-- `src/supabase/rls_hardening.sql` — role-gated admin RLS policies
+- `src/supabase/rls_hardening.sql` — role-gated admin RLS policies and profile
+  privilege protection; re-run it after pulling security updates
 - `src/supabase/booking_modes_upgrade.sql` — one-time upgrade for an existing
   deployment: instant bookings, staff-confirmed requests, and interest-only
   classes now behave differently end to end; re-run it to add transactional
@@ -70,7 +78,8 @@ The Supabase schema is defined in:
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
 `admin_cms_schema.sql`, `availability_schema.sql`, and finally `rls_hardening.sql`.
 For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
-`payment_fulfillment_upgrade.sql`, and `availability_schema.sql` after those
+`payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
+`rls_hardening.sql` after those
 prerequisites. The scripts are idempotent; run them in the Supabase SQL editor
 (or apply via the project's Postgres connection).
 

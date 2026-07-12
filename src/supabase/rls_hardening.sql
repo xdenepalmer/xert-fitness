@@ -43,6 +43,42 @@ drop policy if exists "admin_all_class_sessions" on public.class_sessions;
 create policy "admin_all_class_sessions" on public.class_sessions
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+-- ── profiles: members can update contact details, never their own authority ─
+-- RLS controls row ownership; this trigger protects privileged columns from a
+-- direct PostgREST update that tries to change role or identity fields.
+create or replace function public.guard_profile_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    if tg_op = 'INSERT' then
+      if coalesce(new.role, 'member') <> 'member' then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+    elsif tg_op = 'UPDATE' then
+      if new.id is distinct from old.id then
+        raise exception 'PROFILE_ID_IMMUTABLE';
+      end if;
+      if new.role is distinct from old.role then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+      if new.email is distinct from old.email then
+        raise exception 'PROFILE_EMAIL_MANAGED_BY_AUTH';
+      end if;
+      if new.created_at is distinct from old.created_at then
+        raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
+      end if;
+    end if;
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists before_profile_write on public.profiles;
+create trigger before_profile_write
+  before insert or update on public.profiles
+  for each row execute function public.guard_profile_write();
+
+drop policy if exists "profiles_insert_self" on public.profiles;
+
 -- ── admin_settings: public read stays; writes admin-only ────────────────────
 drop policy if exists "admin_update_admin_settings" on public.admin_settings;
 drop policy if exists "admin_insert_admin_settings" on public.admin_settings;

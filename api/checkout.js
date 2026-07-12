@@ -8,6 +8,21 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+/**
+ * Stripe return URLs must never come from a request Origin header: browsers
+ * and non-browser clients can supply that header themselves. A configured
+ * canonical URL wins; otherwise Vercel's request URL keeps the buyer on the
+ * deployment that created the Checkout Session.
+ */
+export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '') {
+  const candidate = appBaseUrl.trim() || requestUrl;
+  const url = new URL(candidate);
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('Checkout return URL must use HTTP or HTTPS.');
+  }
+  return url.origin;
+}
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -58,11 +73,7 @@ export default async function handler(request) {
           quantity: 1,
         };
 
-    // Redirect URLs are built server-side (never from the client) so a
-    // compromised client can't bounce buyers to another site after payment.
-    const origin =
-      request.headers.get('origin') ||
-      (() => { try { return new URL(request.url).origin; } catch { return ''; } })();
+    const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '');
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',

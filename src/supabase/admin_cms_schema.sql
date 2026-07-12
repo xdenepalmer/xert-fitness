@@ -15,6 +15,35 @@
 -- ── profiles.email ──────────────────────────────────────────────────────────
 alter table public.profiles add column if not exists email text;
 
+-- booking_schema.sql defines the base profile guard before the email column
+-- exists. Once the CMS schema adds it, extend the same trigger so members
+-- cannot replace the contact address staff rely on to identify an account.
+create or replace function public.guard_profile_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    if tg_op = 'INSERT' then
+      if coalesce(new.role, 'member') <> 'member' then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+    elsif tg_op = 'UPDATE' then
+      if new.id is distinct from old.id then
+        raise exception 'PROFILE_ID_IMMUTABLE';
+      end if;
+      if new.role is distinct from old.role then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+      if new.email is distinct from old.email then
+        raise exception 'PROFILE_EMAIL_MANAGED_BY_AUTH';
+      end if;
+      if new.created_at is distinct from old.created_at then
+        raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
+      end if;
+    end if;
+  end if;
+  return new;
+end; $$;
+
 -- Keep the signup trigger writing email too.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$

@@ -45,6 +45,37 @@ returns boolean language sql security definer stable set search_path = public as
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
 $$;
 
+-- RLS controls which rows a member can change, not which columns they can
+-- alter. Keep authority and identity fields server-owned to stop a direct
+-- PostgREST request promoting a member profile to admin.
+create or replace function public.guard_profile_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    if tg_op = 'INSERT' then
+      if coalesce(new.role, 'member') <> 'member' then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+    elsif tg_op = 'UPDATE' then
+      if new.id is distinct from old.id then
+        raise exception 'PROFILE_ID_IMMUTABLE';
+      end if;
+      if new.role is distinct from old.role then
+        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+      if new.created_at is distinct from old.created_at then
+        raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
+      end if;
+    end if;
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists before_profile_write on public.profiles;
+create trigger before_profile_write
+  before insert or update on public.profiles
+  for each row execute function public.guard_profile_write();
+
 
 -- ── products (session packs) ────────────────────────────────────────────────
 create table if not exists public.products (
@@ -354,8 +385,9 @@ create policy "profiles_select_own_or_admin" on public.profiles
 create policy "profiles_update_own_or_admin" on public.profiles
   for update to authenticated using (id = auth.uid() or public.is_admin())
   with check (id = auth.uid() or public.is_admin());
-create policy "profiles_insert_self" on public.profiles
-  for insert to authenticated with check (id = auth.uid());
+-- Profile rows are created only by handle_new_user() in the Auth trigger.
+-- Members may update their contact fields after that, but cannot seed a row
+-- with arbitrary identity metadata through the browser API.
 
 -- products: public may read active packs; admins manage.
 alter table public.products enable row level security;
