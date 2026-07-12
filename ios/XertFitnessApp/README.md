@@ -49,7 +49,7 @@ The repository-root `codemagic.yaml` has two macOS workflows:
 - `ios-verify` runs on pushes and pull requests to `main`; it generates the XcodeGen project and executes the Swift unit tests on an available iPhone simulator without code signing.
 - `ios-testflight` is a manual, signed TestFlight release workflow. It runs the same tests, increments the App Store build number, creates an IPA, and uploads it to TestFlight.
 
-Add these application environment variables in the XERT Fitness app's Codemagic settings. They are deliberately not stored in a shared team variable group, so the automatic verification workflow can run for every team member:
+Create the XERT-specific Codemagic environment group named `xert_env` and add these variables to it. The same group is loaded by both workflows:
 
 ```text
 SUPABASE_URL       # Supabase project URL
@@ -58,6 +58,8 @@ VERCEL_BASE_URL    # deployed Vercel https:// URL
 ```
 
 `ios-verify` can run without these variables: it uses compile-only placeholders and never makes a service request. `ios-testflight` requires the real values and stops with a clear setup error when one is absent.
+
+Codemagic discovers the repository configuration from the root-level `codemagic.yaml` filename. A separate `config.yaml` is not a Codemagic workflow file and is intentionally not used.
 
 The signed release workflow also loads the shared `appstore` group. It expects the secure `CERTIFICATE_PRIVATE_KEY` supplied by the team (with compatible legacy fallback names) and reuses that key to fetch the existing App Store distribution certificate rather than creating another certificate.
 

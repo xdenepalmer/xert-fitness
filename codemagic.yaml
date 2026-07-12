@@ -16,6 +16,11 @@ workflows:
       xcode: latest
       cocoapods: default
       node: 22
+      groups:
+        # Shared team signing key group.
+        - appstore
+        # XERT-specific Supabase/Vercel runtime values.
+        - xert_env
       vars:
         BUNDLE_ID: com.xertfitness.app
         IOS_DIRECTORY: ios/XertFitnessApp
@@ -76,6 +81,8 @@ workflows:
       groups:
         # Contains the stable distribution certificate private key.
         - appstore
+        # Contains XERT-specific Supabase/Vercel runtime values.
+        - xert_env
       xcode: latest
       cocoapods: default
       node: 22
