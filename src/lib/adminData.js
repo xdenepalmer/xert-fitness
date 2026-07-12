@@ -7,6 +7,7 @@ import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
 import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
 import { dashboardMetricsFromSettled } from './adminMetrics';
+import { normalizePTRequestFilters } from './ptRequestAnalytics';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -157,11 +158,53 @@ export async function updateMemberBookingStatus(id, status) {
 // ─── PT Requests ──────────────────────────────────────────────────────────────
 
 export async function getPTRequests(filters = {}) {
-  let query = supabase.from('private_session_requests').select('*').order('created_at', { ascending: false });
-  if (filters.status) query = query.eq('status', filters.status);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data || [];
+  const normalized = normalizePTRequestFilters(filters);
+  const applyFilters = (query, status = normalized.status) => {
+    let filtered = query;
+    if (status) filtered = filtered.eq('status', status);
+    if (normalized.sessionType) filtered = filtered.eq('requested_session_type', normalized.sessionType);
+    if (normalized.cutoff) filtered = filtered.gte('created_at', normalized.cutoff);
+    if (normalized.search) {
+      const term = `%${normalized.search}%`;
+      filtered = filtered.or([
+        'full_name', 'email', 'phone', 'requested_session_type', 'preferred_day',
+        'preferred_time', 'training_goal', 'experience_level', 'admin_notes'
+      ].map(column => `${column}.ilike.${term}`).join(','));
+    }
+    return filtered;
+  };
+
+  const pageQuery = applyFilters(
+    supabase.from('private_session_requests').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+  ).range(normalized.from, normalized.to);
+  const statusCount = status => applyFilters(
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),
+    status
+  );
+  if (filters.includeSummary === false) {
+    const pageResult = await pageQuery;
+    assertSupabaseResponses([pageResult]);
+    return { rows: pageResult.data || [], total: pageResult.count || 0, page: normalized.page, pageSize: normalized.pageSize, summary: null };
+  }
+  const [pageResult, requested, approved, completed] = await Promise.all([
+    pageQuery,
+    statusCount('requested'),
+    statusCount('approved'),
+    statusCount('completed')
+  ]);
+  assertSupabaseResponses([pageResult, requested, approved, completed]);
+  return {
+    rows: pageResult.data || [],
+    total: pageResult.count || 0,
+    page: normalized.page,
+    pageSize: normalized.pageSize,
+    summary: {
+      total: pageResult.count || 0,
+      requested: normalized.status && normalized.status !== 'requested' ? 0 : requested.count || 0,
+      approved: normalized.status && normalized.status !== 'approved' ? 0 : approved.count || 0,
+      completed: normalized.status && normalized.status !== 'completed' ? 0 : completed.count || 0
+    }
+  };
 }
 
 export async function updatePTRequestStatus(id, status, admin_notes) {

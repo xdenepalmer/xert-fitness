@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   filterPTRequests,
   isPendingPTRequest,
+  normalizePTRequestFilters,
   ptRequestCsvRows,
   summarizePTRequests,
 } from '../src/lib/ptRequestAnalytics.js';
@@ -20,6 +21,25 @@ test('filters PT requests by search, status, session type, and age', () => {
   assert.deepEqual(filterPTRequests(requests, { status: 'approved', days: 'all' }, NOW).map(row => row.id), ['b']);
   assert.deepEqual(filterPTRequests(requests, { search: 'after work', days: 'all' }, NOW).map(row => row.id), ['b']);
   assert.deepEqual(filterPTRequests(requests, { search: 'STRENGTH', days: 'all' }, NOW).map(row => row.id), ['a']);
+});
+
+test('normalizes bounded server filters for the PT operations queue', () => {
+  const filters = normalizePTRequestFilters({
+    page: 2,
+    pageSize: 50,
+    search: ' Alex, (Strength) ',
+    status: 'requested',
+    sessionType: '60-minute PT session',
+    days: '30'
+  }, NOW);
+
+  assert.equal(filters.from, 50);
+  assert.equal(filters.to, 99);
+  assert.equal(filters.search, 'Alex Strength');
+  assert.equal(filters.status, 'requested');
+  assert.equal(filters.cutoff, new Date(NOW - 30 * 86400000).toISOString());
+  assert.throws(() => normalizePTRequestFilters({ status: 'unknown' }), /valid PT request status/);
+  assert.throws(() => normalizePTRequestFilters({ days: '365' }), /valid PT request age/);
 });
 
 test('summarizes the filtered PT workload', () => {

@@ -253,7 +253,7 @@ export default function LeadTable({ type = 'member' }) {
         </div>
       )}
 
-      {error && <div className="mb-4"><AdminLoadError message={error} onRetry={load} /></div>}
+      {error && <div className="mb-4"><AdminLoadError message={error} onRetry={() => load(page)} /></div>}
 
       {/* Table */}
       {loading ? (

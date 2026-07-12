@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { requestPrivateSession } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
+import { PT_SESSION_TYPES } from '@/lib/ptRequestAnalytics';
 
-const SESSION_TYPES = ['30-minute PT session', '45-minute PT session', '60-minute PT session', 'Intro assessment', 'Private coaching block'];
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
 const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1pm)', 'Afternoon (1–5pm)', 'After work (5–7pm)', 'Evening (7pm+)', 'Flexible'];
 const GOALS = ['Strength', 'Conditioning', 'Weight loss / body composition', 'Rehab / return to fitness', 'Event preparation', 'Sport performance', 'General health'];
@@ -66,7 +66,7 @@ export default function PTRequestForm({ onSuccess }) {
       <div>
         <FieldLabel required>Session type</FieldLabel>
         <div className="flex flex-wrap gap-2">
-          {SESSION_TYPES.map(t => (
+          {PT_SESSION_TYPES.map(t => (
             <button type="button" key={t} onClick={() => set('requested_session_type', t)}
               aria-pressed={form.requested_session_type === t}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.requested_session_type === t ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>

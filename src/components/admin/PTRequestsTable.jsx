@@ -1,10 +1,11 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { Download, RefreshCw } from 'lucide-react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
-import { filterPTRequests, isPendingPTRequest, ptRequestCsvRows, summarizePTRequests } from '@/lib/ptRequestAnalytics';
+import { isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows } from '@/lib/ptRequestAnalytics';
+import { collectAdminPages } from '@/lib/adminLeads';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
@@ -15,48 +16,113 @@ const STATUS_COLORS = {
   completed: 'bg-green-700/30 text-green-300',
   cancelled: 'bg-xert-steel/20 text-xert-concrete/30',
 };
+const PAGE_SIZE = 50;
+const EMPTY_SUMMARY = { total: 0, requested: 0, approved: 0, completed: 0 };
 
 export default function PTRequestsTable() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sessionTypeFilter, setSessionTypeFilter] = useState('all');
   const [daysFilter, setDaysFilter] = useState('30');
   const [notesModal, setNotesModal] = useState(null);
   const [notes, setNotes] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const requestIdRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = 1) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setLoadError('');
     try {
-      setRequests(await getPTRequests());
+      const result = await getPTRequests({
+        search: debouncedSearch,
+        status: statusFilter,
+        sessionType: sessionTypeFilter,
+        days: daysFilter,
+        page: targetPage,
+        pageSize: PAGE_SIZE
+      });
+      if (requestId !== requestIdRef.current) return;
+      setRequests(result.rows);
+      setSummary(result.summary || EMPTY_SUMMARY);
+      setTotal(result.total);
+      setPage(result.page);
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       setLoadError(error.message || 'Check the private session requests table and admin permissions.');
+      setRequests([]);
+      setSummary(EMPTY_SUMMARY);
+      setTotal(0);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, []);
+  }, [daysFilter, debouncedSearch, sessionTypeFilter, statusFilter]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const sessionTypes = useMemo(() => [...new Set(requests.map(request => request.requested_session_type).filter(Boolean))].sort(), [requests]);
-  const filteredRequests = useMemo(() => filterPTRequests(requests, {
-    search,
-    status: statusFilter,
-    sessionType: sessionTypeFilter,
-    days: daysFilter,
-  }), [daysFilter, requests, search, sessionTypeFilter, statusFilter]);
-  const summary = useMemo(() => summarizePTRequests(filteredRequests), [filteredRequests]);
+  useEffect(() => { void load(1); }, [load]);
+  useEffect(() => () => { requestIdRef.current += 1; }, []);
+
+  const sessionTypes = useMemo(() => [...new Set([...PT_SESSION_TYPES, ...requests.map(request => request.requested_session_type).filter(Boolean)])].sort(), [requests]);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, total);
+
+  const goToPage = targetPage => {
+    setNotesModal(null);
+    void load(targetPage);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const rows = await collectAdminPages(targetPage => getPTRequests({
+        search: debouncedSearch,
+        status: statusFilter,
+        sessionType: sessionTypeFilter,
+        days: daysFilter,
+        page: targetPage,
+        pageSize: 100,
+        includeSummary: false
+      }));
+      if (rows.length === 0) throw new Error('No matching PT requests to export.');
+      downloadCsv(
+        `xert-pt-requests-${new Date().toISOString().slice(0, 10)}.csv`,
+        ptRequestCsvRows(rows),
+        [
+          { key: 'created_at', label: 'Requested' }, { key: 'status', label: 'Status' },
+          { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+          { key: 'phone', label: 'Phone' }, { key: 'session_type', label: 'Session type' },
+          { key: 'preferred_day', label: 'Preferred day' }, { key: 'preferred_time', label: 'Preferred time' },
+          { key: 'training_goal', label: 'Training goal' }, { key: 'experience_level', label: 'Experience level' },
+          { key: 'notes', label: 'Member notes' }, { key: 'admin_notes', label: 'Admin notes' },
+        ]
+      );
+      toast({ title: 'CSV exported', description: `${rows.length} filtered PT request${rows.length === 1 ? '' : 's'} downloaded.` });
+    } catch (error) {
+      toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleUpdate = async (id, status, adminNotes) => {
     setUpdatingId(id);
     try {
       await updatePTRequestStatus(id, status, adminNotes);
       toast({ title: adminNotes === undefined ? 'PT request updated' : 'Notes saved', description: adminNotes === undefined ? `Request is now ${status.replace(/_/g, ' ')}.` : undefined });
-      await load();
+      await load(1);
       if (adminNotes !== undefined) setNotesModal(null);
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
@@ -69,20 +135,9 @@ export default function PTRequestsTable() {
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">PT Request Operations</h2>
-        <button type="button" onClick={() => downloadCsv(
-          `xert-pt-requests-${new Date().toISOString().slice(0, 10)}.csv`,
-          ptRequestCsvRows(filteredRequests),
-          [
-            { key: 'created_at', label: 'Requested' }, { key: 'status', label: 'Status' },
-            { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-            { key: 'phone', label: 'Phone' }, { key: 'session_type', label: 'Session type' },
-            { key: 'preferred_day', label: 'Preferred day' }, { key: 'preferred_time', label: 'Preferred time' },
-            { key: 'training_goal', label: 'Training goal' }, { key: 'experience_level', label: 'Experience level' },
-            { key: 'notes', label: 'Member notes' }, { key: 'admin_notes', label: 'Admin notes' },
-          ]
-        )} disabled={filteredRequests.length === 0}
+        <button type="button" onClick={() => void handleExport()} disabled={total === 0 || exporting || loading}
           className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
-          <Download className="w-3.5 h-3.5" /> CSV
+          <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting...' : 'CSV'}
         </button>
       </div>
 
@@ -104,7 +159,7 @@ export default function PTRequestsTable() {
             className="flex-1 min-w-0 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
             <option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option>
           </select>
-          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh PT requests" aria-label="Refresh PT requests"
+          <button type="button" onClick={() => void load(page)} disabled={loading} title="Refresh PT requests" aria-label="Refresh PT requests"
             className="min-w-11 min-h-11 p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -128,15 +183,15 @@ export default function PTRequestsTable() {
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={load} />
-      ) : filteredRequests.length === 0 ? (
+        <AdminLoadError message={loadError} onRetry={() => load(page)} />
+      ) : requests.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No matching PT requests</p>
           <p className="font-body text-sm text-xert-concrete/40">Adjust the filters or refresh the queue.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredRequests.map(r => (
+          {requests.map(r => (
             <div key={r.id} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
@@ -185,6 +240,23 @@ export default function PTRequestsTable() {
         </div>
       )}
 
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="font-body text-xs text-xert-concrete/40">
+          {total === 0 ? '0 results' : `${firstResult}-${lastResult} of ${total} results`}
+        </p>
+        {pageCount > 1 && (
+          <nav aria-label="PT request result pages" className="flex items-center gap-2">
+            <button type="button" onClick={() => goToPage(page - 1)} disabled={loading || page <= 1} title="Previous page" aria-label="Previous PT request page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => goToPage(page + 1)} disabled={loading || page >= pageCount} title="Next page" aria-label="Next PT request page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </nav>
+        )}
+      </div>
+
       {notesModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div role="dialog" aria-modal="true" aria-labelledby="pt-notes-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
@@ -192,9 +264,9 @@ export default function PTRequestsTable() {
             <textarea aria-label={`Admin notes for ${notesModal.full_name}`} maxLength={5000} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
-              <button disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
+              <button type="button" disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
-              <button disabled={updatingId === notesModal.id} onClick={() => void handleUpdate(notesModal.id, notesModal.status, notes)}
+              <button type="button" disabled={updatingId === notesModal.id} onClick={() => void handleUpdate(notesModal.id, notesModal.status, notes)}
                 className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
