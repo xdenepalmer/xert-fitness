@@ -106,7 +106,7 @@ export async function duplicateClassSession(session) {
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 
 export async function getClassBookings(filters = {}) {
-  let query = supabase.from('class_bookings').select('*, class_sessions(title, start_time)').order('created_at', { ascending: false });
+  let query = supabase.from('class_bookings').select('*, class_sessions(title, start_time, coach_name, location_zone)').order('created_at', { ascending: false });
   if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
   if (filters.status) query = query.eq('status', filters.status);
   const { data, error } = await query;

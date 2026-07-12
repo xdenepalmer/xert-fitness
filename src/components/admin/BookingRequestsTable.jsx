@@ -1,11 +1,13 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { RefreshCw } from 'lucide-react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import { Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
   updateMemberBookingStatus, updateAdminNotes,
 } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { downloadCsv } from '@/lib/csv';
+import { bookingCsvRows, filterAdminBookings, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -22,7 +24,10 @@ export default function BookingRequestsTable() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [daysFilter, setDaysFilter] = useState('30');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [notes, setNotes] = useState('');
   const [updatingKey, setUpdatingKey] = useState('');
@@ -33,8 +38,8 @@ export default function BookingRequestsTable() {
     setLoadError('');
     try {
       const [legacy, members] = await Promise.all([
-        getClassBookings({ status: statusFilter || undefined }),
-        getMemberBookingRequests({ status: statusFilter || undefined }),
+        getClassBookings(),
+        getMemberBookingRequests(),
       ]);
       const rows = [
         ...legacy.map(booking => ({
@@ -59,9 +64,17 @@ export default function BookingRequestsTable() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const filteredBookings = useMemo(() => filterAdminBookings(bookings, {
+    search,
+    status: statusFilter,
+    source: sourceFilter,
+    days: daysFilter,
+  }), [bookings, daysFilter, search, sourceFilter, statusFilter]);
+  const summary = useMemo(() => summarizeAdminBookings(filteredBookings), [filteredBookings]);
 
   const handleStatusUpdate = async (booking, status) => {
     const actionKey = `${booking.source}-${booking.id}`;
@@ -98,30 +111,74 @@ export default function BookingRequestsTable() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Booking Operations</h2>
+        <button type="button" onClick={() => downloadCsv(
+          `xert-bookings-${new Date().toISOString().slice(0, 10)}.csv`,
+          bookingCsvRows(filteredBookings),
+          [
+            { key: 'created_at', label: 'Requested' }, { key: 'source', label: 'Source' },
+            { key: 'status', label: 'Status' }, { key: 'name', label: 'Name' },
+            { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+            { key: 'class', label: 'Class' }, { key: 'class_start', label: 'Class start' },
+            { key: 'coach', label: 'Coach' }, { key: 'location', label: 'Location' },
+            { key: 'credit_reserved', label: 'Credit reserved' }, { key: 'admin_notes', label: 'Admin notes' },
+          ]
+        )} disabled={filteredBookings.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
+          <Download className="w-3.5 h-3.5" /> CSV
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search member, contact or class" aria-label="Search bookings"
+          className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} aria-label="Filter bookings by status"
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-          <option value="">All statuses</option>
+          <option value="all">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button type="button" onClick={() => void load()} disabled={loading} title="Refresh booking requests" aria-label="Refresh booking requests"
-          className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} aria-label="Filter bookings by source" className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+          <option value="all">All sources</option><option value="member">Member credit</option><option value="enquiry">Enquiry form</option>
+        </select>
+        <div className="flex gap-2">
+          <select value={daysFilter} onChange={e => setDaysFilter(e.target.value)} aria-label="Filter bookings by age" className="flex-1 min-w-0 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option>
+          </select>
+          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh booking requests" aria-label="Refresh booking requests"
+            className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {[
+          { label: 'Matching', value: summary.total },
+          { label: 'Requested', value: summary.requested },
+          { label: 'Confirmed', value: summary.confirmed },
+          { label: 'Attended', value: summary.attendance },
+        ].map(item => (
+          <div key={item.label} className="bg-xert-ink border border-xert-steel/20 p-4">
+            <p className="font-display text-2xl text-xert-offwhite tabular-nums">{item.value}</p>
+            <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider mt-1">{item.label}</p>
+          </div>
+        ))}
       </div>
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
         <AdminLoadError message={loadError} onRetry={load} />
-      ) : bookings.length === 0 ? (
+      ) : filteredBookings.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No booking requests</p>
+          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No matching bookings</p>
+          <p className="font-body text-sm text-xert-concrete/40">Adjust the filters or refresh the queue.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {bookings.map(b => (
-            <div key={b.id} className="bg-xert-ink border border-xert-steel/20 p-4">
+          {filteredBookings.map(b => (
+            <div key={`${b.source}-${b.id}`} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
