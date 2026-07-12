@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
@@ -15,16 +16,21 @@ const STATUS_COLORS = {
 export default function PTRequestsTable() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [notesModal, setNotesModal] = useState(null);
   const [notes, setNotes] = useState('');
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    getPTRequests({ status: statusFilter || undefined }).then(data => {
-      setRequests(data);
+    setLoadError('');
+    try {
+      setRequests(await getPTRequests({ status: statusFilter || undefined }));
+    } catch (error) {
+      setLoadError(error.message || 'Check the private session requests table and admin permissions.');
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
   };
 
   useEffect(() => { load(); }, [statusFilter]);
@@ -45,6 +51,8 @@ export default function PTRequestsTable() {
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
+      ) : loadError ? (
+        <AdminLoadError message={loadError} onRetry={load} />
       ) : requests.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No PT requests</p>

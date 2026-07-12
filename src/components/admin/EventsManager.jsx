@@ -7,6 +7,7 @@ import {
   deleteEvent,
   seedXertEventCalendar,
 } from '@/lib/adminData';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
 
@@ -107,15 +108,23 @@ function EventEditor({ event, onSave, onCancel }) {
 export default function EventsManager() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [seeding, setSeeding] = useState(false);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    getAllEvents().then(d => { setEvents(d); setLoading(false); }).catch(() => setLoading(false));
+    setLoadError('');
+    try {
+      setEvents(await getAllEvents());
+    } catch (error) {
+      setLoadError(error.message || 'Check the events table and admin permissions.');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
@@ -174,6 +183,8 @@ export default function EventsManager() {
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
+      ) : loadError ? (
+        <AdminLoadError message={loadError} onRetry={load} />
       ) : filtered.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">

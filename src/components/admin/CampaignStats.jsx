@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 export default function CampaignStats() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      const { data: members } = await supabase.from('member_interest').select('utm_source, utm_medium, utm_campaign, source, created_at');
+  const load = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const { data: members, error } = await supabase.from('member_interest').select('utm_source, utm_medium, utm_campaign, source, created_at');
+      if (error) throw error;
       
       const sourceCounts = {};
       const campaignCounts = {};
@@ -32,12 +37,19 @@ export default function CampaignStats() {
         weeklySignups: Object.entries(weeklySignups).sort().slice(-14),
         total: (members || []).length,
       });
+    } catch (error) {
+      setLoadError(error.message || 'Check the member interest table and admin permissions.');
+    } finally {
       setLoading(false);
-    };
-    fetchAll().catch(() => setLoading(false));
+    }
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   if (loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
+  if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
 
   return (
     <div className="p-6 space-y-8">

@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 export default function SoftLaunchSettings() {
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const loadedSettings = await getSoftLaunchSettings();
+      if (loadedSettings) setSettings(loadedSettings);
+    } catch (error) {
+      setLoadError(error.message || 'Check the admin settings table and admin permissions.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getSoftLaunchSettings().then(s => {
-      if (s) setSettings(s);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    load();
   }, []);
 
   const set = (k, v) => setSettings(p => ({ ...p, [k]: v }));
@@ -31,6 +43,7 @@ export default function SoftLaunchSettings() {
   };
 
   if (loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
+  if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
 
   const Toggle = ({ label, desc, field }) => (
     <div className="flex items-start justify-between gap-4 py-4 border-b border-xert-steel/20">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
 import ImageUploader from '@/components/admin/ImageUploader';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const CATEGORIES = [
   { value: 'coach', label: 'Coach' },
@@ -106,12 +107,20 @@ function CoachEditor({ coach, onSave, onCancel }) {
 export default function CoachesManager() {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    getAllCoaches().then(d => { setCoaches(d); setLoading(false); }).catch(() => setLoading(false));
+    setLoadError('');
+    try {
+      setCoaches(await getAllCoaches());
+    } catch (error) {
+      setLoadError(error.message || 'Check the coaches table and admin permissions.');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
@@ -132,6 +141,8 @@ export default function CoachesManager() {
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
+      ) : loadError ? (
+        <AdminLoadError message={loadError} onRetry={load} />
       ) : coaches.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No team members yet</p>

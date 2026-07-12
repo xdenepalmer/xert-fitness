@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
   Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
-  ShieldCheck,
+  CircleAlert, ShieldCheck,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
@@ -69,6 +69,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [badges, setBadges] = useState({});
+  const [badgesUnavailable, setBadgesUnavailable] = useState(false);
   const { user, profile, signOut } = useSupabaseAuth();
 
   // ⌘K / Ctrl+K opens the command palette.
@@ -85,7 +86,19 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
 
   // Attention badges (new leads, pending requests) — refresh on section change.
   useEffect(() => {
-    getAdminBadgeCounts().then(setBadges).catch(() => {});
+    let active = true;
+    getAdminBadgeCounts()
+      .then(data => {
+        if (!active) return;
+        setBadges(data);
+        setBadgesUnavailable(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setBadges({});
+        setBadgesUnavailable(true);
+      });
+    return () => { active = false; };
   }, [activeSection]);
 
   const activeLabel = ALL_ITEMS.find(n => n.key === activeSection)?.label || 'Command Centre';
@@ -108,9 +121,13 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
           <div className="relative">
             <img src={LOGO} alt="XERT" className="h-7 w-auto mb-2" style={{ filter: 'brightness(0) invert(1)' }} />
             <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
+              {badgesUnavailable ? (
+                <CircleAlert className="w-3.5 h-3.5" style={{ color: '#e0b36a' }} />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
+              )}
               <p className="font-display text-[11px] uppercase tracking-[0.3em]" style={{ color: 'rgba(123,167,188,0.75)' }}>
-                Command Centre
+                {badgesUnavailable ? 'Counts unavailable' : 'Command Centre'}
               </p>
             </div>
           </div>
