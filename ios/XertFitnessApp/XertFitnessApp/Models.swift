@@ -268,8 +268,8 @@ struct PrivateSessionRequest: Encodable, Equatable {
         guard !normalizedType.isEmpty else { throw APIError(message: "Choose a session type.") }
 
         full_name = normalizedName
-        email = normalizedEmail
-        phone = normalizedPhone
+        self.email = normalizedEmail
+        self.phone = normalizedPhone
         requested_session_type = normalizedType
         preferred_day = preferredDay.trimmedNilIfEmpty
         preferred_time = preferredTime.trimmedNilIfEmpty
@@ -310,8 +310,8 @@ struct ClassInterestRequest: Encodable, Equatable {
 
         class_session_id = sessionID
         full_name = normalizedName
-        email = normalizedEmail
-        phone = normalizedPhone
+        self.email = normalizedEmail
+        self.phone = normalizedPhone
         training_level = trainingLevel.trimmedNilIfEmpty
         self.notes = notes.trimmedNilIfEmpty
         consent_to_contact = true
