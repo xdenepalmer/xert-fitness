@@ -198,3 +198,59 @@ struct AuthResponse: Codable {
 struct CheckoutResponse: Codable {
     let url: URL
 }
+
+struct PrivateSessionRequest: Encodable, Equatable {
+    let full_name: String
+    let email: String
+    let phone: String
+    let requested_session_type: String
+    let preferred_day: String?
+    let preferred_time: String?
+    let training_goal: String?
+    let experience_level: String?
+    let notes: String?
+    let consent_to_contact: Bool
+    let status: String
+
+    init(
+        fullName: String,
+        email: String,
+        phone: String,
+        sessionType: String,
+        preferredDay: String = "",
+        preferredTime: String = "",
+        trainingGoal: String = "",
+        experienceLevel: String = "",
+        notes: String = ""
+    ) throws {
+        let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedType = sessionType.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else { throw APIError(message: "Enter your full name.") }
+        guard normalizedEmail.contains("@"), normalizedEmail.contains(".") else {
+            throw APIError(message: "Enter a valid email address.")
+        }
+        guard !normalizedPhone.isEmpty else { throw APIError(message: "Enter your mobile number.") }
+        guard !normalizedType.isEmpty else { throw APIError(message: "Choose a session type.") }
+
+        full_name = normalizedName
+        email = normalizedEmail
+        phone = normalizedPhone
+        requested_session_type = normalizedType
+        preferred_day = preferredDay.trimmedNilIfEmpty
+        preferred_time = preferredTime.trimmedNilIfEmpty
+        training_goal = trainingGoal.trimmedNilIfEmpty
+        experience_level = experienceLevel.trimmedNilIfEmpty
+        self.notes = notes.trimmedNilIfEmpty
+        consent_to_contact = true
+        status = "requested"
+    }
+}
+
+private extension String {
+    var trimmedNilIfEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+}

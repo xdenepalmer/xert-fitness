@@ -2,6 +2,40 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testPrivateSessionRequestNormalizesRequiredAndOptionalFields() throws {
+        let request = try PrivateSessionRequest(
+            fullName: "  Alex Runner  ",
+            email: " ALEX@EXAMPLE.COM ",
+            phone: " 0400 123 456 ",
+            sessionType: "60-minute PT session",
+            preferredDay: "Flexible",
+            notes: "   "
+        )
+
+        XCTAssertEqual(request.full_name, "Alex Runner")
+        XCTAssertEqual(request.email, "alex@example.com")
+        XCTAssertEqual(request.phone, "0400 123 456")
+        XCTAssertEqual(request.preferred_day, "Flexible")
+        XCTAssertNil(request.notes)
+        XCTAssertTrue(request.consent_to_contact)
+        XCTAssertEqual(request.status, "requested")
+    }
+
+    func testPrivateSessionRequestRejectsInvalidRequiredFields() {
+        XCTAssertThrowsError(try PrivateSessionRequest(
+            fullName: "Alex",
+            email: "invalid",
+            phone: "0400 123 456",
+            sessionType: "Intro assessment"
+        ))
+        XCTAssertThrowsError(try PrivateSessionRequest(
+            fullName: "Alex",
+            email: "alex@example.com",
+            phone: "",
+            sessionType: "Intro assessment"
+        ))
+    }
+
     func testPublicDataCacheRoundTripsAndRejectsExpiredData() throws {
         let suiteName = "PublicDataCacheTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

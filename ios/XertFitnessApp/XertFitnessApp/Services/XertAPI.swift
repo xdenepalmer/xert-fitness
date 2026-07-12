@@ -246,6 +246,19 @@ final class XertAPI {
         return response.url
     }
 
+    func requestPrivateSession(_ requestBody: PrivateSessionRequest) async throws {
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/private_session_requests"
+        )
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+        try await perform(request)
+    }
+
     func deleteAccount(session auth: AuthSession) async throws {
         let response: DeleteAccountResponse = try await vercelRequest(
             path: "/api/delete-account",

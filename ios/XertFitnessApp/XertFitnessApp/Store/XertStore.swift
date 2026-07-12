@@ -19,6 +19,7 @@ final class XertStore: ObservableObject {
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
     @Published var isDeletingAccount = false
+    @Published var isRequestingPrivateSession = false
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -312,6 +313,20 @@ final class XertStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    @discardableResult
+    func requestPrivateSession(_ request: PrivateSessionRequest) async -> Bool {
+        isRequestingPrivateSession = true
+        errorMessage = nil
+        defer { isRequestingPrivateSession = false }
+        do {
+            try await api.requestPrivateSession(request)
+            return true
+        } catch {
+            present(error)
+            return false
         }
     }
 

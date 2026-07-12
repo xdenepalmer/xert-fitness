@@ -3,6 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.openURL) private var openURL
+    @State private var isShowingPTRequest = false
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -137,10 +138,28 @@ struct BookingView: View {
                         }
                     }
                 }
+
+                Section("Personal Training") {
+                    Text("Request one-on-one coaching around your goals and availability.")
+                        .foregroundStyle(.secondary)
+                    Button {
+                        isShowingPTRequest = true
+                    } label: {
+                        Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
+                    }
+                }
             }
             .navigationTitle("Book")
             .refreshable {
                 await store.refresh()
+            }
+            .sheet(isPresented: $isShowingPTRequest) {
+                PrivateSessionRequestView(
+                    initialName: store.profile?.full_name ?? "",
+                    initialEmail: store.authSession?.user?.email ?? store.profile?.email ?? "",
+                    initialPhone: store.profile?.phone ?? ""
+                )
+                .environmentObject(store)
             }
         }
     }
@@ -151,5 +170,154 @@ struct BookingView: View {
                 .filter { $0.status == "requested" || $0.status == "confirmed" }
                 .map { ($0.session_id, $0) }
         )
+    }
+}
+
+private struct PrivateSessionRequestView: View {
+    @EnvironmentObject private var store: XertStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var fullName: String
+    @State private var email: String
+    @State private var phone: String
+    @State private var sessionType = ""
+    @State private var preferredDay = ""
+    @State private var preferredTime = ""
+    @State private var trainingGoal = ""
+    @State private var experienceLevel = ""
+    @State private var notes = ""
+    @State private var consentsToContact = false
+    @State private var validationMessage: String?
+    @State private var submitted = false
+
+    private let sessionTypes = ["30-minute PT session", "45-minute PT session", "60-minute PT session", "Intro assessment", "Private coaching block"]
+    private let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Flexible"]
+    private let times = ["Early morning (5-8am)", "Morning (8-11am)", "Lunch (11am-1pm)", "Afternoon (1-5pm)", "After work (5-7pm)", "Evening (7pm+)", "Flexible"]
+    private let goals = ["Strength", "Conditioning", "Weight loss / body composition", "Rehab / return to fitness", "Event preparation", "Sport performance", "General health"]
+    private let experience = ["Complete beginner", "Some experience", "Regular trainer", "Advanced"]
+
+    init(initialName: String, initialEmail: String, initialPhone: String) {
+        _fullName = State(initialValue: initialName)
+        _email = State(initialValue: initialEmail)
+        _phone = State(initialValue: initialPhone)
+    }
+
+    var body: some View {
+        NavigationStack {
+            if submitted {
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.xertSteel)
+                    Text("Request Received")
+                        .font(.title2.bold())
+                    Text("The XERT team will contact you to confirm availability.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.xertSteel)
+                }
+                .padding(32)
+            } else {
+                Form {
+                    Section("Contact") {
+                        TextField("Full name", text: $fullName)
+                            .textContentType(.name)
+                        TextField("Email", text: $email)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                        TextField("Mobile number", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                    }
+
+                    Section("Session") {
+                        Picker("Session type", selection: $sessionType) {
+                            Text("Choose a session").tag("")
+                            ForEach(sessionTypes, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Preferred day", selection: $preferredDay) {
+                            Text("Any day").tag("")
+                            ForEach(days, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Preferred time", selection: $preferredTime) {
+                            Text("Any time").tag("")
+                            ForEach(times, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
+
+                    Section("Training") {
+                        Picker("Goal", selection: $trainingGoal) {
+                            Text("Choose a goal").tag("")
+                            ForEach(goals, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Experience", selection: $experienceLevel) {
+                            Text("Choose a level").tag("")
+                            ForEach(experience, id: \.self) { Text($0).tag($0) }
+                        }
+                        TextField("Notes for your coach", text: $notes, axis: .vertical)
+                            .lineLimit(2...5)
+                    }
+
+                    Section {
+                        Toggle("XERT may contact me about this request", isOn: $consentsToContact)
+                        if let validationMessage {
+                            Text(validationMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                        Button {
+                            submit()
+                        } label: {
+                            HStack {
+                                Label("Send PT Request", systemImage: "paperplane.fill")
+                                Spacer()
+                                if store.isRequestingPrivateSession { ProgressView() }
+                            }
+                        }
+                        .disabled(store.isRequestingPrivateSession)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Personal Training")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+            }
+        }
+    }
+
+    private func submit() {
+        validationMessage = nil
+        guard consentsToContact else {
+            validationMessage = "Consent to contact is required."
+            return
+        }
+        do {
+            let request = try PrivateSessionRequest(
+                fullName: fullName,
+                email: email,
+                phone: phone,
+                sessionType: sessionType,
+                preferredDay: preferredDay,
+                preferredTime: preferredTime,
+                trainingGoal: trainingGoal,
+                experienceLevel: experienceLevel,
+                notes: notes
+            )
+            Task {
+                let succeeded = await store.requestPrivateSession(request)
+                if succeeded {
+                    submitted = true
+                } else {
+                    validationMessage = store.errorMessage ?? "The request could not be sent. Please try again."
+                    store.errorMessage = nil
+                }
+            }
+        } catch {
+            validationMessage = error.localizedDescription
+        }
     }
 }
