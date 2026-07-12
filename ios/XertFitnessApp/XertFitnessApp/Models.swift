@@ -159,6 +159,14 @@ struct AuthSession: Codable, Hashable {
     let expires_at: Int?
     let token_type: String?
     let user: AuthUser?
+
+    func needsRefresh(
+        now: Date = Date(),
+        leeway: TimeInterval = 2 * 60
+    ) -> Bool {
+        guard let expires_at else { return false }
+        return TimeInterval(expires_at) <= now.timeIntervalSince1970 + leeway
+    }
 }
 
 struct AuthUser: Codable, Hashable {

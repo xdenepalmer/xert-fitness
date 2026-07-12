@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
 
     var body: some View {
@@ -40,6 +41,10 @@ struct RootView: View {
             }
         } message: {
             Text(store.errorMessage ?? "")
+        }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active, store.hasBootstrapped, !store.isLoading else { return }
+            Task { await store.refresh() }
         }
     }
 }

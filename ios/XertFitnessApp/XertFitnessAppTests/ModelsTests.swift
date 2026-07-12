@@ -71,6 +71,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(AppConfig.webURL(path: "reset-password").path, "/reset-password")
     }
 
+    func testAuthSessionRefreshesBeforeExpiryButNotWhileComfortablyValid() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let expiring = authSession(expiresAt: Int(now.timeIntervalSince1970) + 90)
+        let valid = authSession(expiresAt: Int(now.timeIntervalSince1970) + 600)
+        let unknown = authSession(expiresAt: nil)
+
+        XCTAssertTrue(expiring.needsRefresh(now: now))
+        XCTAssertFalse(valid.needsRefresh(now: now))
+        XCTAssertFalse(unknown.needsRefresh(now: now))
+    }
+
     func testWebBaseURLAcceptsAHostnameAndRejectsUnsafeSchemes() {
         XCTAssertEqual(
             AppConfig.normalizedWebBaseURL("xert-fitness.vercel.app")?.absoluteString,
@@ -220,6 +231,17 @@ final class ModelsTests: XCTestCase {
             end_time: nil,
             location_zone: nil,
             intensity_level: nil
+        )
+    }
+
+    private func authSession(expiresAt: Int?) -> AuthSession {
+        AuthSession(
+            access_token: "access-token",
+            refresh_token: "refresh-token",
+            expires_in: 3600,
+            expires_at: expiresAt,
+            token_type: "bearer",
+            user: nil
         )
     }
 

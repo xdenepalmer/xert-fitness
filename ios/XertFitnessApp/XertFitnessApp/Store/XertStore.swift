@@ -19,8 +19,10 @@ final class XertStore: ObservableObject {
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
     @Published var isDeletingAccount = false
+    @Published private(set) var hasBootstrapped = false
 
     private let api = XertAPI()
+    private var sessionRefreshTask: Task<AuthSession, Error>?
 
     var isSignedIn: Bool {
         authSession != nil
@@ -43,6 +45,7 @@ final class XertStore: ObservableObject {
             }
         }
         await refresh()
+        hasBootstrapped = true
     }
 
     func refresh() async {
@@ -77,7 +80,18 @@ final class XertStore: ObservableObject {
             events = XertEventCalendar.fallback
         }
 
-        if let authSession {
+        var memberSession: AuthSession?
+        if authSession != nil {
+            do {
+                memberSession = try await validAuthSession()
+            } catch {
+                self.authSession = nil
+                KeychainStore.clearSession()
+                present(error)
+            }
+        }
+
+        if let authSession = memberSession {
             async let creditRequest = api.credits(session: authSession)
             async let bookingRequest = api.bookings(session: authSession)
             async let profileRequest = api.profile(session: authSession)
@@ -163,6 +177,8 @@ final class XertStore: ObservableObject {
 
     func signOut() {
         let currentSession = authSession
+        sessionRefreshTask?.cancel()
+        sessionRefreshTask = nil
         authSession = nil
         credits = []
         bookings = []
@@ -179,15 +195,11 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func deleteAccount() async -> Bool {
-        guard let authSession else {
-            errorMessage = "Sign in again before deleting your account."
-            return false
-        }
-
         errorMessage = nil
         isDeletingAccount = true
         defer { isDeletingAccount = false }
         do {
+            let authSession = try await validAuthSession()
             try await api.deleteAccount(session: authSession)
             self.authSession = nil
             credits = []
@@ -204,14 +216,10 @@ final class XertStore: ObservableObject {
     }
 
     func book(_ session: ClassSession) async {
-        guard let authSession else {
-            errorMessage = "Sign in to book a class."
-            return
-        }
-
         bookingSessionID = session.id
         defer { bookingSessionID = nil }
         do {
+            let authSession = try await validAuthSession()
             try await api.book(session: authSession, classSessionID: session.id)
             await refresh()
         } catch {
@@ -220,14 +228,10 @@ final class XertStore: ObservableObject {
     }
 
     func cancel(_ booking: BookingItem) async {
-        guard let authSession else {
-            errorMessage = "Sign in to manage your bookings."
-            return
-        }
-
         cancellingBookingID = booking.id
         defer { cancellingBookingID = nil }
         do {
+            let authSession = try await validAuthSession()
             try await api.cancelBooking(session: authSession, bookingID: booking.id)
             await refresh()
         } catch {
@@ -236,10 +240,6 @@ final class XertStore: ObservableObject {
     }
 
     func toggleEventGoal(_ event: EventItem) async {
-        guard let authSession else {
-            errorMessage = "Sign in to choose an event training goal."
-            return
-        }
         guard let eventID = event.id else {
             errorMessage = "This calendar event will be available to track once it is loaded in XERT."
             return
@@ -248,6 +248,7 @@ final class XertStore: ObservableObject {
         updatingEventGoalID = eventID
         defer { updatingEventGoalID = nil }
         do {
+            let authSession = try await validAuthSession()
             if eventGoalIDs.contains(eventID) {
                 try await api.removeEventGoal(session: authSession, eventID: eventID)
                 eventGoalIDs.remove(eventID)
@@ -261,12 +262,8 @@ final class XertStore: ObservableObject {
     }
 
     func checkoutURL(for product: Product) async -> URL? {
-        guard let authSession else {
-            errorMessage = "Sign in to purchase a session pack."
-            return nil
-        }
-
         do {
+            let authSession = try await validAuthSession()
             return try await api.checkout(session: authSession, productSlug: product.slug)
         } catch {
             errorMessage = error.localizedDescription
@@ -276,18 +273,13 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func updateProfile(fullName: String, phone: String) async -> Bool {
-        guard let authSession else {
-            errorMessage = "Sign in to update your account details."
-            return false
-        }
-        guard let profileID = profile?.id ?? authSession.user?.id else {
-            errorMessage = "Your profile is still being prepared. Please refresh and try again."
-            return false
-        }
-
         isSavingProfile = true
         defer { isSavingProfile = false }
         do {
+            let authSession = try await validAuthSession()
+            guard let profileID = profile?.id ?? authSession.user?.id else {
+                throw APIError(message: "Your profile is still being prepared. Please refresh and try again.")
+            }
             profile = try await api.updateProfile(
                 session: authSession,
                 profileID: profileID,
@@ -314,6 +306,28 @@ final class XertStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func validAuthSession() async throws -> AuthSession {
+        guard let current = authSession else {
+            throw APIError(message: "Sign in to continue.")
+        }
+        guard current.needsRefresh() else { return current }
+        guard current.refresh_token?.isEmpty == false else {
+            throw APIError(message: "Your XERT session has expired. Please sign in again.")
+        }
+
+        if let sessionRefreshTask {
+            return try await sessionRefreshTask.value
+        }
+
+        let refreshTask = Task { try await api.refresh(session: current) }
+        sessionRefreshTask = refreshTask
+        defer { sessionRefreshTask = nil }
+        let refreshed = try await refreshTask.value
+        authSession = refreshed
+        try KeychainStore.saveSession(refreshed)
+        return refreshed
     }
 
     private func friendlyBookingError(_ message: String) -> String {
