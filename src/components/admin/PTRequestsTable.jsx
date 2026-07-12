@@ -1,8 +1,10 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { RefreshCw } from 'lucide-react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import { Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { downloadCsv } from '@/lib/csv';
+import { filterPTRequests, isPendingPTRequest, ptRequestCsvRows, summarizePTRequests } from '@/lib/ptRequestAnalytics';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
@@ -18,7 +20,10 @@ export default function PTRequestsTable() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sessionTypeFilter, setSessionTypeFilter] = useState('all');
+  const [daysFilter, setDaysFilter] = useState('30');
   const [notesModal, setNotesModal] = useState(null);
   const [notes, setNotes] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
@@ -27,15 +32,24 @@ export default function PTRequestsTable() {
     setLoading(true);
     setLoadError('');
     try {
-      setRequests(await getPTRequests({ status: statusFilter || undefined }));
+      setRequests(await getPTRequests());
     } catch (error) {
       setLoadError(error.message || 'Check the private session requests table and admin permissions.');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const sessionTypes = useMemo(() => [...new Set(requests.map(request => request.requested_session_type).filter(Boolean))].sort(), [requests]);
+  const filteredRequests = useMemo(() => filterPTRequests(requests, {
+    search,
+    status: statusFilter,
+    sessionType: sessionTypeFilter,
+    days: daysFilter,
+  }), [daysFilter, requests, search, sessionTypeFilter, statusFilter]);
+  const summary = useMemo(() => summarizePTRequests(filteredRequests), [filteredRequests]);
 
   const handleUpdate = async (id, status, adminNotes) => {
     setUpdatingId(id);
@@ -53,29 +67,76 @@ export default function PTRequestsTable() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">PT Request Operations</h2>
+        <button type="button" onClick={() => downloadCsv(
+          `xert-pt-requests-${new Date().toISOString().slice(0, 10)}.csv`,
+          ptRequestCsvRows(filteredRequests),
+          [
+            { key: 'created_at', label: 'Requested' }, { key: 'status', label: 'Status' },
+            { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+            { key: 'phone', label: 'Phone' }, { key: 'session_type', label: 'Session type' },
+            { key: 'preferred_day', label: 'Preferred day' }, { key: 'preferred_time', label: 'Preferred time' },
+            { key: 'training_goal', label: 'Training goal' }, { key: 'experience_level', label: 'Experience level' },
+            { key: 'notes', label: 'Member notes' }, { key: 'admin_notes', label: 'Admin notes' },
+          ]
+        )} disabled={filteredRequests.length === 0}
+          className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
+          <Download className="w-3.5 h-3.5" /> CSV
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search PT requests" placeholder="Search member, goal or notes"
+          className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} aria-label="Filter PT requests by status"
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-          <option value="">All statuses</option>
+          <option value="all">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => void load()} disabled={loading} title="Refresh PT requests" aria-label="Refresh PT requests"
-          className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <select value={sessionTypeFilter} onChange={e => setSessionTypeFilter(e.target.value)} aria-label="Filter PT requests by session type"
+          className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+          <option value="all">All session types</option>
+          {sessionTypes.map(type => <option key={type} value={type}>{type}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <select value={daysFilter} onChange={e => setDaysFilter(e.target.value)} aria-label="Filter PT requests by age"
+            className="flex-1 min-w-0 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option>
+          </select>
+          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh PT requests" aria-label="Refresh PT requests"
+            className="min-w-11 min-h-11 p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {[
+          { label: 'Matching', value: summary.total },
+          { label: 'Requested', value: summary.requested },
+          { label: 'Approved', value: summary.approved },
+          { label: 'Completed', value: summary.completed },
+        ].map(item => (
+          <div key={item.label} className="bg-xert-ink border border-xert-steel/20 p-4">
+            <p className="font-display text-2xl text-xert-offwhite tabular-nums">{item.value}</p>
+            <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider mt-1">{item.label}</p>
+          </div>
+        ))}
       </div>
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
         <AdminLoadError message={loadError} onRetry={load} />
-      ) : requests.length === 0 ? (
+      ) : filteredRequests.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No PT requests</p>
+          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No matching PT requests</p>
+          <p className="font-body text-sm text-xert-concrete/40">Adjust the filters or refresh the queue.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {requests.map(r => (
+          {filteredRequests.map(r => (
             <div key={r.id} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
@@ -88,28 +149,35 @@ export default function PTRequestsTable() {
                     {r.phone && <> · <a href={`tel:${r.phone}`} className="hover:text-xert-steel">{r.phone}</a></>}
                   </p>
                   <p className="font-body text-xs text-xert-concrete/60 mt-1">
-                    {r.requested_session_type} · {r.preferred_day} {r.preferred_time}
+                    {[r.requested_session_type, [r.preferred_day, r.preferred_time].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
                   </p>
                   {r.training_goal && <p className="font-body text-xs text-xert-concrete/40 mt-0.5">Goal: {r.training_goal}</p>}
+                  {r.notes && <p className="font-body text-xs text-xert-concrete/40 mt-1">Member note: {r.notes}</p>}
                   {r.admin_notes && <p className="font-body text-xs text-xert-concrete/30 mt-1 italic">{r.admin_notes}</p>}
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end shrink-0">
-                  {r.status === 'requested' && (
+                  {isPendingPTRequest(r.status) && (
                     <>
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'approved')}
-                        className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Approve</button>
-                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'reschedule_requested')}
-                        className="px-3 py-1.5 border border-yellow-600/40 font-body text-xs text-yellow-400 transition-colors">Reschedule</button>
+                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Approve</button>
+                      {r.status === 'requested' && (
+                        <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'reschedule_requested')}
+                          className="min-h-11 px-3 py-2.5 border border-yellow-600/40 font-body text-xs text-yellow-400 transition-colors">Reschedule</button>
+                      )}
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'declined')}
-                        className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Decline</button>
+                        className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Decline</button>
                     </>
                   )}
                   {r.status === 'approved' && (
-                    <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'completed')}
-                      className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Mark complete</button>
+                    <>
+                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'completed')}
+                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Mark complete</button>
+                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'cancelled')}
+                        className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Cancel</button>
+                    </>
                   )}
                   <button onClick={() => { setNotesModal(r); setNotes(r.admin_notes || ''); }}
-                    className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">Notes</button>
+                    className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">Notes</button>
                 </div>
               </div>
             </div>
@@ -119,9 +187,9 @@ export default function PTRequestsTable() {
 
       {notesModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
-            <h3 className="font-display text-lg text-xert-offwhite uppercase mb-4">Admin Notes — {notesModal.full_name}</h3>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
+          <div role="dialog" aria-modal="true" aria-labelledby="pt-notes-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
+            <h3 id="pt-notes-title" className="font-display text-lg text-xert-offwhite uppercase mb-4">Admin Notes — {notesModal.full_name}</h3>
+            <textarea aria-label={`Admin notes for ${notesModal.full_name}`} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
               <button disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
