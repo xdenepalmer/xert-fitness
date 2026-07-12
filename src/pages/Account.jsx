@@ -4,7 +4,7 @@ import { CalendarDays, CheckCircle2, Clock, Loader2, Receipt, Ticket, X } from '
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
-import { getMyCredits, getMyBookings, getMyOrders, cancelBooking } from '@/lib/bookingData';
+import { getMyCredits, getMyBookings, getMyOrders, cancelBooking, updateMyProfile } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 
 function formatDateTime(iso) {
@@ -30,6 +30,9 @@ export default function Account() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
 
@@ -49,6 +52,13 @@ export default function Account() {
   useEffect(() => {
     if (session) refresh();
   }, [session, refresh]);
+
+  useEffect(() => {
+    setProfileForm({
+      full_name: profile?.full_name || '',
+      phone: profile?.phone || '',
+    });
+  }, [profile]);
 
   // After a Stripe purchase the webhook may land a moment after redirect —
   // poll briefly so the new credits appear without a manual refresh.
@@ -76,6 +86,23 @@ export default function Account() {
       toast({ title: 'Could not cancel', description: e.message, variant: 'destructive' });
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    try {
+      await updateMyProfile({
+        full_name: profileForm.full_name.trim() || null,
+        phone: profileForm.phone.trim() || null,
+      });
+      setEditingProfile(false);
+      toast({ title: 'Account details saved', description: 'Your contact details are up to date.' });
+    } catch (e) {
+      toast({ title: 'Could not save account details', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -116,6 +143,7 @@ export default function Account() {
   const pending = bookings.filter(b => b.status === 'requested' && new Date(b.start_time) > now);
   const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time) > now);
   const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time) <= now);
+  const displayName = profileForm.full_name.trim() || user?.email;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
@@ -139,7 +167,7 @@ export default function Account() {
               <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>My Account</span>
             </div>
             <h1 className="font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)', lineHeight: 0.95 }}>
-              {profile?.full_name || user?.email}
+              {displayName}
             </h1>
           </div>
           <button onClick={signOut}
@@ -148,6 +176,69 @@ export default function Account() {
             Sign Out
           </button>
         </div>
+
+        {/* Member details */}
+        <section className="mb-10">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+              Account Details
+            </h2>
+            {!editingProfile && (
+              <button onClick={() => setEditingProfile(true)}
+                className="font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors"
+                style={{ borderColor: 'rgba(123,167,188,0.3)', color: '#7BA7BC' }}>
+                Edit
+              </button>
+            )}
+          </div>
+
+          {editingProfile ? (
+            <form onSubmit={handleProfileSave} className="border p-5" style={cardStyle}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                  Full name
+                  <input value={profileForm.full_name}
+                    onChange={e => setProfileForm(current => ({ ...current, full_name: e.target.value }))}
+                    autoComplete="name"
+                    className="block w-full mt-2 px-3 py-2.5 border bg-transparent font-body text-sm text-xert-offwhite focus:outline-none"
+                    style={{ borderColor: 'rgba(123,167,188,0.3)' }} />
+                </label>
+                <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                  Mobile number
+                  <input value={profileForm.phone}
+                    onChange={e => setProfileForm(current => ({ ...current, phone: e.target.value }))}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    className="block w-full mt-2 px-3 py-2.5 border bg-transparent font-body text-sm text-xert-offwhite focus:outline-none"
+                    style={{ borderColor: 'rgba(123,167,188,0.3)' }} />
+                </label>
+              </div>
+              <div className="flex flex-wrap justify-end gap-3 mt-5">
+                <button type="button" onClick={() => { setEditingProfile(false); setProfileForm({ full_name: profile?.full_name || '', phone: profile?.phone || '' }); }}
+                  className="px-4 py-2.5 font-body text-xs uppercase tracking-wider border"
+                  style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.6)' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingProfile}
+                  className="px-4 py-2.5 font-display text-sm uppercase disabled:opacity-50"
+                  style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                  {savingProfile ? 'Saving...' : 'Save details'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="border p-5 grid grid-cols-1 sm:grid-cols-2 gap-5" style={cardStyle}>
+              <div>
+                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }}>Email</p>
+                <p className="font-body text-sm mt-1" style={{ color: '#D1DDE6' }}>{user?.email}</p>
+              </div>
+              <div>
+                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }}>Mobile</p>
+                <p className="font-body text-sm mt-1" style={{ color: '#D1DDE6' }}>{profileForm.phone || 'Not provided'}</p>
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Credits */}
         <section className="mb-10">
