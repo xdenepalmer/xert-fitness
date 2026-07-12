@@ -10,6 +10,98 @@ import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const FULFILLMENT_EVENT_TYPES = new Set([
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+]);
+const FULFILLABLE_PAYMENT_STATUSES = new Set(['paid', 'no_payment_required']);
+
+function parseNonNegativeInteger(value) {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
+ * Returns the durable order and credit records for a Stripe event, or null
+ * when the event does not represent a completed XERT payment.
+ */
+export function checkoutFulfillmentForEvent(event, now = new Date()) {
+  if (!FULFILLMENT_EVENT_TYPES.has(event?.type)) return null;
+
+  const checkout = event.data?.object;
+  if (
+    !checkout ||
+    checkout.mode !== 'payment' ||
+    !FULFILLABLE_PAYMENT_STATUSES.has(checkout.payment_status)
+  ) {
+    return null;
+  }
+
+  const metadata = checkout.metadata || {};
+  const sessions = parseNonNegativeInteger(metadata.sessions_count);
+  const validityDays = parseNonNegativeInteger(metadata.validity_days);
+
+  if (
+    !checkout.id ||
+    !metadata.user_id ||
+    !metadata.product_id ||
+    !sessions ||
+    validityDays === null
+  ) {
+    throw new Error('Checkout metadata is incomplete or invalid.');
+  }
+
+  return {
+    order: {
+      user_id: metadata.user_id,
+      product_id: metadata.product_id,
+      email: checkout.customer_details?.email || checkout.customer_email || null,
+      amount_cents: checkout.amount_total,
+      currency: checkout.currency || 'aud',
+      status: 'paid',
+      stripe_checkout_session_id: checkout.id,
+      stripe_payment_intent_id:
+        typeof checkout.payment_intent === 'string'
+          ? checkout.payment_intent
+          : checkout.payment_intent?.id || null,
+      paid_at: now.toISOString(),
+    },
+    credit: {
+      user_id: metadata.user_id,
+      product_id: metadata.product_id,
+      total: sessions,
+      remaining: sessions,
+      expires_at:
+        validityDays > 0
+          ? new Date(now.getTime() + validityDays * 86400000).toISOString()
+          : null,
+    },
+  };
+}
+
+/**
+ * Both tables are keyed by Stripe/session order IDs. Retried or concurrent
+ * webhook deliveries can safely resume a failed grant without duplicating it.
+ */
+export async function persistCheckoutFulfillment(admin, fulfillment) {
+  const { data: order, error: orderError } = await admin
+    .from('orders')
+    .upsert(fulfillment.order, { onConflict: 'stripe_checkout_session_id' })
+    .select('id')
+    .single();
+  if (orderError || !order) {
+    throw orderError || new Error('Could not record the paid order.');
+  }
+
+  const { error: creditError } = await admin
+    .from('credit_batches')
+    .upsert(
+      { ...fulfillment.credit, order_id: order.id },
+      { onConflict: 'order_id', ignoreDuplicates: true }
+    );
+  if (creditError) throw creditError;
+}
 
 export default async function handler(request) {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -35,58 +127,12 @@ export default async function handler(request) {
     return new Response(`Webhook signature verification failed: ${e.message}`, { status: 400 });
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const s = event.data.object;
-    const md = s.metadata || {};
-
-    try {
-      // Idempotency: Stripe may deliver an event more than once.
-      const { data: existing } = await admin
-        .from('orders')
-        .select('id')
-        .eq('stripe_checkout_session_id', s.id)
-        .maybeSingle();
-
-      if (!existing) {
-        const { data: order, error: orderErr } = await admin
-          .from('orders')
-          .insert({
-            user_id: md.user_id || null,
-            product_id: md.product_id || null,
-            email: s.customer_details?.email || s.customer_email || null,
-            amount_cents: s.amount_total,
-            currency: s.currency,
-            status: 'paid',
-            stripe_checkout_session_id: s.id,
-            stripe_payment_intent_id:
-              typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id || null,
-            paid_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        if (orderErr) throw orderErr;
-
-        if (md.user_id) {
-          const sessions = parseInt(md.sessions_count || '0', 10);
-          const validity = parseInt(md.validity_days || '0', 10);
-          const expiresAt =
-            validity > 0 ? new Date(Date.now() + validity * 86400000).toISOString() : null;
-
-          const { error: creditErr } = await admin.from('credit_batches').insert({
-            user_id: md.user_id,
-            product_id: md.product_id || null,
-            order_id: order.id,
-            total: sessions,
-            remaining: sessions,
-            expires_at: expiresAt,
-          });
-          if (creditErr) throw creditErr;
-        }
-      }
-    } catch (e) {
+  try {
+    const fulfillment = checkoutFulfillmentForEvent(event);
+    if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
+  } catch (e) {
       // 500 makes Stripe retry delivery.
       return new Response(`Handler error: ${e.message}`, { status: 500 });
-    }
   }
 
   return new Response(JSON.stringify({ received: true }), {

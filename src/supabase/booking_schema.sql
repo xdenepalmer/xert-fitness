@@ -91,7 +91,7 @@ create table if not exists public.credit_batches (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
   product_id  uuid references public.products(id),
-  order_id    uuid references public.orders(id),
+  order_id    uuid unique references public.orders(id),
   total       integer not null,
   remaining   integer not null,
   expires_at  timestamptz,

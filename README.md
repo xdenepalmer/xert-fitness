@@ -43,8 +43,9 @@ build has them. The serverless functions reuse `VITE_SUPABASE_URL` if
 ### Stripe webhook
 
 After deploying, create a Stripe webhook endpoint pointing at
-`https://<your-domain>/api/stripe-webhook` for the `checkout.session.completed`
-event, then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
+`https://<your-domain>/api/stripe-webhook` for both
+`checkout.session.completed` and `checkout.session.async_payment_succeeded`,
+then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 ## Database
 
@@ -59,13 +60,15 @@ The Supabase schema is defined in:
 - `src/supabase/booking_modes_upgrade.sql` — one-time upgrade for an existing
   deployment: instant bookings, staff-confirmed requests, and interest-only
   classes now behave differently end to end
+- `src/supabase/payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
+  that guarantees a paid order grants at most one credit batch
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
 `admin_cms_schema.sql`, then `rls_hardening.sql`. For the already-deployed XERT database, run
-`booking_modes_upgrade.sql` after those prerequisites. The scripts are
-idempotent; run them in the Supabase SQL editor (or apply via the project's
-Postgres connection).
+`booking_modes_upgrade.sql` and `payment_fulfillment_upgrade.sql` after those
+prerequisites. The scripts are idempotent; run them in the Supabase SQL editor
+(or apply via the project's Postgres connection).
 
 The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
 any missing XERT calendar events for an authenticated admin.
@@ -90,6 +93,7 @@ Open the local URL printed by Vite.
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 
