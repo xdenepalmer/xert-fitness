@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, Loader2, Ticket, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Loader2, RefreshCw, Ticket, Users } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
+import { activeBookingsBySession, classActionLabel } from '@/lib/bookingUi';
 
 const steps = [
   'Purchase a session pack.',
@@ -41,23 +42,34 @@ export default function Booking() {
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
   const [bookingId, setBookingId] = useState(null);
+  const [loadErrors, setLoadErrors] = useState([]);
 
   const refresh = useCallback(async () => {
-    try {
-      const [prods, sess, creds, memberBookings] = await Promise.all([
-        getProducts(),
-        getAvailableSessions(),
-        session ? getMyCredits() : Promise.resolve(null),
-        session ? getMyBookings() : Promise.resolve([]),
-      ]);
-      setProducts(prods);
-      setSessions(sess);
-      setCredits(creds);
-      setMyBookings(memberBookings);
-    } catch (e) {
-      toast({ title: 'Could not load booking data', description: e.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
+    setLoadErrors([]);
+    const requests = [getProducts(), getAvailableSessions()];
+    if (session) requests.push(getMyCredits(), getMyBookings());
+    const results = await Promise.allSettled(requests);
+    const errors = [];
+    const apply = (result, label, setter, fallback) => {
+      if (result.status === 'fulfilled') setter(result.value);
+      else {
+        setter(fallback);
+        errors.push(`${label}: ${result.reason?.message || 'unavailable'}`);
+      }
+    };
+    apply(results[0], 'Session packs', setProducts, []);
+    apply(results[1], 'Timetable', setSessions, []);
+    if (session) {
+      apply(results[2], 'Credits', setCredits, null);
+      apply(results[3], 'Your bookings', setMyBookings, []);
+    } else {
+      setCredits(null);
+      setMyBookings([]);
+    }
+    setLoadErrors(errors);
+    setLoading(false);
+    if (errors.length) {
+      toast({ title: 'Some booking data could not load', description: 'Use retry to refresh the unavailable sections.', variant: 'destructive' });
     }
   }, [session, toast]);
 
@@ -73,15 +85,8 @@ export default function Booking() {
     return Array.from(groups.entries());
   }, [sessions]);
 
-  const activeBookingsBySession = useMemo(() => {
-    const active = new Map();
-    for (const booking of myBookings) {
-      if (['requested', 'confirmed'].includes(booking.status)) {
-        active.set(booking.session_id, booking);
-      }
-    }
-    return active;
-  }, [myBookings]);
+  const memberBookingsBySession = useMemo(() => activeBookingsBySession(myBookings), [myBookings]);
+  const timetableUnavailable = loadErrors.some(error => error.startsWith('Timetable:'));
 
   const handleBuy = async (product) => {
     if (!session) {
@@ -142,6 +147,19 @@ export default function Booking() {
           <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)' }}>
             {pageContent.intro}
           </p>
+
+          {loadErrors.length > 0 && (
+            <div role="alert" className="mt-6 border border-xert-red/40 bg-xert-red/10 p-4 flex flex-wrap items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-xert-red" />
+              <div className="flex-1 min-w-[12rem]">
+                <p className="font-display text-sm uppercase text-xert-offwhite">Some booking information is unavailable</p>
+                <p className="font-body text-xs mt-1 text-xert-concrete/60">{loadErrors.join(' | ')}</p>
+              </div>
+              <button type="button" onClick={() => void refresh()} className="inline-flex min-h-11 items-center gap-2 px-4 border border-xert-red/40 font-display text-xs uppercase text-xert-offwhite">
+                <RefreshCw className="w-4 h-4" /> Retry
+              </button>
+            </div>
+          )}
 
           {/* Steps */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-10">
@@ -250,6 +268,11 @@ export default function Booking() {
 
             {loading ? (
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading the timetable…</p>
+            ) : timetableUnavailable ? (
+              <div className="border border-xert-red/30 bg-xert-red/5 p-8 text-center">
+                <p className="font-display text-xl uppercase text-xert-offwhite">Timetable temporarily unavailable</p>
+                <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 px-5 border border-xert-steel/40 font-display text-sm uppercase text-xert-offwhite">Try again</button>
+              </div>
             ) : sessionsByDay.length === 0 ? (
               <div className="border p-10 text-center" style={cardStyle}>
                 <Users className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
@@ -267,13 +290,10 @@ export default function Booking() {
                     <div className="space-y-2">
                       {list.map(s => {
                         const full = s.spots_left !== null && s.spots_left <= 0;
-                        const existingBooking = activeBookingsBySession.get(s.id);
+                        const existingBooking = memberBookingsBySession.get(s.id);
                         const isInterestOnly = s.booking_mode === 'interest_only';
                         const isRequest = s.booking_mode === 'request_to_book';
-                        const actionLabel = existingBooking
-                          ? (existingBooking.status === 'requested' ? 'Requested' : 'Booked')
-                          : full ? 'Full'
-                            : isRequest ? 'Request spot' : 'Book';
+                        const actionLabel = classActionLabel({ booking: existingBooking, full, bookingMode: s.booking_mode });
                         return (
                           <div key={s.id} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
                             <p className="font-display text-lg uppercase tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
