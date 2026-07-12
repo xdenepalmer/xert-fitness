@@ -73,71 +73,71 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
-          <button onClick={onCancel} className="text-xert-concrete/40 hover:text-xert-offwhite text-xl">✕</button>
+          <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
+          <button type="button" onClick={onCancel} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">&#10005;</button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class type</label>
-              <select value={form.class_type} onChange={e => set('class_type', e.target.value)}
+              <label htmlFor="class-type" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class type</label>
+              <select id="class-type" value={form.class_type} onChange={e => set('class_type', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
                 {CLASS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Status</label>
-              <select value={form.status} onChange={e => set('status', e.target.value)}
+              <label htmlFor="class-status" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Status</label>
+              <select id="class-status" value={form.status} onChange={e => set('status', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Title *</label>
-            <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Class title"
+            <label htmlFor="class-title" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Title *</label>
+            <input id="class-title" required value={form.title} onChange={e => set('title', e.target.value)} placeholder="Class title"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
           </div>
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Description</label>
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={2}
+            <label htmlFor="class-description" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Description</label>
+            <textarea id="class-description" value={form.description} onChange={e => set('description', e.target.value)} rows={2}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Start time</label>
-              <input type="datetime-local" value={form.start_time} onChange={e => set('start_time', e.target.value)}
+              <label htmlFor="class-start" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Start time</label>
+              <input id="class-start" type="datetime-local" value={form.start_time} onChange={e => set('start_time', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">End time</label>
-              <input type="datetime-local" value={form.end_time} onChange={e => set('end_time', e.target.value)}
+              <label htmlFor="class-end" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">End time</label>
+              <input id="class-end" type="datetime-local" value={form.end_time} onChange={e => set('end_time', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Duration (min)</label>
-              <input type="number" min="1" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', +e.target.value)}
+              <label htmlFor="class-duration" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Duration (min)</label>
+              <input id="class-duration" type="number" min="1" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', +e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Capacity</label>
-              <input type="number" min="1" step="1" value={form.capacity} onChange={e => set('capacity', +e.target.value)}
+              <label htmlFor="class-capacity" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Capacity</label>
+              <input id="class-capacity" type="number" min="1" step="1" value={form.capacity} onChange={e => set('capacity', +e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Intensity</label>
-              <select value={form.intensity_level} onChange={e => set('intensity_level', e.target.value)}
+              <label htmlFor="class-intensity" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Intensity</label>
+              <select id="class-intensity" value={form.intensity_level} onChange={e => set('intensity_level', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
                 {INTENSITY.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Booking mode</label>
-              <select value={form.booking_mode} onChange={e => set('booking_mode', e.target.value)}
+              <label htmlFor="class-booking-mode" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Booking mode</label>
+              <select id="class-booking-mode" value={form.booking_mode} onChange={e => set('booking_mode', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
                 {BOOKING_MODES.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -153,44 +153,40 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Coach name</label>
-              <input value={form.coach_name} onChange={e => set('coach_name', e.target.value)}
+              <label htmlFor="class-coach" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Coach name</label>
+              <input id="class-coach" value={form.coach_name} onChange={e => set('coach_name', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Location / zone</label>
-              <input value={form.location_zone} onChange={e => set('location_zone', e.target.value)}
+              <label htmlFor="class-location" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Location / zone</label>
+              <input id="class-location" value={form.location_zone} onChange={e => set('location_zone', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
           </div>
           <div className="flex gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div onClick={() => set('beginner_friendly', !form.beginner_friendly)}
-                className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${form.beginner_friendly ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
-                {form.beginner_friendly && <span className="text-white text-xs">✓</span>}
-              </div>
+            <label className="flex min-h-11 items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.beginner_friendly} onChange={e => set('beginner_friendly', e.target.checked)} className="peer sr-only" />
+              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-xert-red peer-checked:bg-xert-red peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.beginner_friendly && <span className="text-white text-xs">&#10003;</span>}</span>
               <span className="font-body text-sm text-xert-concrete/80">Beginner friendly</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div onClick={() => set('public_visible', !form.public_visible)}
-                className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${form.public_visible ? 'border-green-500 bg-green-500' : 'border-xert-steel/50'}`}>
-                {form.public_visible && <span className="text-white text-xs">✓</span>}
-              </div>
+            <label className="flex min-h-11 items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.public_visible} onChange={e => set('public_visible', e.target.checked)} className="peer sr-only" />
+              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.public_visible && <span className="text-white text-xs">&#10003;</span>}</span>
               <span className="font-body text-sm text-xert-concrete/80">Public visible</span>
             </label>
           </div>
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Notes</label>
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
+            <label htmlFor="class-notes" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Notes</label>
+            <textarea id="class-notes" value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button onClick={onCancel}
+          <button type="button" onClick={onCancel} disabled={saving}
             className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
             Cancel
           </button>
-          <button onClick={handleSave} disabled={saving}
+          <button type="button" onClick={handleSave} disabled={saving}
             className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
             {saving ? 'Saving...' : 'Save class'}
           </button>
@@ -227,16 +223,16 @@ function RepeatModal({ session, onDone, onCancel }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
+      <div role="dialog" aria-modal="true" aria-labelledby="repeat-class-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
         <div className="p-6 border-b border-xert-steel/20">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">Repeat Class</h3>
+          <h3 id="repeat-class-title" className="font-display text-xl text-xert-offwhite uppercase">Repeat Class</h3>
           <p className="font-body text-xs text-xert-concrete/50 mt-1">{session.title}</p>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Every … days</label>
-              <select value={intervalDays} onChange={e => setIntervalDays(+e.target.value)}
+              <label htmlFor="repeat-interval" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Every ... days</label>
+              <select id="repeat-interval" value={intervalDays} onChange={e => setIntervalDays(+e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
                 <option value={1}>1 (daily)</option>
                 <option value={2}>2</option>
@@ -246,8 +242,8 @@ function RepeatModal({ session, onDone, onCancel }) {
               </select>
             </div>
             <div>
-              <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Copies</label>
-              <input type="number" min="1" max="26" value={count} onChange={e => setCount(Math.max(1, Math.min(26, +e.target.value)))}
+              <label htmlFor="repeat-count" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Copies</label>
+              <input id="repeat-count" type="number" min="1" max="26" value={count} onChange={e => setCount(Math.max(1, Math.min(26, +e.target.value)))}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
             </div>
           </div>
@@ -256,17 +252,15 @@ function RepeatModal({ session, onDone, onCancel }) {
               Next dates: {preview.join(', ')}{count > 3 ? '…' : ''}
             </p>
           )}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <div onClick={() => setKeepPublished(!keepPublished)}
-              className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${keepPublished ? 'border-green-500 bg-green-500' : 'border-xert-steel/50'}`}>
-              {keepPublished && <span className="text-white text-xs">✓</span>}
-            </div>
+          <label className="flex min-h-11 items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={keepPublished} onChange={e => setKeepPublished(e.target.checked)} className="peer sr-only" />
+            <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{keepPublished && <span className="text-white text-xs">&#10003;</span>}</span>
             <span className="font-body text-sm text-xert-concrete/80">Copies keep this class&rsquo;s publish status</span>
           </label>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">Cancel</button>
-          <button onClick={handleRepeat} disabled={saving}
+          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={handleRepeat} disabled={saving}
             className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
             {saving ? 'Creating…' : `Create ${count} copies`}
           </button>
