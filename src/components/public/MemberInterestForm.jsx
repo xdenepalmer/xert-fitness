@@ -32,11 +32,12 @@ function MultiSelect({ options, value = [], onChange }) {
   );
 }
 
-function FieldLabel({ children, required = false }) {
+function FieldLabel({ children, required = false, htmlFor = undefined }) {
+  const Component = htmlFor ? 'label' : 'span';
   return (
-    <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1">*</span>}
-    </label>
+    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    </Component>
   );
 }
 
@@ -133,9 +134,9 @@ export default function MemberInterestForm() {
       {/* Step 0: About you */}
       {step === 0 && (
         <div className="space-y-5">
-          <div><FieldLabel required>Full name</FieldLabel><Input placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
-          <div><FieldLabel required>Email</FieldLabel><Input type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
-          <div><FieldLabel required>Phone</FieldLabel><Input type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="member-full-name" required>Full name</FieldLabel><Input id="member-full-name" name="full_name" required autoComplete="name" placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="member-email" required>Email</FieldLabel><Input id="member-email" name="email" required autoComplete="email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="member-phone" required>Phone</FieldLabel><Input id="member-phone" name="phone" required autoComplete="tel" type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
           <div>
             <FieldLabel required>Age range</FieldLabel>
             <div className="flex flex-wrap gap-2">
@@ -149,10 +150,10 @@ export default function MemberInterestForm() {
               ))}
             </div>
           </div>
-          <div><FieldLabel required>Suburb / town</FieldLabel><Input placeholder="e.g. Kingaroy" value={form.suburb_town} onChange={e => set('suburb_town', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="member-suburb" required>Suburb / town</FieldLabel><Input id="member-suburb" name="suburb_town" required autoComplete="address-level2" placeholder="e.g. Kingaroy" value={form.suburb_town} onChange={e => set('suburb_town', e.target.value)} /></div>
           <div>
-            <FieldLabel>Occupation group</FieldLabel>
-            <select value={form.occupation_group} onChange={e => set('occupation_group', e.target.value)}
+            <FieldLabel htmlFor="member-occupation">Occupation group</FieldLabel>
+            <select id="member-occupation" name="occupation_group" value={form.occupation_group} onChange={e => set('occupation_group', e.target.value)}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
               <option value="">Select (optional)</option>
               {OCCUPATION_GROUPS.map(o => <option key={o} value={o}>{o}</option>)}
@@ -203,15 +204,15 @@ export default function MemberInterestForm() {
             </FormCheckbox>
           ))}
           <div>
-            <FieldLabel>Any injuries or physical limitations</FieldLabel>
-            <textarea value={form.injuries_or_limitations_optional}
+            <FieldLabel htmlFor="member-limitations">Any injuries or physical limitations</FieldLabel>
+            <textarea id="member-limitations" name="injuries_or_limitations_optional" value={form.injuries_or_limitations_optional}
               onChange={e => set('injuries_or_limitations_optional', e.target.value)}
               rows={2} placeholder="Optional — helps us coach you appropriately"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
           </div>
           <div>
-            <FieldLabel>What's the biggest reason you're joining?</FieldLabel>
-            <textarea value={form.biggest_reason_for_joining}
+            <FieldLabel htmlFor="member-reason">What's the biggest reason you're joining?</FieldLabel>
+            <textarea id="member-reason" name="biggest_reason_for_joining" value={form.biggest_reason_for_joining}
               onChange={e => set('biggest_reason_for_joining', e.target.value)}
               rows={2} placeholder="Optional — helps us understand what matters to you"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />

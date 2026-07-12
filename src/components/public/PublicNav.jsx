@@ -34,7 +34,7 @@ export default function PublicNav() {
       style={{ borderColor: scrolled ? 'rgba(123,167,188,0.15)' : 'transparent', backdropFilter: scrolled ? 'blur(12px)' : 'none' }}>
       <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-14">
         {/* Logo */}
-        <Link to="/" className="flex items-center">
+        <Link to="/" aria-label="XERT Fitness home" className="flex min-w-11 min-h-11 items-center">
           <img src={LOGO} alt="XERT Fitness" className="h-7 w-auto object-contain"
             style={{ filter: 'brightness(0) invert(1)' }} />
         </Link>
@@ -77,7 +77,14 @@ export default function PublicNav() {
         </div>
 
         {/* Mobile hamburger */}
-        <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2" style={{ color: 'rgba(209,221,230,0.7)' }}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-navigation"
+          className="md:hidden min-w-11 min-h-11 p-2 flex flex-col items-center justify-center"
+          style={{ color: 'rgba(209,221,230,0.7)' }}>
           <div className={`w-5 h-0.5 bg-current transition-all mb-1.5 ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
           <div className={`w-5 h-0.5 bg-current transition-all mb-1.5 ${menuOpen ? 'opacity-0' : ''}`} />
           <div className={`w-5 h-0.5 bg-current transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
@@ -86,7 +93,7 @@ export default function PublicNav() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="md:hidden border-t px-6 py-4 space-y-1"
+        <div id="mobile-navigation" className="md:hidden border-t px-6 py-4 space-y-1"
           style={{ backgroundColor: '#101820', borderColor: 'rgba(123,167,188,0.15)' }}>
           {navLinks.map(l => (
             l.to ? (

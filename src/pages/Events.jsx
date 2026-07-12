@@ -173,7 +173,7 @@ export default function Events() {
                       key={cat}
                       type="button"
                       onClick={() => setActiveCategory(cat)}
-                      className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                      className="min-h-11 px-3 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors"
                       style={{
                         borderColor: active ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
                         backgroundColor: active ? 'rgba(123,167,188,0.14)' : 'transparent',
@@ -187,7 +187,7 @@ export default function Events() {
                 <button
                   type="button"
                   onClick={() => setShowPast(v => !v)}
-                  className="ml-0 sm:ml-2 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                  className="min-h-11 ml-0 sm:ml-2 px-3 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors"
                   style={{
                     borderColor: showPast ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
                     backgroundColor: showPast ? 'rgba(123,167,188,0.14)' : 'transparent',
@@ -295,13 +295,13 @@ export default function Events() {
                           )}
                           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                             {ev.url && (
-                              <a href={ev.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                              <a href={ev.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 Event details
                               </a>
                             )}
                             {ev.event_date && (
-                              <button type="button" onClick={() => downloadEventIcs(ev)} className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                              <button type="button" onClick={() => downloadEventIcs(ev)} className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
                                 <CalendarPlus className="w-3.5 h-3.5" />
                                 Add to calendar
                               </button>
@@ -312,7 +312,7 @@ export default function Events() {
                                 aria-pressed={selectedGoal}
                                 disabled={savingGoalId === ev.id}
                                 onClick={() => handleGoalToggle(ev)}
-                                className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider disabled:opacity-50"
+                                className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider disabled:opacity-50"
                                 style={{
                                   color: selectedGoal ? '#D1DDE6' : '#7BA7BC'
                                 }}
