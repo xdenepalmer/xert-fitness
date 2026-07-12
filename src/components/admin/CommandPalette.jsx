@@ -32,6 +32,7 @@ const NAV_COMMANDS = [
 
 const QUICK_COMMANDS = [
   { key: 'calendar', label: 'Create a new class', icon: Plus },
+  { key: 'products', label: 'Create a session pack', icon: Plus },
   { key: 'coaches', label: 'Add a coach or practitioner', icon: Plus },
   { key: 'events', label: 'Add an event', icon: Plus },
 ];

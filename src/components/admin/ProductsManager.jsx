@@ -191,7 +191,7 @@ function NewProductDialog({ onClose, onCreated }) {
   );
 }
 
-export default function ProductsManager() {
+export default function ProductsManager({ initialAction, onIntentHandled }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -210,6 +210,11 @@ export default function ProductsManager() {
     }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setShowCreate(true);
+    onIntentHandled?.();
+  }, [initialAction, onIntentHandled]);
 
   return (
     <div className="p-6">

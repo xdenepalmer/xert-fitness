@@ -60,7 +60,7 @@ export default function AdminCommandCentre() {
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
       case 'orders': return <OrdersManager />;
-      case 'products': return <ProductsManager />;
+      case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'content': return <ContentManager />;
       case 'bookings': return <BookingRequestsTable />;
       case 'pt-requests': return <PTRequestsTable />;
