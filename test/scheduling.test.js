@@ -1,6 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, repeatedClassSessionCopies, sessionEndTime } from '../src/lib/scheduling.js';
+import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, repeatedClassSessionCopies, sessionEndTime } from '../src/lib/scheduling.js';
+
+test('normalizes explicit availability and blackout payloads', () => {
+  const block = normalizeAvailabilityBlock({
+    id: 'must-not-be-sent', start_time: '2026-08-01T08:00', end_time: '2026-08-01T09:00',
+    type: 'PT available', coach_name: ' Byron ', notes: ' ', is_bookable: true,
+  });
+  const blackout = normalizeBlackoutPeriod({
+    created_at: 'must-not-be-sent', start_time: '2026-08-02T08:00', end_time: '2026-08-02T12:00',
+    affects: 'facility_only', reason: 'facility maintenance', notes: ' Equipment install ',
+  });
+
+  assert.equal(block.coach_name, 'Byron');
+  assert.equal(block.notes, null);
+  assert.match(block.start_time, /^2026-07-31T22:00:00\.000Z$|^2026-08-01T08:00:00\.000Z$/);
+  assert.equal(Date.parse(block.end_time) - Date.parse(block.start_time), 60 * 60 * 1000);
+  assert.equal('id' in block, false);
+  assert.equal(blackout.notes, 'Equipment install');
+  assert.equal('created_at' in blackout, false);
+});
+
+test('rejects invalid scheduling types, scopes, reasons, and ranges', () => {
+  const base = { start_time: '2026-08-01T08:00', end_time: '2026-08-01T09:00' };
+  assert.throws(() => normalizeAvailabilityBlock({ ...base, type: 'unknown' }), /valid availability type/);
+  assert.throws(() => normalizeAvailabilityBlock({ ...base, type: 'PT available', end_time: '2026-08-01T07:00' }), /must end after/);
+  assert.throws(() => normalizeBlackoutPeriod({ ...base, affects: 'unknown', reason: 'facility maintenance' }), /valid blackout scope/);
+  assert.throws(() => normalizeBlackoutPeriod({ ...base, affects: 'all', reason: 'unknown' }), /valid blackout reason/);
+});
 
 test('detects only blackouts that affect an overlapping group class', () => {
   const session = {

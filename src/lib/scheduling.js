@@ -1,4 +1,7 @@
 const GROUP_CLASS_BLACKOUT_AFFECTS = new Set(['all', 'group_classes', 'facility_only']);
+const AVAILABILITY_BLOCK_TYPES = new Set(['PT available', 'private session available', 'group class available', 'admin only', 'open gym placeholder', 'workshop placeholder']);
+const BLACKOUT_AFFECTS = new Set(['all', 'group_classes', 'pt_only', 'facility_only', 'coach_only']);
+const BLACKOUT_REASONS = new Set(['full day unavailable', 'partial day unavailable', 'recurring unavailable', 'personal work', 'facility maintenance', 'equipment install', 'private event', 'soft launch restricted']);
 
 function timestamp(value) {
   const valueMs = new Date(value).getTime();
@@ -9,6 +12,49 @@ export function hasValidTimeRange(startTime, endTime) {
   const startMs = timestamp(startTime);
   const endMs = timestamp(endTime);
   return startMs !== null && endMs !== null && endMs > startMs;
+}
+
+function normalizedTimestamp(value, label) {
+  const valueMs = timestamp(value);
+  if (valueMs === null) throw new Error(`${label} needs a valid date and time.`);
+  return new Date(valueMs).toISOString();
+}
+
+function optionalText(value) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+export function normalizeAvailabilityBlock(form = {}) {
+  if (!AVAILABILITY_BLOCK_TYPES.has(form.type)) throw new Error('Choose a valid availability type.');
+  const startTime = normalizedTimestamp(form.start_time, 'Availability block');
+  const endTime = normalizedTimestamp(form.end_time, 'Availability block');
+  if (!hasValidTimeRange(startTime, endTime)) throw new Error('Availability block must end after it starts.');
+
+  return {
+    start_time: startTime,
+    end_time: endTime,
+    type: form.type,
+    coach_name: optionalText(form.coach_name),
+    notes: optionalText(form.notes),
+    is_bookable: Boolean(form.is_bookable),
+  };
+}
+
+export function normalizeBlackoutPeriod(form = {}) {
+  if (!BLACKOUT_AFFECTS.has(form.affects)) throw new Error('Choose a valid blackout scope.');
+  if (!BLACKOUT_REASONS.has(form.reason)) throw new Error('Choose a valid blackout reason.');
+  const startTime = normalizedTimestamp(form.start_time, 'Blackout period');
+  const endTime = normalizedTimestamp(form.end_time, 'Blackout period');
+  if (!hasValidTimeRange(startTime, endTime)) throw new Error('Blackout period must end after it starts.');
+
+  return {
+    start_time: startTime,
+    end_time: endTime,
+    affects: form.affects,
+    reason: form.reason,
+    notes: optionalText(form.notes),
+  };
 }
 
 export function classSessionValidationError(session) {
