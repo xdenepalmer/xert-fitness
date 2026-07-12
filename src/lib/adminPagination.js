@@ -15,3 +15,18 @@ export async function collectAdminPages(fetchPage) {
   } while (rows.length < result.total);
   return rows;
 }
+
+export async function collectAdminBatches(fetchBatch, batchSize = 500) {
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1000) {
+    throw new Error('Admin batch size must be between 1 and 1,000.');
+  }
+  const rows = [];
+  let page = 1;
+  while (true) {
+    const batch = await fetchBatch(page, batchSize);
+    if (!Array.isArray(batch)) throw new Error('Admin query returned an invalid batch.');
+    rows.push(...batch);
+    if (batch.length < batchSize) return rows;
+    page += 1;
+  }
+}

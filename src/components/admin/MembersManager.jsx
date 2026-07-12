@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Download, X, Ticket, CalendarDays, Receipt, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, X, Ticket, CalendarDays, Receipt, Loader2, RefreshCw } from 'lucide-react';
 import { adminListMembers, adminGrantCredits, adminSetRole, adminMemberDetail } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
@@ -24,6 +24,7 @@ const BOOKING_BADGE = {
   no_show: { color: '#e0b36a', label: 'No show' },
   cancelled: { color: 'rgba(209,221,230,0.4)', label: 'Cancelled' },
 };
+const PAGE_SIZE = 50;
 
 function MemberDrawer({ member, onClose, onGrant }) {
   const [detail, setDetail] = useState(null);
@@ -42,13 +43,13 @@ function MemberDrawer({ member, onClose, onGrant }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative w-full max-w-md h-full overflow-y-auto animate-slide-up sm:animate-none"
+      <div role="dialog" aria-modal="true" aria-labelledby="member-detail-title" className="relative w-full max-w-md h-full overflow-y-auto animate-slide-up sm:animate-none"
         style={{ backgroundColor: '#0e161e', borderLeft: '1px solid rgba(123,167,188,0.2)' }}>
         {/* Header */}
         <div className="sticky top-0 p-5 flex items-start justify-between gap-4"
           style={{ backgroundColor: '#0e161e', borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
           <div>
-            <h3 className="font-display text-2xl uppercase leading-none text-xert-offwhite">{member.full_name || '(no name)'}</h3>
+            <h3 id="member-detail-title" className="font-display text-2xl uppercase leading-none text-xert-offwhite">{member.full_name || '(no name)'}</h3>
             <p className="font-body text-xs mt-1.5" style={{ color: 'rgba(209,221,230,0.45)' }}>
               {member.email}{member.phone ? ` · ${member.phone}` : ''}
             </p>
@@ -75,8 +76,8 @@ function MemberDrawer({ member, onClose, onGrant }) {
                 <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
                   <Ticket className="w-3.5 h-3.5" /> Credits
                 </h4>
-                <button disabled={!detail.creditAuditAvailable} onClick={onGrant}
-                  className="px-2.5 py-1 border font-body text-[10px] uppercase tracking-wider transition-colors"
+                <button type="button" disabled={!detail.creditAuditAvailable} onClick={onGrant}
+                  className="min-h-11 px-2.5 py-2 border font-body text-[10px] uppercase tracking-wider transition-colors"
                   style={{ borderColor: 'rgba(123,167,188,0.3)', color: '#7BA7BC', opacity: detail.creditAuditAvailable ? 1 : 0.4 }}>
                   + Grant
                 </button>
@@ -206,25 +207,25 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="grant-credits-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-xert-steel/20">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">Grant Credits</h3>
+          <h3 id="grant-credits-title" className="font-display text-xl text-xert-offwhite uppercase">Grant Credits</h3>
           <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class credits</label>
-            <input type="number" min="1" max="100" value={sessions} onChange={e => setSessions(+e.target.value)} className={`${inputCls} w-full`} />
+            <label htmlFor="grant-credit-count" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class credits</label>
+            <input id="grant-credit-count" type="number" min="1" max="100" value={sessions} onChange={e => setSessions(+e.target.value)} className={`${inputCls} w-full`} />
             <div className="flex gap-2 mt-2">{[1, 4, 10].map(value => <button type="button" key={value} onClick={() => setSessions(value)} className="px-2.5 py-1 border border-xert-steel/30 font-body text-xs text-xert-steel">{value}</button>)}</div>
           </div>
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Validity (days, 0 = never expires)</label>
-            <input type="number" min="0" value={validityDays} onChange={e => setValidityDays(+e.target.value)} className={`${inputCls} w-full`} />
+            <label htmlFor="grant-validity-days" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Validity (days, 0 = never expires)</label>
+            <input id="grant-validity-days" type="number" min="0" value={validityDays} onChange={e => setValidityDays(+e.target.value)} className={`${inputCls} w-full`} />
             <div className="flex flex-wrap gap-2 mt-2">{[{ label: '14 days', value: 14 }, { label: '28 days', value: 28 }, { label: '56 days', value: 56 }, { label: 'No expiry', value: 0 }].map(option => <button type="button" key={option.value} onClick={() => setValidityDays(option.value)} className="px-2.5 py-1 border border-xert-steel/30 font-body text-xs text-xert-steel">{option.label}</button>)}</div>
           </div>
           <div>
-            <label className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Grant reason</label>
-            <textarea value={note} onChange={event => setNote(event.target.value)} maxLength={500} rows={3} placeholder="e.g. Cash sale, service recovery, competition prize" className={`${inputCls} w-full resize-none`} />
+            <label htmlFor="grant-credit-reason" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Grant reason</label>
+            <textarea id="grant-credit-reason" value={note} onChange={event => setNote(event.target.value)} maxLength={500} rows={3} placeholder="e.g. Cash sale, service recovery, competition prize" className={`${inputCls} w-full resize-none`} />
             <p className="font-body text-[10px] text-xert-concrete/30 mt-1">Required for the permanent admin audit trail.</p>
           </div>
           <p className="font-body text-xs text-xert-concrete/40">
@@ -233,8 +234,8 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
           {error && <p role="alert" className="font-body text-xs text-xert-red">{error}</p>}
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button disabled={saving} onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={handleGrant} disabled={saving}
+          <button type="button" disabled={saving} onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={handleGrant} disabled={saving}
             className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
             {saving ? 'Granting…' : `Grant ${sessions}`}
           </button>
@@ -255,6 +256,7 @@ export default function MembersManager() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [creditFilter, setCreditFilter] = useState('all');
   const [roleChangingId, setRoleChangingId] = useState(null);
+  const [page, setPage] = useState(1);
 
   const load = async () => {
     setLoading(true);
@@ -266,6 +268,16 @@ export default function MembersManager() {
   useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => filterMembers(members, { search, role: roleFilter, credit: creditFilter }), [creditFilter, members, roleFilter, search]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visibleMembers = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
+  const firstResult = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, filtered.length);
+
+  useEffect(() => {
+    setPage(1);
+    setViewing(null);
+    setGranting(null);
+  }, [creditFilter, roleFilter, search]);
 
   const handleRole = async (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
@@ -278,6 +290,7 @@ export default function MembersManager() {
       await adminSetRole(m.id, role);
       toast({ title: 'Role updated', description: `${m.full_name || m.email} is now ${role}.` });
       await load();
+      setPage(1);
     } catch (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
     finally { setRoleChangingId(null); }
   };
@@ -287,11 +300,11 @@ export default function MembersManager() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Members ({members.length})</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
+          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search members" placeholder="Search name or email…"
             className={`${inputCls} w-64`} />
-          <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className={inputCls}><option value="all">All roles</option><option value="member">Members</option><option value="admin">Admins</option></select>
-          <select value={creditFilter} onChange={event => setCreditFilter(event.target.value)} className={inputCls}><option value="all">All credits</option><option value="available">Has credits</option><option value="none">No credits</option></select>
-          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh members" aria-label="Refresh members" className="p-2 border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Filter members by role" className={inputCls}><option value="all">All roles</option><option value="member">Members</option><option value="admin">Admins</option></select>
+          <select value={creditFilter} onChange={event => setCreditFilter(event.target.value)} aria-label="Filter members by credits" className={inputCls}><option value="all">All credits</option><option value="available">Has credits</option><option value="none">No credits</option></select>
+          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh members" aria-label="Refresh members" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <button
             onClick={() => downloadCsv(`xert-members-${new Date().toISOString().slice(0, 10)}.csv`, filtered.map(member => ({ ...member, total_spent: (Number(member.total_spent_cents) / 100).toFixed(2) })), [
               { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
@@ -309,7 +322,7 @@ export default function MembersManager() {
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={load} />
+        <AdminLoadError message={loadError} onRetry={() => load()} />
       ) : filtered.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
@@ -321,7 +334,7 @@ export default function MembersManager() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(m => (
+          {visibleMembers.map(m => (
             <div key={m.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex flex-wrap items-center gap-4">
               <div className="flex-1 min-w-[14rem]">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -349,24 +362,24 @@ export default function MembersManager() {
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={() => setViewing(m)}
-                  className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
+                <button type="button" onClick={() => setViewing(m)}
+                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                   View
                 </button>
-                <button onClick={() => setGranting(m)}
-                  className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
+                <button type="button" onClick={() => setGranting(m)}
+                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                   + Credits
                 </button>
                 {m.role === 'admin' ? (
                   m.id !== user?.id && (
                     <button disabled={roleChangingId !== null} onClick={() => handleRole(m, 'member')}
-                      className="px-3 py-1.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
+                      className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
                       Remove admin
                     </button>
                   )
                 ) : (
                   <button disabled={roleChangingId !== null} onClick={() => handleRole(m, 'admin')}
-                    className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
+                    className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                     Make admin
                   </button>
                 )}
@@ -375,6 +388,24 @@ export default function MembersManager() {
           ))}
         </div>
       )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="font-body text-xs text-xert-concrete/40">
+          {filtered.length === 0 ? '0 results' : `${firstResult}-${lastResult} of ${filtered.length} matching members`}
+          {filtered.length !== members.length ? ` · ${members.length} total` : ''}
+        </p>
+        {pageCount > 1 && (
+          <nav aria-label="Member result pages" className="flex items-center gap-2">
+            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </nav>
+        )}
+      </div>
 
       {viewing && (
         <MemberDrawer

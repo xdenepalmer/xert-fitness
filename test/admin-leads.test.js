@@ -2,12 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
-import { collectAdminPages } from '../src/lib/adminPagination.js';
+import { collectAdminBatches, collectAdminPages } from '../src/lib/adminPagination.js';
 
 test('normalizes lead search text before building a PostgREST or filter', () => {
   assert.equal(normalizeLeadSearch('  Alex, (Runner)  '), 'Alex Runner');
   assert.equal(normalizeLeadSearch("coach+one@example.com"), 'coach+one@example.com');
   assert.equal(normalizeLeadSearch('a'.repeat(120)).length, 100);
+});
+
+test('collects count-less RPC batches until the first short page', async () => {
+  const requested = [];
+  const rows = await collectAdminBatches(async (page, size) => {
+    requested.push([page, size]);
+    return page === 1 ? [{ id: 'a' }, { id: 'b' }] : [{ id: 'c' }];
+  }, 2);
+
+  assert.deepEqual(requested, [[1, 2], [2, 2]]);
+  assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c']);
+  await assert.rejects(() => collectAdminBatches(async () => null, 2), /invalid batch/);
 });
 
 test('normalizes bounded one-based lead pages into Supabase ranges', () => {

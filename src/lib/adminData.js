@@ -8,7 +8,7 @@ import { normalizeClassSession } from './scheduling';
 import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
-import { collectAdminPages } from './adminPagination.js';
+import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -431,7 +431,25 @@ export async function seedXertEventCalendar() {
 // ─── Members (admin) ─────────────────────────────────────────────────────────
 
 export async function adminListMembers() {
-  const { data, error } = await supabase.rpc('admin_list_members');
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc('admin_list_members')
+      .order('joined_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+}
+
+export async function adminRecentMembers(limit = 6) {
+  const safeLimit = Math.max(1, Math.min(20, Number.parseInt(String(limit), 10) || 6));
+  const { data, error } = await supabase
+    .rpc('admin_list_members')
+    .order('joined_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(safeLimit);
   if (error) throw new Error(error.message);
   return data || [];
 }
