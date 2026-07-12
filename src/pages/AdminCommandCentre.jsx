@@ -14,6 +14,7 @@ import MembersManager from '@/components/admin/MembersManager';
 import OrdersManager from '@/components/admin/OrdersManager';
 import ProductsManager from '@/components/admin/ProductsManager';
 import ContentManager from '@/components/admin/ContentManager';
+import OperationsHealth from '@/components/admin/OperationsHealth';
 
 export default function AdminCommandCentre() {
   const [section, setSection] = useState('overview');
@@ -21,6 +22,7 @@ export default function AdminCommandCentre() {
   const renderSection = () => {
     switch (section) {
       case 'overview': return <AdminOverview onNavigate={setSection} />;
+      case 'health': return <OperationsHealth onNavigate={setSection} />;
       case 'members': return <LeadTable type="member" />;
       case 'trainers': return <LeadTable type="trainer" />;
       case 'partners': return <LeadTable type="partner" />;

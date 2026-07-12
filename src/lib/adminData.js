@@ -387,6 +387,131 @@ export async function getAdminBadgeCounts() {
   };
 }
 
+// ─── Operations health (admin readiness checklist) ──────────────────────────
+
+async function healthCheck(key, label, fn) {
+  try {
+    const result = await fn();
+    return {
+      key,
+      label,
+      status: result.status || 'ok',
+      detail: result.detail || 'Ready',
+      action: result.action || null,
+      count: result.count ?? null,
+    };
+  } catch (error) {
+    return {
+      key,
+      label,
+      status: 'error',
+      detail: error.message || 'Check failed',
+      action: 'Check Supabase schema, RLS policies, and admin permissions.',
+      count: null,
+    };
+  }
+}
+
+export async function getOperationsHealth() {
+  const nowIso = new Date().toISOString();
+
+  return Promise.all([
+    healthCheck('supabase', 'Supabase connection', async () => {
+      const { error } = await supabase.from('admin_settings').select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      return { detail: 'Admin settings table is reachable.' };
+    }),
+
+    healthCheck('admins', 'Admin access', async () => {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'admin');
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} admin account${count === 1 ? '' : 's'} configured.` }
+        : { status: 'attention', count: 0, detail: 'No admin profile found.', action: 'Promote an owner account in Supabase profiles.role.' };
+    }),
+
+    healthCheck('products', 'Session packs', async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('slug, active, stripe_price_id')
+        .eq('active', true);
+      if (error) throw error;
+      const products = data || [];
+      const missingStripePrices = products.filter(p => !p.stripe_price_id).length;
+      if (products.length === 0) {
+        return { status: 'attention', count: 0, detail: 'No active session packs.', action: 'Activate products in Session Packs.' };
+      }
+      return {
+        status: missingStripePrices > 0 ? 'attention' : 'ok',
+        count: products.length,
+        detail: missingStripePrices > 0
+          ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} use ad-hoc Stripe pricing.`
+          : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
+        action: missingStripePrices > 0 ? 'Add Stripe Price IDs for cleaner product reporting.' : null,
+      };
+    }),
+
+    healthCheck('classes', 'Published classes', async () => {
+      const { count, error } = await supabase
+        .from('class_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .eq('public_visible', true)
+        .gte('start_time', nowIso);
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} upcoming public class${count === 1 ? '' : 'es'} available.` }
+        : { status: 'attention', count: 0, detail: 'No upcoming public classes.', action: 'Publish launch classes in Class Calendar.' };
+    }),
+
+    healthCheck('coaches', 'Published coaches', async () => {
+      const { count, error } = await supabase
+        .from('coaches')
+        .select('id', { count: 'exact', head: true })
+        .eq('published', true);
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} published team profile${count === 1 ? '' : 's'}.` }
+        : { status: 'attention', count: 0, detail: 'No published team profiles.', action: 'Add coaches, nutritionists, physios, or massage partners.' };
+    }),
+
+    healthCheck('events', 'Published events', async () => {
+      const { count, error } = await supabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('published', true);
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} public event${count === 1 ? '' : 's'} in the calendar.` }
+        : { status: 'attention', count: 0, detail: 'No published events.', action: 'Seed or add the 2026 SEQ event calendar.' };
+    }),
+
+    healthCheck('cms', 'Site CMS content', async () => {
+      const { count, error } = await supabase
+        .from('site_content')
+        .select('key', { count: 'exact', head: true });
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} editable content block${count === 1 ? '' : 's'} saved.` }
+        : { status: 'attention', count: 0, detail: 'Using built-in content defaults.', action: 'Review and save content in Site Content.' };
+    }),
+
+    healthCheck('orders', 'Commerce activity', async () => {
+      const { count, error } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'paid');
+      if (error) throw error;
+      return count > 0
+        ? { count, detail: `${count} paid order${count === 1 ? '' : 's'} recorded.` }
+        : { status: 'attention', count: 0, detail: 'No paid orders recorded yet.', action: 'Run a Stripe test purchase after deployment.' };
+    }),
+  ]);
+}
+
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
 export async function adminMemberDetail(userId) {

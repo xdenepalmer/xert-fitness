@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
   Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
+  ShieldCheck,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
@@ -14,7 +15,10 @@ const LOGO = '/assets/xert-logo-full.png';
 const NAV_GROUPS = [
   {
     heading: null,
-    items: [{ key: 'overview', label: 'Overview', icon: LayoutDashboard }],
+    items: [
+      { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { key: 'health', label: 'Operations Health', icon: ShieldCheck },
+    ],
   },
   {
     heading: 'Members & Money',

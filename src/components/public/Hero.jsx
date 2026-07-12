@@ -35,8 +35,8 @@ export default function Hero() {
         {photos.map((src, i) => (
           <div
             key={src}
-            className="absolute inset-0 transition-opacity duration-[1400ms]"
-            style={{ opacity: i === idx ? 1 : 0 }}
+            className="absolute inset-0 transition-opacity"
+            style={{ opacity: i === idx ? 1 : 0, transitionDuration: '1400ms' }}
           >
             <img
               src={src}

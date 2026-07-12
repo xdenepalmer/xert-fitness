@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
-  Handshake, Settings, BarChart3, ExternalLink, Plus, User,
+  Handshake, Settings, BarChart3, ExternalLink, Plus, User, ShieldCheck,
 } from 'lucide-react';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -11,6 +11,7 @@ import { adminListMembers } from '@/lib/adminData';
 
 const NAV_COMMANDS = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { key: 'health', label: 'Operations Health', icon: ShieldCheck },
   { key: 'gym-members', label: 'Members', icon: Users },
   { key: 'orders', label: 'Orders & Revenue', icon: DollarSign },
   { key: 'products', label: 'Session Packs', icon: Ticket },
