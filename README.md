@@ -53,10 +53,19 @@ The Supabase schema is defined in:
 - `src/supabase/rls_policies.sql` — lead/booking tables + Row Level Security
 - `src/supabase/booking_schema.sql` — members, session packs, orders, credits,
   bookings, coaches, events, and the booking functions
+- `src/supabase/admin_cms_schema.sql` — CMS, member/admin actions and class
+  roster functions
+- `src/supabase/rls_hardening.sql` — role-gated admin RLS policies
+- `src/supabase/booking_modes_upgrade.sql` — one-time upgrade for an existing
+  deployment: instant bookings, staff-confirmed requests, and interest-only
+  classes now behave differently end to end
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
-Both are idempotent; run them in the Supabase SQL editor (or apply via the
-project's Postgres connection) to (re)provision the schema.
+For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
+`admin_cms_schema.sql`, then `rls_hardening.sql`. For the already-deployed XERT database, run
+`booking_modes_upgrade.sql` after those prerequisites. The scripts are
+idempotent; run them in the Supabase SQL editor (or apply via the project's
+Postgres connection).
 
 The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
 any missing XERT calendar events for an authenticated admin.

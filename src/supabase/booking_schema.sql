@@ -106,17 +106,42 @@ create table if not exists public.session_bookings (
   user_id           uuid not null references auth.users(id) on delete cascade,
   class_session_id  uuid not null references public.class_sessions(id) on delete cascade,
   credit_batch_id   uuid references public.credit_batches(id),
-  status            text not null default 'confirmed', -- confirmed|cancelled|attended|no_show
+  status            text not null default 'confirmed', -- requested|confirmed|waitlisted|cancelled|declined|attended|no_show
   created_at        timestamptz not null default now(),
   cancelled_at      timestamptz
 );
--- A member can only hold one active booking per session.
+-- A member can only hold one space-holding request or confirmed booking per
+-- session. Waitlisted and declined requests do not reserve a place.
+drop index if exists public.session_bookings_unique_active;
 create unique index if not exists session_bookings_unique_active
   on public.session_bookings(user_id, class_session_id)
-  where status = 'confirmed';
+  where status in ('requested', 'confirmed');
 -- Capacity counts look bookings up by session.
 create index if not exists session_bookings_session_idx
   on public.session_bookings(class_session_id);
+
+-- Booking modes live on class_sessions because staff choose the policy per
+-- class. Keep the value constrained even on databases that predate this field.
+alter table public.class_sessions
+  add column if not exists booking_mode text;
+update public.class_sessions
+  set booking_mode = 'instant_book'
+  where booking_mode is null
+     or booking_mode not in ('instant_book', 'request_to_book', 'interest_only');
+alter table public.class_sessions
+  alter column booking_mode set default 'instant_book',
+  alter column booking_mode set not null;
+alter table public.class_sessions
+  drop constraint if exists class_sessions_booking_mode_check;
+alter table public.class_sessions
+  add constraint class_sessions_booking_mode_check
+  check (booking_mode in ('instant_book', 'request_to_book', 'interest_only'));
+
+alter table public.session_bookings
+  drop constraint if exists session_bookings_status_check;
+alter table public.session_bookings
+  add constraint session_bookings_status_check
+  check (status in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'));
 
 
 -- ── coaches (Coaches page) ──────────────────────────────────────────────────
@@ -156,7 +181,10 @@ create table if not exists public.events (
 -- Booking logic (SECURITY DEFINER so it can enforce rules atomically)
 -- ============================================================================
 
--- Book a class: capacity-safe, consumes the earliest-expiring available credit.
+-- Book a class or submit a booking request. Both modes reserve a seat and the
+-- earliest-expiring available credit atomically; a staff decline/waitlist
+-- releases that credit again. Interest-only classes deliberately stay out of
+-- the commerce flow and use the existing interest workflow instead.
 create or replace function public.book_session(p_session_id uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare
@@ -164,6 +192,8 @@ declare
   v_capacity int;
   v_start    timestamptz;
   v_status   text;
+  v_mode     text;
+  v_booking_status text;
   v_booked   int;
   v_batch    uuid;
   v_booking  uuid;
@@ -171,23 +201,28 @@ begin
   if v_user is null then raise exception 'AUTH_REQUIRED'; end if;
 
   -- Lock the session row to serialise capacity checks.
-  select capacity, start_time, status
-    into v_capacity, v_start, v_status
+  select capacity, start_time, status, coalesce(booking_mode, 'instant_book')
+    into v_capacity, v_start, v_status, v_mode
     from class_sessions where id = p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if v_status <> 'published' then raise exception 'SESSION_NOT_BOOKABLE'; end if;
   if v_start <= now() then raise exception 'SESSION_IN_PAST'; end if;
+  if v_mode = 'interest_only' then raise exception 'SESSION_INTEREST_ONLY'; end if;
+  if v_mode not in ('instant_book', 'request_to_book') then
+    raise exception 'SESSION_NOT_BOOKABLE';
+  end if;
 
   if exists (
     select 1 from session_bookings
-    where user_id = v_user and class_session_id = p_session_id and status = 'confirmed'
+    where user_id = v_user and class_session_id = p_session_id
+      and status in ('requested', 'confirmed')
   ) then
     raise exception 'ALREADY_BOOKED';
   end if;
 
   select count(*) into v_booked
     from session_bookings
-    where class_session_id = p_session_id and status = 'confirmed';
+    where class_session_id = p_session_id and status in ('requested', 'confirmed');
   if v_capacity is not null and v_booked >= v_capacity then
     raise exception 'SESSION_FULL';
   end if;
@@ -202,14 +237,17 @@ begin
 
   update credit_batches set remaining = remaining - 1 where id = v_batch;
 
+  v_booking_status := case when v_mode = 'request_to_book' then 'requested' else 'confirmed' end;
+
   insert into session_bookings (user_id, class_session_id, credit_batch_id, status)
-    values (v_user, p_session_id, v_batch, 'confirmed')
+    values (v_user, p_session_id, v_batch, v_booking_status)
     returning id into v_booking;
 
   return v_booking;
 end; $$;
 
--- Cancel a booking; refund the credit if cancelled >12h before the class.
+-- Cancel a confirmed booking or a pending request. Pending requests always
+-- release their reserved credit; confirmed bookings retain the 12-hour policy.
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -227,12 +265,12 @@ begin
     where b.id = p_booking_id and b.user_id = v_user
     for update;
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
-  if v_status <> 'confirmed' then raise exception 'NOT_CANCELLABLE'; end if;
+  if v_status not in ('requested', 'confirmed') then raise exception 'NOT_CANCELLABLE'; end if;
 
   update session_bookings set status = 'cancelled', cancelled_at = now()
     where id = p_booking_id;
 
-  if v_start - now() > interval '12 hours' and v_batch is not null then
+  if (v_status = 'requested' or v_start - now() > interval '12 hours') and v_batch is not null then
     update credit_batches set remaining = remaining + 1
       where id = v_batch and (expires_at is null or expires_at > now());
   end if;
@@ -249,10 +287,11 @@ returns table (
   select s.id, s.class_type, s.title, s.description, s.coach_name,
          s.start_time, s.end_time, s.duration_minutes, s.capacity, s.location_zone,
          s.beginner_friendly, s.intensity_level, s.booking_mode,
-         count(b.id) filter (where b.status = 'confirmed') as booked_count,
-         -- null capacity = unlimited => null spots_left (mirrors book_session)
+         count(b.id) filter (where b.status in ('requested', 'confirmed')) as booked_count,
+         -- null capacity = unlimited => null spots_left (mirrors book_session).
+         -- Pending requests reserve their place until staff acts on them.
          case when s.capacity is null then null
-              else greatest(s.capacity - count(b.id) filter (where b.status = 'confirmed'), 0)::int
+              else greatest(s.capacity - count(b.id) filter (where b.status in ('requested', 'confirmed')), 0)::int
          end as spots_left
   from class_sessions s
   left join session_bookings b on b.class_session_id = s.id
@@ -346,6 +385,13 @@ create policy "events_admin_all" on public.events
 
 
 -- ── Function grants ─────────────────────────────────────────────────────────
+-- SECURITY DEFINER functions are executable by PUBLIC unless explicitly
+-- revoked. Keep public timetable reads open, but limit member/admin actions.
+revoke execute on function public.sessions_with_availability() from public;
+revoke execute on function public.book_session(uuid) from public, anon;
+revoke execute on function public.cancel_booking(uuid) from public, anon;
+revoke execute on function public.my_bookings() from public, anon;
+revoke execute on function public.is_admin() from public, anon;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
 grant execute on function public.book_session(uuid)          to authenticated;
 grant execute on function public.cancel_booking(uuid)        to authenticated;

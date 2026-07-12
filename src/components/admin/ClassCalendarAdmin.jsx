@@ -8,6 +8,14 @@ const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 
+function rosterStatusOptions(status) {
+  if (status === 'requested') return ['requested', 'confirmed', 'waitlisted', 'declined', 'cancelled'];
+  if (['waitlisted', 'declined', 'cancelled'].includes(status)) {
+    return [status, 'requested', 'confirmed'];
+  }
+  return ['confirmed', 'attended', 'no_show', 'cancelled'];
+}
+
 const STATUS_COLORS = {
   draft: 'text-xert-concrete/40 border-xert-steel/30',
   published: 'text-green-400 border-green-600/40',
@@ -371,6 +379,7 @@ export default function ClassCalendarAdmin() {
                       <span className={`font-body text-xs border px-2 py-0.5 uppercase ${STATUS_COLORS[s.status] || 'text-xert-concrete/40 border-xert-steel/30'}`}>{s.status}</span>
                       {s.public_visible && <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Public</span>}
                       {s.beginner_friendly && <span className="font-body text-xs text-xert-concrete/40 uppercase text-xs">Beginner friendly</span>}
+                      {s.booking_mode && <span className="font-body text-xs text-xert-concrete/40 uppercase">{s.booking_mode.replaceAll('_', ' ')}</span>}
                     </div>
                     <h3 className="font-display text-lg text-xert-offwhite uppercase">{s.title}</h3>
                     <p className="font-body text-xs text-xert-concrete/50">
@@ -410,7 +419,7 @@ export default function ClassCalendarAdmin() {
                 <div className="border-t border-xert-steel/20 p-4 bg-xert-charcoal">
                   {/* Credit-based member roster */}
                   <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">
-                    Class roster ({roster.filter(r => r.status !== 'cancelled').length}{s.capacity ? `/${s.capacity}` : ''})
+                    Class roster ({roster.filter(r => ['requested', 'confirmed'].includes(r.status)).length}{s.capacity ? `/${s.capacity}` : ''})
                   </h4>
                   {roster.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
@@ -424,11 +433,11 @@ export default function ClassCalendarAdmin() {
                           </div>
                           <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
-                            {['confirmed', 'attended', 'no_show', 'cancelled'].map(st => <option key={st} value={st}>{st}</option>)}
+                            {rosterStatusOptions(r.status).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
                         </div>
                       ))}
-                      <p className="font-body text-xs text-xert-concrete/40">Setting a booking to cancelled returns the member&rsquo;s credit.</p>
+                      <p className="font-body text-xs text-xert-concrete/40">Waitlisting, declining, or cancelling a request returns its reserved credit.</p>
                     </div>
                   )}
 

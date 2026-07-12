@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import {
-  getProducts, startCheckout, getAvailableSessions, bookSession, getMyCredits,
+  getProducts, startCheckout, getAvailableSessions, bookSession, getMyBookings, getMyCredits,
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
@@ -47,6 +47,7 @@ export default function Booking() {
 
   const [products, setProducts] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [myBookings, setMyBookings] = useState([]);
   const [credits, setCredits] = useState(null);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
@@ -54,14 +55,16 @@ export default function Booking() {
 
   const refresh = useCallback(async () => {
     try {
-      const [prods, sess, creds] = await Promise.all([
+      const [prods, sess, creds, memberBookings] = await Promise.all([
         getProducts(),
         getAvailableSessions(),
         session ? getMyCredits() : Promise.resolve(null),
+        session ? getMyBookings() : Promise.resolve([]),
       ]);
       setProducts(prods);
       setSessions(sess);
       setCredits(creds);
+      setMyBookings(memberBookings);
     } catch (e) {
       toast({ title: 'Could not load booking data', description: e.message, variant: 'destructive' });
     } finally {
@@ -80,6 +83,16 @@ export default function Booking() {
     }
     return Array.from(groups.entries());
   }, [sessions]);
+
+  const activeBookingsBySession = useMemo(() => {
+    const active = new Map();
+    for (const booking of myBookings) {
+      if (['requested', 'confirmed'].includes(booking.status)) {
+        active.set(booking.session_id, booking);
+      }
+    }
+    return active;
+  }, [myBookings]);
 
   const handleBuy = async (product) => {
     if (!session) {
@@ -105,7 +118,13 @@ export default function Booking() {
     setBookingId(s.id);
     try {
       await bookSession(s.id);
-      toast({ title: 'Class booked ✔', description: `${s.title || s.class_type} — ${formatDay(s.start_time)} ${formatTime(s.start_time)}` });
+      const requested = s.booking_mode === 'request_to_book';
+      toast({
+        title: requested ? 'Booking request sent' : 'Class booked ✔',
+        description: requested
+          ? `${s.title || s.class_type} is awaiting staff confirmation. Your class credit is reserved.`
+          : `${s.title || s.class_type} — ${formatDay(s.start_time)} ${formatTime(s.start_time)}`,
+      });
       await refresh();
     } catch (e) {
       toast({ title: 'Booking failed', description: e.message, variant: 'destructive' });
@@ -259,6 +278,13 @@ export default function Booking() {
                     <div className="space-y-2">
                       {list.map(s => {
                         const full = s.spots_left !== null && s.spots_left <= 0;
+                        const existingBooking = activeBookingsBySession.get(s.id);
+                        const isInterestOnly = s.booking_mode === 'interest_only';
+                        const isRequest = s.booking_mode === 'request_to_book';
+                        const actionLabel = existingBooking
+                          ? (existingBooking.status === 'requested' ? 'Requested' : 'Booked')
+                          : full ? 'Full'
+                            : isRequest ? 'Request spot' : 'Book';
                         return (
                           <div key={s.id} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
                             <p className="font-display text-lg uppercase tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
@@ -272,6 +298,11 @@ export default function Booking() {
                                 {[s.coach_name && `Coach ${s.coach_name}`, s.intensity_level, s.duration_minutes && `${s.duration_minutes} min`]
                                   .filter(Boolean).join(' · ')}
                               </p>
+                              {isRequest && (
+                                <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.7)' }}>
+                                  Staff confirmation required
+                                </p>
+                              )}
                             </div>
                             {s.spots_left !== null && (
                               <span className="font-body text-[11px] uppercase tracking-wider px-2 py-1 shrink-0"
@@ -282,13 +313,21 @@ export default function Booking() {
                                 {full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
                               </span>
                             )}
-                            <button
-                              onClick={() => handleBook(s)}
-                              disabled={full || bookingId === s.id}
-                              className="px-5 py-2.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 shrink-0"
-                              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-                              {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : full ? 'Full' : 'Book'}
-                            </button>
+                            {isInterestOnly ? (
+                              <Link to="/timetable"
+                                className="px-5 py-2.5 font-display text-base uppercase tracking-wide shrink-0 border"
+                                style={{ borderColor: 'rgba(123,167,188,0.4)', color: '#D1DDE6' }}>
+                                Register interest
+                              </Link>
+                            ) : (
+                              <button
+                                onClick={() => handleBook(s)}
+                                disabled={full || Boolean(existingBooking) || bookingId === s.id}
+                                className="px-5 py-2.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 shrink-0"
+                                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                                {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}
+                              </button>
+                            )}
                           </div>
                         );
                       })}

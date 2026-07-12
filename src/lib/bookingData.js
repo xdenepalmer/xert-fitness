@@ -88,6 +88,7 @@ const BOOKING_ERRORS = {
   SESSION_IN_PAST: 'That class has already started.',
   ALREADY_BOOKED: "You've already booked this class.",
   SESSION_FULL: 'Sorry, this class is now full.',
+  SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
   NO_CREDITS: 'You have no available class credits. Purchase a pack to book.',
 };
 

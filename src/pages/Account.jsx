@@ -65,7 +65,9 @@ export default function Account() {
       const hoursOut = (new Date(booking.start_time) - Date.now()) / 36e5;
       toast({
         title: 'Booking cancelled',
-        description: hoursOut > 12
+        description: booking.status === 'requested'
+          ? 'Your request was cancelled and the reserved credit has been returned.'
+          : hoursOut > 12
           ? 'Your class credit has been returned.'
           : 'Cancelled within 12 hours of the class, so the credit was used.',
       });
@@ -111,8 +113,9 @@ export default function Account() {
   }
 
   const now = Date.now();
+  const pending = bookings.filter(b => b.status === 'requested' && new Date(b.start_time) > now);
   const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.start_time) > now);
-  const past = bookings.filter(b => b.status !== 'confirmed' || new Date(b.start_time) <= now);
+  const past = bookings.filter(b => !['requested', 'confirmed'].includes(b.status) || new Date(b.start_time) <= now);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
@@ -175,6 +178,46 @@ export default function Account() {
             </div>
           </div>
         </section>
+
+        {/* Pending booking requests */}
+        {pending.length > 0 && (
+          <section className="mb-10">
+            <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
+              Awaiting Confirmation
+            </h2>
+            <div className="space-y-3">
+              {pending.map(b => (
+                <div key={b.booking_id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
+                    <Clock className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                  </div>
+                  <div className="flex-1 min-w-[12rem]">
+                    <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">
+                      {b.title || b.class_type || 'XERT Class'}
+                    </p>
+                    <p className="font-body text-sm mt-0.5" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                      {formatDateTime(b.start_time)}
+                      {b.coach_name ? ` · Coach ${b.coach_name}` : ''}
+                    </p>
+                    <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.75)' }}>
+                      Your credit is reserved while XERT reviews this request.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCancel(b)}
+                    disabled={cancellingId === b.booking_id}
+                    className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
+                    style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.6)' }}>
+                    {cancellingId === b.booking_id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <X className="w-3.5 h-3.5" />}
+                    Cancel request
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Upcoming bookings */}
         <section className="mb-10">

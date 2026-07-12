@@ -112,35 +112,84 @@ begin
   order by b.created_at asc;
 end; $$;
 
--- Mark attendance or admin-cancel (refunds the credit on cancel).
+-- Manage a member booking. Pending requests reserve a credit and seat so a
+-- confirmation is reliable; waitlisting, declining, or cancelling releases
+-- the credit. Moving a waitlisted/declined booking back to requested or
+-- confirmed checks capacity and reserves a new credit atomically.
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 declare
   v_batch uuid;
   v_current text;
+  v_user uuid;
+  v_session uuid;
+  v_capacity integer;
+  v_start timestamptz;
+  v_active_count integer;
+  v_new_batch uuid;
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
-  if p_status not in ('confirmed', 'attended', 'no_show', 'cancelled') then
+  if p_status not in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show') then
     raise exception 'INVALID_STATUS';
   end if;
 
-  select credit_batch_id, status into v_batch, v_current
+  select credit_batch_id, status, user_id, class_session_id
+    into v_batch, v_current, v_user, v_session
     from session_bookings where id = p_booking_id for update;
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
+  if p_status = v_current then return; end if;
+
+  if p_status in ('attended', 'no_show') and v_current <> 'confirmed' then
+    raise exception 'STATUS_TRANSITION_NOT_ALLOWED';
+  end if;
+
+  -- A status becoming requested/confirmed must reserve a space and credit.
+  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+    select capacity, start_time into v_capacity, v_start
+      from class_sessions where id = v_session for update;
+    if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+    if v_start <= now() then raise exception 'SESSION_IN_PAST'; end if;
+
+    select count(*) into v_active_count
+      from session_bookings
+      where class_session_id = v_session and status in ('requested', 'confirmed');
+    if v_capacity is not null and v_active_count >= v_capacity then
+      raise exception 'SESSION_FULL';
+    end if;
+
+    select id into v_new_batch
+      from credit_batches
+      where user_id = v_user and remaining > 0
+        and (expires_at is null or expires_at > now())
+      order by expires_at asc nulls last, created_at asc
+      limit 1 for update;
+    if v_new_batch is null then raise exception 'NO_CREDITS'; end if;
+
+    update credit_batches set remaining = remaining - 1 where id = v_new_batch;
+    v_batch := v_new_batch;
+  end if;
 
   update session_bookings
     set status = p_status,
+        credit_batch_id = v_batch,
         cancelled_at = case when p_status = 'cancelled' then now() else cancelled_at end
     where id = p_booking_id;
 
-  -- Admin cancellations always return the credit (goodwill path).
-  if p_status = 'cancelled' and v_current <> 'cancelled' and v_batch is not null then
+  -- Admin resolution releases a previously reserved credit. This is not tied
+  -- to the member cancellation window because staff initiated the change.
+  if p_status in ('waitlisted', 'declined', 'cancelled')
+    and v_current in ('requested', 'confirmed') and v_batch is not null then
     update credit_batches set remaining = remaining + 1 where id = v_batch;
   end if;
 end; $$;
 
 
 -- ── Grants ──────────────────────────────────────────────────────────────────
+revoke execute on function public.admin_list_members() from public, anon;
+revoke execute on function public.admin_grant_credits(uuid, integer, integer) from public, anon;
+revoke execute on function public.admin_set_role(uuid, text) from public, anon;
+revoke execute on function public.admin_session_roster(uuid) from public, anon;
+revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_list_members()                    to authenticated;
 grant execute on function public.admin_grant_credits(uuid, integer, integer) to authenticated;
 grant execute on function public.admin_set_role(uuid, text)              to authenticated;
