@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
@@ -20,8 +21,9 @@ export default function PTRequestsTable() {
   const [statusFilter, setStatusFilter] = useState('');
   const [notesModal, setNotesModal] = useState(null);
   const [notes, setNotes] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
@@ -31,22 +33,36 @@ export default function PTRequestsTable() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleUpdate = async (id, status, adminNotes) => {
-    try { await updatePTRequestStatus(id, status, adminNotes); load(); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
+    setUpdatingId(id);
+    try {
+      await updatePTRequestStatus(id, status, adminNotes);
+      toast({ title: adminNotes === undefined ? 'PT request updated' : 'Notes saved', description: adminNotes === undefined ? `Request is now ${status.replace(/_/g, ' ')}.` : undefined });
+      await load();
+      if (adminNotes !== undefined) setNotesModal(null);
+    } catch (e) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   return (
     <div className="p-6">
-      <div className="flex gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-6">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
           <option value="">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
+        <button type="button" onClick={() => void load()} disabled={loading} title="Refresh PT requests" aria-label="Refresh PT requests"
+          className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {loading ? (
@@ -67,7 +83,10 @@ export default function PTRequestsTable() {
                     <span className="font-body text-base text-xert-offwhite">{r.full_name}</span>
                     <span className={`font-body text-xs px-2 py-0.5 ${STATUS_COLORS[r.status] || ''}`}>{r.status?.replace(/_/g, ' ')}</span>
                   </div>
-                  <p className="font-body text-xs text-xert-concrete/50">{r.email} · {r.phone}</p>
+                  <p className="font-body text-xs text-xert-concrete/50">
+                    <a href={`mailto:${r.email}`} className="hover:text-xert-steel">{r.email}</a>
+                    {r.phone && <> · <a href={`tel:${r.phone}`} className="hover:text-xert-steel">{r.phone}</a></>}
+                  </p>
                   <p className="font-body text-xs text-xert-concrete/60 mt-1">
                     {r.requested_session_type} · {r.preferred_day} {r.preferred_time}
                   </p>
@@ -77,16 +96,16 @@ export default function PTRequestsTable() {
                 <div className="flex gap-2 flex-wrap justify-end shrink-0">
                   {r.status === 'requested' && (
                     <>
-                      <button onClick={() => handleUpdate(r.id, 'approved')}
+                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'approved')}
                         className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Approve</button>
-                      <button onClick={() => handleUpdate(r.id, 'reschedule_requested')}
+                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'reschedule_requested')}
                         className="px-3 py-1.5 border border-yellow-600/40 font-body text-xs text-yellow-400 transition-colors">Reschedule</button>
-                      <button onClick={() => handleUpdate(r.id, 'declined')}
+                      <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'declined')}
                         className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Decline</button>
                     </>
                   )}
                   {r.status === 'approved' && (
-                    <button onClick={() => handleUpdate(r.id, 'completed')}
+                    <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'completed')}
                       className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Mark complete</button>
                   )}
                   <button onClick={() => { setNotesModal(r); setNotes(r.admin_notes || ''); }}
@@ -105,10 +124,10 @@ export default function PTRequestsTable() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
-              <button onClick={() => setNotesModal(null)}
+              <button disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
-              <button onClick={() => { handleUpdate(notesModal.id, notesModal.status, notes); setNotesModal(null); }}
-                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors">Save</button>
+              <button disabled={updatingId === notesModal.id} onClick={() => void handleUpdate(notesModal.id, notesModal.status, notes)}
+                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>

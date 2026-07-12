@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
   updateMemberBookingStatus, updateAdminNotes,
 } from '@/lib/adminData';
+import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -19,16 +21,21 @@ const STATUS_COLORS = {
 export default function BookingRequestsTable() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [notes, setNotes] = useState('');
+  const [updatingKey, setUpdatingKey] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
 
-  const load = () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    Promise.all([
-      getClassBookings({ status: statusFilter || undefined }),
-      getMemberBookingRequests({ status: statusFilter || undefined }),
-    ]).then(([legacy, members]) => {
+    setLoadError('');
+    try {
+      const [legacy, members] = await Promise.all([
+        getClassBookings({ status: statusFilter || undefined }),
+        getMemberBookingRequests({ status: statusFilter || undefined }),
+      ]);
       const rows = [
         ...legacy.map(booking => ({
           ...booking,
@@ -47,47 +54,66 @@ export default function BookingRequestsTable() {
         })),
       ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setBookings(rows);
+    } catch (error) {
+      setLoadError(error.message || 'Check booking tables and admin permissions.');
+    } finally {
       setLoading(false);
-    }).catch(error => {
-      toast({ title: 'Could not load booking requests', description: error.message, variant: 'destructive' });
-      setLoading(false);
-    });
-  };
+    }
+  }, [statusFilter]);
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleStatusUpdate = async (booking, status) => {
+    const actionKey = `${booking.source}-${booking.id}`;
+    setUpdatingKey(actionKey);
     try {
       if (booking.source === 'member') {
         await updateMemberBookingStatus(booking.id, status);
       } else {
         await updateBookingStatus(booking.id, status);
       }
-      load();
-    } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
+      toast({ title: 'Booking updated', description: `${booking.full_name || 'Booking'} is now ${status.replace(/_/g, ' ')}.` });
+      await load();
+    } catch (e) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUpdatingKey('');
+    }
   };
 
   const saveNotes = async () => {
     if (!selectedBooking) return;
+    setSavingNotes(true);
     try {
       await updateAdminNotes('class_bookings', selectedBooking.id, notes);
       setSelectedBooking(null);
-      load();
-    } catch (e) { toast({ title: 'Save failed', description: e.message, variant: 'destructive' }); }
+      toast({ title: 'Notes saved' });
+      await load();
+    } catch (e) {
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingNotes(false);
+    }
   };
 
   return (
     <div className="p-6">
-      <div className="flex gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-6">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
           <option value="">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <button type="button" onClick={() => void load()} disabled={loading} title="Refresh booking requests" aria-label="Refresh booking requests"
+          className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
+      ) : loadError ? (
+        <AdminLoadError message={loadError} onRetry={load} />
       ) : bookings.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No booking requests</p>
@@ -102,7 +128,10 @@ export default function BookingRequestsTable() {
                     <span className="font-body text-base text-xert-offwhite">{b.full_name}</span>
                     <span className={`font-body text-xs px-2 py-0.5 ${STATUS_COLORS[b.status] || ''}`}>{b.status}</span>
                   </div>
-                  <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.phone}</p>
+                  <p className="font-body text-xs text-xert-concrete/50">
+                    <a href={`mailto:${b.email}`} className="hover:text-xert-steel">{b.email}</a>
+                    {b.phone && <> · <a href={`tel:${b.phone}`} className="hover:text-xert-steel">{b.phone}</a></>}
+                  </p>
                   <div className="flex flex-wrap gap-2 mt-1">
                     <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
                       {b.source === 'member' ? 'Member credit booking' : 'Enquiry form'}
@@ -123,15 +152,15 @@ export default function BookingRequestsTable() {
                 <div className="flex gap-2 flex-wrap justify-end shrink-0">
                   {b.status === 'requested' && (
                     <>
-                      <button onClick={() => handleStatusUpdate(b, 'confirmed')}
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
                         className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
                         Confirm
                       </button>
-                      <button onClick={() => handleStatusUpdate(b, 'waitlisted')}
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'waitlisted')}
                         className="px-3 py-1.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
                         Waitlist
                       </button>
-                      <button onClick={() => handleStatusUpdate(b, 'declined')}
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'declined')}
                         className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         Decline
                       </button>
@@ -139,11 +168,11 @@ export default function BookingRequestsTable() {
                   )}
                   {b.status === 'confirmed' && (
                     <>
-                      <button onClick={() => handleStatusUpdate(b, 'attended')}
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'attended')}
                         className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
                         Attended
                       </button>
-                      <button onClick={() => handleStatusUpdate(b, 'no_show')}
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'no_show')}
                         className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         No show
                       </button>
@@ -169,10 +198,10 @@ export default function BookingRequestsTable() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
-              <button onClick={() => setSelectedBooking(null)}
+              <button disabled={savingNotes} onClick={() => setSelectedBooking(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
-              <button onClick={saveNotes}
-                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors">Save</button>
+              <button disabled={savingNotes} onClick={saveNotes}
+                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{savingNotes ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>
