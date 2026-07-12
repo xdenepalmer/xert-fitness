@@ -76,7 +76,7 @@ The Supabase schema is defined in:
 - `src/supabase/product_validation_upgrade.sql` — validates product price,
   currency, credit count, and expiry before checkout can use a pack
 - `src/supabase/event_goals_upgrade.sql` — lets members choose a calendar event
-  to train toward and exposes each training group to admins
+  to train toward and gives admins a contactable roster for each training group
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then

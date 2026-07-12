@@ -7,7 +7,7 @@
 --   • Admin RPCs (SECURITY DEFINER, is_admin()-guarded):
 --       admin_list_members, admin_grant_credits, admin_set_role,
 --       admin_session_roster, admin_set_booking_status,
---       admin_cancel_class_session
+--       admin_cancel_class_session, admin_event_goal_members
 -- Idempotent — safe to re-run.
 -- ============================================================================
 
@@ -215,6 +215,28 @@ begin
   end if;
 end; $$;
 
+-- Members training toward a specific calendar event, including the contact
+-- details staff need to coordinate an event group.
+create or replace function public.admin_event_goal_members(p_event_id uuid)
+returns table (
+  user_id uuid,
+  full_name text,
+  email text,
+  phone text,
+  selected_at timestamptz
+) language plpgsql security definer stable set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  if p_event_id is null then raise exception 'EVENT_ID_REQUIRED'; end if;
+
+  return query
+  select g.user_id, p.full_name, p.email, p.phone, g.created_at
+  from public.member_event_goals g
+  left join public.profiles p on p.id = g.user_id
+  where g.event_id = p_event_id
+  order by g.created_at asc;
+end; $$;
+
 -- Cancel a class as an operator action. This is deliberately different from a
 -- member cancellation: every outstanding member booking is invalidated and
 -- any reserved credit is returned because XERT, not the member, cancelled it.
@@ -284,12 +306,14 @@ revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 revoke execute on function public.admin_session_roster(uuid) from public, anon;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
+revoke execute on function public.admin_event_goal_members(uuid) from public, anon;
 grant execute on function public.admin_list_members()                    to authenticated;
 grant execute on function public.admin_grant_credits(uuid, integer, integer) to authenticated;
 grant execute on function public.admin_set_role(uuid, text)              to authenticated;
 grant execute on function public.admin_session_roster(uuid)              to authenticated;
 grant execute on function public.admin_set_booking_status(uuid, text)    to authenticated;
 grant execute on function public.admin_cancel_class_session(uuid)         to authenticated;
+grant execute on function public.admin_event_goal_members(uuid)            to authenticated;
 
 -- ============================================================================
 -- Done.

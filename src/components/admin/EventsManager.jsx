@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Target, X } from 'lucide-react';
+import { Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, seedXertEventCalendar } from '@/lib/adminData';
+import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'fitness', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
@@ -147,6 +147,80 @@ function EventEditor({ event, onSave, onCancel }) {
   );
 }
 
+function TrainingRosterDialog({ event, members, loading, error, onClose }) {
+  useEffect(() => {
+    const closeOnEscape = keyboardEvent => {
+      if (keyboardEvent.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/80" onClick={onClose} aria-label="Close training group" />
+      <section role="dialog" aria-modal="true" aria-labelledby="training-roster-title" className="relative w-full max-w-xl max-h-[85vh] overflow-y-auto bg-xert-ink border border-xert-steel/20">
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 p-5 bg-xert-ink border-b border-xert-steel/20">
+          <div>
+            <p className="font-body text-[10px] uppercase tracking-wider text-xert-steel">Event training group</p>
+            <h3 id="training-roster-title" className="mt-1 font-display text-xl uppercase text-xert-offwhite">{event.name}</h3>
+          </div>
+          <button type="button" onClick={onClose} autoFocus aria-label="Close training group" title="Close" className="p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </header>
+
+        <div className="p-5">
+          {loading ? (
+            <div className="py-12 flex items-center justify-center" role="status">
+              <Loader2 className="w-5 h-5 animate-spin text-xert-steel" />
+              <span className="sr-only">Loading training group</span>
+            </div>
+          ) : error ? (
+            <div className="border border-xert-red/30 bg-xert-red/5 p-4">
+              <p className="font-body text-sm text-xert-red">{error}</p>
+            </div>
+          ) : members.length === 0 ? (
+            <div className="py-12 text-center border border-xert-steel/20">
+              <Target className="w-6 h-6 mx-auto mb-3 text-xert-steel/50" />
+              <p className="font-display text-lg uppercase text-xert-offwhite">No members yet</p>
+              <p className="mt-1 font-body text-sm text-xert-concrete/45">This event does not have a training group yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {members.map(member => (
+                <article key={member.user_id} className="border border-xert-steel/20 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-display text-base uppercase text-xert-offwhite">{member.full_name || member.email || 'XERT member'}</h4>
+                      <p className="mt-1 font-body text-[11px] text-xert-concrete/40">
+                        Joined group {new Date(member.selected_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {member.email && (
+                        <a href={`mailto:${member.email}`} className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
+                          <Mail className="w-3.5 h-3.5" /> Email
+                        </a>
+                      )}
+                      {member.phone && (
+                        <a href={`tel:${member.phone}`} className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
+                          <Phone className="w-3.5 h-3.5" /> Call
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  {(member.email || member.phone) && <p className="mt-3 font-body text-xs text-xert-concrete/55 break-all">{[member.email, member.phone].filter(Boolean).join(' · ')}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function EventsManager() {
   const [events, setEvents] = useState([]);
   const [goalCounts, setGoalCounts] = useState({});
@@ -158,6 +232,31 @@ export default function EventsManager() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [seeding, setSeeding] = useState(false);
+  const [rosterEvent, setRosterEvent] = useState(null);
+  const [rosterMembers, setRosterMembers] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState('');
+
+  useEffect(() => {
+    if (!rosterEvent) return undefined;
+    let active = true;
+    setRosterMembers([]);
+    setRosterError('');
+    setRosterLoading(true);
+    getEventGoalMembers(rosterEvent.id)
+      .then(members => {
+        if (active) setRosterMembers(members);
+      })
+      .catch(error => {
+        if (active) setRosterError(error.message || 'Could not load this training group.');
+      })
+      .finally(() => {
+        if (active) setRosterLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [rosterEvent]);
 
   const load = async () => {
     setLoading(true);
@@ -277,12 +376,10 @@ export default function EventsManager() {
                   <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/60 px-2 py-0.5 uppercase">{ev.category || 'other'}</span>
                   {!ev.published && <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Hidden</span>}
                   {ev.url && <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Link</span>}
-                  {(goalCounts[ev.id] || 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 font-body text-xs border border-xert-red/40 text-xert-red px-2 py-0.5 uppercase">
+                  <button type="button" onClick={() => setRosterEvent(ev)} disabled={Boolean(goalLoadError)} title={goalLoadError || 'View training group'} className="inline-flex items-center gap-1 font-body text-xs border border-xert-red/40 text-xert-red px-2 py-0.5 uppercase disabled:opacity-40">
                       <Target className="w-3 h-3" />
-                      {goalCounts[ev.id]} training
-                    </span>
-                  )}
+                      {goalCounts[ev.id] || 0} training
+                  </button>
                 </div>
                 <h3 className="font-display text-base text-xert-offwhite uppercase">{ev.name}</h3>
                 <p className="font-body text-xs text-xert-concrete/50">
@@ -323,6 +420,16 @@ export default function EventsManager() {
             load();
           }}
           onCancel={() => setShowEditor(false)}
+        />
+      )}
+
+      {rosterEvent && (
+        <TrainingRosterDialog
+          event={rosterEvent}
+          members={rosterMembers}
+          loading={rosterLoading}
+          error={rosterError}
+          onClose={() => setRosterEvent(null)}
         />
       )}
     </div>

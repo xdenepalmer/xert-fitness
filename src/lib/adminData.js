@@ -326,6 +326,15 @@ export async function getEventGoalCounts() {
   }, {});
 }
 
+export async function getEventGoalMembers(eventId) {
+  if (!eventId) throw new Error('An event is required to load its training group.');
+  const { data, error } = await supabase.rpc('admin_event_goal_members', {
+    p_event_id: eventId
+  });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 export async function createEvent(event) {
   const { error } = await supabase.from('events').insert([event]);
   if (error) throw new Error(error.message);
