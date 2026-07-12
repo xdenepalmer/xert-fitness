@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useScroll, useTransform } from 'framer-motion';
 import { useSiteContent } from '@/lib/siteContent';
 import { HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
 
@@ -8,30 +7,46 @@ const LOGO_FULL_WHITE = '/assets/xert-logo-full.png';
 
 const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Quality', 'Longevity', 'Community', 'Preparation'];
 
-const ease = [0.22, 1, 0.36, 1];
-
 export default function Hero() {
   const [photoIndex, setPhotoIndex] = useState(0);
-  const { scrollY } = useScroll();
+  const [scrollY, setScrollY] = useState(0);
   const content = useSiteContent('hero', HERO_DEFAULTS);
   const headlineWords = (content.headline || HERO_DEFAULTS.headline).split(' ');
   const photos = content.photos?.length > 0 ? content.photos : HERO_PHOTOS;
   const idx = photoIndex % photos.length;
 
-  // Parallax: background drifts slower, content lifts as you scroll.
-  const bgY = useTransform(scrollY, [0, 800], [0, 160]);
-  const contentY = useTransform(scrollY, [0, 600], [0, -60]);
-  const overlayOpacity = useTransform(scrollY, [0, 500], [1, 0.4]);
-
   useEffect(() => {
+    if (photos.length <= 1) return undefined;
     const t = setInterval(() => setPhotoIndex(i => (i + 1) % photos.length), 5000);
     return () => clearInterval(t);
+  }, [photos.length]);
+
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      setScrollY(Math.min(window.scrollY, 800));
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', schedule, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, []);
+
+  const bgY = Math.min(160, scrollY * 0.2);
+  const contentY = -Math.min(60, scrollY * 0.1);
+  const overlayOpacity = Math.max(0.4, 1 - scrollY * 0.0012);
 
   return (
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-xert-navy">
       {/* Background photo with parallax + blue-steel grade */}
-      <motion.div className="absolute inset-0" style={{ y: bgY }}>
+      <div className="absolute inset-0 will-change-transform" style={{ transform: `translate3d(0,${bgY}px,0)` }}>
         {photos.map((src, i) => (
           <div
             key={src}
@@ -46,10 +61,10 @@ export default function Hero() {
             />
           </div>
         ))}
-      </motion.div>
+      </div>
 
       {/* Steel-blue gradient overlay */}
-      <motion.div
+      <div
         className="absolute inset-0"
         style={{
           opacity: overlayOpacity,
@@ -70,69 +85,46 @@ export default function Hero() {
       />
 
       {/* Top fine animated line */}
-      <motion.div
-        className="absolute top-0 left-0 right-0 h-0.5 origin-left"
+      <div
+        className="xert-hero-line absolute top-0 left-0 right-0 h-0.5 origin-left"
         style={{ background: 'linear-gradient(90deg, transparent, #7BA7BC, transparent)' }}
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ duration: 1.4, ease }}
       />
 
       {/* Nav spacer */}
       <div className="relative z-10 h-14" />
 
       {/* Main hero content */}
-      <motion.div className="relative z-10 flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-8 pb-20" style={{ y: contentY }}>
+      <div className="relative z-10 flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-8 pb-20 will-change-transform" style={{ transform: `translate3d(0,${contentY}px,0)` }}>
         <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
 
           {/* Left — brand + copy */}
           <div>
-            <motion.div
-              className="mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease }}
-            >
+            <div className="xert-enter xert-enter-up mb-8">
               <img
                 src={LOGO_FULL_WHITE}
                 alt="XERT Fitness"
                 className="h-16 sm:h-20 w-auto object-contain"
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
-            </motion.div>
+            </div>
 
-            <motion.div
-              className="mb-6 flex items-center gap-3"
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.15, ease }}
-            >
+            <div className="xert-enter xert-enter-left mb-6 flex items-center gap-3" style={{ animationDelay: '150ms' }}>
               <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
               <span className="font-body text-xs uppercase tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Functional Fitness Training Facility</span>
-            </motion.div>
+            </div>
 
             {/* Headline — line-by-line reveal */}
             <h1 className="font-display text-[clamp(3rem,10vw,7rem)] leading-[0.9] text-xert-offwhite uppercase mb-6 tracking-tight overflow-hidden">
               {headlineWords.map((line, i) => (
                 <span key={`${line}-${i}`} className="block overflow-hidden">
-                  <motion.span
-                    className="block"
-                    style={{ color: i === headlineWords.length - 1 ? '#7BA7BC' : undefined }}
-                    initial={{ y: '110%' }}
-                    animate={{ y: '0%' }}
-                    transition={{ duration: 0.9, delay: 0.2 + i * 0.12, ease }}
-                  >
+                  <span className="xert-headline-enter block" style={{ color: i === headlineWords.length - 1 ? '#7BA7BC' : undefined, animationDelay: `${200 + i * 120}ms` }}>
                     {line}
-                  </motion.span>
+                  </span>
                 </span>
               ))}
             </h1>
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.6, ease }}
-            >
+            <div className="xert-enter xert-enter-up" style={{ animationDelay: '600ms' }}>
               <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
                 {content.subheading}
               </p>
@@ -164,16 +156,11 @@ export default function Hero() {
                   View Timetable
                 </Link>
               </div>
-            </motion.div>
+            </div>
           </div>
 
           {/* Right — feature photo */}
-          <motion.div
-            className="hidden lg:block relative"
-            initial={{ opacity: 0, scale: 1.05 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1.1, delay: 0.3, ease }}
-          >
+          <div className="xert-feature-enter hidden lg:block relative" style={{ animationDelay: '300ms' }}>
             <div className="relative aspect-[3/4] overflow-hidden">
               <img
                 src={photos[idx]}
@@ -205,9 +192,9 @@ export default function Hero() {
               style={{ color: 'rgba(123,167,188,0.06)', whiteSpace: 'nowrap' }}>
               Beat Your Best
             </div>
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Values strip */}
       <div className="relative z-10 border-t" style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(16,24,32,0.85)', backdropFilter: 'blur(8px)' }}>
@@ -238,20 +225,13 @@ export default function Hero() {
       </div>
 
       {/* Scroll cue */}
-      <motion.div
-        className="absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 z-10 hidden sm:flex flex-col items-center gap-2"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.4, duration: 0.8 }}
-      >
+      <div className="xert-scroll-cue absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
         <span className="font-body text-[10px] uppercase tracking-[0.3em]" style={{ color: 'rgba(123,167,188,0.6)' }}>Scroll</span>
-        <motion.div
-          className="w-px h-8"
+        <div
+          className="xert-scroll-pulse w-px h-8 origin-top"
           style={{ background: 'linear-gradient(180deg, #7BA7BC, transparent)' }}
-          animate={{ scaleY: [0.4, 1, 0.4], opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         />
-      </motion.div>
+      </div>
     </section>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * Mobile-first PWA install prompt. Captures the beforeinstallprompt
@@ -16,10 +15,11 @@ export default function PWAInstallPrompt() {
     if (standalone) return;
     if (localStorage.getItem('xert_pwa_dismissed') === '1') return;
 
+    let revealTimer = 0;
     const handler = (e) => {
       e.preventDefault();
       setDeferred(e);
-      setTimeout(() => setVisible(true), 2500);
+      revealTimer = window.setTimeout(() => setVisible(true), 2500);
     };
     window.addEventListener('beforeinstallprompt', handler);
     const installed = () => {
@@ -31,6 +31,7 @@ export default function PWAInstallPrompt() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
       window.removeEventListener('appinstalled', installed);
+      if (revealTimer) window.clearTimeout(revealTimer);
     };
   }, []);
 
@@ -49,15 +50,8 @@ export default function PWAInstallPrompt() {
   };
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ y: 120, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 120, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-          className="fixed bottom-0 left-0 right-0 z-[60] p-4 sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm"
-        >
+    visible ? (
+        <div className="xert-sheet-enter fixed bottom-0 left-0 right-0 z-[60] p-4 sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm">
           <div
             className="flex items-center gap-4 p-4 border"
             style={{
@@ -89,8 +83,7 @@ export default function PWAInstallPrompt() {
               <X className="w-4 h-4" style={{ color: 'rgba(209,221,230,0.5)' }} />
             </button>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+    ) : null
   );
 }

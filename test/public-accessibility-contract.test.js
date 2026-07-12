@@ -6,6 +6,7 @@ const nav = readFileSync(new URL('../src/components/public/PublicNav.jsx', impor
 const memberForm = readFileSync(new URL('../src/components/public/MemberInterestForm.jsx', import.meta.url), 'utf8');
 const events = readFileSync(new URL('../src/pages/Events.jsx', import.meta.url), 'utf8');
 const stickyMobileCta = readFileSync(new URL('../src/components/public/StickyMobileCTA.jsx', import.meta.url), 'utf8');
+const packageManifest = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const formSources = [
   '../src/components/public/TrainerInterestForm.jsx',
   '../src/components/public/PartnerInterestForm.jsx',
@@ -41,6 +42,12 @@ test('the shared mobile booking action avoids a page reload and respects reduced
   assert.match(stickyMobileCta, /motion-reduce:transition-none/);
   assert.match(stickyMobileCta, /requestAnimationFrame/);
   assert.doesNotMatch(stickyMobileCta, /framer-motion/);
+});
+
+test('public motion uses native reduced-motion-aware effects without a runtime dependency', () => {
+  assert.doesNotMatch(packageManifest, /framer-motion/);
+  assert.match(readFileSync(new URL('../src/index.css', import.meta.url), 'utf8'), /prefers-reduced-motion: reduce/);
+  assert.match(readFileSync(new URL('../src/components/public/motion/Reveal.jsx', import.meta.url), 'utf8'), /IntersectionObserver/);
 });
 
 test('every remaining acquisition form names custom inputs and non-input controls', () => {

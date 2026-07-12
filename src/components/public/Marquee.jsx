@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 
 const WORDS = ['Beat Your Best', 'Structure', 'Performance', 'Discipline', 'Event Ready', 'Resilience', 'Kingaroy QLD'];
 
@@ -15,11 +14,7 @@ export default function Marquee() {
       className="relative overflow-hidden border-y py-5"
       style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: '#0d1720' }}
     >
-      <motion.div
-        className="flex whitespace-nowrap"
-        animate={{ x: ['0%', '-50%'] }}
-        transition={{ duration: 28, ease: 'linear', repeat: Infinity }}
-      >
+      <div className="xert-marquee-track flex whitespace-nowrap">
         {items.map((w, i) => (
           <span key={i} className="flex items-center shrink-0">
             <span
@@ -31,7 +26,7 @@ export default function Marquee() {
             <span className="w-1.5 h-1.5 rounded-full mx-2" style={{ backgroundColor: '#7BA7BC' }} />
           </span>
         ))}
-      </motion.div>
+      </div>
       {/* Edge fades */}
       <div className="absolute inset-y-0 left-0 w-24" style={{ background: 'linear-gradient(90deg, #0d1720, transparent)' }} />
       <div className="absolute inset-y-0 right-0 w-24" style={{ background: 'linear-gradient(270deg, #0d1720, transparent)' }} />

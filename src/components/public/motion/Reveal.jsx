@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { motion, useInView } from 'framer-motion';
 
 /**
  * Scroll-triggered reveal. Wraps children and animates them in
@@ -16,27 +15,42 @@ export default function Reveal({
   duration = 0.7,
 }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once, margin: '-8% 0px -8% 0px' });
-  const [forceShow, setForceShow] = useState(false);
+  const [show, setShow] = useState(false);
 
   // Fail-safe: if for any reason the element never registers as in-view
   // (e.g. layout/observer quirks), reveal it so content is never lost.
   useEffect(() => {
-    const t = setTimeout(() => setForceShow(true), 1200);
-    return () => clearTimeout(t);
-  }, []);
-
-  const show = inView || forceShow;
+    const node = ref.current;
+    if (!node || !('IntersectionObserver' in window)) {
+      setShow(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setShow(true);
+        if (once) observer.disconnect();
+      } else if (!once) setShow(false);
+    }, { rootMargin: '-8% 0px -8% 0px' });
+    observer.observe(node);
+    const fallback = window.setTimeout(() => setShow(true), 1200);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(fallback);
+    };
+  }, [once]);
 
   return (
-    <motion.div
+    <div
       ref={ref}
-      className={className}
-      initial={{ opacity: 0, y, x }}
-      animate={show ? { opacity: 1, y: 0, x: 0 } : { opacity: 0, y, x }}
-      transition={{ duration, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={`xert-reveal ${className}`}
+      style={{
+        opacity: show ? 1 : 0,
+        transform: show ? 'translate3d(0,0,0)' : `translate3d(${x}px,${y}px,0)`,
+        transitionDuration: `${duration}s`,
+        transitionDelay: `${delay}s`
+      }}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
