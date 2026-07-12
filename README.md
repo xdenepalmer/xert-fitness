@@ -75,15 +75,18 @@ The Supabase schema is defined in:
   that guarantees a paid order grants at most one credit batch
 - `src/supabase/product_validation_upgrade.sql` — validates product price,
   currency, credit count, and expiry before checkout can use a pack
+- `src/supabase/event_goals_upgrade.sql` — lets members choose a calendar event
+  to train toward and exposes each training group to admins
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
 `admin_cms_schema.sql`, `availability_schema.sql`, and finally `rls_hardening.sql`.
 For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
-`rls_hardening.sql`, and `product_validation_upgrade.sql` after those
-prerequisites. The scripts are idempotent; run them in the Supabase SQL editor
-(or apply via the project's Postgres connection).
+`rls_hardening.sql`, `product_validation_upgrade.sql`, and
+`event_goals_upgrade.sql` after those prerequisites. The scripts are idempotent;
+run them in the Supabase SQL editor (or apply via the project's Postgres
+connection).
 
 The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
 any missing XERT calendar events for an authenticated admin.

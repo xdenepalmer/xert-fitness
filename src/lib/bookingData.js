@@ -4,11 +4,7 @@ import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
 export async function getProducts() {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('active', true)
-    .order('sort_order', { ascending: true });
+  const { data, error } = await supabase.from('products').select('*').eq('active', true).order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -21,16 +17,18 @@ export async function getProducts() {
  * serverless function can attribute the order + credits to their account).
  */
 export async function startCheckout(productSlug) {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
   if (!session) throw new Error('Please sign in before purchasing a pack.');
 
   const res = await fetch('/api/checkout', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${session.access_token}`
     },
-    body: JSON.stringify({ product_slug: productSlug }),
+    body: JSON.stringify({ product_slug: productSlug })
   });
 
   if (!res.ok) {
@@ -46,12 +44,7 @@ export async function startCheckout(productSlug) {
 
 export async function getMyCredits() {
   const nowIso = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('credit_batches')
-    .select('*')
-    .gt('remaining', 0)
-    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
-    .order('expires_at', { ascending: true });
+  const { data, error } = await supabase.from('credit_batches').select('*').gt('remaining', 0).or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('expires_at', { ascending: true });
   if (error) throw new Error(error.message);
   const batches = data || [];
   const total = batches.reduce((sum, b) => sum + (b.remaining || 0), 0);
@@ -59,10 +52,7 @@ export async function getMyCredits() {
 }
 
 export async function getMyOrders() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, products(name)')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -89,7 +79,7 @@ const BOOKING_ERRORS = {
   ALREADY_BOOKED: "You've already booked this class.",
   SESSION_FULL: 'Sorry, this class is now full.',
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
-  NO_CREDITS: 'You have no available class credits. Purchase a pack to book.',
+  NO_CREDITS: 'You have no available class credits. Purchase a pack to book.'
 };
 
 function friendlyBookingError(message) {
@@ -100,32 +90,36 @@ function friendlyBookingError(message) {
 }
 
 export async function bookSession(sessionId) {
-  const { data, error } = await supabase.rpc('book_session', { p_session_id: sessionId });
+  const { data, error } = await supabase.rpc('book_session', {
+    p_session_id: sessionId
+  });
   if (error) throw new Error(friendlyBookingError(error.message));
   return data; // booking id
 }
 
 export async function cancelBooking(bookingId) {
-  const { error } = await supabase.rpc('cancel_booking', { p_booking_id: bookingId });
+  const { error } = await supabase.rpc('cancel_booking', {
+    p_booking_id: bookingId
+  });
   if (error) throw new Error(friendlyBookingError(error.message));
 }
 
 // ─── Profile / role ───────────────────────────────────────────────────────────
 
 export async function getMyProfile() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error && error.code !== 'PGRST116') throw new Error(error.message);
   return data;
 }
 
 export async function updateMyProfile(updates) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in.');
   const { error } = await supabase
     .from('profiles')
@@ -137,21 +131,43 @@ export async function updateMyProfile(updates) {
 // ─── Public content: coaches & events ─────────────────────────────────────────
 
 export async function getCoaches() {
-  const { data, error } = await supabase
-    .from('coaches')
-    .select('*')
-    .eq('published', true)
-    .order('sort_order', { ascending: true });
+  const { data, error } = await supabase.from('coaches').select('*').eq('published', true).order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
 }
 
 export async function getEvents() {
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .eq('published', true)
-    .order('event_date', { ascending: true });
+  const { data, error } = await supabase.from('events').select('*').eq('published', true).order('event_date', { ascending: true });
   if (error) return XERT_2026_EVENTS;
   return data?.length ? sortEvents(data) : XERT_2026_EVENTS;
+}
+
+async function requireCurrentUserId() {
+  const {
+    data: { user },
+    error
+  } = await supabase.auth.getUser();
+  if (error || !user) throw new Error('Please sign in to manage your training goals.');
+  return user.id;
+}
+
+// ─── Member event goals ──────────────────────────────────────────────────────
+
+export async function getMyEventGoals() {
+  const userId = await requireCurrentUserId();
+  const { data, error } = await supabase.from('member_event_goals').select('event_id, created_at, events(id, name, category, event_date, end_date, location, region, url, published, sort_order)').eq('user_id', userId).order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function addMyEventGoal(eventId) {
+  const userId = await requireCurrentUserId();
+  const { error } = await supabase.from('member_event_goals').upsert({ user_id: userId, event_id: eventId }, { onConflict: 'user_id,event_id', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+}
+
+export async function removeMyEventGoal(eventId) {
+  const userId = await requireCurrentUserId();
+  const { error } = await supabase.from('member_event_goals').delete().eq('user_id', userId).eq('event_id', eventId);
+  if (error) throw new Error(error.message);
 }

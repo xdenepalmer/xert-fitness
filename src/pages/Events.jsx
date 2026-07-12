@@ -1,23 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CalendarPlus, ExternalLink, MapPin, Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarDays, CalendarPlus, ExternalLink, MapPin, Target, Trophy } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
-import { getEvents } from '@/lib/bookingData';
-import {
-  downloadEventIcs,
-  formatEventRange,
-  getEventState,
-  groupEventsByMonth,
-  sortEvents,
-} from '@/lib/eventCalendar';
+import { addMyEventGoal, getEvents, getMyEventGoals, removeMyEventGoal } from '@/lib/bookingData';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { downloadEventIcs, formatEventRange, getEventState, groupEventsByMonth, sortEvents } from '@/lib/eventCalendar';
+
+function canTrackEventGoal(event) {
+  return Boolean(event?.id && event.source !== 'xert-default');
+}
 
 export default function Events() {
+  const { session } = useSupabaseAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [showPast, setShowPast] = useState(false);
+  const [goalEventIds, setGoalEventIds] = useState(() => new Set());
+  const [savingGoalId, setSavingGoalId] = useState(null);
 
   useEffect(() => {
     getEvents()
@@ -26,6 +32,65 @@ export default function Events() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!session) {
+      setGoalEventIds(new Set());
+      return undefined;
+    }
+    let active = true;
+    getMyEventGoals()
+      .then(goals => {
+        if (active) setGoalEventIds(new Set(goals.map(goal => goal.event_id)));
+      })
+      .catch(error => {
+        if (active)
+          toast({
+            title: 'Could not load training goals',
+            description: error.message,
+            variant: 'destructive'
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [session, toast]);
+
+  const handleGoalToggle = async event => {
+    if (!session) {
+      navigate('/login');
+      return;
+    }
+    if (!canTrackEventGoal(event)) return;
+    const eventId = event.id;
+    const alreadySelected = goalEventIds.has(eventId);
+    setSavingGoalId(eventId);
+    try {
+      if (alreadySelected) {
+        await removeMyEventGoal(eventId);
+      } else {
+        await addMyEventGoal(eventId);
+      }
+      setGoalEventIds(current => {
+        const next = new Set(current);
+        if (alreadySelected) next.delete(eventId);
+        else next.add(eventId);
+        return next;
+      });
+      toast({
+        title: alreadySelected ? 'Training goal removed' : 'Training goal saved',
+        description: alreadySelected ? `${event.name} has been removed from your account.` : `${event.name} is now one of your XERT training goals.`
+      });
+    } catch (error) {
+      toast({
+        title: 'Could not update training goal',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingGoalId(null);
+    }
+  };
+
   const categories = useMemo(() => {
     const set = new Set(events.map(e => e.category).filter(Boolean));
     return ['all', ...Array.from(set).sort()];
@@ -33,22 +98,13 @@ export default function Events() {
 
   const orderedEvents = useMemo(() => sortEvents(events), [events]);
 
-  const filtered = useMemo(
-    () => (activeCategory === 'all' ? orderedEvents : orderedEvents.filter(e => e.category === activeCategory)),
-    [orderedEvents, activeCategory]
-  );
+  const filtered = useMemo(() => (activeCategory === 'all' ? orderedEvents : orderedEvents.filter(e => e.category === activeCategory)), [orderedEvents, activeCategory]);
 
-  const visibleEvents = useMemo(
-    () => filtered.filter(ev => showPast || getEventState(ev).key !== 'complete'),
-    [filtered, showPast]
-  );
+  const visibleEvents = useMemo(() => filtered.filter(ev => showPast || getEventState(ev).key !== 'complete'), [filtered, showPast]);
 
   const byMonth = useMemo(() => groupEventsByMonth(visibleEvents), [visibleEvents]);
 
-  const comingUp = useMemo(
-    () => orderedEvents.filter(ev => getEventState(ev).key !== 'complete').slice(0, 3),
-    [orderedEvents]
-  );
+  const comingUp = useMemo(() => orderedEvents.filter(ev => getEventState(ev).key !== 'complete').slice(0, 3), [orderedEvents]);
 
   const usingDefaultCalendar = events.some(ev => ev.source === 'xert-default');
 
@@ -66,13 +122,12 @@ export default function Events() {
             </span>
           </div>
           <h1 className="font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-            Event Schedule<br />
+            Event Schedule
+            <br />
             <span style={{ color: '#7BA7BC' }}>2026.</span>
           </h1>
           <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)', fontSize: '1.0625rem' }}>
-            XERT programming follows the South East Queensland sporting and fitness calendar. Choose your events, train
-            with purpose and build toward shared goals through the year — from marathons and triathlons to functional
-            fitness, ultra running and community racing.
+            XERT programming follows the South East Queensland sporting and fitness calendar. Choose your events, train with purpose and build toward shared goals through the year — from marathons and triathlons to functional fitness, ultra running and community racing.
           </p>
 
           {/* Category filter */}
@@ -89,10 +144,21 @@ export default function Events() {
                   {comingUp.map(ev => {
                     const state = getEventState(ev);
                     return (
-                      <article key={`next-${ev.id || ev.name}`} className="border p-4" style={{ borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
-                        <p className="font-body text-[10px] uppercase tracking-wider mb-2" style={{ color: '#7BA7BC' }}>{state.label}</p>
+                      <article
+                        key={`next-${ev.id || ev.name}`}
+                        className="border p-4"
+                        style={{
+                          borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
+                          backgroundColor: 'rgba(50,72,90,0.16)'
+                        }}
+                      >
+                        <p className="font-body text-[10px] uppercase tracking-wider mb-2" style={{ color: '#7BA7BC' }}>
+                          {state.label}
+                        </p>
                         <h2 className="font-display text-xl uppercase leading-tight text-xert-offwhite">{ev.name}</h2>
-                        <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.58)' }}>{formatEventRange(ev)} · {ev.location}</p>
+                        <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                          {formatEventRange(ev)} · {ev.location}
+                        </p>
                       </article>
                     );
                   })}
@@ -111,7 +177,7 @@ export default function Events() {
                       style={{
                         borderColor: active ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
                         backgroundColor: active ? 'rgba(123,167,188,0.14)' : 'transparent',
-                        color: active ? '#F1F3F4' : 'rgba(209,221,230,0.6)',
+                        color: active ? '#F1F3F4' : 'rgba(209,221,230,0.6)'
                       }}
                     >
                       {cat === 'all' ? 'All events' : cat}
@@ -125,7 +191,7 @@ export default function Events() {
                   style={{
                     borderColor: showPast ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
                     backgroundColor: showPast ? 'rgba(123,167,188,0.14)' : 'transparent',
-                    color: showPast ? '#F1F3F4' : 'rgba(209,221,230,0.6)',
+                    color: showPast ? '#F1F3F4' : 'rgba(209,221,230,0.6)'
                   }}
                 >
                   {showPast ? 'Hide completed' : 'Show completed'}
@@ -137,10 +203,14 @@ export default function Events() {
           {/* Body */}
           <div className="mt-12">
             {loading && (
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading the 2026 calendar…</p>
+              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                Loading the 2026 calendar…
+              </p>
             )}
             {error && (
-              <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Couldn’t load events: {error}</p>
+              <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>
+                Couldn’t load events: {error}
+              </p>
             )}
             {!loading && !error && events.length === 0 && (
               <div className="border p-10 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
@@ -161,75 +231,103 @@ export default function Events() {
               </div>
             )}
 
-            {!loading && !error && byMonth.map(({ month, events: list }) => (
-              <section key={month} className="mb-10">
-                <div className="flex items-baseline gap-4 mb-4">
-                  <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
-                  <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                    {list.length} {list.length === 1 ? 'event' : 'events'}
-                  </span>
-                </div>
+            {!loading &&
+              !error &&
+              byMonth.map(({ month, events: list }) => (
+                <section key={month} className="mb-10">
+                  <div className="flex items-baseline gap-4 mb-4">
+                    <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
+                    <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                      {list.length} {list.length === 1 ? 'event' : 'events'}
+                    </span>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {list.map(ev => {
-                    const Wrapper = ev.url ? 'a' : 'div';
-                    const wrapperProps = ev.url
-                      ? { href: ev.url, target: '_blank', rel: 'noopener noreferrer' }
-                      : {};
-                    const state = getEventState(ev);
-                    return (
-                      <Wrapper
-                        key={ev.id}
-                        {...wrapperProps}
-                        className="group border p-5 flex flex-col transition-colors"
-                        style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}
-                      >
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <span className="font-body text-sm uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                            {formatEventRange(ev)}
-                          </span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ color: state.key === 'complete' ? 'rgba(16,24,32,0.64)' : '#101820', backgroundColor: state.key === 'complete' ? 'rgba(209,221,230,0.52)' : '#D1DDE6' }}>
-                              {state.label}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {list.map(ev => {
+                      const state = getEventState(ev);
+                      const trackable = canTrackEventGoal(ev);
+                      const selectedGoal = trackable && goalEventIds.has(ev.id);
+                      return (
+                        <article
+                          key={ev.id}
+                          className="group border p-5 flex flex-col transition-colors"
+                          style={{
+                            borderColor: 'rgba(123,167,188,0.16)',
+                            backgroundColor: 'rgba(50,72,90,0.16)'
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <span className="font-body text-sm uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                              {formatEventRange(ev)}
                             </span>
-                            {ev.category && (
-                              <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1 hidden sm:inline-block" style={{ color: '#101820', backgroundColor: '#D1DDE6' }}>
-                                {ev.category}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span
+                                className="font-body text-[10px] uppercase tracking-wider px-2 py-1"
+                                style={{
+                                  color: state.key === 'complete' ? 'rgba(16,24,32,0.64)' : '#101820',
+                                  backgroundColor: state.key === 'complete' ? 'rgba(209,221,230,0.52)' : '#D1DDE6'
+                                }}
+                              >
+                                {state.label}
                               </span>
+                              {ev.category && (
+                                <span
+                                  className="font-body text-[10px] uppercase tracking-wider px-2 py-1 hidden sm:inline-block"
+                                  style={{
+                                    color: '#101820',
+                                    backgroundColor: '#D1DDE6'
+                                  }}
+                                >
+                                  {ev.category}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <h3 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-2 flex items-start gap-2">
+                            {ev.name}
+                            {ev.url && <ExternalLink className="w-4 h-4 mt-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />}
+                          </h3>
+                          {ev.location && (
+                            <p className="font-body text-sm mt-auto flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.56)' }}>
+                              <MapPin className="w-3.5 h-3.5" style={{ color: 'rgba(123,167,188,0.6)' }} />
+                              {ev.location}
+                            </p>
+                          )}
+                          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                            {ev.url && (
+                              <a href={ev.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Event details
+                              </a>
+                            )}
+                            {ev.event_date && (
+                              <button type="button" onClick={() => downloadEventIcs(ev)} className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+                                <CalendarPlus className="w-3.5 h-3.5" />
+                                Add to calendar
+                              </button>
+                            )}
+                            {trackable && state.key !== 'complete' && (
+                              <button
+                                type="button"
+                                aria-pressed={selectedGoal}
+                                disabled={savingGoalId === ev.id}
+                                onClick={() => handleGoalToggle(ev)}
+                                className="inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider disabled:opacity-50"
+                                style={{
+                                  color: selectedGoal ? '#D1DDE6' : '#7BA7BC'
+                                }}
+                              >
+                                <Target className="w-3.5 h-3.5" />
+                                {savingGoalId === ev.id ? 'Saving goal...' : selectedGoal ? 'Training goal' : 'Train for this'}
+                              </button>
                             )}
                           </div>
-                        </div>
-                        <h3 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-2 flex items-start gap-2">
-                          {ev.name}
-                          {ev.url && <ExternalLink className="w-4 h-4 mt-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />}
-                        </h3>
-                        {ev.location && (
-                          <p className="font-body text-sm mt-auto flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.56)' }}>
-                            <MapPin className="w-3.5 h-3.5" style={{ color: 'rgba(123,167,188,0.6)' }} />
-                            {ev.location}
-                          </p>
-                        )}
-                        {ev.event_date && (
-                          <button
-                            type="button"
-                            onClick={e => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              downloadEventIcs(ev);
-                            }}
-                            className="inline-flex items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
-                            style={{ color: '#7BA7BC' }}
-                          >
-                            <CalendarPlus className="w-3.5 h-3.5" />
-                            Add to calendar
-                          </button>
-                        )}
-                      </Wrapper>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
           </div>
 
           {/* CTA */}
@@ -240,11 +338,7 @@ export default function Events() {
                 Training toward one of these? Book a session and prepare with structured coaching.
               </p>
             </div>
-            <a
-              href="/booking"
-              className="inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] sm:ml-auto shrink-0"
-              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
-            >
+            <a href="/booking" className="inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] sm:ml-auto shrink-0" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
               Book A Session
             </a>
           </div>

@@ -64,13 +64,16 @@ export async function createClassSessions(sessionData) {
 }
 
 export async function updateClassSession(id, updates) {
-  const { error } = await supabase.from('class_sessions').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await supabase
+    .from('class_sessions')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw new Error(error.message);
 }
 
 export async function cancelClassSession(id) {
   const { data, error } = await supabase.rpc('admin_cancel_class_session', {
-    p_session_id: id,
+    p_session_id: id
   });
   if (error) throw new Error(error.message);
   return data || 0;
@@ -78,7 +81,11 @@ export async function cancelClassSession(id) {
 
 export async function duplicateClassSession(session) {
   const { id, created_at, updated_at, ...rest } = session;
-  return createClassSession({ ...rest, status: 'draft', title: `${rest.title} (copy)` });
+  return createClassSession({
+    ...rest,
+    status: 'draft',
+    title: `${rest.title} (copy)`
+  });
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
@@ -100,10 +107,7 @@ export async function updateBookingStatus(id, status) {
 // Authenticated member bookings are a separate, credit-backed workflow from
 // pre-launch enquiry forms. The admin queue presents both together.
 export async function getMemberBookingRequests(filters = {}) {
-  let query = supabase
-    .from('session_bookings')
-    .select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)')
-    .order('created_at', { ascending: false });
+  let query = supabase.from('session_bookings').select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)').order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
 
   const { data, error } = await query;
@@ -113,14 +117,14 @@ export async function getMemberBookingRequests(filters = {}) {
   const memberIds = [...new Set(rows.map(row => row.user_id).filter(Boolean))];
   if (memberIds.length === 0) return [];
 
-  const { data: profiles, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, full_name, email, phone')
-    .in('id', memberIds);
+  const { data: profiles, error: profileError } = await supabase.from('profiles').select('id, full_name, email, phone').in('id', memberIds);
   if (profileError) throw new Error(profileError.message);
 
   const profileById = new Map((profiles || []).map(profile => [profile.id, profile]));
-  return rows.map(row => ({ ...row, profile: profileById.get(row.user_id) || null }));
+  return rows.map(row => ({
+    ...row,
+    profile: profileById.get(row.user_id) || null
+  }));
 }
 
 export async function updateMemberBookingStatus(id, status) {
@@ -201,14 +205,17 @@ export function getDefaultSettings() {
     fitbox_enabled: false,
     fitbox_booking_url: null,
     announcement_banner_text: null,
-    announcement_banner_enabled: false,
+    announcement_banner_enabled: false
   };
 }
 
 export async function updateSoftLaunchSettings(updates) {
   const current = await getSoftLaunchSettings();
   if (current?.id) {
-    const { error } = await supabase.from('admin_settings').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', current.id);
+    const { error } = await supabase
+      .from('admin_settings')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', current.id);
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabase.from('admin_settings').insert([{ ...getDefaultSettings(), ...updates }]);
@@ -224,13 +231,15 @@ export async function getDashboardStats() {
   const weekAgoIso = weekAgo.toISOString();
 
   const [members, trainers, partners, newMembers, bookings, memberBookings, ptRequests] = await Promise.all([
-    supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', { count: 'exact' }),
+    supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', {
+      count: 'exact'
+    }),
     supabase.from('trainer_interest').select('id', { count: 'exact' }),
     supabase.from('partner_interest').select('id', { count: 'exact' }),
     supabase.from('member_interest').select('id', { count: 'exact' }).gte('created_at', weekAgoIso),
     supabase.from('class_bookings').select('id, status', { count: 'exact' }),
     supabase.from('session_bookings').select('id, status', { count: 'exact' }),
-    supabase.from('private_session_requests').select('id, status', { count: 'exact' }),
+    supabase.from('private_session_requests').select('id, status', { count: 'exact' })
   ]);
   assertSupabaseResponses([members, trainers, partners, newMembers, bookings, memberBookings, ptRequests]);
 
@@ -245,7 +254,10 @@ export async function getDashboardStats() {
       timeCounts[t] = (timeCounts[t] || 0) + 1;
     });
   });
-  const topTimes = Object.entries(timeCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, c]) => ({ time: t, count: c }));
+  const topTimes = Object.entries(timeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([t, c]) => ({ time: t, count: c }));
 
   // Most common goals
   const goalCounts = {};
@@ -254,7 +266,10 @@ export async function getDashboardStats() {
       goalCounts[g] = (goalCounts[g] || 0) + 1;
     });
   });
-  const topGoals = Object.entries(goalCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g, c]) => ({ goal: g, count: c }));
+  const topGoals = Object.entries(goalCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([g, c]) => ({ goal: g, count: c }));
 
   return {
     totalMembers: members.count || 0,
@@ -265,21 +280,16 @@ export async function getDashboardStats() {
     eventPrepInterest: memberData.filter(m => m.interested_in_event_prep).length,
     topTimes,
     topGoals,
-    pendingBookings: bookingData.filter(b => b.status === 'requested').length
-      + memberBookingData.filter(b => b.status === 'requested').length,
-    waitlistedBookings: bookingData.filter(b => b.status === 'waitlisted').length
-      + memberBookingData.filter(b => b.status === 'waitlisted').length,
-    ptRequests: ptRequests.count || 0,
+    pendingBookings: bookingData.filter(b => b.status === 'requested').length + memberBookingData.filter(b => b.status === 'requested').length,
+    waitlistedBookings: bookingData.filter(b => b.status === 'waitlisted').length + memberBookingData.filter(b => b.status === 'waitlisted').length,
+    ptRequests: ptRequests.count || 0
   };
 }
 
 // ─── Coaches (admin CRUD) ───────────────────────────────────────────────────
 
 export async function getAllCoaches() {
-  const { data, error } = await supabase
-    .from('coaches')
-    .select('*')
-    .order('sort_order', { ascending: true });
+  const { data, error } = await supabase.from('coaches').select('*').order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -302,12 +312,18 @@ export async function deleteCoach(id) {
 // ─── Events (admin CRUD) ────────────────────────────────────────────────────
 
 export async function getAllEvents() {
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .order('event_date', { ascending: true });
+  const { data, error } = await supabase.from('events').select('*').order('event_date', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+export async function getEventGoalCounts() {
+  const { data, error } = await supabase.from('member_event_goals').select('event_id');
+  if (error) throw new Error(error.message);
+  return (data || []).reduce((counts, goal) => {
+    counts[goal.event_id] = (counts[goal.event_id] || 0) + 1;
+    return counts;
+  }, {});
 }
 
 export async function createEvent(event) {
@@ -326,9 +342,7 @@ export async function deleteEvent(id) {
 }
 
 export async function seedXertEventCalendar() {
-  const { data: existing, error: existingError } = await supabase
-    .from('events')
-    .select('name,event_date');
+  const { data: existing, error: existingError } = await supabase.from('events').select('name,event_date');
   if (existingError) throw new Error(existingError.message);
 
   const existingKeys = new Set((existing || []).map(event => `${event.name}|${event.event_date}`));
@@ -347,12 +361,15 @@ export async function seedXertEventCalendar() {
     region: event.region,
     sort_order: event.sort_order,
     published: true,
-    url: (/** @type {{ url?: string }} */ (event)).url || null,
+    url: /** @type {{ url?: string }} */ (event).url || null
   }));
 
   const { error } = await supabase.from('events').insert(payload);
   if (error) throw new Error(error.message);
-  return { inserted: missing.length, total: (existing?.length || 0) + missing.length };
+  return {
+    inserted: missing.length,
+    total: (existing?.length || 0) + missing.length
+  };
 }
 
 // ─── Members (admin) ─────────────────────────────────────────────────────────
@@ -365,27 +382,35 @@ export async function adminListMembers() {
 
 export async function adminGrantCredits(userId, sessions, validityDays) {
   const { error } = await supabase.rpc('admin_grant_credits', {
-    p_user_id: userId, p_sessions: sessions, p_validity_days: validityDays ?? null,
+    p_user_id: userId,
+    p_sessions: sessions,
+    p_validity_days: validityDays ?? null
   });
   if (error) throw new Error(error.message);
 }
 
 export async function adminSetRole(userId, role) {
-  const { error } = await supabase.rpc('admin_set_role', { p_user_id: userId, p_role: role });
+  const { error } = await supabase.rpc('admin_set_role', {
+    p_user_id: userId,
+    p_role: role
+  });
   if (error) throw new Error(error.message);
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────
 
 export async function adminSessionRoster(sessionId) {
-  const { data, error } = await supabase.rpc('admin_session_roster', { p_session_id: sessionId });
+  const { data, error } = await supabase.rpc('admin_session_roster', {
+    p_session_id: sessionId
+  });
   if (error) throw new Error(error.message);
   return data || [];
 }
 
 export async function adminSetBookingStatus(bookingId, status) {
   const { error } = await supabase.rpc('admin_set_booking_status', {
-    p_booking_id: bookingId, p_status: status,
+    p_booking_id: bookingId,
+    p_status: status
   });
   if (error) throw new Error(error.message);
 }
@@ -393,10 +418,7 @@ export async function adminSetBookingStatus(bookingId, status) {
 // ─── Orders (admin) ──────────────────────────────────────────────────────────
 
 export async function getAllOrders() {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, products(name)')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -404,10 +426,7 @@ export async function getAllOrders() {
 // ─── Products (admin) ────────────────────────────────────────────────────────
 
 export async function getAllProducts() {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .order('sort_order', { ascending: true });
+  const { data, error } = await supabase.from('products').select('*').order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -425,20 +444,12 @@ export async function getBusinessStats() {
   monthStart.setHours(0, 0, 0, 0);
   const nowIso = new Date().toISOString();
 
-  const [orders, members, credits, upcoming] = await Promise.all([
-    supabase.from('orders').select('amount_cents, status, paid_at, created_at').eq('status', 'paid'),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase.from('credit_batches').select('remaining, expires_at').gt('remaining', 0),
-    supabase.from('class_sessions').select('id', { count: 'exact', head: true })
-      .eq('status', 'published').gte('start_time', nowIso),
-  ]);
+  const [orders, members, credits, upcoming] = await Promise.all([supabase.from('orders').select('amount_cents, status, paid_at, created_at').eq('status', 'paid'), supabase.from('profiles').select('id', { count: 'exact', head: true }), supabase.from('credit_batches').select('remaining, expires_at').gt('remaining', 0), supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('start_time', nowIso)]);
   assertSupabaseResponses([orders, members, credits, upcoming]);
 
   const paid = orders.data || [];
   const monthPaid = paid.filter(o => new Date(o.paid_at || o.created_at) >= monthStart);
-  const activeCredits = (credits.data || [])
-    .filter(c => !c.expires_at || new Date(c.expires_at) > new Date())
-    .reduce((s, c) => s + (c.remaining || 0), 0);
+  const activeCredits = (credits.data || []).filter(c => !c.expires_at || new Date(c.expires_at) > new Date()).reduce((s, c) => s + (c.remaining || 0), 0);
 
   return {
     totalRevenueCents: paid.reduce((s, o) => s + (o.amount_cents || 0), 0),
@@ -446,7 +457,7 @@ export async function getBusinessStats() {
     paidOrders: paid.length,
     memberCount: members.count || 0,
     activeCredits,
-    upcomingClasses: upcoming.count || 0,
+    upcomingClasses: upcoming.count || 0
   };
 }
 
@@ -457,13 +468,13 @@ export async function getAdminBadgeCounts() {
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
-    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested')
   ]);
   assertSupabaseResponses([newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT]);
   return {
     members: newLeads.count || 0,
     bookings: (pendingLegacyBookings.count || 0) + (pendingMemberBookings.count || 0),
-    'pt-requests': pendingPT.count || 0,
+    'pt-requests': pendingPT.count || 0
   };
 }
 
@@ -478,7 +489,7 @@ async function healthCheck(key, label, fn) {
       status: result.status || 'ok',
       detail: result.detail || 'Ready',
       action: result.action || null,
-      count: result.count ?? null,
+      count: result.count ?? null
     };
   } catch (error) {
     return {
@@ -487,7 +498,7 @@ async function healthCheck(key, label, fn) {
       status: 'error',
       detail: error.message || 'Check failed',
       action: 'Check Supabase schema, RLS policies, and admin permissions.',
-      count: null,
+      count: null
     };
   }
 }
@@ -503,107 +514,136 @@ export async function getOperationsHealth() {
     }),
 
     healthCheck('admins', 'Admin access', async () => {
-      const { count, error } = await supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', 'admin');
+      const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin');
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} admin account${count === 1 ? '' : 's'} configured.` }
-        : { status: 'attention', count: 0, detail: 'No admin profile found.', action: 'Promote an owner account in Supabase profiles.role.' };
+        ? {
+            count,
+            detail: `${count} admin account${count === 1 ? '' : 's'} configured.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'No admin profile found.',
+            action: 'Promote an owner account in Supabase profiles.role.'
+          };
     }),
 
     healthCheck('products', 'Session packs', async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('slug, active, stripe_price_id')
-        .eq('active', true);
+      const { data, error } = await supabase.from('products').select('slug, active, stripe_price_id').eq('active', true);
       if (error) throw error;
       const products = data || [];
       const missingStripePrices = products.filter(p => !p.stripe_price_id).length;
       if (products.length === 0) {
-        return { status: 'attention', count: 0, detail: 'No active session packs.', action: 'Activate products in Session Packs.' };
+        return {
+          status: 'attention',
+          count: 0,
+          detail: 'No active session packs.',
+          action: 'Activate products in Session Packs.'
+        };
       }
       return {
         status: missingStripePrices > 0 ? 'attention' : 'ok',
         count: products.length,
-        detail: missingStripePrices > 0
-          ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} use ad-hoc Stripe pricing.`
-          : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
-        action: missingStripePrices > 0 ? 'Add Stripe Price IDs for cleaner product reporting.' : null,
+        detail: missingStripePrices > 0 ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} use ad-hoc Stripe pricing.` : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
+        action: missingStripePrices > 0 ? 'Add Stripe Price IDs for cleaner product reporting.' : null
       };
     }),
 
     healthCheck('classes', 'Published classes', async () => {
-      const { count, error } = await supabase
-        .from('class_sessions')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'published')
-        .eq('public_visible', true)
-        .gte('start_time', nowIso);
+      const { count, error } = await supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').eq('public_visible', true).gte('start_time', nowIso);
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} upcoming public class${count === 1 ? '' : 'es'} available.` }
-        : { status: 'attention', count: 0, detail: 'No upcoming public classes.', action: 'Publish launch classes in Class Calendar.' };
+        ? {
+            count,
+            detail: `${count} upcoming public class${count === 1 ? '' : 'es'} available.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'No upcoming public classes.',
+            action: 'Publish launch classes in Class Calendar.'
+          };
     }),
 
     healthCheck('coaches', 'Published coaches', async () => {
-      const { count, error } = await supabase
-        .from('coaches')
-        .select('id', { count: 'exact', head: true })
-        .eq('published', true);
+      const { count, error } = await supabase.from('coaches').select('id', { count: 'exact', head: true }).eq('published', true);
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} published team profile${count === 1 ? '' : 's'}.` }
-        : { status: 'attention', count: 0, detail: 'No published team profiles.', action: 'Add coaches, nutritionists, physios, or massage partners.' };
+        ? {
+            count,
+            detail: `${count} published team profile${count === 1 ? '' : 's'}.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'No published team profiles.',
+            action: 'Add coaches, nutritionists, physios, or massage partners.'
+          };
     }),
 
     healthCheck('events', 'Published events', async () => {
-      const { count, error } = await supabase
-        .from('events')
-        .select('id', { count: 'exact', head: true })
-        .eq('published', true);
+      const { count, error } = await supabase.from('events').select('id', { count: 'exact', head: true }).eq('published', true);
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} public event${count === 1 ? '' : 's'} in the calendar.` }
-        : { status: 'attention', count: 0, detail: 'No published events.', action: 'Seed or add the 2026 SEQ event calendar.' };
+        ? {
+            count,
+            detail: `${count} public event${count === 1 ? '' : 's'} in the calendar.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'No published events.',
+            action: 'Seed or add the 2026 SEQ event calendar.'
+          };
     }),
 
     healthCheck('cms', 'Site CMS content', async () => {
-      const { count, error } = await supabase
-        .from('site_content')
-        .select('key', { count: 'exact', head: true });
+      const { count, error } = await supabase.from('site_content').select('key', { count: 'exact', head: true });
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} editable content block${count === 1 ? '' : 's'} saved.` }
-        : { status: 'attention', count: 0, detail: 'Using built-in content defaults.', action: 'Review and save content in Site Content.' };
+        ? {
+            count,
+            detail: `${count} editable content block${count === 1 ? '' : 's'} saved.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'Using built-in content defaults.',
+            action: 'Review and save content in Site Content.'
+          };
     }),
 
     healthCheck('orders', 'Commerce activity', async () => {
-      const { count, error } = await supabase
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'paid');
+      const { count, error } = await supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'paid');
       if (error) throw error;
       return count > 0
-        ? { count, detail: `${count} paid order${count === 1 ? '' : 's'} recorded.` }
-        : { status: 'attention', count: 0, detail: 'No paid orders recorded yet.', action: 'Run a Stripe test purchase after deployment.' };
-    }),
+        ? {
+            count,
+            detail: `${count} paid order${count === 1 ? '' : 's'} recorded.`
+          }
+        : {
+            status: 'attention',
+            count: 0,
+            detail: 'No paid orders recorded yet.',
+            action: 'Run a Stripe test purchase after deployment.'
+          };
+    })
   ]);
 }
 
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders] = await Promise.all([
-    supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
-    supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }),
-  ]);
+  const [credits, bookings, orders] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false })]);
   for (const r of [credits, bookings, orders]) {
     if (r.error) throw new Error(r.error.message);
   }
-  return { credits: credits.data || [], bookings: bookings.data || [], orders: orders.data || [] };
+  return {
+    credits: credits.data || [],
+    bookings: bookings.data || [],
+    orders: orders.data || []
+  };
 }
 
 // ─── Site content (CMS) ──────────────────────────────────────────────────────
@@ -615,9 +655,7 @@ export async function getAllSiteContent() {
 }
 
 export async function saveSiteContent(key, contentData) {
-  const { error } = await supabase
-    .from('site_content')
-    .upsert({ key, data: contentData, updated_at: new Date().toISOString() });
+  const { error } = await supabase.from('site_content').upsert({ key, data: contentData, updated_at: new Date().toISOString() });
   if (error) throw new Error(error.message);
 }
 
@@ -627,12 +665,16 @@ export async function exportLeadsCsv(table) {
   if (!data || data.length === 0) return null;
 
   const headers = Object.keys(data[0]);
-  const rows = data.map(row => headers.map(h => {
-    const val = row[h];
-    if (Array.isArray(val)) return `"${val.join(', ')}"`;
-    if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
-    return val ?? '';
-  }).join(','));
+  const rows = data.map(row =>
+    headers
+      .map(h => {
+        const val = row[h];
+        if (Array.isArray(val)) return `"${val.join(', ')}"`;
+        if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
+        return val ?? '';
+      })
+      .join(',')
+  );
 
   return [headers.join(','), ...rows].join('\n');
 }

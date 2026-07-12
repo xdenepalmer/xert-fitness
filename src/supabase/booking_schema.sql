@@ -229,6 +229,16 @@ create table if not exists public.events (
   created_at  timestamptz not null default now()
 );
 
+-- ── member_event_goals (events members train toward together) ───────────────
+create table if not exists public.member_event_goals (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  event_id    uuid not null references public.events(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (user_id, event_id)
+);
+create index if not exists member_event_goals_event_idx on public.member_event_goals(event_id);
+
 
 -- ============================================================================
 -- Booking logic (SECURITY DEFINER so it can enforce rules atomically)
@@ -436,6 +446,19 @@ create policy "events_public_read" on public.events
   for select to anon, authenticated using (published = true);
 create policy "events_admin_all" on public.events
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- member_event_goals: members control their own goals; staff can see the
+-- group around each event so programming and follow-up stay purposeful.
+alter table public.member_event_goals enable row level security;
+drop policy if exists "member_event_goals_select_own_or_admin" on public.member_event_goals;
+drop policy if exists "member_event_goals_insert_own" on public.member_event_goals;
+drop policy if exists "member_event_goals_delete_own_or_admin" on public.member_event_goals;
+create policy "member_event_goals_select_own_or_admin" on public.member_event_goals
+  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+create policy "member_event_goals_insert_own" on public.member_event_goals
+  for insert to authenticated with check (user_id = auth.uid());
+create policy "member_event_goals_delete_own_or_admin" on public.member_event_goals
+  for delete to authenticated using (user_id = auth.uid() or public.is_admin());
 
 
 -- ── Function grants ─────────────────────────────────────────────────────────
