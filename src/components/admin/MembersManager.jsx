@@ -269,7 +269,10 @@ export default function MembersManager() {
 
   const handleRole = async (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
-    if (!confirm(`${verb} ${m.full_name || m.email}?`)) return;
+    const consequence = role === 'admin'
+      ? 'This grants access to member data, bookings, sales, content, and staff controls.'
+      : 'This removes access to all administrative tools.';
+    if (!confirm(`${verb} ${m.full_name || m.email}?\n\n${consequence}`)) return;
     setRoleChangingId(m.id);
     try {
       await adminSetRole(m.id, role);

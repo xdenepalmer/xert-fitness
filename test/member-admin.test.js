@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { creditGrantValidationError, filterMembers } from '../src/lib/memberAdmin.js';
+import { creditGrantValidationError, filterMembers, normalizeRoleChange } from '../src/lib/memberAdmin.js';
 
 test('validates audited credit grant inputs before calling Supabase', () => {
   assert.equal(creditGrantValidationError({ sessions: 4, validityDays: 28, note: 'Cash sale' }), null);
@@ -28,4 +28,18 @@ test('credit grant migration keeps retries idempotent and grants auditable', () 
   assert.match(sql, /if not public\.is_admin\(\)/i);
   assert.match(sql, /granted_by, sessions, validity_days, note, credit_batch_id/i);
   assert.match(sql, /grant execute on function public\.admin_grant_credits_v2/i);
+});
+
+test('validates role mutations and both database paths protect the final admin', () => {
+  assert.deepEqual(normalizeRoleChange(' user-a ', 'admin'), { userId: 'user-a', role: 'admin' });
+  assert.throws(() => normalizeRoleChange('', 'admin'), /member account/);
+  assert.throws(() => normalizeRoleChange('user-a', 'owner'), /member or admin/);
+
+  for (const path of ['../src/supabase/admin_cms_schema.sql', '../src/supabase/admin_role_safety_upgrade.sql']) {
+    const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
+    assert.match(sql, /pg_advisory_xact_lock/i);
+    assert.match(sql, /CANNOT_DEMOTE_LAST_ADMIN/i);
+    assert.match(sql, /insert into public\.admin_role_changes/i);
+    assert.match(sql, /changed_by, previous_role, new_role/i);
+  }
 });

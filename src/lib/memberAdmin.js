@@ -22,3 +22,10 @@ export function filterMembers(members, { search = '', role = 'all', credit = 'al
     return [member.full_name, member.email, member.phone].some(value => String(value || '').toLowerCase().includes(query));
   });
 }
+
+export function normalizeRoleChange(userId, role) {
+  const normalizedId = String(userId || '').trim();
+  if (!normalizedId) throw new Error('A member account is required.');
+  if (!['member', 'admin'].includes(role)) throw new Error('Role must be member or admin.');
+  return { userId: normalizedId, role };
+}

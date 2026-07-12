@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
+import { normalizeRoleChange } from './memberAdmin';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -425,11 +426,17 @@ export async function adminGrantCredits(userId, sessions, validityDays, requestI
 }
 
 export async function adminSetRole(userId, role) {
+  const change = normalizeRoleChange(userId, role);
   const { error } = await supabase.rpc('admin_set_role', {
-    p_user_id: userId,
-    p_role: role
+    p_user_id: change.userId,
+    p_role: change.role
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/CANNOT_DEMOTE_LAST_ADMIN/i.test(error.message || '')) {
+      throw new Error('Promote another administrator before removing the final admin.');
+    }
+    throw new Error(error.message);
+  }
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────
