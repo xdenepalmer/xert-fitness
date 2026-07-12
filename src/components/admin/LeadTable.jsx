@@ -1,14 +1,15 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { Download, RefreshCw, X } from 'lucide-react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Download, RefreshCw, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getMemberLeads, getTrainerLeads, getPartnerLeads, updateLead, updateLeadStatuses } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { selectedLeadIds } from '@/lib/adminLeads';
+import { collectLeadPages, selectedLeadIds } from '@/lib/adminLeads';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
 const TRAINER_STATUSES = ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'];
 const PARTNER_STATUSES = ['new', 'reviewing', 'contacted', 'meeting', 'approved', 'not_suitable', 'archived'];
+const PAGE_SIZE = 50;
 
 const STATUS_COLORS = {
   new: 'bg-xert-red/20 text-xert-red',
@@ -118,24 +119,34 @@ export default function LeadTable({ type = 'member' }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const requestIdRef = useRef(0);
 
   const fetchFn = type === 'member' ? getMemberLeads : type === 'trainer' ? getTrainerLeads : getPartnerLeads;
   const table = type === 'member' ? 'member_interest' : type === 'trainer' ? 'trainer_interest' : 'partner_interest';
   const statuses = type === 'member' ? MEMBER_STATUSES : type === 'trainer' ? TRAINER_STATUSES : PARTNER_STATUSES;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = 1) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError('');
     try {
-      const data = await fetchFn({ search: debouncedSearch, status: statusFilter });
-      setLeads(data);
+      const result = await fetchFn({ search: debouncedSearch, status: statusFilter, page: targetPage, pageSize: PAGE_SIZE });
+      if (requestId !== requestIdRef.current) return;
+      setLeads(result.rows);
+      setTotal(result.total);
+      setPage(result.page);
     } catch (e) {
+      if (requestId !== requestIdRef.current) return;
       setError(e.message);
       setLeads([]);
+      setTotal(0);
       setSelectedIds(new Set());
       setSelectedLead(null);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [debouncedSearch, fetchFn, statusFilter]);
 
@@ -146,16 +157,38 @@ export default function LeadTable({ type = 'member' }) {
 
   useEffect(() => {
     setSelectedIds(new Set());
-    void load();
+    void load(1);
   }, [load]);
 
-  const handleExport = () => {
-    if (leads.length === 0) {
-      toast({ title: 'No results to export', variant: 'destructive' });
-      return;
+  useEffect(() => () => { requestIdRef.current += 1; }, []);
+
+  const goToPage = targetPage => {
+    setSelectedIds(new Set());
+    setSelectedLead(null);
+    void load(targetPage);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const rows = await collectLeadPages(targetPage => fetchFn({
+        search: debouncedSearch,
+        status: statusFilter,
+        page: targetPage,
+        pageSize: 100
+      }));
+
+      if (rows.length === 0) {
+        toast({ title: 'No results to export', variant: 'destructive' });
+        return;
+      }
+      downloadCsv(`xert_${table}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+      toast({ title: 'CSV exported', description: `${rows.length} filtered result${rows.length === 1 ? '' : 's'} downloaded.` });
+    } catch (exportError) {
+      toast({ title: 'Export failed', description: exportError.message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
     }
-    downloadCsv(`xert_${table}_${new Date().toISOString().split('T')[0]}.csv`, leads);
-    toast({ title: 'CSV exported', description: `${leads.length} filtered result${leads.length === 1 ? '' : 's'} downloaded.` });
   };
 
   const handleBulkUpdate = async () => {
@@ -166,7 +199,7 @@ export default function LeadTable({ type = 'member' }) {
       toast({ title: 'Leads updated', description: `${selectedIds.size} lead${selectedIds.size === 1 ? '' : 's'} moved to ${bulkStatus.replace(/_/g, ' ')}.` });
       setSelectedIds(new Set());
       setBulkStatus('');
-      await load();
+      await load(1);
     } catch (bulkError) {
       toast({ title: 'Bulk update failed', description: bulkError.message, variant: 'destructive' });
     } finally {
@@ -175,6 +208,9 @@ export default function LeadTable({ type = 'member' }) {
   };
 
   const allSelected = leads.length > 0 && leads.every(lead => selectedIds.has(lead.id));
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="p-6">
@@ -191,12 +227,12 @@ export default function LeadTable({ type = 'member' }) {
           <option value="">All statuses</option>
           {statuses.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => void load()} disabled={loading} title="Refresh leads" aria-label="Refresh leads" className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel disabled:opacity-40">
+        <button type="button" onClick={() => void load(page)} disabled={loading} title="Refresh leads" aria-label="Refresh leads" className="p-2.5 border border-xert-steel/40 text-xert-steel hover:border-xert-steel disabled:opacity-40">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <button type="button" onClick={handleExport}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase hover:border-xert-concrete transition-colors whitespace-nowrap">
-          <Download className="w-3.5 h-3.5" /> Export results
+        <button type="button" onClick={() => void handleExport()} disabled={exporting || loading}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase hover:border-xert-concrete transition-colors whitespace-nowrap disabled:opacity-40">
+          <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting...' : 'Export results'}
         </button>
       </div>
 
@@ -204,7 +240,7 @@ export default function LeadTable({ type = 'member' }) {
         <div className="flex flex-wrap items-center gap-3 mb-4 p-3 border border-xert-steel/20 bg-xert-ink">
           <label className="inline-flex items-center gap-2 font-body text-xs text-xert-concrete/60">
             <input type="checkbox" checked={allSelected} onChange={event => setSelectedIds(event.target.checked ? new Set(leads.map(lead => lead.id)) : new Set())} className="accent-xert-red" />
-            Select all results
+            Select page
           </label>
           <span className="font-body text-xs text-xert-concrete/40">{selectedIds.size} selected</span>
           <select value={bulkStatus} onChange={event => setBulkStatus(event.target.value)} disabled={selectedIds.size === 0 || bulkSaving} className="sm:ml-auto bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-xs text-xert-offwhite disabled:opacity-40">
@@ -259,7 +295,22 @@ export default function LeadTable({ type = 'member' }) {
         </div>
       )}
 
-      <p className="font-body text-xs text-xert-concrete/30 mt-4">{leads.length} result{leads.length !== 1 ? 's' : ''}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="font-body text-xs text-xert-concrete/40">
+          {total === 0 ? '0 results' : `${firstResult}-${lastResult} of ${total} results`}
+        </p>
+        {pageCount > 1 && (
+          <nav aria-label="Lead results pages" className="flex items-center gap-2">
+            <button type="button" onClick={() => goToPage(page - 1)} disabled={loading || page <= 1} title="Previous page" aria-label="Previous lead page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => goToPage(page + 1)} disabled={loading || page >= pageCount} title="Next page" aria-label="Next lead page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </nav>
+        )}
+      </div>
 
       {selectedLead && (
         <LeadDetailDrawer
@@ -267,7 +318,7 @@ export default function LeadTable({ type = 'member' }) {
           statuses={statuses}
           table={table}
           onClose={() => setSelectedLead(null)}
-          onUpdate={load}
+          onUpdate={() => load(1)}
         />
       )}
     </div>

@@ -1,12 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
+import { collectLeadPages, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
 
 test('normalizes lead search text before building a PostgREST or filter', () => {
   assert.equal(normalizeLeadSearch('  Alex, (Runner)  '), 'Alex Runner');
   assert.equal(normalizeLeadSearch("coach+one@example.com"), 'coach+one@example.com');
   assert.equal(normalizeLeadSearch('a'.repeat(120)).length, 100);
+});
+
+test('normalizes bounded one-based lead pages into Supabase ranges', () => {
+  assert.deepEqual(normalizeLeadPage(3, 50), { page: 3, pageSize: 50, from: 100, to: 149 });
+  assert.deepEqual(normalizeLeadPage(), { page: 1, pageSize: 50, from: 0, to: 49 });
+  assert.throws(() => normalizeLeadPage(0, 50), /positive number/);
+  assert.throws(() => normalizeLeadPage(1, 101), /between 1 and 100/);
+});
+
+test('collects every filtered lead page for a complete CSV export', async () => {
+  const pages = [
+    { rows: [{ id: 'a' }, { id: 'b' }], total: 3 },
+    { rows: [{ id: 'c' }], total: 3 },
+  ];
+  const requested = [];
+  const rows = await collectLeadPages(async page => {
+    requested.push(page);
+    return pages[page - 1];
+  });
+
+  assert.deepEqual(requested, [1, 2]);
+  assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c']);
+  await assert.rejects(() => collectLeadPages(async () => ({ rows: null, total: 1 })), /invalid page/);
 });
 
 test('allows only known lead tables and statuses for CRM mutations', () => {

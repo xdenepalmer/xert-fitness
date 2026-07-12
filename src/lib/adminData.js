@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertSupabaseResponses } from './supabaseResults';
-import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
+import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
@@ -9,34 +9,27 @@ import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizeP
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
-export async function getMemberLeads(filters = {}) {
-  let query = supabase.from('member_interest').select('*').order('created_at', { ascending: false });
+async function getLeadPage(table, filters = {}) {
+  const pagination = normalizeLeadPage(filters.page, filters.pageSize);
+  let query = supabase.from(table).select('*', { count: 'exact' }).order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
   const search = normalizeLeadSearch(filters.search);
   if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-  const { data, error } = await query;
+  const { data, count, error } = await query.range(pagination.from, pagination.to);
   if (error) throw new Error(error.message);
-  return data || [];
+  return { rows: data || [], total: count || 0, page: pagination.page, pageSize: pagination.pageSize };
+}
+
+export async function getMemberLeads(filters = {}) {
+  return getLeadPage('member_interest', filters);
 }
 
 export async function getTrainerLeads(filters = {}) {
-  let query = supabase.from('trainer_interest').select('*').order('created_at', { ascending: false });
-  if (filters.status) query = query.eq('status', filters.status);
-  const search = normalizeLeadSearch(filters.search);
-  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data || [];
+  return getLeadPage('trainer_interest', filters);
 }
 
 export async function getPartnerLeads(filters = {}) {
-  let query = supabase.from('partner_interest').select('*').order('created_at', { ascending: false });
-  if (filters.status) query = query.eq('status', filters.status);
-  const search = normalizeLeadSearch(filters.search);
-  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data || [];
+  return getLeadPage('partner_interest', filters);
 }
 
 export async function updateLeadStatus(table, id, status) {

@@ -6,6 +6,32 @@ export function normalizeLeadSearch(value) {
     .slice(0, 100);
 }
 
+export function normalizeLeadPage(page = 1, pageSize = 50) {
+  const normalizedPage = Number.parseInt(String(page), 10);
+  const normalizedSize = Number.parseInt(String(pageSize), 10);
+  if (!Number.isInteger(normalizedPage) || normalizedPage < 1) throw new Error('Lead page must be a positive number.');
+  if (!Number.isInteger(normalizedSize) || normalizedSize < 1 || normalizedSize > 100) {
+    throw new Error('Lead page size must be between 1 and 100.');
+  }
+  const from = (normalizedPage - 1) * normalizedSize;
+  return { page: normalizedPage, pageSize: normalizedSize, from, to: from + normalizedSize - 1 };
+}
+
+export async function collectLeadPages(fetchPage) {
+  const rows = [];
+  let page = 1;
+  let result;
+  do {
+    result = await fetchPage(page);
+    if (!Array.isArray(result?.rows) || !Number.isFinite(result?.total)) {
+      throw new Error('Lead export returned an invalid page.');
+    }
+    rows.push(...result.rows);
+    page += 1;
+  } while (rows.length < result.total && result.rows.length > 0);
+  return rows;
+}
+
 export function selectedLeadIds(current, id, checked) {
   const next = new Set(current);
   if (checked) next.add(id);
