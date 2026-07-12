@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { filterOrders, orderCsvRows, summarizeOrders } from '../src/lib/orderAnalytics.js';
+import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '../src/lib/orderAnalytics.js';
 
 const NOW = Date.parse('2026-07-12T12:00:00+10:00');
 const orders = [
@@ -29,4 +29,12 @@ test('exports human currency amounts and Stripe reconciliation identifiers', () 
   assert.equal(row.amount, '48.00');
   assert.equal(row.currency, 'AUD');
   assert.equal(row.checkout_session, 'cs_alex');
+});
+
+test('builds a bounded daily paid-revenue series without counting refunds', () => {
+  const series = buildDailyRevenue(orders, new Date(2026, 6, 12, 12), 3);
+  assert.equal(series.length, 3);
+  assert.deepEqual(series.map(day => day.label), ['10 July', '11 July', '12 July']);
+  assert.deepEqual(series.map(day => day.amountCents), [0, 0, 4800]);
+  assert.equal(buildDailyRevenue([], new Date(2026, 6, 12), 1000).length, 366);
 });

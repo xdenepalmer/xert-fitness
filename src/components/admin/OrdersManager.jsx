@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, X } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { getAllOrders } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
+import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
@@ -57,27 +56,8 @@ export default function OrdersManager() {
   const summaryCurrency = stats.currencies.length === 1 ? stats.currencies[0] : currencyFilter !== 'all' ? currencyFilter : null;
   const money = cents => summaryCurrency ? formatPackPrice(cents, summaryCurrency) : stats.paidCount === 0 ? formatPackPrice(0, 'aud') : 'Mixed currencies';
 
-  // Daily revenue for the last 30 days.
-  const chartData = useMemo(() => {
-    const days = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    for (let i = 29; i >= 0; i--) {
-      const day = new Date(today.getTime() - i * 86400000);
-      days.push({
-        key: day.toDateString(),
-        label: day.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
-        revenue: 0,
-      });
-    }
-    const byKey = Object.fromEntries(days.map(d => [d.key, d]));
-    for (const o of filteredOrders) {
-      if (o.status !== 'paid') continue;
-      const key = new Date(o.paid_at || o.created_at).toDateString();
-      if (byKey[key]) byKey[key].revenue += (o.amount_cents || 0) / 100;
-    }
-    return days;
-  }, [filteredOrders]);
+  const chartData = useMemo(() => buildDailyRevenue(filteredOrders), [filteredOrders]);
+  const chartMaximum = Math.max(...chartData.map(day => day.amountCents), 0);
 
   const copyIdentifier = async value => {
     if (!value) return;
@@ -147,23 +127,23 @@ export default function OrdersManager() {
           <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
             Revenue — last 30 days
           </h3>
-          <div style={{ width: '100%', height: 180 }}>
-            <ResponsiveContainer>
-              <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
-                <XAxis dataKey="label" interval={6} tick={{ fill: 'rgba(209,221,230,0.4)', fontSize: 10 }} axisLine={{ stroke: 'rgba(123,167,188,0.2)' }} tickLine={false} />
-                <YAxis tick={{ fill: 'rgba(209,221,230,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
-                <Tooltip
-                  cursor={{ fill: 'rgba(123,167,188,0.08)' }}
-                  contentStyle={{ backgroundColor: '#101820', border: '1px solid rgba(123,167,188,0.3)', fontFamily: 'inherit', fontSize: 12 }}
-                  labelStyle={{ color: '#D1DDE6' }}
-                  formatter={value => {
-                    const amount = Array.isArray(value) ? value[0] : value;
-                    return [formatPackPrice(Number(amount) * 100, summaryCurrency || 'aud'), 'Revenue'];
-                  }}
-                />
-                <Bar dataKey="revenue" fill="#7BA7BC" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div role="img" aria-label="Daily paid revenue for the last 30 days" className="relative h-44 pt-3 pb-6 border-b border-xert-steel/20">
+            <div className="absolute inset-x-0 top-3 bottom-6 flex items-end gap-1">
+              {chartData.map(day => {
+                const height = chartMaximum ? Math.max(day.amountCents ? 2 : 0, (day.amountCents / chartMaximum) * 100) : 0;
+                const amount = formatPackPrice(day.amountCents, summaryCurrency || 'aud');
+                return (
+                  <div key={day.key} className="flex-1 h-full flex items-end" title={`${day.label}: ${amount}`} aria-label={`${day.label}: ${amount}`}>
+                    <div className="w-full bg-xert-steel hover:bg-xert-concrete transition-colors" style={{ height: `${height}%` }} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="absolute inset-x-0 bottom-0 flex justify-between font-body text-[10px] text-xert-concrete/40">
+              <span>{chartData[0]?.label}</span>
+              <span>{chartData[Math.floor(chartData.length / 2)]?.label}</span>
+              <span>{chartData.at(-1)?.label}</span>
+            </div>
           </div>
         </div>
       )}

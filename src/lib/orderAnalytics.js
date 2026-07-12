@@ -38,6 +38,34 @@ export function summarizeOrders(orders, now = new Date()) {
   };
 }
 
+function localDayKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
+
+export function buildDailyRevenue(orders, now = new Date(), dayCount = 30) {
+  const count = Math.max(1, Math.min(366, Math.trunc(Number(dayCount) || 30)));
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: count }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (count - index - 1));
+    return {
+      key: localDayKey(date),
+      label: date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+      amountCents: 0
+    };
+  });
+  const byKey = new Map(days.map(day => [day.key, day]));
+  for (const order of orders || []) {
+    if (order.status !== 'paid') continue;
+    const day = byKey.get(localDayKey(order.paid_at || order.created_at));
+    if (day) day.amountCents += Number(order.amount_cents) || 0;
+  }
+  return days;
+}
+
 export function orderCsvRows(orders) {
   return (orders || []).map(order => ({
     created_at: order.created_at,
