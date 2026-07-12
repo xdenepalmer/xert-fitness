@@ -11,7 +11,8 @@ const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 
-function rosterStatusOptions(status) {
+function rosterStatusOptions(status, sessionStatus) {
+  if (sessionStatus !== 'published') return [status];
   if (status === 'requested') return ['requested', 'confirmed', 'waitlisted', 'declined', 'cancelled'];
   if (['waitlisted', 'declined', 'cancelled'].includes(status)) {
     return [status, 'requested', 'confirmed'];
@@ -338,6 +339,11 @@ export default function ClassCalendarAdmin() {
   const handleRosterStatus = async (bookingId, status) => {
     const sessionId = expandedBookings;
     if (!sessionId) return;
+    const session = sessions.find(item => item.id === sessionId);
+    if (session?.status !== 'published') {
+      toast({ title: 'Class is not open for booking', description: 'Publish the class before reopening a member booking.', variant: 'destructive' });
+      return;
+    }
     setUpdatingBookingId(bookingId);
     try {
       await adminSetBookingStatus(bookingId, status);
@@ -548,9 +554,9 @@ export default function ClassCalendarAdmin() {
                             <p className="font-body text-sm text-xert-offwhite">{r.full_name || r.email || 'Member'}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                           </div>
-                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id}
+                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || s.status !== 'published'}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
-                            {rosterStatusOptions(r.status).map(st => <option key={st} value={st}>{st}</option>)}
+                            {rosterStatusOptions(r.status, s.status).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
                         </div>
                       ))}

@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, Check, Ticket } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getProducts } from '@/lib/bookingData';
+import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
 
 const steps = [
   'Purchase a session pack.',
@@ -8,35 +10,28 @@ const steps = [
   'Train with expert coaching in a structured semi-private environment.',
 ];
 
-const packs = [
-  {
-    name: '1 Class Pass',
-    price: '$15.00',
-    validity: 'Use within 2 weeks',
-    description: 'Perfect for a drop-in session, casual training or trying your first XERT session.',
-    includes: ['1 coached functional fitness session', 'Accessory equipment access after class where available'],
-    cta: 'Book A Session',
-  },
-  {
-    name: '4 Class Starter Pack',
-    price: '$48.00',
-    validity: 'Use within 4 weeks',
-    description: 'A great way to experience the XERT training system.',
-    includes: ['4 coached sessions', 'Structured programming access', 'Semi-private coaching environment', 'Flexible booking system'],
-    cta: 'Start Your Training Block',
-    featured: true,
-  },
-  {
-    name: '10 Class Performance Pack',
-    price: '$105.00',
-    validity: 'Use within 8 weeks',
-    description: 'Designed for members committed to consistency and long-term progress.',
-    includes: ['10 coached sessions', 'Flexible booking access', 'Priority class availability', 'Structured progression through training blocks'],
-    cta: 'Commit To Your Training',
-  },
-];
-
 export default function SessionPacks() {
+  const [packs, setPacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getProducts()
+      .then(products => {
+        if (!active) return;
+        setPacks(products);
+        setError(false);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
   return (
     <section id="booking" className="py-20 px-6" style={{ backgroundColor: '#0d1720' }}>
       <div className="max-w-6xl mx-auto">
@@ -68,9 +63,18 @@ export default function SessionPacks() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {packs.map(pack => (
+          {loading && [1, 2, 3].map(index => (
+            <div key={index} className="h-[29rem] border animate-pulse" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(16,24,32,0.64)' }} />
+          ))}
+          {!loading && packs.map(pack => {
+            const benefits = [
+              `${pack.sessions_count} coached session${pack.sessions_count === 1 ? '' : 's'}`,
+              'Semi-private coaching environment',
+              'Flexible online booking',
+            ];
+            return (
             <article
-              key={pack.name}
+              key={pack.id}
               className="relative border p-6 flex flex-col"
               style={{
                 borderColor: pack.featured ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
@@ -88,12 +92,12 @@ export default function SessionPacks() {
               </div>
 
               <h3 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h3>
-              <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{pack.price}</p>
-              <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>{pack.validity}</p>
+              <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{formatPackPrice(pack.price_cents, pack.currency)}</p>
+              <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>{formatPackValidity(pack.validity_days)}</p>
               <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'rgba(209,221,230,0.68)' }}>{pack.description}</p>
 
               <div className="space-y-3 mb-6 flex-1">
-                {pack.includes.map(item => (
+                {benefits.map(item => (
                   <div key={item} className="flex items-start gap-3">
                     <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
                     <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>{item}</p>
@@ -106,12 +110,23 @@ export default function SessionPacks() {
                 className="inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98]"
                 style={{ backgroundColor: pack.featured ? '#7BA7BC' : 'transparent', color: pack.featured ? '#101820' : '#D1DDE6', border: pack.featured ? '1px solid #7BA7BC' : '1px solid rgba(123,167,188,0.35)' }}
               >
-                {pack.cta}
+                {packCta(pack.slug)}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </article>
-          ))}
+            );
+          })}
         </div>
+        {!loading && (error || packs.length === 0) && (
+          <div className="mt-6 border p-5 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
+            <p className="font-body text-sm mb-4" style={{ color: 'rgba(209,221,230,0.68)' }}>
+              Session packs are available from the live booking page.
+            </p>
+            <Link to="/booking#packs" className="inline-flex items-center gap-2 font-display text-sm uppercase" style={{ color: '#7BA7BC' }}>
+              View session packs <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );

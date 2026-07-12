@@ -10,6 +10,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
+import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
 
 const steps = [
   'Purchase a session pack.',
@@ -17,19 +18,7 @@ const steps = [
   'Train with expert coaching in a structured semi-private environment.',
 ];
 
-const PACK_CTAS = {
-  'single': 'Book A Session',
-  'starter-4': 'Start Your Training Block',
-  'performance-10': 'Commit To Your Training',
-};
-
 const cardStyle = { borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' };
-
-function validityLabel(days) {
-  if (!days) return '';
-  const weeks = Math.round(days / 7);
-  return `Use within ${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
-}
 
 function formatDay(iso) {
   return new Date(iso).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -201,10 +190,10 @@ export default function Booking() {
                   </div>
                   <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h2>
                   <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
-                    ${(pack.price_cents / 100).toFixed(2)}
+                    {formatPackPrice(pack.price_cents, pack.currency)}
                   </p>
                   <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>
-                    {validityLabel(pack.validity_days)}
+                    {formatPackValidity(pack.validity_days)}
                   </p>
                   {pack.description && (
                     <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'rgba(209,221,230,0.68)' }}>
@@ -242,7 +231,7 @@ export default function Booking() {
                     }}>
                     {buyingSlug === pack.slug
                       ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <>{PACK_CTAS[pack.slug] || 'Buy Pack'}<ArrowRight className="w-4 h-4" /></>}
+                      : <>{packCta(pack.slug)}<ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </article>
               ))}

@@ -189,6 +189,7 @@ declare
   v_session uuid;
   v_capacity integer;
   v_start timestamptz;
+  v_session_status text;
   v_active_count integer;
   v_new_batch uuid;
 begin
@@ -209,11 +210,12 @@ begin
   end if;
 
   if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
-    select capacity, start_time into v_capacity, v_start
+    select capacity, start_time, status into v_capacity, v_start, v_session_status
       from public.class_sessions
       where id = v_session
       for update;
     if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+    if v_session_status <> 'published' then raise exception 'SESSION_NOT_BOOKABLE'; end if;
     if v_start <= now() then raise exception 'SESSION_IN_PAST'; end if;
 
     select count(*) into v_active_count
