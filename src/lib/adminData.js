@@ -1,13 +1,15 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertSupabaseResponses } from './supabaseResults';
+import { normalizeLeadSearch } from './adminLeads';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
 export async function getMemberLeads(filters = {}) {
   let query = supabase.from('member_interest').select('*').order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
-  if (filters.search) query = query.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+  const search = normalizeLeadSearch(filters.search);
+  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -16,7 +18,8 @@ export async function getMemberLeads(filters = {}) {
 export async function getTrainerLeads(filters = {}) {
   let query = supabase.from('trainer_interest').select('*').order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
-  if (filters.search) query = query.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+  const search = normalizeLeadSearch(filters.search);
+  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -25,7 +28,8 @@ export async function getTrainerLeads(filters = {}) {
 export async function getPartnerLeads(filters = {}) {
   let query = supabase.from('partner_interest').select('*').order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
-  if (filters.search) query = query.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+  const search = normalizeLeadSearch(filters.search);
+  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -33,6 +37,17 @@ export async function getPartnerLeads(filters = {}) {
 
 export async function updateLeadStatus(table, id, status) {
   const { error } = await supabase.from(table).update({ status }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateLead(table, id, updates) {
+  const { error } = await supabase.from(table).update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateLeadStatuses(table, ids, status) {
+  if (!ids?.length) return;
+  const { error } = await supabase.from(table).update({ status }).in('id', ids);
   if (error) throw new Error(error.message);
 }
 
@@ -666,24 +681,4 @@ export async function getAllSiteContent() {
 export async function saveSiteContent(key, contentData) {
   const { error } = await supabase.from('site_content').upsert({ key, data: contentData, updated_at: new Date().toISOString() });
   if (error) throw new Error(error.message);
-}
-
-export async function exportLeadsCsv(table) {
-  const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) return null;
-
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row =>
-    headers
-      .map(h => {
-        const val = row[h];
-        if (Array.isArray(val)) return `"${val.join(', ')}"`;
-        if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
-        return val ?? '';
-      })
-      .join(',')
-  );
-
-  return [headers.join(','), ...rows].join('\n');
 }
