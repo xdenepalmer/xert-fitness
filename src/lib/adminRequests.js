@@ -18,6 +18,28 @@ export function normalizeBookingStatusMutation(id, status) {
   return { id: recordId(id), status };
 }
 
+export function normalizeSessionAttendanceMutation(sessionId, attendance) {
+  const normalizedSessionId = recordId(sessionId);
+  if (!Array.isArray(attendance) || attendance.length === 0) {
+    throw new Error('Add at least one member to the roll call.');
+  }
+
+  const seen = new Set();
+  const attendedIds = [];
+  const noShowIds = [];
+  for (const entry of attendance) {
+    const bookingId = recordId(entry?.bookingId);
+    if (seen.has(bookingId)) throw new Error('Each booking can only appear once in a roll call.');
+    if (!['attended', 'no_show'].includes(entry?.status)) {
+      throw new Error('Mark every member as attended or no show.');
+    }
+    seen.add(bookingId);
+    (entry.status === 'attended' ? attendedIds : noShowIds).push(bookingId);
+  }
+
+  return { sessionId: normalizedSessionId, attendedIds, noShowIds };
+}
+
 export function normalizeLegacyBookingNotes(id, notes) {
   return { id: recordId(id), admin_notes: normalizeAdminNotes(notes) };
 }

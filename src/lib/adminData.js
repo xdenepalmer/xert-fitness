@@ -5,7 +5,12 @@ import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLe
 import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
-import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
+import {
+  normalizeBookingStatusMutation,
+  normalizeLegacyBookingNotes,
+  normalizePTRequestMutation,
+  normalizeSessionAttendanceMutation,
+} from './adminRequests';
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
@@ -511,6 +516,17 @@ export async function adminSetBookingStatus(bookingId, status) {
     p_status: mutation.status
   });
   if (error) throw new Error(error.message);
+}
+
+export async function adminRecordSessionAttendance(sessionId, attendance) {
+  const mutation = normalizeSessionAttendanceMutation(sessionId, attendance);
+  const { data, error } = await supabase.rpc('admin_record_session_attendance', {
+    p_session_id: mutation.sessionId,
+    p_attended_ids: mutation.attendedIds,
+    p_no_show_ids: mutation.noShowIds,
+  });
+  if (error) throw new Error(error.message);
+  return Number(data || 0);
 }
 
 // ─── Orders (admin) ──────────────────────────────────────────────────────────

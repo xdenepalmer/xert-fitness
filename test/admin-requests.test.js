@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from '../src/lib/adminRequests.js';
+import {
+  normalizeBookingStatusMutation,
+  normalizeLegacyBookingNotes,
+  normalizePTRequestMutation,
+  normalizeSessionAttendanceMutation,
+} from '../src/lib/adminRequests.js';
 
 test('normalizes explicit booking status and notes mutations', () => {
   assert.deepEqual(normalizeBookingStatusMutation(' booking-a ', 'confirmed'), { id: 'booking-a', status: 'confirmed' });
@@ -24,4 +29,27 @@ test('builds bounded PT updates without carrying caller fields', () => {
   assert.deepEqual(normalizePTRequestMutation('request-a', 'completed'), {
     id: 'request-a', updates: { status: 'completed' },
   });
+});
+
+test('normalizes a complete class roll call into atomic RPC inputs', () => {
+  assert.deepEqual(normalizeSessionAttendanceMutation(' session-a ', [
+    { bookingId: ' booking-1 ', status: 'attended' },
+    { bookingId: 'booking-2', status: 'no_show' },
+    { bookingId: 'booking-3', status: 'attended' },
+  ]), {
+    sessionId: 'session-a',
+    attendedIds: ['booking-1', 'booking-3'],
+    noShowIds: ['booking-2'],
+  });
+});
+
+test('rejects empty, incomplete, and duplicate roll calls', () => {
+  assert.throws(() => normalizeSessionAttendanceMutation('session-a', []), /at least one member/);
+  assert.throws(() => normalizeSessionAttendanceMutation('session-a', [
+    { bookingId: 'booking-1', status: 'confirmed' },
+  ]), /attended or no show/);
+  assert.throws(() => normalizeSessionAttendanceMutation('session-a', [
+    { bookingId: 'booking-1', status: 'attended' },
+    { bookingId: ' booking-1 ', status: 'no_show' },
+  ]), /only appear once/);
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Download, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 
@@ -288,6 +288,9 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
+  const [attendanceSession, setAttendanceSession] = useState(null);
+  const [attendanceDraft, setAttendanceDraft] = useState({});
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -432,6 +435,38 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
     );
   };
 
+  const openAttendance = (session) => {
+    const eligible = roster.filter(member => ['confirmed', 'attended', 'no_show'].includes(member.status));
+    setAttendanceDraft(Object.fromEntries(eligible.map(member => [
+      member.booking_id,
+      member.status === 'no_show' ? 'no_show' : 'attended',
+    ])));
+    setAttendanceSession(session);
+  };
+
+  const saveAttendance = async () => {
+    if (!attendanceSession) return;
+    const eligible = roster.filter(member => ['confirmed', 'attended', 'no_show'].includes(member.status));
+    setIsSavingAttendance(true);
+    try {
+      const updated = await adminRecordSessionAttendance(attendanceSession.id, eligible.map(member => ({
+        bookingId: member.booking_id,
+        status: attendanceDraft[member.booking_id],
+      })));
+      toast({
+        title: 'Attendance recorded',
+        description: `${updated} ${updated === 1 ? 'member' : 'members'} marked and class completed.`,
+      });
+      setAttendanceSession(null);
+      await refreshBookings(attendanceSession.id);
+      await load();
+    } catch (error) {
+      toast({ title: 'Roll call failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSavingAttendance(false);
+    }
+  };
+
   const now = Date.now();
   const filtered = sessions.filter(s => {
     if (timeFilter === 'all') return true;
@@ -543,11 +578,22 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
                     <h4 className="font-display text-sm text-xert-concrete/60 uppercase">
                       Class roster ({roster.filter(r => ['requested', 'confirmed'].includes(r.status)).length}{s.capacity ? `/${s.capacity}` : ''})
                     </h4>
-                    <button onClick={() => exportRoster(s)} disabled={roster.length === 0}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
-                      <Download className="w-3.5 h-3.5" />
-                      Export roster
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      {s.start_time && new Date(s.start_time).getTime() <= now
+                        && ['published', 'full', 'completed'].includes(s.status)
+                        && roster.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status)) && (
+                        <button type="button" onClick={() => openAttendance(s)}
+                          className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-green-600/40 font-body text-[11px] uppercase tracking-wider text-green-400 hover:bg-green-900/20 transition-colors">
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          Take attendance
+                        </button>
+                      )}
+                      <button onClick={() => exportRoster(s)} disabled={roster.length === 0}
+                        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
+                        <Download className="w-3.5 h-3.5" />
+                        Export roster
+                      </button>
+                    </div>
                   </div>
                   {roster.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
@@ -611,6 +657,66 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
           onDone={() => { setRepeating(null); load(); }}
           onCancel={() => setRepeating(null)}
         />
+      )}
+
+      {attendanceSession && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="attendance-title"
+            className="flex max-h-[92vh] w-full max-w-2xl flex-col border border-xert-steel/30 bg-xert-ink">
+            <div className="flex items-start justify-between gap-4 border-b border-xert-steel/20 p-5 sm:p-6">
+              <div>
+                <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class roll call</p>
+                <h3 id="attendance-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">{attendanceSession.title}</h3>
+                <p className="mt-1 font-body text-xs text-xert-concrete/55">
+                  {new Date(attendanceSession.start_time).toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+              <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
+                aria-label="Close attendance roll call" title="Close"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/60 disabled:opacity-40">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5 sm:p-6">
+              <div className="mb-4 flex gap-5 font-body text-xs text-xert-concrete/60">
+                <span><strong className="text-green-400">{Object.values(attendanceDraft).filter(status => status === 'attended').length}</strong> present</span>
+                <span><strong className="text-xert-orange">{Object.values(attendanceDraft).filter(status => status === 'no_show').length}</strong> no show</span>
+              </div>
+              <div className="space-y-2">
+                {roster.filter(member => ['confirmed', 'attended', 'no_show'].includes(member.status)).map(member => (
+                  <div key={member.booking_id} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-charcoal p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-body text-sm text-xert-offwhite">{member.full_name || member.email || 'Member'}</p>
+                      <p className="truncate font-body text-xs text-xert-concrete/45">{member.email}</p>
+                    </div>
+                    <div className="grid grid-cols-2" role="group" aria-label={`Attendance for ${member.full_name || member.email || 'member'}`}>
+                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [member.booking_id]: 'attended' }))}
+                        aria-pressed={attendanceDraft[member.booking_id] === 'attended'}
+                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[member.booking_id] === 'attended' ? 'bg-green-700 text-white' : 'border border-xert-steel/30 text-xert-concrete/60'}`}>
+                        Present
+                      </button>
+                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [member.booking_id]: 'no_show' }))}
+                        aria-pressed={attendanceDraft[member.booking_id] === 'no_show'}
+                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[member.booking_id] === 'no_show' ? 'bg-xert-orange text-xert-ink' : 'border border-l-0 border-xert-steel/30 text-xert-concrete/60'}`}>
+                        No show
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-xert-steel/20 p-5 sm:flex-row sm:justify-end sm:p-6">
+              <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
+                className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
+              <button type="button" onClick={() => void saveAttendance()} disabled={isSavingAttendance}
+                className="min-h-11 bg-green-700 px-5 font-display text-xs uppercase text-white transition-colors hover:bg-green-600 disabled:opacity-40">
+                {isSavingAttendance ? 'Saving roll call...' : 'Save attendance'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {sessionToCancel && (
