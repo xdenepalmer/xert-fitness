@@ -8,11 +8,13 @@ final class XertStore: ObservableObject {
     @Published var events: [EventItem] = []
     @Published var credits: [CreditBatch] = []
     @Published var bookings: [BookingItem] = []
+    @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var bookingSessionID: UUID?
     @Published var cancellingBookingID: UUID?
+    @Published var isSavingProfile = false
 
     private let api = XertAPI()
 
@@ -74,6 +76,7 @@ final class XertStore: ObservableObject {
         if let authSession {
             async let creditRequest = api.credits(session: authSession)
             async let bookingRequest = api.bookings(session: authSession)
+            async let profileRequest = api.profile(session: authSession)
             do {
                 credits = try await creditRequest
                 bookings = try await bookingRequest
@@ -82,9 +85,16 @@ final class XertStore: ObservableObject {
                 bookings = []
                 present(error)
             }
+            do {
+                profile = try await profileRequest
+            } catch {
+                profile = nil
+                present(error)
+            }
         } else {
             credits = []
             bookings = []
+            profile = nil
         }
     }
 
@@ -117,6 +127,7 @@ final class XertStore: ObservableObject {
         authSession = nil
         credits = []
         bookings = []
+        profile = nil
         KeychainStore.clearSession()
         if let currentSession {
             Task { try? await api.signOut(session: currentSession) }
@@ -166,6 +177,33 @@ final class XertStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    @discardableResult
+    func updateProfile(fullName: String, phone: String) async -> Bool {
+        guard let authSession else {
+            errorMessage = "Sign in to update your account details."
+            return false
+        }
+        guard let profileID = profile?.id ?? authSession.user?.id else {
+            errorMessage = "Your profile is still being prepared. Please refresh and try again."
+            return false
+        }
+
+        isSavingProfile = true
+        defer { isSavingProfile = false }
+        do {
+            profile = try await api.updateProfile(
+                session: authSession,
+                profileID: profileID,
+                fullName: fullName,
+                phone: phone
+            )
+            return true
+        } catch {
+            present(error)
+            return false
         }
     }
 

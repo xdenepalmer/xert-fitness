@@ -37,6 +37,22 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(batch.remaining, 7)
     }
 
+    func testMemberProfileDecodesTheWebProfileColumns() throws {
+        let data = """
+        {
+          "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "full_name": "Alex Runner",
+          "phone": "0400 123 456",
+          "email": "alex@example.com"
+        }
+        """.data(using: .utf8)!
+
+        let profile = try JSONDecoder().decode(MemberProfile.self, from: data)
+
+        XCTAssertEqual(profile.full_name, "Alex Runner")
+        XCTAssertEqual(profile.phone, "0400 123 456")
+    }
+
     func testFallbackCalendarCarriesTheFull2026Program() {
         XCTAssertEqual(XertEventCalendar.fallback.count, 20)
         XCTAssertEqual(XertEventCalendar.fallback.first?.name, "Gold Coast Marathon")

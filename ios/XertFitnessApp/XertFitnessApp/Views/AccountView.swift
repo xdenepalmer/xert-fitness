@@ -5,6 +5,14 @@ struct AccountView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isCreatingAccount = false
+    @State private var fullName = ""
+    @State private var phone = ""
+    @State private var didSaveProfile = false
+    @FocusState private var focusedProfileField: ProfileField?
+
+    private enum ProfileField {
+        case fullName, phone
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,6 +32,45 @@ struct AccountView: View {
                                 .foregroundStyle(.xertSteel)
                                 .fontWeight(.bold)
                         }
+                    }
+
+                    Section("Account Details") {
+                        TextField("Full name", text: $fullName)
+                            .textContentType(.name)
+                            .focused($focusedProfileField, equals: .fullName)
+                            .submitLabel(.next)
+                            .onSubmit { focusedProfileField = .phone }
+                        TextField("Mobile number", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                            .focused($focusedProfileField, equals: .phone)
+                        Button {
+                            Task {
+                                let saved = await store.updateProfile(fullName: fullName, phone: phone)
+                                didSaveProfile = saved
+                                if saved { focusedProfileField = nil }
+                            }
+                        } label: {
+                            HStack {
+                                Text(store.isSavingProfile ? "Saving..." : "Save Account Details")
+                                Spacer()
+                                if store.isSavingProfile {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(store.isSavingProfile)
+                        .onChange(of: fullName) { _ in didSaveProfile = false }
+                        .onChange(of: phone) { _ in didSaveProfile = false }
+
+                        if didSaveProfile {
+                            Label("Account details saved", systemImage: "checkmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.xertSteel)
+                        }
+                    }
+
+                    Section {
                         Button("Sign Out", role: .destructive) {
                             store.signOut()
                         }
@@ -90,7 +137,16 @@ struct AccountView: View {
             .refreshable {
                 await store.refresh()
             }
+            .onAppear(perform: syncProfileForm)
+            .onChange(of: store.profile) { _ in
+                syncProfileForm()
+            }
         }
+    }
+
+    private func syncProfileForm() {
+        fullName = store.profile?.full_name ?? ""
+        phone = store.profile?.phone ?? ""
     }
 }
 

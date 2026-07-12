@@ -28,6 +28,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Native SwiftUI tab app: Home, Book, Events, Account.
 - Supabase password auth and sign-up.
 - Secure token persistence in Keychain.
+- Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
 - Booking RPC support through `book_session`.
 - Instant booking, staff-confirmed booking requests, and request cancellation.

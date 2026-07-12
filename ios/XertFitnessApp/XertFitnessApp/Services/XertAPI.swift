@@ -117,6 +117,51 @@ final class XertAPI {
         )
     }
 
+    func profile(session auth: AuthSession) async throws -> MemberProfile? {
+        var queryItems = [
+            URLQueryItem(name: "select", value: "id,full_name,phone,email"),
+            URLQueryItem(name: "limit", value: "1"),
+        ]
+        if let userID = auth.user?.id {
+            queryItems.append(URLQueryItem(name: "id", value: "eq.\(userID.uuidString)"))
+        }
+        let profiles: [MemberProfile] = try await restRequest(
+            path: "/rest/v1/profiles",
+            queryItems: queryItems,
+            auth: auth
+        )
+        return profiles.first
+    }
+
+    func updateProfile(
+        session auth: AuthSession,
+        profileID: UUID,
+        fullName: String,
+        phone: String
+    ) async throws -> MemberProfile {
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/profiles",
+            queryItems: [URLQueryItem(name: "id", value: "eq.\(profileID.uuidString)")]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(ProfileUpdate(
+            full_name: fullName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            phone: phone.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            updated_at: ISO8601DateFormatter.standard.string(from: Date())
+        ))
+
+        let profiles: [MemberProfile] = try await decode(request)
+        guard let profile = profiles.first else {
+            throw APIError(message: "Could not save account details.")
+        }
+        return profile
+    }
+
     func bookings(session auth: AuthSession) async throws -> [BookingItem] {
         try await rpc(path: "my_bookings", body: EmptyBody(), auth: auth)
     }
@@ -247,6 +292,16 @@ final class XertAPI {
 }
 
 private struct EmptyBody: Encodable {}
+private struct ProfileUpdate: Encodable {
+    let full_name: String?
+    let phone: String?
+    let updated_at: String
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
 private struct EmptyResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()

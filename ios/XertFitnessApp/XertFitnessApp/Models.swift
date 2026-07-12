@@ -63,6 +63,13 @@ struct CreditBatch: Identifiable, Codable, Hashable {
     let expires_at: Date?
 }
 
+struct MemberProfile: Identifiable, Codable, Hashable {
+    let id: UUID
+    let full_name: String?
+    let phone: String?
+    let email: String?
+}
+
 struct BookingItem: Identifiable, Codable, Hashable {
     var id: UUID { booking_id }
     let booking_id: UUID
