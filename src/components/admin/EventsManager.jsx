@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { getAllEvents, createEvent, updateEvent, deleteEvent } from '@/lib/adminData';
+import {
+  getAllEvents,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  seedXertEventCalendar,
+} from '@/lib/adminData';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
 
@@ -105,6 +111,7 @@ export default function EventsManager() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
+  const [seeding, setSeeding] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -115,6 +122,24 @@ export default function EventsManager() {
   const handleDelete = async (id) => {
     if (!confirm('Delete this event?')) return;
     try { await deleteEvent(id); load(); } catch (e) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
+  };
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const result = await seedXertEventCalendar();
+      toast({
+        title: result.inserted ? 'Calendar loaded' : 'Calendar already loaded',
+        description: result.inserted
+          ? `${result.inserted} XERT 2026 event${result.inserted === 1 ? '' : 's'} added.`
+          : 'No missing XERT 2026 events were found.',
+      });
+      load();
+    } catch (e) {
+      toast({ title: 'Calendar load failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSeeding(false);
+    }
   };
 
   const usedCategories = ['all', ...Array.from(new Set(events.map(e => e.category).filter(Boolean))).sort()];
@@ -136,6 +161,10 @@ export default function EventsManager() {
             className="bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
             {usedCategories.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}
           </select>
+          <button onClick={handleSeed} disabled={seeding}
+            className="px-4 py-2.5 border border-xert-steel/40 text-xert-concrete font-display text-sm uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
+            {seeding ? 'Loading...' : 'Load 2026 Calendar'}
+          </button>
           <button onClick={() => { setEditing(null); setShowEditor(true); }}
             className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
             + Add Event

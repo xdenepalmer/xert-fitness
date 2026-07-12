@@ -1,93 +1,34 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarDays, Clock, Target, Trophy } from 'lucide-react';
+import {
+  XERT_2026_EVENTS,
+  formatEventRange,
+  getEventState,
+  groupEventsByMonth,
+  parseCalendarDate,
+  sortEvents,
+} from '@/lib/eventCalendar';
 
 const PHOTO = '/assets/event-calendar.jpg';
 
-const eventMonths = [
-  {
-    month: 'July',
-    events: [
-      { title: 'Gold Coast Marathon', dateLabel: '4-5 Jul', start: '2026-07-04', end: '2026-07-05', type: 'Run' },
-      { title: 'ACTÍVATE Brisbane', dateLabel: '12 Jul', start: '2026-07-12', type: 'Fitness' },
-      { title: 'The Guzzler Ultra', dateLabel: '18-19 Jul', start: '2026-07-18', end: '2026-07-19', type: 'Ultra' },
-      { title: 'Max Adventure Sunshine Coast', dateLabel: '25 Jul', start: '2026-07-25', type: 'Adventure' },
-    ],
-  },
-  {
-    month: 'August',
-    events: [
-      { title: 'Sunshine Coast Marathon Festival', dateLabel: '2 Aug', start: '2026-08-02', type: 'Run' },
-      { title: 'Brisbane to Gold Coast Cycle Challenge', dateLabel: '23 Aug', start: '2026-08-23', type: 'Cycle' },
-      { title: 'Coastal High Trail Run', dateLabel: '29 Aug', start: '2026-08-29', type: 'Trail' },
-    ],
-  },
-  {
-    month: 'September',
-    events: [
-      { title: 'Turf Games Gold Coast', dateLabel: '12-13 Sep', start: '2026-09-12', end: '2026-09-13', type: 'Functional' },
-      { title: 'IRONMAN 70.3 Sunshine Coast', dateLabel: '13 Sep', start: '2026-09-13', type: 'Triathlon' },
-      { title: 'Bridge to Brisbane', dateLabel: '13 Sep', start: '2026-09-13', type: 'Run' },
-      { title: 'Butterfly Effect', dateLabel: '26-27 Sep', start: '2026-09-26', end: '2026-09-27', type: 'Community' },
-      { title: 'Xert Endurance Challenge', dateLabel: 'Last Saturday of September', start: '2026-09-26', type: 'XERT' },
-    ],
-  },
-  {
-    month: 'October',
-    events: [
-      { title: 'AP&ES Games', dateLabel: '11-12 Oct', start: '2026-10-11', end: '2026-10-12', type: 'Games' },
-      { title: 'Blackall 100', dateLabel: '17 Oct', start: '2026-10-17', type: 'Ultra' },
-      { title: 'Cricket Season Begins', dateLabel: 'October', start: '2026-10-01', type: 'Sport' },
-    ],
-  },
-  {
-    month: 'November',
-    events: [
-      { title: 'Noosa Triathlon', dateLabel: '1 Nov', start: '2026-11-01', type: 'Triathlon' },
-      { title: 'Robina Triathlon', dateLabel: '15 Nov', start: '2026-11-15', type: 'Triathlon' },
-    ],
-  },
-  {
-    month: 'December',
-    events: [
-      { title: 'Summer Touch Football Season', dateLabel: 'December', start: '2026-12-01', type: 'Sport' },
-      { title: 'Cricket Season', dateLabel: 'December', start: '2026-12-01', type: 'Sport' },
-      { title: 'Xert Team Competition', dateLabel: 'First Saturday of December', start: '2026-12-05', type: 'XERT' },
-    ],
-  },
-];
+const eventMonths = groupEventsByMonth(XERT_2026_EVENTS);
+const allEvents = sortEvents(XERT_2026_EVENTS);
 
-const allEvents = eventMonths.flatMap(month =>
-  month.events.map(event => ({ ...event, month: month.month }))
-);
-
-function startOfDay(date) {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
+function eventType(event) {
+  if (event.category === 'xert') return 'XERT';
+  return (event.category || 'Event').replace(/^\w/, char => char.toUpperCase());
 }
 
-function endOfDay(date) {
-  const copy = new Date(date);
-  copy.setHours(23, 59, 59, 999);
-  return copy;
-}
-
-function getEventState(event, now = new Date()) {
-  const today = startOfDay(now);
-  const start = startOfDay(`${event.start}T00:00:00`);
-  const end = endOfDay(`${event.end || event.start}T00:00:00`);
-
-  if (today > end) return { key: 'complete', label: 'Complete' };
-  if (today >= start && today <= end) return { key: 'live', label: 'Happening now' };
-  return { key: 'upcoming', label: 'Coming up' };
+function eventMonth(event) {
+  return eventMonths.find(month => month.events.some(monthEvent => monthEvent.id === event.id))?.month || '';
 }
 
 function getInitialMonth() {
   const upcoming = allEvents
     .filter(event => getEventState(event).key !== 'complete')
-    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    .sort((a, b) => parseCalendarDate(a.event_date).getTime() - parseCalendarDate(b.event_date).getTime());
 
-  return upcoming[0]?.month || eventMonths[0].month;
+  return upcoming[0] ? eventMonth(upcoming[0]) : eventMonths[0].month;
 }
 
 export default function EventWall() {
@@ -96,7 +37,7 @@ export default function EventWall() {
   const upcomingEvents = useMemo(() => {
     return allEvents
       .filter(event => getEventState(event).key !== 'complete')
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      .sort((a, b) => parseCalendarDate(a.event_date).getTime() - parseCalendarDate(b.event_date).getTime())
       .slice(0, 4);
   }, []);
 
@@ -159,7 +100,7 @@ export default function EventWall() {
                   const state = getEventState(event);
                   return (
                     <div
-                      key={`${event.title}-${event.dateLabel}`}
+                      key={`${event.name}-${event.date_label}`}
                       className="flex items-start gap-4 p-4 border"
                       style={{
                         borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.12)',
@@ -169,13 +110,13 @@ export default function EventWall() {
                       <CalendarDays className="w-5 h-5 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
-                          <p className="font-display text-lg uppercase leading-tight text-xert-offwhite">{event.title}</p>
+                          <p className="font-display text-lg uppercase leading-tight text-xert-offwhite">{event.name}</p>
                           <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1 shrink-0" style={{ color: '#101820', backgroundColor: '#D1DDE6' }}>
-                            {event.type}
+                            {eventType(event)}
                           </span>
                         </div>
                         <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.65)' }}>
-                          {event.dateLabel} - {event.month}
+                          {formatEventRange(event)} - {eventMonth(event)}
                         </p>
                         <p className="font-body text-xs uppercase tracking-wider mt-2" style={{ color: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.55)' }}>
                           {state.label}
@@ -243,7 +184,7 @@ export default function EventWall() {
                 const state = getEventState(event);
                 return (
                   <article
-                    key={`${selectedMonth.month}-${event.title}`}
+                    key={`${selectedMonth.month}-${event.name}`}
                     className="border p-5 min-h-[10rem] flex flex-col"
                     style={{
                       borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
@@ -260,11 +201,11 @@ export default function EventWall() {
                     </div>
 
                     <p className="font-body text-sm uppercase tracking-wider mb-2" style={{ color: '#7BA7BC' }}>
-                      {event.dateLabel}
+                      {formatEventRange(event)}
                     </p>
-                    <h4 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-3">{event.title}</h4>
+                    <h4 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-3">{event.name}</h4>
                     <p className="font-body text-sm mt-auto" style={{ color: 'rgba(209,221,230,0.56)' }}>
-                      {event.type} event
+                      {eventType(event)} event
                     </p>
                   </article>
                 );

@@ -1,36 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ExternalLink, MapPin, Trophy } from 'lucide-react';
+import { CalendarDays, CalendarPlus, ExternalLink, MapPin, Trophy } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import { getEvents } from '@/lib/bookingData';
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-function parseDate(value) {
-  // Treat the stored `date` as a local calendar day (avoid TZ shifting).
-  if (!value) return null;
-  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function formatRange(ev) {
-  const start = parseDate(ev.event_date);
-  if (!start) return 'Date TBC';
-  const opts = { day: 'numeric', month: 'short' };
-  const startLabel = start.toLocaleDateString('en-AU', opts);
-  if (ev.end_date && ev.end_date !== ev.event_date) {
-    const end = parseDate(ev.end_date);
-    return `${start.getDate()}–${end.toLocaleDateString('en-AU', opts)}`;
-  }
-  return startLabel;
-}
+import {
+  downloadEventIcs,
+  formatEventRange,
+  getEventState,
+  groupEventsByMonth,
+  sortEvents,
+} from '@/lib/eventCalendar';
 
 export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [showPast, setShowPast] = useState(false);
 
   useEffect(() => {
     getEvents()
@@ -44,21 +31,26 @@ export default function Events() {
     return ['all', ...Array.from(set).sort()];
   }, [events]);
 
+  const orderedEvents = useMemo(() => sortEvents(events), [events]);
+
   const filtered = useMemo(
-    () => (activeCategory === 'all' ? events : events.filter(e => e.category === activeCategory)),
-    [events, activeCategory]
+    () => (activeCategory === 'all' ? orderedEvents : orderedEvents.filter(e => e.category === activeCategory)),
+    [orderedEvents, activeCategory]
   );
 
-  const byMonth = useMemo(() => {
-    const groups = {};
-    for (const ev of filtered) {
-      const d = parseDate(ev.event_date);
-      const key = d ? MONTHS[d.getMonth()] : 'Dates TBC';
-      (groups[key] ||= []).push(ev);
-    }
-    // Preserve calendar order.
-    return MONTHS.map(m => [m, groups[m]]).filter(([, list]) => list && list.length);
-  }, [filtered]);
+  const visibleEvents = useMemo(
+    () => filtered.filter(ev => showPast || getEventState(ev).key !== 'complete'),
+    [filtered, showPast]
+  );
+
+  const byMonth = useMemo(() => groupEventsByMonth(visibleEvents), [visibleEvents]);
+
+  const comingUp = useMemo(
+    () => orderedEvents.filter(ev => getEventState(ev).key !== 'complete').slice(0, 3),
+    [orderedEvents]
+  );
+
+  const usingDefaultCalendar = events.some(ev => ev.source === 'xert-default');
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
@@ -85,25 +77,60 @@ export default function Events() {
 
           {/* Category filter */}
           {!loading && !error && events.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-8">
-              {categories.map(cat => {
-                const active = cat === activeCategory;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setActiveCategory(cat)}
-                    className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
-                    style={{
-                      borderColor: active ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
-                      backgroundColor: active ? 'rgba(123,167,188,0.14)' : 'transparent',
-                      color: active ? '#F1F3F4' : 'rgba(209,221,230,0.6)',
-                    }}
-                  >
-                    {cat === 'all' ? 'All events' : cat}
-                  </button>
-                );
-              })}
+            <div className="mt-8 space-y-5">
+              {usingDefaultCalendar && (
+                <p className="font-body text-xs uppercase tracking-[0.18em]" style={{ color: 'rgba(123,167,188,0.72)' }}>
+                  Showing the XERT 2026 calendar while live Supabase events are being prepared.
+                </p>
+              )}
+
+              {comingUp.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {comingUp.map(ev => {
+                    const state = getEventState(ev);
+                    return (
+                      <article key={`next-${ev.id || ev.name}`} className="border p-4" style={{ borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
+                        <p className="font-body text-[10px] uppercase tracking-wider mb-2" style={{ color: '#7BA7BC' }}>{state.label}</p>
+                        <h2 className="font-display text-xl uppercase leading-tight text-xert-offwhite">{ev.name}</h2>
+                        <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.58)' }}>{formatEventRange(ev)} · {ev.location}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {categories.map(cat => {
+                  const active = cat === activeCategory;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setActiveCategory(cat)}
+                      className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                      style={{
+                        borderColor: active ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
+                        backgroundColor: active ? 'rgba(123,167,188,0.14)' : 'transparent',
+                        color: active ? '#F1F3F4' : 'rgba(209,221,230,0.6)',
+                      }}
+                    >
+                      {cat === 'all' ? 'All events' : cat}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setShowPast(v => !v)}
+                  className="ml-0 sm:ml-2 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                  style={{
+                    borderColor: showPast ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
+                    backgroundColor: showPast ? 'rgba(123,167,188,0.14)' : 'transparent',
+                    color: showPast ? '#F1F3F4' : 'rgba(209,221,230,0.6)',
+                  }}
+                >
+                  {showPast ? 'Hide completed' : 'Show completed'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -124,8 +151,17 @@ export default function Events() {
                 </p>
               </div>
             )}
+            {!loading && !error && events.length > 0 && visibleEvents.length === 0 && (
+              <div className="border p-10 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
+                <Trophy className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
+                <p className="font-display text-2xl uppercase text-xert-offwhite">No upcoming matches.</p>
+                <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                  Switch on completed events to review the full 2026 calendar.
+                </p>
+              </div>
+            )}
 
-            {!loading && !error && byMonth.map(([month, list]) => (
+            {!loading && !error && byMonth.map(({ month, events: list }) => (
               <section key={month} className="mb-10">
                 <div className="flex items-baseline gap-4 mb-4">
                   <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
@@ -140,6 +176,7 @@ export default function Events() {
                     const wrapperProps = ev.url
                       ? { href: ev.url, target: '_blank', rel: 'noopener noreferrer' }
                       : {};
+                    const state = getEventState(ev);
                     return (
                       <Wrapper
                         key={ev.id}
@@ -149,13 +186,18 @@ export default function Events() {
                       >
                         <div className="flex items-start justify-between gap-4 mb-3">
                           <span className="font-body text-sm uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                            {formatRange(ev)}
+                            {formatEventRange(ev)}
                           </span>
-                          {ev.category && (
-                            <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1 shrink-0" style={{ color: '#101820', backgroundColor: '#D1DDE6' }}>
-                              {ev.category}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ color: state.key === 'complete' ? 'rgba(16,24,32,0.64)' : '#101820', backgroundColor: state.key === 'complete' ? 'rgba(209,221,230,0.52)' : '#D1DDE6' }}>
+                              {state.label}
                             </span>
-                          )}
+                            {ev.category && (
+                              <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1 hidden sm:inline-block" style={{ color: '#101820', backgroundColor: '#D1DDE6' }}>
+                                {ev.category}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <h3 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-2 flex items-start gap-2">
                           {ev.name}
@@ -166,6 +208,21 @@ export default function Events() {
                             <MapPin className="w-3.5 h-3.5" style={{ color: 'rgba(123,167,188,0.6)' }} />
                             {ev.location}
                           </p>
+                        )}
+                        {ev.event_date && (
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              downloadEventIcs(ev);
+                            }}
+                            className="inline-flex items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
+                            style={{ color: '#7BA7BC' }}
+                          >
+                            <CalendarPlus className="w-3.5 h-3.5" />
+                            Add to calendar
+                          </button>
                         )}
                       </Wrapper>
                     );

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { XERT_2026_EVENTS } from './eventCalendar';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -276,6 +277,36 @@ export async function updateEvent(id, updates) {
 export async function deleteEvent(id) {
   const { error } = await supabase.from('events').delete().eq('id', id);
   if (error) throw new Error(error.message);
+}
+
+export async function seedXertEventCalendar() {
+  const { data: existing, error: existingError } = await supabase
+    .from('events')
+    .select('name,event_date');
+  if (existingError) throw new Error(existingError.message);
+
+  const existingKeys = new Set((existing || []).map(event => `${event.name}|${event.event_date}`));
+  const missing = XERT_2026_EVENTS.filter(event => !existingKeys.has(`${event.name}|${event.event_date}`));
+
+  if (missing.length === 0) {
+    return { inserted: 0, total: existing?.length || 0 };
+  }
+
+  const payload = missing.map(event => ({
+    name: event.name,
+    category: event.category,
+    event_date: event.event_date,
+    end_date: event.end_date,
+    location: event.location,
+    region: event.region,
+    sort_order: event.sort_order,
+    published: true,
+    url: event.url || null,
+  }));
+
+  const { error } = await supabase.from('events').insert(payload);
+  if (error) throw new Error(error.message);
+  return { inserted: missing.length, total: (existing?.length || 0) + missing.length };
 }
 
 // ─── Members (admin) ─────────────────────────────────────────────────────────

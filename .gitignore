@@ -29,3 +29,6 @@ dist-ssr
 
 .env
 .vite
+
+# iOS local config
+ios/**/Config.xcconfig

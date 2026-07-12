@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -150,6 +151,6 @@ export async function getEvents() {
     .select('*')
     .eq('published', true)
     .order('event_date', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  if (error) return XERT_2026_EVENTS;
+  return data?.length ? sortEvents(data) : XERT_2026_EVENTS;
 }

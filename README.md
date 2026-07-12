@@ -53,9 +53,20 @@ The Supabase schema is defined in:
 - `src/supabase/rls_policies.sql` — lead/booking tables + Row Level Security
 - `src/supabase/booking_schema.sql` — members, session packs, orders, credits,
   bookings, coaches, events, and the booking functions
+- `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 Both are idempotent; run them in the Supabase SQL editor (or apply via the
 project's Postgres connection) to (re)provision the schema.
+
+The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
+any missing XERT calendar events for an authenticated admin.
+
+## iOS App
+
+A SwiftUI companion app scaffold lives in `ios/XertFitnessApp`. It includes
+native Home, Book, Events and Account tabs, Supabase auth, Keychain token
+storage, class booking RPC support and Vercel checkout launch. See
+`ios/XertFitnessApp/README.md` for Xcode setup.
 
 ## Run Locally
 
