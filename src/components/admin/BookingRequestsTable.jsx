@@ -3,7 +3,7 @@ import { Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
-  updateMemberBookingStatus, updateAdminNotes,
+  updateMemberBookingStatus, updateLegacyBookingNotes,
 } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
@@ -98,7 +98,7 @@ export default function BookingRequestsTable() {
     if (!selectedBooking) return;
     setSavingNotes(true);
     try {
-      await updateAdminNotes('class_bookings', selectedBooking.id, notes);
+      await updateLegacyBookingNotes(selectedBooking.id, notes);
       setSelectedBooking(null);
       toast({ title: 'Notes saved' });
       await load();
@@ -250,14 +250,15 @@ export default function BookingRequestsTable() {
 
       {selectedBooking && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
-            <h3 className="font-display text-lg text-xert-offwhite uppercase mb-4">Admin Notes</h3>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
+          <div role="dialog" aria-modal="true" aria-labelledby="booking-notes-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
+            <h3 id="booking-notes-title" className="font-display text-lg text-xert-offwhite uppercase mb-4">Admin Notes</h3>
+            <label htmlFor="booking-admin-notes" className="sr-only">Admin notes for {selectedBooking.full_name}</label>
+            <textarea id="booking-admin-notes" maxLength={5000} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
-              <button disabled={savingNotes} onClick={() => setSelectedBooking(null)}
+              <button type="button" disabled={savingNotes} onClick={() => setSelectedBooking(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
-              <button disabled={savingNotes} onClick={saveNotes}
+              <button type="button" disabled={savingNotes} onClick={saveNotes}
                 className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{savingNotes ? 'Saving...' : 'Save'}</button>
             </div>
           </div>

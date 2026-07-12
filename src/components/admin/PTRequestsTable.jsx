@@ -189,7 +189,7 @@ export default function PTRequestsTable() {
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div role="dialog" aria-modal="true" aria-labelledby="pt-notes-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-sm w-full">
             <h3 id="pt-notes-title" className="font-display text-lg text-xert-offwhite uppercase mb-4">Admin Notes — {notesModal.full_name}</h3>
-            <textarea aria-label={`Admin notes for ${notesModal.full_name}`} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
+            <textarea aria-label={`Admin notes for ${notesModal.full_name}`} maxLength={5000} value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none mb-4" />
             <div className="flex gap-3">
               <button disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}

@@ -5,6 +5,7 @@ import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from '
 import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
+import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -58,8 +59,9 @@ export async function updateLeadStatuses(table, ids, status) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateAdminNotes(table, id, admin_notes) {
-  const { error } = await supabase.from(table).update({ admin_notes }).eq('id', id);
+export async function updateLegacyBookingNotes(id, adminNotes) {
+  const mutation = normalizeLegacyBookingNotes(id, adminNotes);
+  const { error } = await supabase.from('class_bookings').update({ admin_notes: mutation.admin_notes }).eq('id', mutation.id);
   if (error) throw new Error(error.message);
 }
 
@@ -126,7 +128,8 @@ export async function getClassBookings(filters = {}) {
 }
 
 export async function updateBookingStatus(id, status) {
-  const { error } = await supabase.from('class_bookings').update({ status }).eq('id', id);
+  const mutation = normalizeBookingStatusMutation(id, status);
+  const { error } = await supabase.from('class_bookings').update({ status: mutation.status }).eq('id', mutation.id);
   if (error) throw new Error(error.message);
 }
 
@@ -168,9 +171,8 @@ export async function getPTRequests(filters = {}) {
 }
 
 export async function updatePTRequestStatus(id, status, admin_notes) {
-  const updates = { status };
-  if (admin_notes !== undefined) updates.admin_notes = admin_notes;
-  const { error } = await supabase.from('private_session_requests').update(updates).eq('id', id);
+  const mutation = normalizePTRequestMutation(id, status, admin_notes);
+  const { error } = await supabase.from('private_session_requests').update(mutation.updates).eq('id', mutation.id);
   if (error) throw new Error(error.message);
 }
 
@@ -456,9 +458,10 @@ export async function adminSessionRoster(sessionId) {
 }
 
 export async function adminSetBookingStatus(bookingId, status) {
+  const mutation = normalizeBookingStatusMutation(bookingId, status);
   const { error } = await supabase.rpc('admin_set_booking_status', {
-    p_booking_id: bookingId,
-    p_status: status
+    p_booking_id: mutation.id,
+    p_status: mutation.status
   });
   if (error) throw new Error(error.message);
 }
