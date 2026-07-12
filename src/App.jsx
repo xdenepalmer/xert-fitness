@@ -8,28 +8,36 @@ import { SupabaseAuthProvider } from '@/lib/SupabaseAuthContext';
 import AdminRoute from '@/components/admin/AdminRoute';
 import ScrollToTop from './components/ScrollToTop';
 
-// Page imports
-import Home from './pages/Home';
-import ThankYou from './pages/ThankYou';
-import TrainerInterest from './pages/TrainerInterest';
-import PartnerInterest from './pages/PartnerInterest';
-import SoftLaunchTimetable from './pages/SoftLaunchTimetable';
-// Admin suite is code-split so public visitors never download it.
+// Routes load on demand, keeping the initial public visit lightweight.
+const Home = lazy(() => import('./pages/Home'));
+const ThankYou = lazy(() => import('./pages/ThankYou'));
+const TrainerInterest = lazy(() => import('./pages/TrainerInterest'));
+const PartnerInterest = lazy(() => import('./pages/PartnerInterest'));
+const SoftLaunchTimetable = lazy(() => import('./pages/SoftLaunchTimetable'));
 const AdminCommandCentre = lazy(() => import('./pages/AdminCommandCentre'));
-import About from './pages/About';
-import Contact from './pages/Contact';
-import TrainingGuide from './pages/TrainingGuide';
-import Coaches from './pages/Coaches';
-import Events from './pages/Events';
-import Booking from './pages/Booking';
-import Account from './pages/Account';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
+const About = lazy(() => import('./pages/About'));
+const Contact = lazy(() => import('./pages/Contact'));
+const TrainingGuide = lazy(() => import('./pages/TrainingGuide'));
+const Coaches = lazy(() => import('./pages/Coaches'));
+const Events = lazy(() => import('./pages/Events'));
+const Booking = lazy(() => import('./pages/Booking'));
+const Account = lazy(() => import('./pages/Account'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+
+function RouteLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-xert-black" role="status" aria-label="Loading page">
+      <span className="w-7 h-7 border-2 border-xert-steel/30 border-t-xert-red rounded-full animate-spin" />
+    </div>
+  );
+}
 
 const AppRoutes = () => (
-    <Routes>
+    <Suspense fallback={<RouteLoader />}>
+      <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/thank-you" element={<ThankYou />} />
       <Route path="/trainer-interest" element={<TrainerInterest />} />
@@ -48,10 +56,11 @@ const AppRoutes = () => (
       <Route path="/training-guide" element={<TrainingGuide />} />
       {/* ADMIN — requires a signed-in user whose profiles.role = 'admin'.
           Promote an admin with the SQL noted in src/supabase/booking_schema.sql. */}
-      <Route path="/admin" element={<AdminRoute><Suspense fallback={null}><AdminCommandCentre /></Suspense></AdminRoute>} />
-      <Route path="/admin/*" element={<AdminRoute><Suspense fallback={null}><AdminCommandCentre /></Suspense></AdminRoute>} />
+      <Route path="/admin" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
       <Route path="*" element={<PageNotFound />} />
-    </Routes>
+      </Routes>
+    </Suspense>
 );
 
 function App() {

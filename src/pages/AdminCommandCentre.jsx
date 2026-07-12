@@ -1,20 +1,31 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
-import AdminOverview from '@/components/admin/AdminOverview';
-import LeadTable from '@/components/admin/LeadTable';
-import ClassCalendarAdmin from '@/components/admin/ClassCalendarAdmin';
-import BookingRequestsTable from '@/components/admin/BookingRequestsTable';
-import PTRequestsTable from '@/components/admin/PTRequestsTable';
-import AvailabilityManager from '@/components/admin/AvailabilityManager';
-import SoftLaunchSettings from '@/components/admin/SoftLaunchSettings';
-import CampaignStats from '@/components/admin/CampaignStats';
-import CoachesManager from '@/components/admin/CoachesManager';
-import EventsManager from '@/components/admin/EventsManager';
-import MembersManager from '@/components/admin/MembersManager';
-import OrdersManager from '@/components/admin/OrdersManager';
-import ProductsManager from '@/components/admin/ProductsManager';
-import ContentManager from '@/components/admin/ContentManager';
-import OperationsHealth from '@/components/admin/OperationsHealth';
+
+// Admin tools are independently code-split. Most staff sessions only need one
+// operational surface at a time, so there is no reason to preload the rest.
+const AdminOverview = lazy(() => import('@/components/admin/AdminOverview'));
+const LeadTable = lazy(() => import('@/components/admin/LeadTable'));
+const ClassCalendarAdmin = lazy(() => import('@/components/admin/ClassCalendarAdmin'));
+const BookingRequestsTable = lazy(() => import('@/components/admin/BookingRequestsTable'));
+const PTRequestsTable = lazy(() => import('@/components/admin/PTRequestsTable'));
+const AvailabilityManager = lazy(() => import('@/components/admin/AvailabilityManager'));
+const SoftLaunchSettings = lazy(() => import('@/components/admin/SoftLaunchSettings'));
+const CampaignStats = lazy(() => import('@/components/admin/CampaignStats'));
+const CoachesManager = lazy(() => import('@/components/admin/CoachesManager'));
+const EventsManager = lazy(() => import('@/components/admin/EventsManager'));
+const MembersManager = lazy(() => import('@/components/admin/MembersManager'));
+const OrdersManager = lazy(() => import('@/components/admin/OrdersManager'));
+const ProductsManager = lazy(() => import('@/components/admin/ProductsManager'));
+const ContentManager = lazy(() => import('@/components/admin/ContentManager'));
+const OperationsHealth = lazy(() => import('@/components/admin/OperationsHealth'));
+
+function SectionLoader() {
+  return (
+    <div className="p-6" role="status" aria-label="Loading section">
+      <div className="h-24 bg-xert-ink animate-pulse border border-xert-steel/20" />
+    </div>
+  );
+}
 
 export default function AdminCommandCentre() {
   const [section, setSection] = useState('overview');
@@ -44,7 +55,9 @@ export default function AdminCommandCentre() {
 
   return (
     <AdminLayout activeSection={section} onSectionChange={setSection}>
-      {renderSection()}
+      <Suspense fallback={<SectionLoader />}>
+        {renderSection()}
+      </Suspense>
     </AdminLayout>
   );
 }
