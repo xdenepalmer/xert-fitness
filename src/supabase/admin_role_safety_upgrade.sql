@@ -40,3 +40,22 @@ end; $$;
 
 revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 grant execute on function public.admin_set_role(uuid, text) to authenticated;
+
+-- Runtime capability marker for admin health and release CI.
+create table if not exists public.xert_schema_capabilities (
+  capability text primary key,
+  installed_at timestamptz not null default now()
+);
+alter table public.xert_schema_capabilities enable row level security;
+drop policy if exists "xert_schema_capabilities_admin_read" on public.xert_schema_capabilities;
+create policy "xert_schema_capabilities_admin_read" on public.xert_schema_capabilities
+  for select to authenticated using (public.is_admin());
+insert into public.xert_schema_capabilities (capability)
+values ('admin_role_safety') on conflict (capability) do nothing;
+create or replace function public.xert_public_capabilities()
+returns table (capability text)
+language sql security definer stable set search_path = public as $$
+  select c.capability from public.xert_schema_capabilities c order by c.capability;
+$$;
+revoke execute on function public.xert_public_capabilities() from public;
+grant execute on function public.xert_public_capabilities() to anon, authenticated;

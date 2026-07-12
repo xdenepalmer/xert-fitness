@@ -93,6 +93,10 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
+Operations Health and the TestFlight release workflow verify the
+`admin_role_safety` and `booking_waitlist_withdrawal` capability markers. A
+release intentionally stops until both current upgrade scripts have been run.
+
 The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
 any missing XERT calendar events for an authenticated admin.
 

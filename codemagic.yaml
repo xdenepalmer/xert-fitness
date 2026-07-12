@@ -101,6 +101,33 @@ workflows:
           SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY
           VERCEL_BASE_URL = $(escape_xcconfig_url "$VERCEL_BASE_URL")
           EOF
+      - name: Verify production service contract
+        script: |
+          set -e
+          case "$SUPABASE_URL" in https://*) ;; *) echo "::error:: SUPABASE_URL must use HTTPS."; exit 1 ;; esac
+          case "$VERCEL_BASE_URL" in https://*) ;; *) echo "::error:: VERCEL_BASE_URL must use HTTPS."; exit 1 ;; esac
+
+          curl --silent --show-error --fail --max-time 20 "$VERCEL_BASE_URL/" >/dev/null
+          CAPABILITIES="$(curl --silent --show-error --fail --max-time 20 \
+            "$SUPABASE_URL/rest/v1/rpc/xert_public_capabilities" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            --data '{}')" || {
+              echo "::error:: Production Supabase capability RPC is unavailable. Apply the latest database upgrades."
+              exit 1
+            }
+          node -e '
+            const rows = JSON.parse(process.argv[1]);
+            const installed = new Set(rows.map(row => row.capability));
+            const required = ["admin_role_safety", "booking_waitlist_withdrawal"];
+            const missing = required.filter(item => !installed.has(item));
+            if (missing.length) {
+              console.error(`::error:: Missing production database capabilities: ${missing.join(", ")}`);
+              process.exit(1);
+            }
+            console.log("Production service contract verified.");
+          ' "$CAPABILITIES"
       - name: Install XcodeGen when needed
         script: |
           if ! command -v xcodegen >/dev/null 2>&1; then

@@ -3,6 +3,7 @@ import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import { normalizeRoleChange } from './memberAdmin';
+import { summarizeSchemaCapabilities } from './schemaCapabilities';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -682,6 +683,29 @@ export async function getOperationsHealth() {
         };
       }
       return { count, detail: `${count || 0} audited manual credit grant${count === 1 ? '' : 's'} recorded.` };
+    }),
+
+    healthCheck('schema-contract', 'Database release contract', async () => {
+      const { data, error } = await supabase.rpc('xert_public_capabilities');
+      if (error) {
+        return {
+          status: 'attention',
+          detail: 'Database capability reporting is not installed.',
+          action: 'Apply the latest booking_modes_upgrade.sql and admin_role_safety_upgrade.sql files.'
+        };
+      }
+      const summary = summarizeSchemaCapabilities(data);
+      return summary.ready
+        ? {
+            count: summary.installed.length,
+            detail: 'Required booking and admin safety migrations are installed.'
+          }
+        : {
+            status: 'attention',
+            count: summary.installed.length,
+            detail: `Missing database capabilities: ${summary.missing.join(', ')}.`,
+            action: summary.actions.join(' ')
+          };
     })
   ]);
 }
