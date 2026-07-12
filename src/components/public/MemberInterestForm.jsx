@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitMemberInterest } from '@/lib/submitForms';
+import FormCheckbox from '@/components/public/FormCheckbox';
 
 const STEPS = ['About you', 'Training', 'Interests', 'Confirm'];
 
@@ -20,6 +21,7 @@ function MultiSelect({ options, value = [], onChange }) {
       {options.map(opt => (
         <button type="button" key={opt}
           onClick={() => toggle(opt)}
+          aria-pressed={value.includes(opt)}
           className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
             ? 'border-xert-red bg-xert-red/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
@@ -140,6 +142,7 @@ export default function MemberInterestForm() {
               {AGE_RANGES.map(a => (
                 <button type="button" key={a}
                   onClick={() => set('age_range', a)}
+                  aria-pressed={form.age_range === a}
                   className={`px-4 py-2 font-body text-sm border transition-all ${form.age_range === a ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
                   {a}
                 </button>
@@ -167,6 +170,7 @@ export default function MemberInterestForm() {
               {TRAINING_LEVELS.map(l => (
                 <button type="button" key={l}
                   onClick={() => set('current_training_level', l)}
+                  aria-pressed={form.current_training_level === l}
                   className={`px-3 py-2 text-sm font-body border transition-all ${form.current_training_level === l ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
                   {l}
                 </button>
@@ -194,13 +198,9 @@ export default function MemberInterestForm() {
             { key: 'interested_in_workshops', label: 'Interested in workshops' },
             { key: 'interested_in_event_prep', label: 'Interested in event preparation' },
           ].map(item => (
-            <label key={item.key} className="flex items-center gap-3 cursor-pointer group">
-              <div onClick={() => set(item.key, !form[item.key])}
-                className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 transition-all ${form[item.key] ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50 group-hover:border-xert-red/50'}`}>
-                {form[item.key] && <span className="text-white text-xs">✓</span>}
-              </div>
-              <span className="font-body text-sm text-xert-concrete/80">{item.label}</span>
-            </label>
+            <FormCheckbox key={item.key} name={item.key} checked={form[item.key]} onChange={checked => set(item.key, checked)}>
+              {item.label}
+            </FormCheckbox>
           ))}
           <div>
             <FieldLabel>Any injuries or physical limitations</FieldLabel>
@@ -229,25 +229,16 @@ export default function MemberInterestForm() {
             <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Times:</strong> {form.preferred_training_times.join(', ') || '—'}</p>
           </div>
 
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div onClick={() => set('consent_to_contact', !form.consent_to_contact)}
-              className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.consent_to_contact ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50 group-hover:border-xert-red/50'}`}>
-              {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
-            </div>
-            <span className="font-body text-sm text-xert-concrete/80">
-              I consent to XERT Fitness contacting me about my interest and the soft launch as described in the <a href="/privacy" className="underline text-xert-steel">Privacy Policy</a>. <span className="text-xert-red">*</span>
-            </span>
-          </label>
+          <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
+            I consent to XERT Fitness contacting me about my interest and the soft launch.
+          </FormCheckbox>
+          <p className="font-body text-xs pl-8" style={{ color: 'rgba(209,221,230,0.55)' }}>
+            See how XERT handles your details in the <a href="/privacy" className="underline text-xert-steel">Privacy Policy</a>.
+          </p>
 
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div onClick={() => set('mailing_list_consent', !form.mailing_list_consent)}
-              className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.mailing_list_consent ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50 group-hover:border-xert-red/50'}`}>
-              {form.mailing_list_consent && <span className="text-white text-xs">✓</span>}
-            </div>
-            <span className="font-body text-sm text-xert-concrete/80">
-              I'd like to receive XERT updates and launch information by email. (Optional)
-            </span>
-          </label>
+          <FormCheckbox name="mailing_list_consent" checked={form.mailing_list_consent} onChange={checked => set('mailing_list_consent', checked)}>
+            I'd like to receive XERT updates and launch information by email. (Optional)
+          </FormCheckbox>
         </div>
       )}
 

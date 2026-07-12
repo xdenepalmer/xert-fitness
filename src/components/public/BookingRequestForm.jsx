@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { requestClassBooking } from '@/lib/submitForms';
+import FormCheckbox from '@/components/public/FormCheckbox';
 
 function FieldLabel({ children, required = false }) {
   return (
@@ -72,6 +73,7 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
           {TRAINING_LEVELS.map(l => (
             <button type="button" key={l}
               onClick={() => set('training_level', l)}
+              aria-pressed={form.training_level === l}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.training_level === l ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {l}
             </button>
@@ -86,15 +88,9 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>
 
-      <label className="flex items-start gap-3 cursor-pointer">
-        <div onClick={() => set('consent_to_contact', !form.consent_to_contact)}
-          className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.consent_to_contact ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
-          {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
-        </div>
-        <span className="font-body text-sm text-xert-concrete/80">
-          I consent to XERT contacting me about this booking request. <span className="text-xert-red">*</span>
-        </span>
-      </label>
+      <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
+        I consent to XERT contacting me about this booking request.
+      </FormCheckbox>
 
       {error && (
         <div className="p-3 border border-xert-red/50 bg-xert-red/10">

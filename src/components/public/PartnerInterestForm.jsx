@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitPartnerInterest } from '@/lib/submitForms';
+import FormCheckbox from '@/components/public/FormCheckbox';
 
 const STEPS = ['Contact', 'Practice', 'Confirm'];
 const SERVICES = ['Physiotherapy', 'Nutrition / dietetics', 'Psychology / mental performance', 'Massage therapy', 'Strength & conditioning education', 'Medical / GP', 'Podiatry', 'Occupational therapy', 'Other allied health'];
@@ -30,6 +31,7 @@ function MultiSelect({ options, value = [], onChange }) {
       {options.map(opt => (
         <button type="button" key={opt}
           onClick={() => toggle(opt)}
+          aria-pressed={value.includes(opt)}
           className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
             ? 'border-xert-red bg-xert-red/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
@@ -138,13 +140,9 @@ export default function PartnerInterestForm() {
               { key: 'subcontract_interest', label: 'Open to subcontracting at XERT' },
               { key: 'workshop_interest', label: 'Interested in running workshops' },
             ].map(item => (
-              <label key={item.key} className="flex items-center gap-3 cursor-pointer">
-                <div onClick={() => set(item.key, !form[item.key])}
-                  className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 transition-all ${form[item.key] ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
-                  {form[item.key] && <span className="text-white text-xs">✓</span>}
-                </div>
-                <span className="font-body text-sm text-xert-concrete/80">{item.label}</span>
-              </label>
+              <FormCheckbox key={item.key} name={item.key} checked={form[item.key]} onChange={checked => set(item.key, checked)}>
+                {item.label}
+              </FormCheckbox>
             ))}
           </div>
           <div>
@@ -179,15 +177,9 @@ export default function PartnerInterestForm() {
             <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Business:</strong> {form.business_name}</p>
             <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Services:</strong> {form.services_offered.join(', ') || '—'}</p>
           </div>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <div onClick={() => set('consent_to_contact', !form.consent_to_contact)}
-              className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.consent_to_contact ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
-              {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
-            </div>
-            <span className="font-body text-sm text-xert-concrete/80">
-              I consent to XERT Fitness contacting me about this enquiry. <span className="text-xert-red">*</span>
-            </span>
-          </label>
+          <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
+            I consent to XERT Fitness contacting me about this enquiry.
+          </FormCheckbox>
         </div>
       )}
 

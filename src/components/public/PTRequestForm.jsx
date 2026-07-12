@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { requestPrivateSession } from '@/lib/submitForms';
+import FormCheckbox from '@/components/public/FormCheckbox';
 
 const SESSION_TYPES = ['30-minute PT session', '45-minute PT session', '60-minute PT session', 'Intro assessment', 'Private coaching block'];
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
@@ -67,6 +68,7 @@ export default function PTRequestForm({ onSuccess }) {
         <div className="flex flex-wrap gap-2">
           {SESSION_TYPES.map(t => (
             <button type="button" key={t} onClick={() => set('requested_session_type', t)}
+              aria-pressed={form.requested_session_type === t}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.requested_session_type === t ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {t}
             </button>
@@ -98,6 +100,7 @@ export default function PTRequestForm({ onSuccess }) {
         <div className="flex flex-wrap gap-2">
           {GOALS.map(g => (
             <button type="button" key={g} onClick={() => set('training_goal', g)}
+              aria-pressed={form.training_goal === g}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.training_goal === g ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {g}
             </button>
@@ -110,6 +113,7 @@ export default function PTRequestForm({ onSuccess }) {
         <div className="flex flex-wrap gap-2">
           {EXPERIENCE.map(exp => (
             <button type="button" key={exp} onClick={() => set('experience_level', exp)}
+              aria-pressed={form.experience_level === exp}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.experience_level === exp ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {exp}
             </button>
@@ -124,15 +128,9 @@ export default function PTRequestForm({ onSuccess }) {
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>
 
-      <label className="flex items-start gap-3 cursor-pointer">
-        <div onClick={() => set('consent_to_contact', !form.consent_to_contact)}
-          className={`w-5 h-5 border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${form.consent_to_contact ? 'border-xert-red bg-xert-red' : 'border-xert-steel/50'}`}>
-          {form.consent_to_contact && <span className="text-white text-xs">✓</span>}
-        </div>
-        <span className="font-body text-sm text-xert-concrete/80">
-          I consent to XERT contacting me about this PT request. <span className="text-xert-red">*</span>
-        </span>
-      </label>
+      <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
+        I consent to XERT contacting me about this PT request.
+      </FormCheckbox>
 
       {error && (
         <div className="p-3 border border-xert-red/50 bg-xert-red/10">
