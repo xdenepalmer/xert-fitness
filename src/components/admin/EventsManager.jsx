@@ -3,6 +3,7 @@ import { Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { normalizeEventInput } from '@/lib/eventAdmin';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'fitness', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
 
@@ -26,41 +27,18 @@ function EventEditor({ event, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
-  const handleSave = async () => {
-    const name = form.name.trim();
-    const url = form.url?.trim() || null;
-
-    if (!name) {
-      toast({ title: 'Name required.', variant: 'destructive' });
-      return;
-    }
-    if (!form.event_date && form.end_date) {
-      toast({ title: 'Start date required', description: 'Choose a start date before adding an end date.', variant: 'destructive' });
-      return;
-    }
-    if (form.event_date && form.end_date && form.end_date < form.event_date) {
-      toast({ title: 'Invalid date range', description: 'The end date cannot be before the start date.', variant: 'destructive' });
-      return;
-    }
-    if (url) {
-      try {
-        const parsed = new URL(url);
-        if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Unsupported protocol');
-      } catch {
-        toast({ title: 'Invalid website link', description: 'Enter a complete http:// or https:// address.', variant: 'destructive' });
-        return;
-      }
-    }
-    // Normalise empty date strings to null (Postgres date columns reject '').
-    const payload = {
-      ...form,
-      name,
-      event_date: form.event_date || null,
-      end_date: form.end_date || null,
-      url
+  useEffect(() => {
+    const closeOnEscape = keyboardEvent => {
+      if (keyboardEvent.key === 'Escape' && !saving) onCancel();
     };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onCancel, saving]);
+
+  const handleSave = async () => {
     setSaving(true);
     try {
+      const payload = normalizeEventInput(form);
       if (event?.id) await updateEvent(event.id, payload);
       else await createEvent(payload);
       onSave();
@@ -77,22 +55,22 @@ function EventEditor({ event, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="event-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">{event?.id ? 'Edit' : 'New'} Event</h3>
-          <button type="button" onClick={onCancel} aria-label="Close event editor" title="Close" className="p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors">
+          <h3 id="event-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{event?.id ? 'Edit' : 'New'} Event</h3>
+          <button type="button" onClick={onCancel} aria-label="Close event editor" title="Close" className="min-w-11 min-h-11 p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className={labelCls}>Event name *</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
+            <label htmlFor="event-name" className={labelCls}>Event name *</label>
+            <input id="event-name" required autoFocus value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className={labelCls}>Category</label>
-              <select value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={inputCls}>
+              <label htmlFor="event-category" className={labelCls}>Category</label>
+              <select id="event-category" value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={inputCls}>
                 {CATEGORIES.map(c => (
                   <option key={c} value={c}>
                     {c}
@@ -101,32 +79,32 @@ function EventEditor({ event, onSave, onCancel }) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Start date</label>
-              <input type="date" value={form.event_date || ''} onChange={e => set('event_date', e.target.value)} className={inputCls} />
+              <label htmlFor="event-start-date" className={labelCls}>Start date</label>
+              <input id="event-start-date" type="date" value={form.event_date || ''} onChange={e => set('event_date', e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>End date (optional)</label>
-              <input type="date" value={form.end_date || ''} onChange={e => set('end_date', e.target.value)} className={inputCls} />
+              <label htmlFor="event-end-date" className={labelCls}>End date (optional)</label>
+              <input id="event-end-date" type="date" min={form.event_date || undefined} value={form.end_date || ''} onChange={e => set('end_date', e.target.value)} className={inputCls} />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Location</label>
-              <input value={form.location || ''} onChange={e => set('location', e.target.value)} placeholder="e.g. Sunshine Coast" className={inputCls} />
+              <label htmlFor="event-location" className={labelCls}>Location</label>
+              <input id="event-location" value={form.location || ''} onChange={e => set('location', e.target.value)} placeholder="e.g. Sunshine Coast" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Region</label>
-              <input value={form.region || ''} onChange={e => set('region', e.target.value)} className={inputCls} />
+              <label htmlFor="event-region" className={labelCls}>Region</label>
+              <input id="event-region" value={form.region || ''} onChange={e => set('region', e.target.value)} className={inputCls} />
             </div>
           </div>
           <div>
-            <label className={labelCls}>Official website link</label>
-            <input value={form.url || ''} onChange={e => set('url', e.target.value)} placeholder="https://…" className={inputCls} />
+            <label htmlFor="event-url" className={labelCls}>Official website link</label>
+            <input id="event-url" type="url" value={form.url || ''} onChange={e => set('url', e.target.value)} placeholder="https://…" className={inputCls} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
             <div>
-              <label className={labelCls}>Sort order</label>
-              <input type="number" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
+              <label htmlFor="event-sort-order" className={labelCls}>Sort order</label>
+              <input id="event-sort-order" type="number" min="0" step="1" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
             </div>
             <label className="flex items-center gap-2 cursor-pointer pb-2">
               <input type="checkbox" checked={Boolean(form.published)} onChange={event => set('published', event.target.checked)} className="w-5 h-5 accent-[#7BA7BC]" />
@@ -135,10 +113,10 @@ function EventEditor({ event, onSave, onCancel }) {
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
+          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             Cancel
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -236,6 +214,7 @@ export default function EventsManager() {
   const [rosterMembers, setRosterMembers] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     if (!rosterEvent) return undefined;
@@ -282,17 +261,23 @@ export default function EventsManager() {
     load();
   }, []);
 
-  const handleDelete = async id => {
-    if (!confirm('Delete this event?')) return;
+  const handleDelete = async event => {
+    const goalCount = goalCounts[event.id] || 0;
+    const goalWarning = goalCount ? ` This also removes ${goalCount} member training goal${goalCount === 1 ? '' : 's'}.` : '';
+    if (!confirm(`Delete ${event.name}?${goalWarning} This cannot be undone.`)) return;
+    setDeletingId(event.id);
     try {
-      await deleteEvent(id);
-      load();
+      await deleteEvent(event.id);
+      toast({ title: 'Event deleted', description: `${event.name} was removed from the calendar.` });
+      await load();
     } catch (e) {
       toast({
         title: 'Delete failed',
         description: e.message,
         variant: 'destructive'
       });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -329,15 +314,15 @@ export default function EventsManager() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">SE QLD Event Calendar</h2>
         <div className="flex items-center gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" className="w-48 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
+          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search events" placeholder="Search events…" className="w-48 min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Filter events by category" className="min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
             {usedCategories.map(c => (
               <option key={c} value={c}>
                 {c === 'all' ? 'All categories' : c}
               </option>
             ))}
           </select>
-          <button onClick={handleSeed} disabled={seeding} className="px-4 py-2.5 border border-xert-steel/40 text-xert-concrete font-display text-sm uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
+          <button onClick={handleSeed} disabled={seeding || deletingId !== null} className="min-h-11 px-4 py-2.5 border border-xert-steel/40 text-xert-concrete font-display text-sm uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             {seeding ? 'Loading...' : 'Load 2026 Calendar'}
           </button>
           <button
@@ -345,7 +330,8 @@ export default function EventsManager() {
               setEditing(null);
               setShowEditor(true);
             }}
-            className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors"
+            disabled={deletingId !== null}
+            className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50"
           >
             + Add Event
           </button>
@@ -376,7 +362,7 @@ export default function EventsManager() {
                   <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/60 px-2 py-0.5 uppercase">{ev.category || 'other'}</span>
                   {!ev.published && <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Hidden</span>}
                   {ev.url && <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Link</span>}
-                  <button type="button" onClick={() => setRosterEvent(ev)} disabled={Boolean(goalLoadError)} title={goalLoadError || 'View training group'} className="inline-flex items-center gap-1 font-body text-xs border border-xert-red/40 text-xert-red px-2 py-0.5 uppercase disabled:opacity-40">
+                  <button type="button" onClick={() => setRosterEvent(ev)} disabled={Boolean(goalLoadError)} title={goalLoadError || 'View training group'} className="inline-flex min-h-11 items-center gap-1 font-body text-xs border border-xert-red/40 text-xert-red px-2 py-2.5 uppercase disabled:opacity-40">
                       <Target className="w-3 h-3" />
                       {goalCounts[ev.id] || 0} training
                   </button>
@@ -399,12 +385,13 @@ export default function EventsManager() {
                     setEditing(ev);
                     setShowEditor(true);
                   }}
-                  className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors"
+                  disabled={deletingId !== null}
+                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50"
                 >
                   Edit
                 </button>
-                <button onClick={() => handleDelete(ev.id)} className="px-3 py-1.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
-                  Delete
+                <button onClick={() => handleDelete(ev)} disabled={deletingId !== null} className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
+                  {deletingId === ev.id ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>
