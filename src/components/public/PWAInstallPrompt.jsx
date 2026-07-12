@@ -11,6 +11,9 @@ export default function PWAInstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const iosNavigator = /** @type {Navigator & { standalone?: boolean }} */ (window.navigator);
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches || iosNavigator.standalone;
+    if (standalone) return;
     if (localStorage.getItem('xert_pwa_dismissed') === '1') return;
 
     const handler = (e) => {
@@ -19,13 +22,23 @@ export default function PWAInstallPrompt() {
       setTimeout(() => setVisible(true), 2500);
     };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    const installed = () => {
+      localStorage.setItem('xert_pwa_dismissed', '1');
+      setDeferred(null);
+      setVisible(false);
+    };
+    window.addEventListener('appinstalled', installed);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installed);
+    };
   }, []);
 
   const install = async () => {
     if (!deferred) return;
     deferred.prompt();
-    await deferred.userChoice;
+    const choice = await deferred.userChoice;
+    if (choice.outcome === 'accepted') localStorage.setItem('xert_pwa_dismissed', '1');
     setDeferred(null);
     setVisible(false);
   };
