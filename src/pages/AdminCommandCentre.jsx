@@ -1,5 +1,7 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
+import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
@@ -28,7 +30,18 @@ function SectionLoader() {
 }
 
 export default function AdminCommandCentre() {
-  const [section, setSection] = useState('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const section = getAdminSectionFromPath(location.pathname);
+  const canonicalPath = getAdminSectionPath(section);
+
+  useEffect(() => {
+    if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
+  }, [canonicalPath, location.pathname, navigate]);
+
+  const setSection = useCallback(nextSection => {
+    navigate(getAdminSectionPath(nextSection));
+  }, [navigate]);
 
   const renderSection = () => {
     switch (section) {

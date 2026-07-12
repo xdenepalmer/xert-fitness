@@ -131,7 +131,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
               </p>
             </div>
           </div>
-          <button onClick={() => setSidebarOpen(false)}
+          <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close admin navigation" title="Close navigation"
             className="lg:hidden absolute top-4 right-4 p-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
             <X className="w-4 h-4" />
           </button>
@@ -151,6 +151,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
                 const Icon = item.icon;
                 return (
                   <button
+                    type="button"
                     key={item.key}
                     onClick={() => { onSectionChange(item.key); setSidebarOpen(false); }}
                     className="relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-all group"
@@ -200,7 +201,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
               <ExternalLink className="w-3 h-3" /> Site
             </Link>
-            <button onClick={signOut}
+            <button type="button" onClick={signOut}
               className="flex items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
@@ -213,7 +214,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
 
       {/* Overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/70 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <button type="button" className="fixed inset-0 z-40 bg-black/70 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Close admin navigation" />
       )}
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
@@ -226,7 +227,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
             backdropFilter: 'blur(10px)',
           }}>
           <div className="flex items-center gap-4">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
+            <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation" title="Open navigation" className="lg:hidden p-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-3">
@@ -237,7 +238,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => setPaletteOpen(true)}
+            <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search admin tools" title="Search admin tools"
               className="flex items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.25)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
