@@ -77,6 +77,8 @@ The Supabase schema is defined in:
   currency, credit count, and expiry before checkout can use a pack
 - `src/supabase/event_goals_upgrade.sql` — lets members choose a calendar event
   to train toward and gives admins a contactable roster for each training group
+- `src/supabase/credit_grant_audit_upgrade.sql` — makes manual admin credit
+  grants retry-safe and records who granted them and why
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
@@ -84,7 +86,7 @@ For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
 For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
 `rls_hardening.sql`, `product_validation_upgrade.sql`, and
-`event_goals_upgrade.sql` after those prerequisites. The scripts are idempotent;
+`event_goals_upgrade.sql`, and `credit_grant_audit_upgrade.sql` after those prerequisites. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

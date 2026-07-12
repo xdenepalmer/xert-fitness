@@ -404,13 +404,20 @@ export async function adminListMembers() {
   return data || [];
 }
 
-export async function adminGrantCredits(userId, sessions, validityDays) {
-  const { error } = await supabase.rpc('admin_grant_credits', {
+export async function adminGrantCredits(userId, sessions, validityDays, requestId, note) {
+  const { error } = await supabase.rpc('admin_grant_credits_v2', {
     p_user_id: userId,
     p_sessions: sessions,
-    p_validity_days: validityDays ?? null
+    p_validity_days: validityDays ?? null,
+    p_request_id: requestId,
+    p_note: note
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/admin_grant_credits_v2|schema cache|function.*not found/i.test(error.message || '')) {
+      throw new Error('Apply credit_grant_audit_upgrade.sql before issuing manual credits.');
+    }
+    throw new Error(error.message);
+  }
 }
 
 export async function adminSetRole(userId, role) {
@@ -652,6 +659,18 @@ export async function getOperationsHealth() {
             detail: 'No paid orders recorded yet.',
             action: 'Run a Stripe test purchase after deployment.'
           };
+    }),
+
+    healthCheck('credit-audit', 'Audited credit grants', async () => {
+      const { count, error } = await supabase.from('admin_credit_grants').select('id', { count: 'exact', head: true });
+      if (error) {
+        return {
+          status: 'attention',
+          detail: 'Manual credit grant auditing is not installed.',
+          action: 'Apply src/supabase/credit_grant_audit_upgrade.sql in Supabase.'
+        };
+      }
+      return { count, detail: `${count || 0} audited manual credit grant${count === 1 ? '' : 's'} recorded.` };
     })
   ]);
 }
@@ -659,14 +678,16 @@ export async function getOperationsHealth() {
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false })]);
+  const [credits, bookings, orders, grants] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false })]);
   for (const r of [credits, bookings, orders]) {
     if (r.error) throw new Error(r.error.message);
   }
   return {
     credits: credits.data || [],
     bookings: bookings.data || [],
-    orders: orders.data || []
+    orders: orders.data || [],
+    grants: grants.error ? [] : grants.data || [],
+    creditAuditAvailable: !grants.error
   };
 }
 
