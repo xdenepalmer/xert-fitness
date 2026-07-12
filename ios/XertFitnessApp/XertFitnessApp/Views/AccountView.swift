@@ -10,6 +10,7 @@ struct AccountView: View {
     @State private var didSaveProfile = false
     @State private var passwordResetSent = false
     @State private var bookingToCancel: BookingItem?
+    @State private var showingDeleteConfirmation = false
     @FocusState private var focusedProfileField: ProfileField?
 
     private enum ProfileField {
@@ -76,6 +77,16 @@ struct AccountView: View {
                         Button("Sign Out", role: .destructive) {
                             store.signOut()
                         }
+                    }
+
+                    Section("Account Control") {
+                        Button("Delete Account", role: .destructive) {
+                            showingDeleteConfirmation = true
+                        }
+                        .disabled(store.isDeletingAccount)
+                        Text("Permanently removes your profile, credits, bookings and training goals. This cannot be undone.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
 
                     Section("Bookings") {
@@ -184,6 +195,18 @@ struct AccountView: View {
                 }
             } message: { booking in
                 Text(booking.cancellationMessage)
+            }
+            .confirmationDialog(
+                "Permanently delete your XERT account?",
+                isPresented: $showingDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Keep Account", role: .cancel) {}
+                Button("Delete Account", role: .destructive) {
+                    Task { _ = await store.deleteAccount() }
+                }
+            } message: {
+                Text("Your member profile, credits, bookings and training goals will be removed. Purchase records are anonymized.")
             }
         }
     }

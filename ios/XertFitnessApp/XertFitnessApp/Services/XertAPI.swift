@@ -246,6 +246,17 @@ final class XertAPI {
         return response.url
     }
 
+    func deleteAccount(session auth: AuthSession) async throws {
+        let response: DeleteAccountResponse = try await vercelRequest(
+            path: "/api/delete-account",
+            body: ["confirmation": "DELETE"],
+            auth: auth
+        )
+        guard response.deleted else {
+            throw APIError(message: "XERT could not confirm that your account was deleted.")
+        }
+    }
+
     private func authRequest<T: Decodable, Body: Encodable>(
         path: String,
         queryItems: [URLQueryItem] = [],
@@ -368,6 +379,10 @@ private struct EmptyResponse: Decodable {
         let container = try decoder.singleValueContainer()
         _ = container.decodeNil()
     }
+}
+
+private struct DeleteAccountResponse: Decodable {
+    let deleted: Bool
 }
 
 private extension ISO8601DateFormatter {

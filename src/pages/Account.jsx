@@ -7,6 +7,7 @@ import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { useToast } from '@/components/ui/use-toast';
+import { deleteMyAccount } from '@/lib/accountData';
 
 function formatDateTime(iso) {
   if (!iso) return '';
@@ -47,6 +48,8 @@ export default function Account() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   const [savingProfile, setSavingProfile] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
 
@@ -168,6 +171,19 @@ export default function Account() {
         description: e.message,
         variant: 'destructive'
       });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await deleteMyAccount(session?.access_token);
+      setShowDeleteAccount(false);
+      toast({ title: 'Account deleted', description: 'Your XERT member account has been permanently removed.' });
+    } catch (error) {
+      toast({ title: 'Could not delete account', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -601,6 +617,16 @@ export default function Account() {
             </div>
           </section>
         )}
+
+        <section className="mt-12 pt-8 border-t" style={{ borderColor: 'rgba(201,78,68,0.25)' }}>
+          <h2 className="font-display text-xl uppercase text-xert-offwhite">Account Control</h2>
+          <p className="font-body text-sm mt-2 max-w-xl" style={{ color: 'rgba(209,221,230,0.55)' }}>
+            Permanently remove your profile, credits, bookings and training goals. Purchase records are anonymized.
+          </p>
+          <button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-4 px-4 py-2.5 border font-body text-xs uppercase tracking-wider" style={{ borderColor: 'rgba(201,78,68,0.55)', color: '#f0a1a1' }}>
+            Delete account
+          </button>
+        </section>
       </main>
 
       <PublicFooter />
@@ -643,6 +669,22 @@ export default function Account() {
               </button>
               <button type="button" onClick={confirmCancellation} className="px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
                 Cancel booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteAccount && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title" aria-describedby="delete-account-description">
+          <div className="w-full max-w-md border p-6" style={{ borderColor: 'rgba(201,78,68,0.45)', backgroundColor: '#101820' }}>
+            <h2 id="delete-account-title" className="font-display text-2xl uppercase text-xert-offwhite">Delete account permanently?</h2>
+            <p id="delete-account-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
+              Your profile, credits, bookings and training goals will be removed. This cannot be undone.
+            </p>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
+              <button type="button" autoFocus disabled={deletingAccount} onClick={() => setShowDeleteAccount(false)} className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.65)' }}>Keep account</button>
+              <button type="button" disabled={deletingAccount} onClick={() => void handleDeleteAccount()} className="px-4 py-2.5 font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+                {deletingAccount ? 'Deleting...' : 'Delete account'}
               </button>
             </div>
           </div>

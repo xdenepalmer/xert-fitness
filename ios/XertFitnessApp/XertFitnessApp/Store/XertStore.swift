@@ -18,6 +18,7 @@ final class XertStore: ObservableObject {
     @Published var isSavingProfile = false
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
+    @Published var isDeletingAccount = false
 
     private let api = XertAPI()
 
@@ -173,6 +174,32 @@ final class XertStore: ObservableObject {
             if let currentSession {
                 try? await api.signOut(session: currentSession)
             }
+        }
+    }
+
+    @discardableResult
+    func deleteAccount() async -> Bool {
+        guard let authSession else {
+            errorMessage = "Sign in again before deleting your account."
+            return false
+        }
+
+        errorMessage = nil
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await api.deleteAccount(session: authSession)
+            self.authSession = nil
+            credits = []
+            bookings = []
+            profile = nil
+            eventGoalIDs = []
+            KeychainStore.clearSession()
+            await ClassReminderScheduler.shared.clearAll()
+            return true
+        } catch {
+            present(error)
+            return false
         }
     }
 
