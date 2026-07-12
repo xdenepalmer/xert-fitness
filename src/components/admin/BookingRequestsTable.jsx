@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassBookings, updateBookingStatus, updateAdminNotes } from '@/lib/adminData';
+import {
+  getClassBookings, getMemberBookingRequests, updateBookingStatus,
+  updateMemberBookingStatus, updateAdminNotes,
+} from '@/lib/adminData';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -22,16 +25,46 @@ export default function BookingRequestsTable() {
 
   const load = () => {
     setLoading(true);
-    getClassBookings({ status: statusFilter || undefined }).then(data => {
-      setBookings(data);
+    Promise.all([
+      getClassBookings({ status: statusFilter || undefined }),
+      getMemberBookingRequests({ status: statusFilter || undefined }),
+    ]).then(([legacy, members]) => {
+      const rows = [
+        ...legacy.map(booking => ({
+          ...booking,
+          source: 'enquiry',
+          createdAt: booking.created_at,
+          session: booking.class_sessions,
+        })),
+        ...members.map(booking => ({
+          ...booking,
+          source: 'member',
+          full_name: booking.profile?.full_name || booking.profile?.email || 'Member',
+          email: booking.profile?.email || 'Email unavailable',
+          phone: booking.profile?.phone || '',
+          createdAt: booking.created_at,
+          session: booking.class_sessions,
+        })),
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setBookings(rows);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(error => {
+      toast({ title: 'Could not load booking requests', description: error.message, variant: 'destructive' });
+      setLoading(false);
+    });
   };
 
   useEffect(() => { load(); }, [statusFilter]);
 
-  const handleStatusUpdate = async (id, status) => {
-    try { await updateBookingStatus(id, status); load(); } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
+  const handleStatusUpdate = async (booking, status) => {
+    try {
+      if (booking.source === 'member') {
+        await updateMemberBookingStatus(booking.id, status);
+      } else {
+        await updateBookingStatus(booking.id, status);
+      }
+      load();
+    } catch (e) { toast({ title: 'Update failed', description: e.message, variant: 'destructive' }); }
   };
 
   const saveNotes = async () => {
@@ -70,9 +103,19 @@ export default function BookingRequestsTable() {
                     <span className={`font-body text-xs px-2 py-0.5 ${STATUS_COLORS[b.status] || ''}`}>{b.status}</span>
                   </div>
                   <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.phone}</p>
-                  {b.class_sessions && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
+                      {b.source === 'member' ? 'Member credit booking' : 'Enquiry form'}
+                    </span>
+                    {b.source === 'member' && b.credit_batch_id && (
+                      <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
+                        Credit reserved
+                      </span>
+                    )}
+                  </div>
+                  {b.session && (
                     <p className="font-body text-xs text-xert-concrete/40 mt-1">
-                      {b.class_sessions.title} · {b.class_sessions.start_time ? new Date(b.class_sessions.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      {b.session.title} · {b.session.start_time ? new Date(b.session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                     </p>
                   )}
                   {b.admin_notes && <p className="font-body text-xs text-xert-concrete/30 mt-1 italic">{b.admin_notes}</p>}
@@ -80,15 +123,15 @@ export default function BookingRequestsTable() {
                 <div className="flex gap-2 flex-wrap justify-end shrink-0">
                   {b.status === 'requested' && (
                     <>
-                      <button onClick={() => handleStatusUpdate(b.id, 'confirmed')}
+                      <button onClick={() => handleStatusUpdate(b, 'confirmed')}
                         className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
                         Confirm
                       </button>
-                      <button onClick={() => handleStatusUpdate(b.id, 'waitlisted')}
+                      <button onClick={() => handleStatusUpdate(b, 'waitlisted')}
                         className="px-3 py-1.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
                         Waitlist
                       </button>
-                      <button onClick={() => handleStatusUpdate(b.id, 'declined')}
+                      <button onClick={() => handleStatusUpdate(b, 'declined')}
                         className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         Decline
                       </button>
@@ -96,20 +139,22 @@ export default function BookingRequestsTable() {
                   )}
                   {b.status === 'confirmed' && (
                     <>
-                      <button onClick={() => handleStatusUpdate(b.id, 'attended')}
+                      <button onClick={() => handleStatusUpdate(b, 'attended')}
                         className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
                         Attended
                       </button>
-                      <button onClick={() => handleStatusUpdate(b.id, 'no_show')}
+                      <button onClick={() => handleStatusUpdate(b, 'no_show')}
                         className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         No show
                       </button>
                     </>
                   )}
-                  <button onClick={() => { setSelectedBooking(b); setNotes(b.admin_notes || ''); }}
-                    className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">
-                    Notes
-                  </button>
+                  {b.source === 'enquiry' && (
+                    <button onClick={() => { setSelectedBooking(b); setNotes(b.admin_notes || ''); }}
+                      className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">
+                      Notes
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

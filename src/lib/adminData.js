@@ -86,6 +86,36 @@ export async function updateBookingStatus(id, status) {
   if (error) throw new Error(error.message);
 }
 
+// Authenticated member bookings are a separate, credit-backed workflow from
+// pre-launch enquiry forms. The admin queue presents both together.
+export async function getMemberBookingRequests(filters = {}) {
+  let query = supabase
+    .from('session_bookings')
+    .select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)')
+    .order('created_at', { ascending: false });
+  if (filters.status) query = query.eq('status', filters.status);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const rows = data || [];
+  const memberIds = [...new Set(rows.map(row => row.user_id).filter(Boolean))];
+  if (memberIds.length === 0) return [];
+
+  const { data: profiles, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, phone')
+    .in('id', memberIds);
+  if (profileError) throw new Error(profileError.message);
+
+  const profileById = new Map((profiles || []).map(profile => [profile.id, profile]));
+  return rows.map(row => ({ ...row, profile: profileById.get(row.user_id) || null }));
+}
+
+export async function updateMemberBookingStatus(id, status) {
+  return adminSetBookingStatus(id, status);
+}
+
 // ─── PT Requests ──────────────────────────────────────────────────────────────
 
 export async function getPTRequests(filters = {}) {
@@ -182,17 +212,19 @@ export async function getDashboardStats() {
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoIso = weekAgo.toISOString();
 
-  const [members, trainers, partners, newMembers, bookings, ptRequests] = await Promise.all([
+  const [members, trainers, partners, newMembers, bookings, memberBookings, ptRequests] = await Promise.all([
     supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', { count: 'exact' }),
     supabase.from('trainer_interest').select('id', { count: 'exact' }),
     supabase.from('partner_interest').select('id', { count: 'exact' }),
     supabase.from('member_interest').select('id', { count: 'exact' }).gte('created_at', weekAgoIso),
     supabase.from('class_bookings').select('id, status', { count: 'exact' }),
+    supabase.from('session_bookings').select('id, status', { count: 'exact' }),
     supabase.from('private_session_requests').select('id, status', { count: 'exact' }),
   ]);
 
   const memberData = members.data || [];
   const bookingData = bookings.data || [];
+  const memberBookingData = memberBookings.data || [];
 
   // Most requested class times
   const timeCounts = {};
@@ -221,8 +253,10 @@ export async function getDashboardStats() {
     eventPrepInterest: memberData.filter(m => m.interested_in_event_prep).length,
     topTimes,
     topGoals,
-    pendingBookings: bookingData.filter(b => b.status === 'requested').length,
-    waitlistedBookings: bookingData.filter(b => b.status === 'waitlisted').length,
+    pendingBookings: bookingData.filter(b => b.status === 'requested').length
+      + memberBookingData.filter(b => b.status === 'requested').length,
+    waitlistedBookings: bookingData.filter(b => b.status === 'waitlisted').length
+      + memberBookingData.filter(b => b.status === 'waitlisted').length,
     ptRequests: ptRequests.count || 0,
   };
 }
@@ -406,14 +440,15 @@ export async function getBusinessStats() {
 // ─── Sidebar badge counts (things needing attention) ─────────────────────────
 
 export async function getAdminBadgeCounts() {
-  const [newLeads, pendingBookings, pendingPT] = await Promise.all([
+  const [newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT] = await Promise.all([
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
   ]);
   return {
     members: newLeads.count || 0,
-    bookings: pendingBookings.count || 0,
+    bookings: (pendingLegacyBookings.count || 0) + (pendingMemberBookings.count || 0),
     'pt-requests': pendingPT.count || 0,
   };
 }
