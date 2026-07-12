@@ -31,6 +31,7 @@ test('collects every filtered lead page for a complete CSV export', async () => 
   assert.deepEqual(requested, [1, 2]);
   assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c']);
   await assert.rejects(() => collectAdminPages(async () => ({ rows: null, total: 1 })), /invalid page/);
+  await assert.rejects(() => collectAdminPages(async () => ({ rows: [], total: 1 })), /stopped after 0 of 1/);
 });
 
 test('allows only known lead tables and statuses for CRM mutations', () => {

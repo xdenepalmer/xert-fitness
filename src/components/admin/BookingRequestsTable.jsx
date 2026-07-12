@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { Download, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
@@ -19,6 +19,7 @@ const STATUS_COLORS = {
   attended: 'bg-green-700/30 text-green-300',
   no_show: 'bg-orange-900/30 text-xert-orange',
 };
+const PAGE_SIZE = 50;
 
 export default function BookingRequestsTable() {
   const [bookings, setBookings] = useState([]);
@@ -32,6 +33,7 @@ export default function BookingRequestsTable() {
   const [notes, setNotes] = useState('');
   const [updatingKey, setUpdatingKey] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +77,15 @@ export default function BookingRequestsTable() {
     days: daysFilter,
   }), [bookings, daysFilter, search, sourceFilter, statusFilter]);
   const summary = useMemo(() => summarizeAdminBookings(filteredBookings), [filteredBookings]);
+  const pageCount = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+  const visibleBookings = useMemo(() => filteredBookings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredBookings, page]);
+  const firstResult = filteredBookings.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, filteredBookings.length);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedBooking(null);
+  }, [daysFilter, search, sourceFilter, statusFilter]);
 
   const handleStatusUpdate = async (booking, status) => {
     const actionKey = `${booking.source}-${booking.id}`;
@@ -87,6 +98,7 @@ export default function BookingRequestsTable() {
       }
       toast({ title: 'Booking updated', description: `${booking.full_name || 'Booking'} is now ${status.replace(/_/g, ' ')}.` });
       await load();
+      setPage(1);
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -102,6 +114,7 @@ export default function BookingRequestsTable() {
       setSelectedBooking(null);
       toast({ title: 'Notes saved' });
       await load();
+      setPage(1);
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -169,7 +182,7 @@ export default function BookingRequestsTable() {
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={load} />
+        <AdminLoadError message={loadError} onRetry={() => load()} />
       ) : filteredBookings.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No matching bookings</p>
@@ -177,7 +190,7 @@ export default function BookingRequestsTable() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredBookings.map(b => (
+          {visibleBookings.map(b => (
             <div key={`${b.source}-${b.id}`} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -210,15 +223,15 @@ export default function BookingRequestsTable() {
                   {b.status === 'requested' && (
                     <>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
-                        className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
                         Confirm
                       </button>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'waitlisted')}
-                        className="px-3 py-1.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
                         Waitlist
                       </button>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'declined')}
-                        className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         Decline
                       </button>
                     </>
@@ -226,18 +239,18 @@ export default function BookingRequestsTable() {
                   {b.status === 'confirmed' && (
                     <>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'attended')}
-                        className="px-3 py-1.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
                         Attended
                       </button>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'no_show')}
-                        className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         No show
                       </button>
                     </>
                   )}
                   {b.source === 'enquiry' && (
                     <button onClick={() => { setSelectedBooking(b); setNotes(b.admin_notes || ''); }}
-                      className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">
+                      className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 transition-colors">
                       Notes
                     </button>
                   )}
@@ -247,6 +260,24 @@ export default function BookingRequestsTable() {
           ))}
         </div>
       )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="font-body text-xs text-xert-concrete/40">
+          {filteredBookings.length === 0 ? '0 results' : `${firstResult}-${lastResult} of ${filteredBookings.length} matching bookings`}
+          {filteredBookings.length !== bookings.length ? ` · ${bookings.length} total` : ''}
+        </p>
+        {pageCount > 1 && (
+          <nav aria-label="Booking result pages" className="flex items-center gap-2">
+            <button type="button" onClick={() => { setSelectedBooking(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous booking page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => { setSelectedBooking(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next booking page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </nav>
+        )}
+      </div>
 
       {selectedBooking && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">

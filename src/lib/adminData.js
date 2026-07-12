@@ -115,12 +115,20 @@ export async function duplicateClassSession(session) {
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 
 export async function getClassBookings(filters = {}) {
-  let query = supabase.from('class_bookings').select('*, class_sessions(title, start_time, coach_name, location_zone)').order('created_at', { ascending: false });
-  if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
-  if (filters.status) query = query.eq('status', filters.status);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data || [];
+  const pageSize = 500;
+  return collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    let query = supabase
+      .from('class_bookings')
+      .select('*, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
+    if (filters.status) query = query.eq('status', filters.status);
+    const { data, count, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
 }
 
 export async function updateBookingStatus(id, status) {
@@ -132,20 +140,31 @@ export async function updateBookingStatus(id, status) {
 // Authenticated member bookings are a separate, credit-backed workflow from
 // pre-launch enquiry forms. The admin queue presents both together.
 export async function getMemberBookingRequests(filters = {}) {
-  let query = supabase.from('session_bookings').select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)').order('created_at', { ascending: false });
-  if (filters.status) query = query.eq('status', filters.status);
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const rows = data || [];
+  const pageSize = 500;
+  const rows = await collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    let query = supabase
+      .from('session_bookings')
+      .select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    if (filters.status) query = query.eq('status', filters.status);
+    const { data, count, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
   const memberIds = [...new Set(rows.map(row => row.user_id).filter(Boolean))];
   if (memberIds.length === 0) return [];
 
-  const { data: profiles, error: profileError } = await supabase.from('profiles').select('id, full_name, email, phone').in('id', memberIds);
-  if (profileError) throw new Error(profileError.message);
+  const profiles = [];
+  for (let index = 0; index < memberIds.length; index += 100) {
+    const ids = memberIds.slice(index, index + 100);
+    const { data, error } = await supabase.from('profiles').select('id, full_name, email, phone').in('id', ids);
+    if (error) throw new Error(error.message);
+    profiles.push(...(data || []));
+  }
 
-  const profileById = new Map((profiles || []).map(profile => [profile.id, profile]));
+  const profileById = new Map(profiles.map(profile => [profile.id, profile]));
   return rows.map(row => ({
     ...row,
     profile: profileById.get(row.user_id) || null

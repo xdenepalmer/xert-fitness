@@ -8,7 +8,10 @@ export async function collectAdminPages(fetchPage) {
       throw new Error('Admin query returned an invalid page.');
     }
     rows.push(...result.rows);
+    if (rows.length < result.total && result.rows.length === 0) {
+      throw new Error(`Admin query stopped after ${rows.length} of ${result.total} rows.`);
+    }
     page += 1;
-  } while (rows.length < result.total && result.rows.length > 0);
+  } while (rows.length < result.total);
   return rows;
 }
