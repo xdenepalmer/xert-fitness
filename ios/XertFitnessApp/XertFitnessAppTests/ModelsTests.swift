@@ -2,6 +2,12 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testDataSourceLabelsAreMemberFacingAndComplete() {
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 7)
+        XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
+        XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
+    }
+
     func testPrivateSessionRequestNormalizesRequiredAndOptionalFields() throws {
         let request = try PrivateSessionRequest(
             fullName: "  Alex Runner  ",

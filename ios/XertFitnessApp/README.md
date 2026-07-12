@@ -31,6 +31,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Secure token persistence in Keychain.
 - Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
+- Source-level offline and partial-refresh notices, with cached public data kept usable when individual services fail.
 - Upcoming-event filtering in the XERT/Queensland calendar, plus event detail links when an admin supplies one.
 - Booking RPC support through `book_session`.
 - Instant booking, staff-confirmed booking requests, waitlist visibility, and member cancellation or waitlist withdrawal.

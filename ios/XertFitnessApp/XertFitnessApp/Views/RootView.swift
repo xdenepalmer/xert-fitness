@@ -113,3 +113,23 @@ struct StaleMemberDataNotice: View {
         }
     }
 }
+
+struct DataAvailabilityNotice: View {
+    @EnvironmentObject private var store: XertStore
+    let sources: Set<XertDataSource>
+
+    var body: some View {
+        let unavailable = sources.intersection(store.unavailableDataSources)
+            .sorted { $0.rawValue < $1.rawValue }
+        if !unavailable.isEmpty {
+            Label {
+                Text("Could not refresh \(unavailable.map(\.displayName).joined(separator: ", ")). Pull to retry.")
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .accessibilityLabel("Some XERT data is unavailable: \(unavailable.map(\.displayName).joined(separator: ", ")). Pull to retry.")
+        }
+    }
+}

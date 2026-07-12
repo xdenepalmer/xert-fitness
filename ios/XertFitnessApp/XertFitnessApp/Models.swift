@@ -1,5 +1,21 @@
 import Foundation
 
+enum XertDataSource: String, CaseIterable, Hashable {
+    case products, sessions, events, credits, bookings, profile, eventGoals
+
+    var displayName: String {
+        switch self {
+        case .products: return "session packs"
+        case .sessions: return "class timetable"
+        case .events: return "event calendar"
+        case .credits: return "class credits"
+        case .bookings: return "your bookings"
+        case .profile: return "member profile"
+        case .eventGoals: return "training goals"
+        }
+    }
+}
+
 struct Product: Identifiable, Codable, Hashable {
     var id: String { slug }
     let slug: String

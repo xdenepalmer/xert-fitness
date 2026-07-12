@@ -14,6 +14,11 @@ struct BookingView: View {
                         CachedPublicDataNotice()
                     }
                 }
+                if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .credits, .bookings]) {
+                    Section {
+                        DataAvailabilityNotice(sources: [.products, .sessions, .credits, .bookings])
+                    }
+                }
 
                 Section("Credits") {
                     if store.isSignedIn {

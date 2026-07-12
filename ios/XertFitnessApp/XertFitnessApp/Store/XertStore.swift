@@ -26,6 +26,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var publicDataUpdatedAt: Date?
     @Published private(set) var isUsingStaleMemberData = false
     @Published private(set) var memberDataUpdatedAt: Date?
+    @Published private(set) var unavailableDataSources: Set<XertDataSource> = []
 
     private let api = XertAPI()
     private var sessionRefreshTask: Task<AuthSession, Error>?
@@ -64,6 +65,7 @@ final class XertStore: ObservableObject {
     func refresh() async {
         isLoading = true
         errorMessage = nil
+        unavailableDataSources = []
         defer { isLoading = false }
 
         async let productRequest = api.products()
@@ -78,14 +80,14 @@ final class XertStore: ObservableObject {
             products = try await productRequest
             productsLoaded = true
         } catch {
-            if products.isEmpty { present(error) }
+            unavailableDataSources.insert(.products)
         }
 
         do {
             sessions = try await sessionRequest
             sessionsLoaded = true
         } catch {
-            if sessions.isEmpty { present(error) }
+            unavailableDataSources.insert(.sessions)
         }
 
         do {
@@ -93,6 +95,7 @@ final class XertStore: ObservableObject {
             events = loadedEvents.isEmpty ? XertEventCalendar.fallback : loadedEvents
             eventsLoaded = true
         } catch {
+            unavailableDataSources.insert(.events)
             // The app still carries the published 2026 training calendar when
             // the events table has not been seeded yet.
             if events.isEmpty { events = XertEventCalendar.fallback }
@@ -134,25 +137,26 @@ final class XertStore: ObservableObject {
                 credits = try await creditRequest
                 creditsLoaded = true
             } catch {
-                present(error)
+                unavailableDataSources.insert(.credits)
             }
             do {
                 bookings = try await bookingRequest
                 await ClassReminderScheduler.shared.sync(bookings: bookings)
                 bookingsLoaded = true
             } catch {
-                present(error)
+                unavailableDataSources.insert(.bookings)
             }
             do {
                 profile = try await profileRequest
                 profileLoaded = true
             } catch {
-                present(error)
+                unavailableDataSources.insert(.profile)
             }
             do {
                 let loadedEventGoals = try await eventGoalRequest
                 eventGoalIDs = Set(loadedEventGoals.map(\.event_id))
             } catch {
+                unavailableDataSources.insert(.eventGoals)
                 // Event goals are optional until the companion Supabase upgrade
                 // is applied; keep the rest of the member account available.
             }
@@ -228,6 +232,7 @@ final class XertStore: ObservableObject {
         eventGoalIDs = []
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
+        unavailableDataSources.subtract([.credits, .bookings, .profile, .eventGoals])
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -252,6 +257,7 @@ final class XertStore: ObservableObject {
             eventGoalIDs = []
             memberDataUpdatedAt = nil
             isUsingStaleMemberData = false
+            unavailableDataSources.subtract([.credits, .bookings, .profile, .eventGoals])
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
             return true

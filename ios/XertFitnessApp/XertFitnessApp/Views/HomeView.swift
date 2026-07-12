@@ -10,6 +10,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     CachedPublicDataNotice()
                     StaleMemberDataNotice()
+                    DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("XERT Fitness")

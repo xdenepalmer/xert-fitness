@@ -26,6 +26,11 @@ struct AccountView: View {
                             StaleMemberDataNotice()
                         }
                     }
+                    if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .profile, .eventGoals]) {
+                        Section {
+                            DataAvailabilityNotice(sources: [.credits, .bookings, .profile, .eventGoals])
+                        }
+                    }
 
                     Section("Membership") {
                         HStack {

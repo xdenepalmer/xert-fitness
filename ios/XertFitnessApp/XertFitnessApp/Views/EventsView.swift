@@ -15,6 +15,11 @@ struct EventsView: View {
                         CachedPublicDataNotice()
                     }
                 }
+                if !store.unavailableDataSources.isDisjoint(with: [.events, .eventGoals]) {
+                    Section {
+                        DataAvailabilityNotice(sources: [.events, .eventGoals])
+                    }
+                }
 
                 Section {
                     Text("XERT programming follows the South East Queensland sporting and fitness calendar.")
