@@ -122,6 +122,26 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testBookingCancellationCreditPolicyMatchesServerRules() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        XCTAssertTrue(BookingCancellationPolicy.returnsCredit(
+            status: "requested",
+            startTime: now.addingTimeInterval(30 * 60),
+            now: now
+        ))
+        XCTAssertTrue(BookingCancellationPolicy.returnsCredit(
+            status: "confirmed",
+            startTime: now.addingTimeInterval(13 * 60 * 60),
+            now: now
+        ))
+        XCTAssertFalse(BookingCancellationPolicy.returnsCredit(
+            status: "confirmed",
+            startTime: now.addingTimeInterval(12 * 60 * 60),
+            now: now
+        ))
+    }
+
     private func booking(status: String, startTime: Date) -> BookingItem {
         BookingItem(
             booking_id: UUID(),

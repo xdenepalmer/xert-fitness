@@ -8,6 +8,7 @@ struct AccountView: View {
     @State private var fullName = ""
     @State private var phone = ""
     @State private var didSaveProfile = false
+    @State private var bookingToCancel: BookingItem?
     @FocusState private var focusedProfileField: ProfileField?
 
     private enum ProfileField {
@@ -93,7 +94,7 @@ struct AccountView: View {
                                         .foregroundStyle(.xertSteel)
                                     if booking.isCancellable {
                                         Button("Cancel booking", role: .destructive) {
-                                            Task { await store.cancel(booking) }
+                                            bookingToCancel = booking
                                         }
                                         .disabled(store.cancellingBookingID == booking.id)
                                     }
@@ -141,6 +142,24 @@ struct AccountView: View {
             .onChange(of: store.profile) { _ in
                 syncProfileForm()
             }
+            .confirmationDialog(
+                "Cancel booking?",
+                isPresented: Binding(
+                    get: { bookingToCancel != nil },
+                    set: { if !$0 { bookingToCancel = nil } }
+                ),
+                presenting: bookingToCancel
+            ) { booking in
+                Button("Keep booking", role: .cancel) {
+                    bookingToCancel = nil
+                }
+                Button("Cancel booking", role: .destructive) {
+                    bookingToCancel = nil
+                    Task { await store.cancel(booking) }
+                }
+            } message: { booking in
+                Text(booking.cancellationMessage)
+            }
         }
     }
 
@@ -153,5 +172,12 @@ struct AccountView: View {
 private extension BookingItem {
     var isCancellable: Bool {
         (status == "requested" || status == "confirmed") && start_time > Date()
+    }
+
+    var cancellationMessage: String {
+        if BookingCancellationPolicy.returnsCredit(status: status, startTime: start_time) {
+            return "This will remove you from \(title) and return your class credit."
+        }
+        return "This will remove you from \(title). Confirmed bookings cancelled within 12 hours do not return a class credit."
     }
 }
