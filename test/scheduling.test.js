@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
+import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
 
 test('normalizes explicit availability and blackout payloads', () => {
   const block = normalizeAvailabilityBlock({
@@ -66,6 +66,24 @@ test('round-trips stored timestamps through a datetime-local editor value', () =
   assert.match(editorValue, /^\d{4}-\d{2}-\d{2}T\d{2}:35$/);
   assert.equal(new Date(editorValue).getTime(), Date.parse(iso));
   assert.equal(toDateTimeLocalInput('not-a-date'), '');
+});
+
+test('hydrates editable scheduling forms without carrying database metadata', () => {
+  const block = availabilityBlockEditorForm({
+    id: 'database-id', start_time: '2026-08-01T08:00:00.000Z', end_time: '2026-08-01T09:00:00.000Z',
+    type: 'group class available', coach_name: 'Byron', notes: null, is_bookable: true,
+  });
+  const blackout = blackoutPeriodEditorForm({
+    id: 'database-id', start_time: '2026-08-02T08:00:00.000Z', end_time: '2026-08-02T12:00:00.000Z',
+    affects: 'facility_only', reason: 'facility maintenance', notes: 'Equipment install',
+  });
+
+  assert.equal(new Date(block.start_time).getTime(), Date.parse('2026-08-01T08:00:00.000Z'));
+  assert.equal(block.is_bookable, true);
+  assert.equal(blackout.affects, 'facility_only');
+  assert.equal(blackout.notes, 'Equipment install');
+  assert.equal('id' in block, false);
+  assert.equal('id' in blackout, false);
 });
 
 test('rejects unsafe published class data before it reaches the timetable', () => {

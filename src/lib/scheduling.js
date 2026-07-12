@@ -36,6 +36,27 @@ export function toDateTimeLocalInput(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+export function availabilityBlockEditorForm(block = {}) {
+  return {
+    start_time: toDateTimeLocalInput(block.start_time),
+    end_time: toDateTimeLocalInput(block.end_time),
+    type: AVAILABILITY_BLOCK_TYPES.has(block.type) ? block.type : 'PT available',
+    coach_name: String(block.coach_name || ''),
+    notes: String(block.notes || ''),
+    is_bookable: Boolean(block.is_bookable),
+  };
+}
+
+export function blackoutPeriodEditorForm(blackout = {}) {
+  return {
+    start_time: toDateTimeLocalInput(blackout.start_time),
+    end_time: toDateTimeLocalInput(blackout.end_time),
+    affects: BLACKOUT_AFFECTS.has(blackout.affects) ? blackout.affects : 'all',
+    reason: BLACKOUT_REASONS.has(blackout.reason) ? blackout.reason : 'facility maintenance',
+    notes: String(blackout.notes || ''),
+  };
+}
+
 export function normalizeAvailabilityBlock(form = {}) {
   if (!AVAILABILITY_BLOCK_TYPES.has(form.type)) throw new Error('Choose a valid availability type.');
   const startTime = normalizedTimestamp(form.start_time, 'Availability block');

@@ -246,6 +246,11 @@ export async function createAvailabilityBlock(blockData) {
   if (error) throw new Error(error.message);
 }
 
+export async function updateAvailabilityBlock(id, blockData) {
+  const { error } = await supabase.from('availability_blocks').update(blockData).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function deleteAvailabilityBlock(id) {
   const { error } = await supabase.from('availability_blocks').delete().eq('id', id);
   if (error) throw new Error(error.message);
@@ -259,6 +264,11 @@ export async function getBlackoutPeriods() {
 
 export async function createBlackoutPeriod(periodData) {
   const { error } = await supabase.from('blackout_periods').insert([periodData]);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateBlackoutPeriod(id, periodData) {
+  const { error } = await supabase.from('blackout_periods').update(periodData).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
