@@ -72,7 +72,7 @@ any missing XERT calendar events for an authenticated admin.
 
 ## iOS App
 
-A SwiftUI companion app scaffold lives in `ios/XertFitnessApp`. It includes
+A SwiftUI companion app lives in `ios/XertFitnessApp`. It includes
 native Home, Book, Events and Account tabs, Supabase auth, Keychain token
 storage, class booking RPC support and Vercel checkout launch. See
 `ios/XertFitnessApp/README.md` for Xcode setup.
@@ -89,10 +89,11 @@ Open the local URL printed by Vite.
 
 ```bash
 npm run lint
+npm run typecheck
 npm run build
 ```
 
-`npm run typecheck` exists, but this JavaScript project still has broader typing debt in shared UI/admin files.
+`npm run typecheck` checks the JavaScript/JSX sources with TypeScript and should pass alongside lint and the production build.
 
 ## Deploy
 

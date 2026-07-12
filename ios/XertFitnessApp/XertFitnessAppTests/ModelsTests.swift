@@ -58,4 +58,37 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertEventCalendar.fallback.first?.name, "Gold Coast Marathon")
         XCTAssertEqual(XertEventCalendar.fallback.last?.name, "XERT Team Competition")
     }
+
+    func testEventStatesUseQueenslandDatesAndSafeLinks() throws {
+        let data = """
+        {
+          "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "name": "Future Event",
+          "event_date": "2999-01-01",
+          "end_date": null,
+          "url": "https://events.example.com/register"
+        }
+        """.data(using: .utf8)!
+
+        let futureEvent = try JSONDecoder().decode(EventItem.self, from: data)
+
+        XCTAssertFalse(futureEvent.isComplete)
+        XCTAssertEqual(futureEvent.externalURL?.host, "events.example.com")
+
+        let completedEvent = EventItem(
+            id: nil,
+            name: "Completed Event",
+            category: nil,
+            event_date: "2020-01-01",
+            end_date: nil,
+            location: nil,
+            region: nil,
+            url: "javascript:alert('no')",
+            published: true,
+            sort_order: nil
+        )
+
+        XCTAssertTrue(completedEvent.isComplete)
+        XCTAssertNil(completedEvent.externalURL)
+    }
 }

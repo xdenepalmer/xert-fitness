@@ -88,9 +88,14 @@ struct BookingView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.xertSteel)
                                 } else if session.booking_mode == "interest_only" {
-                                    Label("Interest only", systemImage: "person.2")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.secondary)
+                                    Button {
+                                        openURL(AppConfig.webURL(path: "timetable"))
+                                    } label: {
+                                        Label("Register interest", systemImage: "person.2")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.xertSteel)
                                 } else {
                                     Button {
                                         Task { await store.book(session) }

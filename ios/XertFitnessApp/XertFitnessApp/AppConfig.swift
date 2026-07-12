@@ -26,4 +26,9 @@ enum AppConfig {
         }
         return url
     }
+
+    static func webURL(path: String) -> URL {
+        guard !path.isEmpty else { return vercelBaseURL }
+        return vercelBaseURL.appendingPathComponent(path)
+    }
 }

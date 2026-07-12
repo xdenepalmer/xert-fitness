@@ -54,6 +54,44 @@ struct EventItem: Identifiable, Codable, Hashable {
     var stableID: String {
         id?.uuidString ?? "\(name)-\(event_date ?? "tbc")"
     }
+
+    var isComplete: Bool {
+        guard let finalDate = eventDate(end_date) ?? eventDate(event_date) else { return false }
+        return Self.calendar.startOfDay(for: finalDate) < Self.calendar.startOfDay(for: Date())
+    }
+
+    var externalURL: URL? {
+        guard
+            let rawURL = url?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let parsedURL = URL(string: rawURL),
+            let scheme = parsedURL.scheme?.lowercased(),
+            parsedURL.host != nil,
+            scheme == "https" || scheme == "http"
+        else {
+            return nil
+        }
+        return parsedURL
+    }
+
+    private func eventDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        return Self.dateFormatter.date(from: value)
+    }
+
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
+        return calendar
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Self.calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = Self.calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }
 
 struct CreditBatch: Identifiable, Codable, Hashable {

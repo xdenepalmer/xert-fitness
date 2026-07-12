@@ -30,8 +30,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Secure token persistence in Keychain.
 - Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
+- Upcoming-event filtering in the XERT/Queensland calendar, plus event detail links when an admin supplies one.
 - Booking RPC support through `book_session`.
 - Instant booking, staff-confirmed booking requests, and request cancellation.
+- Interest-only class handoff to the live XERT timetable/registration form.
 - Vercel checkout launch through `/api/checkout`.
 - Refresh-token renewal on launch and focused decoding tests for the Supabase data contract.
 

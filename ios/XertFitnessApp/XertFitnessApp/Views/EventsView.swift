@@ -13,11 +13,11 @@ struct EventsView: View {
 
                 Section("Coming Up") {
                     let events = store.events
-                        .filter { $0.event_date != nil }
+                        .filter { $0.event_date != nil && !$0.isComplete }
                         .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
 
                     if events.isEmpty {
-                        Text("No published events yet.")
+                        Text("No upcoming events yet.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(events, id: \.stableID) { event in
@@ -39,6 +39,13 @@ struct EventsView: View {
                                     Label(location, systemImage: "mappin")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                }
+                                if let url = event.externalURL {
+                                    Link(destination: url) {
+                                        Label("Event details", systemImage: "arrow.up.right.square")
+                                            .font(.subheadline.weight(.semibold))
+                                    }
+                                    .tint(.xertSteel)
                                 }
                             }
                             .padding(.vertical, 4)
