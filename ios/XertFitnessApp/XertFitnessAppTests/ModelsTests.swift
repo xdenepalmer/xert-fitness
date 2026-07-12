@@ -91,4 +91,37 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(completedEvent.isComplete)
         XCTAssertNil(completedEvent.externalURL)
     }
+
+    func testClassReminderPlannerOnlySchedulesFutureConfirmedBookings() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let confirmed = booking(status: "confirmed", startTime: now.addingTimeInterval(4 * 60 * 60))
+        let requested = booking(status: "requested", startTime: now.addingTimeInterval(4 * 60 * 60))
+        let tooSoon = booking(status: "confirmed", startTime: now.addingTimeInterval(90 * 60))
+
+        XCTAssertEqual(
+            ClassReminderPlanner.reminderDate(for: confirmed.start_time, now: now),
+            now.addingTimeInterval(2 * 60 * 60)
+        )
+        XCTAssertEqual(
+            ClassReminderPlanner.reminderBookings(from: [confirmed, requested, tooSoon], now: now).map(\.booking_id),
+            [confirmed.booking_id]
+        )
+    }
+
+    private func booking(status: String, startTime: Date) -> BookingItem {
+        BookingItem(
+            booking_id: UUID(),
+            status: status,
+            booked_at: nil,
+            cancelled_at: nil,
+            session_id: UUID(),
+            title: "Strength",
+            class_type: "Strength",
+            coach_name: "Coach",
+            start_time: startTime,
+            end_time: nil,
+            location_zone: nil,
+            intensity_level: nil
+        )
+    }
 }

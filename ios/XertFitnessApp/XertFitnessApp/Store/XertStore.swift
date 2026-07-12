@@ -80,6 +80,7 @@ final class XertStore: ObservableObject {
             do {
                 credits = try await creditRequest
                 bookings = try await bookingRequest
+                await ClassReminderScheduler.shared.sync(bookings: bookings)
             } catch {
                 credits = []
                 bookings = []
@@ -95,6 +96,7 @@ final class XertStore: ObservableObject {
             credits = []
             bookings = []
             profile = nil
+            await ClassReminderScheduler.shared.clearAll()
         }
     }
 
@@ -129,8 +131,11 @@ final class XertStore: ObservableObject {
         bookings = []
         profile = nil
         KeychainStore.clearSession()
-        if let currentSession {
-            Task { try? await api.signOut(session: currentSession) }
+        Task {
+            await ClassReminderScheduler.shared.clearAll()
+            if let currentSession {
+                try? await api.signOut(session: currentSession)
+            }
         }
     }
 
