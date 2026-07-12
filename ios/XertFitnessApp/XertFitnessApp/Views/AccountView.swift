@@ -44,6 +44,12 @@ struct AccountView: View {
                                     Text(booking.status.uppercased())
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.xertSteel)
+                                    if booking.isCancellable {
+                                        Button("Cancel booking", role: .destructive) {
+                                            Task { await store.cancel(booking) }
+                                        }
+                                        .disabled(store.cancellingBookingID == booking.id)
+                                    }
                                 }
                                 .padding(.vertical, 4)
                             }
@@ -85,5 +91,11 @@ struct AccountView: View {
                 await store.refresh()
             }
         }
+    }
+}
+
+private extension BookingItem {
+    var isCancellable: Bool {
+        (status == "requested" || status == "confirmed") && start_time > Date()
     }
 }

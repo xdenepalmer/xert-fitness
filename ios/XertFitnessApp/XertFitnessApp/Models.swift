@@ -5,10 +5,15 @@ struct Product: Identifiable, Codable, Hashable {
     let slug: String
     let name: String
     let description: String?
-    let sessions: Int
+    let sessionsCount: Int
     let price_cents: Int
     let active: Bool?
     let sort_order: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case slug, name, description, price_cents, active, sort_order
+        case sessionsCount = "sessions_count"
+    }
 
     var displayPrice: String {
         let dollars = Double(price_cents) / 100
@@ -53,7 +58,7 @@ struct EventItem: Identifiable, Codable, Hashable {
 
 struct CreditBatch: Identifiable, Codable, Hashable {
     let id: UUID
-    let sessions: Int
+    let total: Int
     let remaining: Int
     let expires_at: Date?
 }
@@ -78,6 +83,7 @@ struct AuthSession: Codable, Hashable {
     let access_token: String
     let refresh_token: String?
     let expires_in: Int?
+    let expires_at: Int?
     let token_type: String?
     let user: AuthUser?
 }
@@ -91,6 +97,7 @@ struct AuthResponse: Codable {
     let access_token: String?
     let refresh_token: String?
     let expires_in: Int?
+    let expires_at: Int?
     let token_type: String?
     let user: AuthUser?
 
@@ -100,6 +107,7 @@ struct AuthResponse: Codable {
             access_token: access_token,
             refresh_token: refresh_token,
             expires_in: expires_in,
+            expires_at: expires_at,
             token_type: token_type,
             user: user
         )

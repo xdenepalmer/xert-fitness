@@ -6,6 +6,16 @@ struct APIError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+private struct SupabaseErrorResponse: Decodable {
+    let message: String?
+    let error: String?
+    let error_description: String?
+
+    var displayMessage: String? {
+        message ?? error_description ?? error
+    }
+}
+
 final class XertAPI {
     private let session: URLSession
     private let decoder: JSONDecoder
@@ -44,6 +54,29 @@ final class XertAPI {
         let body = ["email": email, "password": password]
         let response: AuthResponse = try await authRequest(path: "/auth/v1/signup", body: body)
         return response.session
+    }
+
+    func refresh(session auth: AuthSession) async throws -> AuthSession {
+        guard let refreshToken = auth.refresh_token, !refreshToken.isEmpty else {
+            throw APIError(message: "Your XERT session needs you to sign in again.")
+        }
+        let response: AuthResponse = try await authRequest(
+            path: "/auth/v1/token",
+            queryItems: [URLQueryItem(name: "grant_type", value: "refresh_token")],
+            body: ["refresh_token": refreshToken]
+        )
+        guard let session = response.session else {
+            throw APIError(message: "Supabase did not return a refreshed session.")
+        }
+        return session
+    }
+
+    func signOut(session auth: AuthSession) async throws {
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/auth/v1/logout")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        try await perform(request)
     }
 
     func products() async throws -> [Product] {
@@ -92,6 +125,14 @@ final class XertAPI {
         let _: UUID = try await rpc(
             path: "book_session",
             body: ["p_session_id": classSessionID.uuidString],
+            auth: auth
+        )
+    }
+
+    func cancelBooking(session auth: AuthSession, bookingID: UUID) async throws {
+        let _: EmptyResponse = try await rpc(
+            path: "cancel_booking",
+            body: ["p_booking_id": bookingID.uuidString],
             auth: auth
         )
     }
@@ -182,20 +223,36 @@ final class XertAPI {
         return URLRequest(url: url)
     }
 
+    private func perform(_ request: URLRequest) async throws {
+        _ = try await responseData(for: request)
+    }
+
     private func decode<T: Decodable>(_ request: URLRequest) async throws -> T {
+        try decoder.decode(T.self, from: try await responseData(for: request))
+    }
+
+    private func responseData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError(message: "Invalid network response.")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? "Request failed."
+            let message = (try? decoder.decode(SupabaseErrorResponse.self, from: data))?.displayMessage
+                ?? String(data: data, encoding: .utf8)
+                ?? "Request failed."
             throw APIError(message: message)
         }
-        return try decoder.decode(T.self, from: data)
+        return data
     }
 }
 
 private struct EmptyBody: Encodable {}
+private struct EmptyResponse: Decodable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        _ = container.decodeNil()
+    }
+}
 
 private extension ISO8601DateFormatter {
     static let standard: ISO8601DateFormatter = {

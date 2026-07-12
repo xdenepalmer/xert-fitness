@@ -35,7 +35,7 @@ struct BookingView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(product.name)
                                         .foregroundStyle(.primary)
-                                    Text("\(product.sessions) sessions")
+                                    Text("\(product.sessionsCount) sessions")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -54,6 +54,7 @@ struct BookingView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(store.sessions) { session in
+                            let booking = activeBookings[session.id]
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack(alignment: .top) {
                                     VStack(alignment: .leading, spacing: 4) {
@@ -79,15 +80,31 @@ struct BookingView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
-                                Button {
-                                    Task { await store.book(session) }
-                                } label: {
-                                    Label("Book Class", systemImage: "checkmark.circle")
+                                if let booking {
+                                    Label(
+                                        booking.status == "requested" ? "Request sent" : "Booked",
+                                        systemImage: booking.status == "requested" ? "clock" : "checkmark.circle"
+                                    )
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.xertSteel)
+                                } else if session.booking_mode == "interest_only" {
+                                    Label("Interest only", systemImage: "person.2")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Button {
+                                        Task { await store.book(session) }
+                                    } label: {
+                                        Label(
+                                            session.booking_mode == "request_to_book" ? "Request spot" : "Book class",
+                                            systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle"
+                                        )
                                         .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.xertSteel)
+                                    .disabled((session.spots_left ?? 1) == 0 || store.bookingSessionID == session.id)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.xertSteel)
-                                .disabled((session.spots_left ?? 1) == 0)
                             }
                             .padding(.vertical, 6)
                         }
@@ -99,5 +116,13 @@ struct BookingView: View {
                 await store.refresh()
             }
         }
+    }
+
+    private var activeBookings: [UUID: BookingItem] {
+        Dictionary(
+            uniqueKeysWithValues: store.bookings
+                .filter { $0.status == "requested" || $0.status == "confirmed" }
+                .map { ($0.session_id, $0) }
+        )
     }
 }

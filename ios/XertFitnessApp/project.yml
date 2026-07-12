@@ -1,0 +1,38 @@
+name: XertFitness
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    DEVELOPMENT_TEAM: ""
+targets:
+  XertFitness:
+    type: application
+    platform: iOS
+    sources:
+      - path: XertFitnessApp
+    configFiles:
+      Debug: Config.xcconfig
+      Release: Config.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xertfitness.app
+        PRODUCT_NAME: XertFitness
+        INFOPLIST_FILE: XertFitnessApp/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGN_STYLE: Automatic
+  XertFitnessTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: XertFitnessAppTests
+    dependencies:
+      - target: XertFitness
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xertfitness.app.tests
+        GENERATE_INFOPLIST_FILE: YES

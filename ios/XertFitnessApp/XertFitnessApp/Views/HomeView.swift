@@ -35,7 +35,7 @@ struct HomeView: View {
                                     Text(product.name)
                                         .font(.headline)
                                         .foregroundStyle(.xertOffWhite)
-                                    Text("\(product.sessions) sessions")
+                                    Text("\(product.sessionsCount) sessions")
                                         .font(.caption)
                                         .foregroundStyle(.white.opacity(0.55))
                                 }

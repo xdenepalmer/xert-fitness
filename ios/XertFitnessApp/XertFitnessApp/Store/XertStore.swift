@@ -11,6 +11,8 @@ final class XertStore: ObservableObject {
     @Published var authSession: AuthSession?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var bookingSessionID: UUID?
+    @Published var cancellingBookingID: UUID?
 
     private let api = XertAPI()
 
@@ -24,6 +26,16 @@ final class XertStore: ObservableObject {
 
     func bootstrap() async {
         authSession = KeychainStore.loadSession()
+        if let authSession, authSession.refresh_token != nil {
+            do {
+                let refreshed = try await api.refresh(session: authSession)
+                self.authSession = refreshed
+                try KeychainStore.saveSession(refreshed)
+            } catch {
+                self.authSession = nil
+                KeychainStore.clearSession()
+            }
+        }
         await refresh()
     }
 
@@ -32,26 +44,47 @@ final class XertStore: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
+        async let productRequest = api.products()
+        async let sessionRequest = api.sessions()
+        async let eventRequest = api.events()
+
         do {
-            async let products = api.products()
-            async let sessions = api.sessions()
-            async let events = api.events()
-
-            self.products = try await products
-            self.sessions = try await sessions
-            self.events = try await events
-
-            if let authSession {
-                async let credits = api.credits(session: authSession)
-                async let bookings = api.bookings(session: authSession)
-                self.credits = try await credits
-                self.bookings = try await bookings
-            } else {
-                self.credits = []
-                self.bookings = []
-            }
+            products = try await productRequest
         } catch {
-            errorMessage = error.localizedDescription
+            products = []
+            present(error)
+        }
+
+        do {
+            sessions = try await sessionRequest
+        } catch {
+            sessions = []
+            present(error)
+        }
+
+        do {
+            let loadedEvents = try await eventRequest
+            events = loadedEvents.isEmpty ? XertEventCalendar.fallback : loadedEvents
+        } catch {
+            // The app still carries the published 2026 training calendar when
+            // the events table has not been seeded yet.
+            events = XertEventCalendar.fallback
+        }
+
+        if let authSession {
+            async let creditRequest = api.credits(session: authSession)
+            async let bookingRequest = api.bookings(session: authSession)
+            do {
+                credits = try await creditRequest
+                bookings = try await bookingRequest
+            } catch {
+                credits = []
+                bookings = []
+                present(error)
+            }
+        } else {
+            credits = []
+            bookings = []
         }
     }
 
@@ -62,19 +95,32 @@ final class XertStore: ObservableObject {
     }
 
     func signUp(email: String, password: String) async {
-        await authenticate {
-            if let session = try await api.signUp(email: email, password: password) {
-                return session
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            guard let session = try await api.signUp(email: email, password: password) else {
+                errorMessage = "Check your email to confirm your XERT account, then sign in."
+                return
             }
-            return try await api.signIn(email: email, password: password)
+            authSession = session
+            try KeychainStore.saveSession(session)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
     func signOut() {
+        let currentSession = authSession
         authSession = nil
         credits = []
         bookings = []
         KeychainStore.clearSession()
+        if let currentSession {
+            Task { try? await api.signOut(session: currentSession) }
+        }
     }
 
     func book(_ session: ClassSession) async {
@@ -83,8 +129,26 @@ final class XertStore: ObservableObject {
             return
         }
 
+        bookingSessionID = session.id
+        defer { bookingSessionID = nil }
         do {
             try await api.book(session: authSession, classSessionID: session.id)
+            await refresh()
+        } catch {
+            errorMessage = friendlyBookingError(error.localizedDescription)
+        }
+    }
+
+    func cancel(_ booking: BookingItem) async {
+        guard let authSession else {
+            errorMessage = "Sign in to manage your bookings."
+            return
+        }
+
+        cancellingBookingID = booking.id
+        defer { cancellingBookingID = nil }
+        do {
+            try await api.cancelBooking(session: authSession, bookingID: booking.id)
             await refresh()
         } catch {
             errorMessage = friendlyBookingError(error.localizedDescription)
@@ -133,6 +197,18 @@ final class XertStore: ObservableObject {
         if message.contains("AUTH_REQUIRED") {
             return "Sign in to book a class."
         }
+        if message.contains("SESSION_INTEREST_ONLY") {
+            return "This class is collecting interest only."
+        }
+        if message.contains("NOT_CANCELLABLE") {
+            return "This booking can no longer be cancelled."
+        }
         return message
+    }
+
+    private func present(_ error: Error) {
+        if errorMessage == nil {
+            errorMessage = error.localizedDescription
+        }
     }
 }
