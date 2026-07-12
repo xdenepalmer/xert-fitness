@@ -16,7 +16,7 @@ function FieldLabel({ children, required = false }) {
 
 function Input({ ...props }) {
   return (
-    <input {...props}
+    <input aria-label={props['aria-label'] || props.placeholder} {...props}
       className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
   );
 }
@@ -147,7 +147,7 @@ export default function PartnerInterestForm() {
           </div>
           <div>
             <FieldLabel>Preferred partnership model</FieldLabel>
-            <select value={form.preferred_model} onChange={e => set('preferred_model', e.target.value)}
+            <select aria-label="Preferred partnership model" value={form.preferred_model} onChange={e => set('preferred_model', e.target.value)}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
               <option value="">Select (optional)</option>
               {['Referral partner', 'Regular sessions at XERT', 'Workshops only', 'Online services', 'Flexible / open to discussion'].map(m => <option key={m} value={m}>{m}</option>)}
@@ -159,11 +159,11 @@ export default function PartnerInterestForm() {
           </div>
           <div>
             <FieldLabel>Website or social link</FieldLabel>
-            <Input placeholder="Optional" value={form.website_social_link} onChange={e => set('website_social_link', e.target.value)} />
+            <Input aria-label="Website or social link" placeholder="Optional" value={form.website_social_link} onChange={e => set('website_social_link', e.target.value)} />
           </div>
           <div>
             <FieldLabel>Short intro</FieldLabel>
-            <textarea value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
+            <textarea aria-label="Short introduction" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
               rows={3} placeholder="Tell us about your practice and what you'd bring to XERT"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
           </div>

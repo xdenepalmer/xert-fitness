@@ -17,7 +17,7 @@ function FieldLabel({ children, required = false }) {
 
 function Input({ ...props }) {
   return (
-    <input {...props}
+    <input aria-label={props['aria-label'] || props.placeholder} {...props}
       className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
   );
 }
@@ -135,7 +135,7 @@ export default function TrainerInterestForm() {
           </div>
           <div>
             <FieldLabel required>Years of experience</FieldLabel>
-            <select value={form.years_experience} onChange={e => set('years_experience', e.target.value)}
+            <select aria-label="Years of experience" value={form.years_experience} onChange={e => set('years_experience', e.target.value)}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
               <option value="">Select</option>
               {['Under 1 year', '1–2 years', '3–5 years', '5–10 years', '10+ years'].map(y => <option key={y} value={y}>{y}</option>)}
@@ -143,7 +143,7 @@ export default function TrainerInterestForm() {
           </div>
           <div>
             <FieldLabel required>Functional training experience</FieldLabel>
-            <textarea value={form.functional_training_experience} onChange={e => set('functional_training_experience', e.target.value)}
+            <textarea aria-label="Functional training experience" value={form.functional_training_experience} onChange={e => set('functional_training_experience', e.target.value)}
               rows={3} placeholder="Describe your experience with functional training approaches"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
           </div>
@@ -174,7 +174,7 @@ export default function TrainerInterestForm() {
           </div>
           <div>
             <FieldLabel>Insurance status</FieldLabel>
-            <select value={form.insurance_status} onChange={e => set('insurance_status', e.target.value)}
+            <select aria-label="Insurance status" value={form.insurance_status} onChange={e => set('insurance_status', e.target.value)}
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
               <option value="">Select (optional)</option>
               {['Current PI/PL insurance', 'Expired — can renew', 'Not currently insured', 'Unsure'].map(o => <option key={o} value={o}>{o}</option>)}
@@ -182,7 +182,7 @@ export default function TrainerInterestForm() {
           </div>
           <div>
             <FieldLabel>Short intro</FieldLabel>
-            <textarea value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
+            <textarea aria-label="Short introduction" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
               rows={3} placeholder="Tell us a bit about yourself and your coaching approach"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
           </div>

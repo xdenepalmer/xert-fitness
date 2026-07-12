@@ -17,7 +17,7 @@ function FieldLabel({ children, required = false }) {
 }
 function Input({ ...props }) {
   return (
-    <input {...props}
+    <input aria-label={props['aria-label'] || props.placeholder} {...props}
       className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
   );
 }
@@ -79,7 +79,7 @@ export default function PTRequestForm({ onSuccess }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <FieldLabel>Preferred day</FieldLabel>
-          <select value={form.preferred_day} onChange={e => set('preferred_day', e.target.value)}
+          <select aria-label="Preferred day" value={form.preferred_day} onChange={e => set('preferred_day', e.target.value)}
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
             <option value="">Any day</option>
             {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -87,7 +87,7 @@ export default function PTRequestForm({ onSuccess }) {
         </div>
         <div>
           <FieldLabel>Preferred time</FieldLabel>
-          <select value={form.preferred_time} onChange={e => set('preferred_time', e.target.value)}
+          <select aria-label="Preferred time" value={form.preferred_time} onChange={e => set('preferred_time', e.target.value)}
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
             <option value="">Any time</option>
             {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -123,7 +123,7 @@ export default function PTRequestForm({ onSuccess }) {
 
       <div>
         <FieldLabel>Notes</FieldLabel>
-        <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+        <textarea aria-label="Notes for the coach" value={form.notes} onChange={e => set('notes', e.target.value)}
           rows={2} placeholder="Anything you'd like the coach to know (optional)"
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>

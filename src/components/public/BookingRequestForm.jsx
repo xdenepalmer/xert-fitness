@@ -11,7 +11,7 @@ function FieldLabel({ children, required = false }) {
 }
 function Input({ ...props }) {
   return (
-    <input {...props}
+    <input aria-label={props['aria-label'] || props.placeholder} {...props}
       className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
   );
 }
@@ -83,7 +83,7 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
 
       <div>
         <FieldLabel>Notes</FieldLabel>
-        <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+        <textarea aria-label="Notes for the coach" value={form.notes} onChange={e => set('notes', e.target.value)}
           rows={2} placeholder="Any questions or information for the coach (optional)"
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>
