@@ -5,6 +5,7 @@ import test from 'node:test';
 const nav = readFileSync(new URL('../src/components/public/PublicNav.jsx', import.meta.url), 'utf8');
 const memberForm = readFileSync(new URL('../src/components/public/MemberInterestForm.jsx', import.meta.url), 'utf8');
 const events = readFileSync(new URL('../src/pages/Events.jsx', import.meta.url), 'utf8');
+const contact = readFileSync(new URL('../src/pages/Contact.jsx', import.meta.url), 'utf8');
 const stickyMobileCta = readFileSync(new URL('../src/components/public/StickyMobileCTA.jsx', import.meta.url), 'utf8');
 const packageManifest = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const formSources = [
@@ -35,6 +36,13 @@ test('event filters and actions provide full-size mobile targets', () => {
   assert.ok((events.match(/min-h-11/g) || []).length >= 5);
   assert.match(events, /Add to calendar/);
   assert.match(events, /Train for this/);
+});
+
+test('contact provides an accessible training gallery and actionable area map', () => {
+  assert.match(contact, /aria-labelledby="contact-gallery-title"/);
+  assert.match(contact, /title="Map of the Kingaroy Queensland area"/);
+  assert.match(contact, /loading="lazy"/);
+  assert.match(contact, /<Link to="\/booking"/);
 });
 
 test('the shared mobile booking action avoids a page reload and respects reduced motion', () => {
