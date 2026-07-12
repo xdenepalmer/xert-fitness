@@ -5,7 +5,7 @@ import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
 import { isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows } from '@/lib/ptRequestAnalytics';
-import { collectAdminPages } from '@/lib/adminLeads';
+import { collectAdminPages } from '@/lib/adminPagination';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {

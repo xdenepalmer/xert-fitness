@@ -1,3 +1,5 @@
+import { collectAdminPages } from './adminPagination.js';
+
 export function normalizeLeadSearch(value) {
   return String(value || '')
     .trim()
@@ -17,21 +19,7 @@ export function normalizeLeadPage(page = 1, pageSize = 50) {
   return { page: normalizedPage, pageSize: normalizedSize, from, to: from + normalizedSize - 1 };
 }
 
-export async function collectAdminPages(fetchPage) {
-  const rows = [];
-  let page = 1;
-  let result;
-  do {
-    result = await fetchPage(page);
-    if (!Array.isArray(result?.rows) || !Number.isFinite(result?.total)) {
-      throw new Error('Admin export returned an invalid page.');
-    }
-    rows.push(...result.rows);
-    page += 1;
-  } while (rows.length < result.total && result.rows.length > 0);
-  return rows;
-}
-
+export { collectAdminPages };
 export const collectLeadPages = collectAdminPages;
 
 export function selectedLeadIds(current, id, checked) {

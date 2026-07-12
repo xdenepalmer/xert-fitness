@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Copy, Download, RefreshCw, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, X } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { getAllOrders } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
@@ -14,6 +14,7 @@ const STATUS_COLORS = {
   failed: 'text-xert-red/60 border-xert-red/30',
   refunded: 'text-xert-concrete/40 border-xert-steel/30',
 };
+const PAGE_SIZE = 50;
 
 export default function OrdersManager() {
   const [orders, setOrders] = useState([]);
@@ -24,6 +25,7 @@ export default function OrdersManager() {
   const [currencyFilter, setCurrencyFilter] = useState('all');
   const [daysFilter, setDaysFilter] = useState('30');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [page, setPage] = useState(1);
 
   const load = async () => {
     setLoading(true);
@@ -41,6 +43,15 @@ export default function OrdersManager() {
 
   const currencies = useMemo(() => [...new Set(orders.map(order => String(order.currency || 'aud').toLowerCase()))].sort(), [orders]);
   const filteredOrders = useMemo(() => filterOrders(orders, { search, status: statusFilter, currency: currencyFilter, days: daysFilter }), [currencyFilter, daysFilter, orders, search, statusFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const visibleOrders = useMemo(() => filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredOrders, page]);
+  const firstResult = filteredOrders.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(page * PAGE_SIZE, filteredOrders.length);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedOrder(null);
+  }, [currencyFilter, daysFilter, search, statusFilter]);
 
   const stats = useMemo(() => summarizeOrders(filteredOrders), [filteredOrders]);
   const summaryCurrency = stats.currencies.length === 1 ? stats.currencies[0] : currencyFilter !== 'all' ? currencyFilter : null;
@@ -98,17 +109,17 @@ export default function OrdersManager() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search buyer, product or Stripe ID" className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
-        <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
+        <input value={search} onChange={event => setSearch(event.target.value)} aria-label="Search orders" placeholder="Search buyer, product or Stripe ID" className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
+        <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Filter orders by status" className="bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
           <option value="all">All statuses</option>
           {Object.keys(STATUS_COLORS).map(status => <option key={status} value={status}>{status}</option>)}
         </select>
-        <select value={currencyFilter} onChange={event => setCurrencyFilter(event.target.value)} className="bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
+        <select value={currencyFilter} onChange={event => setCurrencyFilter(event.target.value)} aria-label="Filter orders by currency" className="bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
           <option value="all">All currencies</option>
           {currencies.map(currency => <option key={currency} value={currency}>{currency.toUpperCase()}</option>)}
         </select>
         <div className="flex gap-2">
-          <select value={daysFilter} onChange={event => setDaysFilter(event.target.value)} className="flex-1 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
+          <select value={daysFilter} onChange={event => setDaysFilter(event.target.value)} aria-label="Filter orders by age" className="flex-1 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
             <option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option>
           </select>
           <button type="button" onClick={() => void load()} disabled={loading} title="Refresh orders" aria-label="Refresh orders" className="p-2.5 border border-xert-steel/40 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
@@ -160,7 +171,7 @@ export default function OrdersManager() {
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={load} />
+        <AdminLoadError message={loadError} onRetry={() => load()} />
       ) : filteredOrders.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">No matching orders</p>
@@ -168,7 +179,7 @@ export default function OrdersManager() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredOrders.map(o => (
+          {visibleOrders.map(o => (
             <button type="button" onClick={() => setSelectedOrder(o)} key={o.id} className="w-full text-left bg-xert-ink border border-xert-steel/20 p-4 flex flex-wrap items-center gap-4 hover:border-xert-steel/50 transition-colors">
               <span className={`font-body text-xs border px-2 py-0.5 uppercase shrink-0 ${STATUS_COLORS[o.status] || STATUS_COLORS.pending}`}>
                 {o.status}
@@ -187,7 +198,23 @@ export default function OrdersManager() {
           ))}
         </div>
       )}
-      <p className="font-body text-xs text-xert-concrete/30 mt-4">{filteredOrders.length} of {orders.length} orders shown</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="font-body text-xs text-xert-concrete/40">
+          {filteredOrders.length === 0 ? '0 results' : `${firstResult}-${lastResult} of ${filteredOrders.length} matching orders`}
+          {filteredOrders.length !== orders.length ? ` · ${orders.length} total` : ''}
+        </p>
+        {pageCount > 1 && (
+          <nav aria-label="Order result pages" className="flex items-center gap-2">
+            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </nav>
+        )}
+      </div>
 
       {selectedOrder && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">

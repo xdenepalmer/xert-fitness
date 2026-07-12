@@ -8,6 +8,7 @@ import { normalizeClassSession } from './scheduling';
 import { normalizeBookingStatusMutation, normalizeLegacyBookingNotes, normalizePTRequestMutation } from './adminRequests';
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
+import { collectAdminPages } from './adminPagination.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -468,7 +469,23 @@ export async function adminSetBookingStatus(bookingId, status) {
 // ─── Orders (admin) ──────────────────────────────────────────────────────────
 
 export async function getAllOrders() {
-  const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false });
+  const pageSize = 500;
+  return collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    const { data, count, error } = await supabase
+      .from('orders')
+      .select('*, products(name)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
+}
+
+export async function getRecentOrders(limit = 6) {
+  const safeLimit = Math.max(1, Math.min(20, Number.parseInt(String(limit), 10) || 6));
+  const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false }).limit(safeLimit);
   if (error) throw new Error(error.message);
   return data || [];
 }

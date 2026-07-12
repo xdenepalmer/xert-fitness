@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { collectLeadPages, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
+import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
+import { collectAdminPages } from '../src/lib/adminPagination.js';
 
 test('normalizes lead search text before building a PostgREST or filter', () => {
   assert.equal(normalizeLeadSearch('  Alex, (Runner)  '), 'Alex Runner');
@@ -22,14 +23,14 @@ test('collects every filtered lead page for a complete CSV export', async () => 
     { rows: [{ id: 'c' }], total: 3 },
   ];
   const requested = [];
-  const rows = await collectLeadPages(async page => {
+  const rows = await collectAdminPages(async page => {
     requested.push(page);
     return pages[page - 1];
   });
 
   assert.deepEqual(requested, [1, 2]);
   assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c']);
-  await assert.rejects(() => collectLeadPages(async () => ({ rows: null, total: 1 })), /invalid page/);
+  await assert.rejects(() => collectAdminPages(async () => ({ rows: null, total: 1 })), /invalid page/);
 });
 
 test('allows only known lead tables and statuses for CRM mutations', () => {

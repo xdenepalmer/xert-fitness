@@ -7,7 +7,7 @@ import {
 import AdminStatCard from './AdminStatCard';
 import {
   getDashboardStats, getSoftLaunchSettings, getDefaultSettings,
-  getBusinessStats, getAllOrders, adminListMembers,
+  getBusinessStats, getRecentOrders, adminListMembers,
   getAllCoaches, getAllEvents, getAllSiteContent,
 } from '@/lib/adminData';
 import { getAvailableSessions } from '@/lib/bookingData';
@@ -78,7 +78,7 @@ export default function AdminOverview({ onNavigate }) {
         getBusinessStats()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error })),
-        Promise.allSettled([getAllOrders(), adminListMembers()]).then(activityFromSettled)
+        Promise.allSettled([getRecentOrders(6), adminListMembers()]).then(activityFromSettled)
       ]);
       if (requestId !== requestIdRef.current) return;
       setStats(s);
