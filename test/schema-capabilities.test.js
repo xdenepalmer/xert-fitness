@@ -181,7 +181,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /\/api\/stripe-webhook/);
   assert.match(yaml, /\/api\/admin-refund-order/);
   assert.match(yaml, /\/api\/admin-reconcile-order/);
-  assert.match(yaml, /\/api\/admin-notify-class-cancellation/);
+  assert.match(yaml, /\/api\/admin-publish-announcement[\s\S]*notify_class_cancellation/);
   assert.match(yaml, /expected HTTP 400/);
   assert.match(yaml, /STRIPE_WEBHOOK_SECRET/);
   assert.match(yaml, /Verify production push delivery/);

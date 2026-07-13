@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import checkoutHandler from '../api/checkout.js';
 import deleteAccountHandler from '../api/delete-account.js';
 import commerceHealthHandler from '../api/admin-commerce-health.js';
@@ -10,7 +11,6 @@ import pushSubscriptionHandler from '../api/push-subscription.js';
 import adminPublishAnnouncementHandler from '../api/admin-publish-announcement.js';
 import pushHealthHandler from '../api/push-health.js';
 import adminPushHealthHandler from '../api/admin-push-health.js';
-import adminNotifyClassCancellationHandler from '../api/admin-notify-class-cancellation.js';
 
 function createVercelResponse() {
   return {
@@ -37,6 +37,11 @@ function createVercelResponse() {
   };
 }
 
+test('Hobby deployment stays within the twelve-function ceiling', () => {
+  const functions = readdirSync(new URL('../api/', import.meta.url)).filter(name => name.endsWith('.js'));
+  assert.equal(functions.length, 12);
+});
+
 for (const [name, handler, method] of [
   ['checkout', checkoutHandler, 'GET'],
   ['delete account', deleteAccountHandler, 'GET'],
@@ -48,7 +53,6 @@ for (const [name, handler, method] of [
   ['admin announcement publishing', adminPublishAnnouncementHandler, 'GET'],
   ['push health', pushHealthHandler, 'POST'],
   ['admin push health', adminPushHealthHandler, 'POST'],
-  ['class cancellation notification', adminNotifyClassCancellationHandler, 'GET'],
 ]) {
   test(`${name} completes the Vercel Node response for an unsupported method`, async () => {
     const response = createVercelResponse();

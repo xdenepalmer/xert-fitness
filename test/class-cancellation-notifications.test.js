@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { summarizePreviousClassAlertPushes } from '../api/admin-notify-class-cancellation.js';
+import { summarizePreviousClassAlertPushes } from '../api/admin-publish-announcement.js';
 import { loadSubscriptions } from '../api/apns.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -11,7 +11,7 @@ const migration = read('../supabase/migrations/20260714015000_class_cancellation
 const adminData = read('../src/lib/adminData.js');
 const adminCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
 const apns = read('../api/apns.js');
-const endpoint = read('../api/admin-notify-class-cancellation.js');
+const endpoint = read('../api/admin-publish-announcement.js');
 
 test('linked migration exactly installs targeted cancellation notices', () => {
   assert.equal(migration.replace(/\r\n/g, '\n'), source.replace(/\r\n/g, '\n'));
@@ -48,7 +48,7 @@ test('member RPC and direct-read policy exclude alerts targeted to another accou
 
 test('admin cancellation attempts bounded targeted APNs and retains contact fallback', () => {
   const flow = adminCalendar.slice(adminCalendar.indexOf('const handleCancel = async'), adminCalendar.indexOf('const handleBookingStatus'));
-  assert.match(adminData, /notifyClassCancellation[\s\S]*\/api\/admin-notify-class-cancellation/);
+  assert.match(adminData, /notifyClassCancellation[\s\S]*\/api\/admin-publish-announcement[\s\S]*notify_class_cancellation/);
   assert.match(adminData, /member_announcements'\)\.select\('\*'\)\.eq\('audience', 'all'\)/);
   assert.ok(flow.indexOf('await cancelClassSession') < flow.indexOf('await notifyClassCancellation'));
   assert.match(adminCalendar, /Private in-app notice created for/);

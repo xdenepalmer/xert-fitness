@@ -185,13 +185,13 @@ export async function cancelClassSession(id) {
 export async function notifyClassCancellation(id) {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
-  const response = await fetch('/api/admin-notify-class-cancellation', {
+  const response = await fetch('/api/admin-publish-announcement', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ session_id: id }),
+    body: JSON.stringify({ action: 'notify_class_cancellation', session_id: id }),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Member push delivery could not be completed.');

@@ -190,9 +190,9 @@ workflows:
           CLASS_NOTICE_BODY="$(mktemp)"
           CLASS_NOTICE_CODE="$(curl --silent --show-error --max-time 20 \
             -o "$CLASS_NOTICE_BODY" -w '%{http_code}' \
-            "$VERCEL_BASE_URL/api/admin-notify-class-cancellation" \
+            "$VERCEL_BASE_URL/api/admin-publish-announcement" \
             -H 'Content-Type: application/json' \
-            --data '{}')" || CLASS_NOTICE_CODE=000
+            --data '{"action":"notify_class_cancellation"}')" || CLASS_NOTICE_CODE=000
           if [ "$CLASS_NOTICE_CODE" != "401" ]; then
             echo "::error:: Class cancellation notification preflight expected HTTP 401 but received $CLASS_NOTICE_CODE."
             head -c 300 "$CLASS_NOTICE_BODY"; echo
