@@ -21,11 +21,11 @@ drop policy if exists "member_event_goals_select_own_or_admin" on public.member_
 drop policy if exists "member_event_goals_insert_own" on public.member_event_goals;
 drop policy if exists "member_event_goals_delete_own_or_admin" on public.member_event_goals;
 create policy "member_event_goals_select_own_or_admin" on public.member_event_goals
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 create policy "member_event_goals_insert_own" on public.member_event_goals
-  for insert to authenticated with check (user_id = auth.uid());
+  for insert to authenticated with check (user_id = (select auth.uid()));
 create policy "member_event_goals_delete_own_or_admin" on public.member_event_goals
-  for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+  for delete to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 -- Admin-only event roster. SECURITY DEFINER permits the function to read the
 -- member contact fields, while the explicit guard keeps it inaccessible to

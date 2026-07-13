@@ -16,8 +16,8 @@ const [migration, baselineRls, hardenedRls, webData, webAccount, models, api, st
 
 test('PT tracking migration preserves public enquiries and isolates member reads', () => {
   assert.match(migration, /add column if not exists user_id uuid references auth\.users\(id\).*default auth\.uid\(\)/i);
-  assert.match(migration, /auth\.uid\(\) is null and user_id is null/i);
-  assert.match(migration, /user_id = auth\.uid\(\)/i);
+  assert.match(migration, /\(select auth\.uid\(\)\) is null and user_id is null/i);
+  assert.match(migration, /user_id = \(select auth\.uid\(\)\)/i);
   assert.match(migration, /having count\(\*\) = 1/i);
   assert.match(migration, /values \('member_pt_request_tracking'\)/i);
   assert.match(migration, /xert_public_capabilities/i);
@@ -31,8 +31,8 @@ test('every PT policy entry point enforces trusted request state, consent, and o
     assert.ok(policyStart >= 0 && policyEnd > policyStart);
     assert.match(policy, /status = 'requested'/i);
     assert.match(policy, /consent_to_contact is true/i);
-    assert.match(policy, /auth\.uid\(\) is null and user_id is null/i);
-    assert.match(policy, /auth\.uid\(\) is not null and user_id = auth\.uid\(\)/i);
+    assert.match(policy, /\(select auth\.uid\(\)\) is null and user_id is null/i);
+    assert.match(policy, /\(select auth\.uid\(\)\) is not null and user_id = \(select auth\.uid\(\)\)/i);
   }
 });
 

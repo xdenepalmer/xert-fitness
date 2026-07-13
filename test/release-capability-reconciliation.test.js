@@ -40,8 +40,13 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/public_form_integrity_upgrade.sql', '../supabase/migrations/20260714004300_public_form_integrity.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {
-    const source = readFileSync(new URL(sourcePath, import.meta.url), 'utf8').replace(/\r\n/g, '\n').trim();
-    const linkedMigration = readFileSync(new URL(migrationPath, import.meta.url), 'utf8').replace(/\r\n/g, '\n').trim();
+    const normalize = (sql) => sql
+      .replace(/\r\n/g, '\n')
+      // A later linked migration optimizes these equivalent policy expressions.
+      .replace(/\(select auth\.uid\(\)\)/gi, 'auth.uid()')
+      .trim();
+    const source = normalize(readFileSync(new URL(sourcePath, import.meta.url), 'utf8'));
+    const linkedMigration = normalize(readFileSync(new URL(migrationPath, import.meta.url), 'utf8'));
     assert.equal(linkedMigration, source);
   }
 });

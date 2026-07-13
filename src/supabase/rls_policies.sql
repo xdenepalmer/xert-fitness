@@ -100,8 +100,8 @@ create policy "public_insert_private_session_requests" on public.private_session
     status = 'requested'
     and consent_to_contact is true
     and (
-      (auth.uid() is null and user_id is null)
-      or (auth.uid() is not null and user_id = auth.uid())
+      ((select auth.uid()) is null and user_id is null)
+      or ((select auth.uid()) is not null and user_id = (select auth.uid()))
     )
   );
 create policy "admin_all_private_session_requests" on public.private_session_requests

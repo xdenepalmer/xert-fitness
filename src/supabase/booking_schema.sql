@@ -817,10 +817,10 @@ drop policy if exists "profiles_select_own_or_admin" on public.profiles;
 drop policy if exists "profiles_update_own_or_admin" on public.profiles;
 drop policy if exists "profiles_insert_self"         on public.profiles;
 create policy "profiles_select_own_or_admin" on public.profiles
-  for select to authenticated using (id = auth.uid() or public.is_admin());
+  for select to authenticated using (id = (select auth.uid()) or (select public.is_admin()));
 create policy "profiles_update_own_or_admin" on public.profiles
-  for update to authenticated using (id = auth.uid() or public.is_admin())
-  with check (id = auth.uid() or public.is_admin());
+  for update to authenticated using (id = (select auth.uid()) or (select public.is_admin()))
+  with check (id = (select auth.uid()) or (select public.is_admin()));
 -- Profile rows are created only by handle_new_user() in the Auth trigger.
 -- Members may update their contact fields after that, but cannot seed a row
 -- with arbitrary identity metadata through the browser API.
@@ -843,7 +843,7 @@ create policy "products_admin_insert" on public.products
 alter table public.orders enable row level security;
 drop policy if exists "orders_select_own_or_admin" on public.orders;
 create policy "orders_select_own_or_admin" on public.orders
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 -- member_announcements: signed-in members see only live notices; admins manage
 -- drafts, publishing and expiry through the command centre.
@@ -880,14 +880,14 @@ create policy "member_announcements_admin_delete" on public.member_announcements
 alter table public.member_announcement_receipts enable row level security;
 drop policy if exists "announcement_receipts_select_own_or_admin" on public.member_announcement_receipts;
 create policy "announcement_receipts_select_own_or_admin" on public.member_announcement_receipts
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 -- credit_batches: a user reads own credits; admins read all. Writes via
 -- SECURITY DEFINER functions / service role only.
 alter table public.credit_batches enable row level security;
 drop policy if exists "credit_batches_select_own_or_admin" on public.credit_batches;
 create policy "credit_batches_select_own_or_admin" on public.credit_batches
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 alter table public.stripe_refunds enable row level security;
 drop policy if exists "stripe_refunds_admin_read" on public.stripe_refunds;
@@ -899,7 +899,7 @@ create policy "stripe_refunds_admin_read" on public.stripe_refunds
 alter table public.session_bookings enable row level security;
 drop policy if exists "session_bookings_select_own_or_admin" on public.session_bookings;
 create policy "session_bookings_select_own_or_admin" on public.session_bookings
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 -- coaches: public reads published; admins manage.
 alter table public.coaches enable row level security;
@@ -926,11 +926,11 @@ drop policy if exists "member_event_goals_select_own_or_admin" on public.member_
 drop policy if exists "member_event_goals_insert_own" on public.member_event_goals;
 drop policy if exists "member_event_goals_delete_own_or_admin" on public.member_event_goals;
 create policy "member_event_goals_select_own_or_admin" on public.member_event_goals
-  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 create policy "member_event_goals_insert_own" on public.member_event_goals
-  for insert to authenticated with check (user_id = auth.uid());
+  for insert to authenticated with check (user_id = (select auth.uid()));
 create policy "member_event_goals_delete_own_or_admin" on public.member_event_goals
-  for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+  for delete to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 
 -- ── Function grants ─────────────────────────────────────────────────────────

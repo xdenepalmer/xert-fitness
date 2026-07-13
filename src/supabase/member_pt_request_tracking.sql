@@ -32,15 +32,15 @@ create policy "public_insert_private_session_requests" on public.private_session
     status = 'requested'
     and consent_to_contact is true
     and (
-      (auth.uid() is null and user_id is null)
-      or (auth.uid() is not null and user_id = auth.uid())
+      ((select auth.uid()) is null and user_id is null)
+      or ((select auth.uid()) is not null and user_id = (select auth.uid()))
     )
   );
 
 drop policy if exists "members_read_own_private_session_requests" on public.private_session_requests;
 create policy "members_read_own_private_session_requests" on public.private_session_requests
   for select to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- Runtime capability marker for admin health and release CI. Register this
 -- only after the column, policies and historical ownership pass all succeed.
