@@ -170,10 +170,10 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
-Operations Health and the TestFlight release workflow verify every production
+Operations Health and the TestFlight release workflow verify every database
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
-and schedule audit, booking lifecycle, content/configuration history, member push delivery, schedule integrity, public-form integrity, and database security hardening. A release intentionally
+and schedule audit, booking lifecycle, content/configuration history, member push delivery, schedule integrity, public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.

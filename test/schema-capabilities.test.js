@@ -184,8 +184,10 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /\/api\/admin-publish-announcement[\s\S]*notify_class_cancellation/);
   assert.match(yaml, /expected HTTP 400/);
   assert.match(yaml, /STRIPE_WEBHOOK_SECRET/);
-  assert.match(yaml, /Verify production push delivery/);
+  assert.match(yaml, /Report production push delivery readiness/);
   assert.match(yaml, /\/api\/push-health/);
+  assert.match(yaml, /REQUIRE_PRODUCTION_SERVICES/);
+  assert.match(yaml, /TestFlight upload will continue/);
 });
 
 test('read-only production check reports every release capability and migration', () => {

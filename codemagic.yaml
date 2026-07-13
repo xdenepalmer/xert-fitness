@@ -104,6 +104,16 @@ workflows:
       - name: Verify production service contract
         script: |
           set -e
+          STRICT_PRODUCTION_SERVICES="${REQUIRE_PRODUCTION_SERVICES:-false}"
+
+          report_service_issue() {
+            echo "::warning:: $1"
+            if [ "$STRICT_PRODUCTION_SERVICES" = "true" ]; then
+              echo "::error:: REQUIRE_PRODUCTION_SERVICES=true, so this readiness warning is release-blocking."
+              exit 1
+            fi
+          }
+
           # These are public URLs, so on failure we can safely dump the first bytes
           # to expose the exact malformation (missing scheme, quotes, whitespace, http://).
           url_diag() {
@@ -137,7 +147,7 @@ workflows:
             -H 'Content-Type: application/json' \
             --data '{}')" || API_CODE=000
           if [ "$API_CODE" != "401" ]; then
-            echo "::error:: Production checkout preflight expected HTTP 401 but received $API_CODE. Response body:"
+            echo "::warning:: Production checkout preflight expected HTTP 401 but received $API_CODE. Response body:"
             head -c 300 "$API_BODY"; echo
             case "$API_CODE" in
               500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
@@ -145,7 +155,7 @@ workflows:
               000) echo "The checkout function timed out or could not be reached." ;;
             esac
             rm -f "$API_BODY"
-            exit 1
+            report_service_issue "Checkout is not production-ready; the signed app can still be distributed for TestFlight testing."
           fi
           rm -f "$API_BODY"
 
@@ -156,7 +166,7 @@ workflows:
             -H 'Content-Type: application/json' \
             --data '{}')" || REFUND_CODE=000
           if [ "$REFUND_CODE" != "401" ]; then
-            echo "::error:: Production refund preflight expected HTTP 401 but received $REFUND_CODE. Response body:"
+            echo "::warning:: Production refund preflight expected HTTP 401 but received $REFUND_CODE. Response body:"
             head -c 300 "$REFUND_BODY"; echo
             case "$REFUND_CODE" in
               500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
@@ -164,7 +174,7 @@ workflows:
               000) echo "The refund function timed out or could not be reached." ;;
             esac
             rm -f "$REFUND_BODY"
-            exit 1
+            report_service_issue "Admin refunds are not production-ready; TestFlight upload will continue."
           fi
           rm -f "$REFUND_BODY"
 
@@ -175,7 +185,7 @@ workflows:
             -H 'Content-Type: application/json' \
             --data '{}')" || RECONCILE_CODE=000
           if [ "$RECONCILE_CODE" != "401" ]; then
-            echo "::error:: Production reconciliation preflight expected HTTP 401 but received $RECONCILE_CODE. Response body:"
+            echo "::warning:: Production reconciliation preflight expected HTTP 401 but received $RECONCILE_CODE. Response body:"
             head -c 300 "$RECONCILE_BODY"; echo
             case "$RECONCILE_CODE" in
               500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
@@ -183,7 +193,7 @@ workflows:
               000) echo "The reconciliation function timed out or could not be reached." ;;
             esac
             rm -f "$RECONCILE_BODY"
-            exit 1
+            report_service_issue "Checkout reconciliation is not production-ready; TestFlight upload will continue."
           fi
           rm -f "$RECONCILE_BODY"
 
@@ -209,7 +219,7 @@ workflows:
             -H 'Content-Type: application/json' \
             --data '{}')" || WEBHOOK_CODE=000
           if [ "$WEBHOOK_CODE" != "400" ]; then
-            echo "::error:: Production Stripe webhook preflight expected HTTP 400 but received $WEBHOOK_CODE. Response body:"
+            echo "::warning:: Production Stripe webhook preflight expected HTTP 400 but received $WEBHOOK_CODE. Response body:"
             head -c 300 "$WEBHOOK_BODY"; echo
             case "$WEBHOOK_CODE" in
               500) echo "Add STRIPE_WEBHOOK_SECRET and the other server secrets to the Vercel Production environment, then redeploy." ;;
@@ -217,7 +227,7 @@ workflows:
               000) echo "The Stripe webhook function timed out or could not be reached." ;;
             esac
             rm -f "$WEBHOOK_BODY"
-            exit 1
+            report_service_issue "The Stripe webhook is not production-ready; TestFlight upload will continue."
           fi
           rm -f "$WEBHOOK_BODY"
 
@@ -284,25 +294,33 @@ workflows:
             }
             console.log("Production service contract verified.");
           ' "$CAPABILITIES"
-      - name: Verify production push delivery
+      - name: Report production push delivery readiness
         script: |
           set -e
           PUSH_BODY="$(mktemp)"
           PUSH_STATUS="$(curl -sS -o "$PUSH_BODY" -w '%{http_code}' "$VERCEL_BASE_URL/api/push-health")"
           if [ "$PUSH_STATUS" != "200" ]; then
-            echo "::error:: Push health returned HTTP $PUSH_STATUS."
+            echo "::warning:: Push health returned HTTP $PUSH_STATUS. TestFlight upload will continue."
             cat "$PUSH_BODY"
             rm -f "$PUSH_BODY"
-            exit 1
+            if [ "${REQUIRE_PRODUCTION_SERVICES:-false}" = "true" ]; then exit 1; fi
+            exit 0
           fi
-          node -e '
+          if ! node -e '
             const health = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
             if (health.ready !== true) {
-              console.error("::error:: Production APNs delivery is not configured in Vercel.");
+              console.error("::warning:: Production APNs delivery is not configured in Vercel; TestFlight upload will continue.");
               process.exit(1);
             }
             console.log("Production APNs delivery verified.");
-          ' "$PUSH_BODY"
+          ' "$PUSH_BODY"; then
+            rm -f "$PUSH_BODY"
+            if [ "${REQUIRE_PRODUCTION_SERVICES:-false}" = "true" ]; then
+              echo "::error:: REQUIRE_PRODUCTION_SERVICES=true, so APNs readiness is release-blocking."
+              exit 1
+            fi
+            exit 0
+          fi
           rm -f "$PUSH_BODY"
       - name: Install XcodeGen when needed
         script: |
@@ -377,6 +395,29 @@ workflows:
             exit 1
           }
 
+          INFO_PLIST="$APP_PATH/Info.plist"
+          [ -f "$INFO_PLIST" ] || { echo "::error:: signed app Info.plist is missing"; exit 1; }
+          SIGNED_BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw -o - "$INFO_PLIST")"
+          [ "$SIGNED_BUNDLE_ID" = "$BUNDLE_ID" ] || {
+            echo "::error:: Signed bundle identifier is $SIGNED_BUNDLE_ID, expected $BUNDLE_ID."
+            exit 1
+          }
+          [ "$(plutil -extract ITSAppUsesNonExemptEncryption raw -o - "$INFO_PLIST")" = "false" ] || {
+            echo "::error:: ITSAppUsesNonExemptEncryption must be false for the app's exempt HTTPS/Apple cryptography usage."
+            exit 1
+          }
+          IPAD_ORIENTATIONS="$(plutil -extract 'UISupportedInterfaceOrientations~ipad' json -o - "$INFO_PLIST")"
+          for orientation in \
+            UIInterfaceOrientationPortrait \
+            UIInterfaceOrientationPortraitUpsideDown \
+            UIInterfaceOrientationLandscapeLeft \
+            UIInterfaceOrientationLandscapeRight; do
+            printf '%s' "$IPAD_ORIENTATIONS" | grep -q "$orientation" || {
+              echo "::error:: iPad orientation $orientation is missing; App Store upload would fail validation."
+              exit 1
+            }
+          done
+
           PRIVACY_MANIFEST="$APP_PATH/PrivacyInfo.xcprivacy"
           if [ ! -f "$PRIVACY_MANIFEST" ]; then
             echo "::error:: PrivacyInfo.xcprivacy is missing from the signed app bundle!"
@@ -396,7 +437,7 @@ workflows:
             echo "::error:: Privacy manifest is missing XERT account data declarations!"
             exit 1
           }
-          echo "Signed bundle verified: entitlements and privacy manifest present."
+          echo "Signed bundle verified: identifier, iPad orientations, export compliance, entitlements and privacy manifest present."
     artifacts:
       - ios/XertFitnessApp/build/test-results.xcresult
       - ios/XertFitnessApp/build/ios/ipa/*.ipa
