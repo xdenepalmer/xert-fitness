@@ -203,6 +203,7 @@ create table if not exists public.admin_member_notes (
 create index if not exists admin_member_notes_user_created_idx
   on public.admin_member_notes (user_id, created_at desc);
 alter table public.admin_member_notes enable row level security;
+revoke all on table public.admin_member_notes from public, anon, authenticated;
 drop policy if exists "admin_member_notes_admin_read" on public.admin_member_notes;
 create policy "admin_member_notes_admin_read" on public.admin_member_notes
   for select to authenticated using (public.is_admin());
@@ -816,6 +817,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('credit_expiry_follow_up') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('booking_time_conflict_guard') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('admin_member_notes') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

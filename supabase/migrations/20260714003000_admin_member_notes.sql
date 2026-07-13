@@ -1,4 +1,4 @@
--- Additive, idempotent admin-only member servicing timeline.
+-- Durable, admin-only servicing notes used by the member follow-up queue.
 
 create table if not exists public.admin_member_notes (
   id uuid primary key default gen_random_uuid(),
@@ -30,15 +30,17 @@ begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_user_id is null then raise exception 'MEMBER_REQUIRED'; end if;
   return query
-  select n.id, n.user_id, n.author_id, coalesce(a.full_name, a.email, 'Former admin'),
-         n.category, n.body, n.created_at, n.archived_at, n.archived_by
-  from public.admin_member_notes n
-  left join public.profiles a on a.id = n.author_id
-  where n.user_id = p_user_id
-    and (coalesce(p_include_archived, false) or n.archived_at is null)
-  order by (n.archived_at is not null), n.created_at desc
+  select note.id, note.user_id, note.author_id,
+         coalesce(author.full_name, author.email, 'Former admin'),
+         note.category, note.body, note.created_at, note.archived_at, note.archived_by
+  from public.admin_member_notes as note
+  left join public.profiles as author on author.id = note.author_id
+  where note.user_id = p_user_id
+    and (coalesce(p_include_archived, false) or note.archived_at is null)
+  order by (note.archived_at is not null), note.created_at desc
   limit 100;
-end; $$;
+end;
+$$;
 
 create or replace function public.admin_add_member_note(
   p_user_id uuid,
@@ -51,14 +53,21 @@ declare
   v_body text := btrim(coalesce(p_body, ''));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
-  if v_category not in ('general', 'coaching', 'follow_up', 'billing') then raise exception 'INVALID_NOTE_CATEGORY'; end if;
-  if char_length(v_body) < 3 or char_length(v_body) > 1000 then raise exception 'INVALID_NOTE_BODY'; end if;
-  if not exists (select 1 from public.profiles where id = p_user_id) then raise exception 'MEMBER_NOT_FOUND'; end if;
+  if v_category not in ('general', 'coaching', 'follow_up', 'billing') then
+    raise exception 'INVALID_NOTE_CATEGORY';
+  end if;
+  if char_length(v_body) < 3 or char_length(v_body) > 1000 then
+    raise exception 'INVALID_NOTE_BODY';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_user_id) then
+    raise exception 'MEMBER_NOT_FOUND';
+  end if;
   insert into public.admin_member_notes (user_id, author_id, category, body)
   values (p_user_id, auth.uid(), v_category, v_body)
   returning id into v_id;
   return v_id;
-end; $$;
+end;
+$$;
 
 create or replace function public.admin_set_member_note_archived(
   p_note_id uuid,
@@ -75,7 +84,8 @@ begin
   where id = p_note_id;
   get diagnostics v_updated = row_count;
   if v_updated <> 1 then raise exception 'MEMBER_NOTE_NOT_FOUND'; end if;
-end; $$;
+end;
+$$;
 
 revoke execute on function public.admin_list_member_notes(uuid, boolean) from public, anon;
 revoke execute on function public.admin_add_member_note(uuid, text, text) from public, anon;
