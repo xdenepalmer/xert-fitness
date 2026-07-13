@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [migration, webData, models, api, store, account] = await Promise.all([
+const [migration, webData, webAccount, models, api, store, account] = await Promise.all([
   readFile(new URL('../src/supabase/member_pt_request_tracking.sql', import.meta.url), 'utf8'),
   readFile(new URL('../src/lib/bookingData.js', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Models.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift', import.meta.url), 'utf8'),
@@ -21,6 +22,9 @@ test('PT tracking migration preserves public enquiries and isolates member reads
 test('web and native clients expose owned PT request history', () => {
   assert.match(webData, /export async function getMyPrivateSessionRequests/);
   assert.match(webData, /\.eq\('user_id', userId\)/);
+  assert.match(webAccount, /getMyPrivateSessionRequests\(\)\.catch\(\(\) => \[\]\)/);
+  assert.match(webAccount, /privateSessionRequests\.map/);
+  assert.match(webAccount, />\s*PT Requests\s*</);
   assert.match(models, /struct PrivateSessionStatusItem/);
   assert.match(api, /func privateSessionRequests\(session auth: AuthSession\)/);
   assert.match(api, /func requestPrivateSession\(_ requestBody: PrivateSessionRequest, auth: AuthSession\? = nil\)/);

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarDays, CheckCircle2, Clock, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
-import { getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
+import { getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { useToast } from '@/components/ui/use-toast';
@@ -30,6 +30,18 @@ function formatDate(iso) {
   });
 }
 
+function privateSessionStatus(status) {
+  const labels = {
+    requested: 'Awaiting review',
+    approved: 'Approved',
+    reschedule_requested: 'Scheduling follow-up',
+    declined: 'Declined',
+    completed: 'Completed',
+    cancelled: 'Cancelled'
+  };
+  return labels[status] || String(status || 'requested').replace(/_/g, ' ');
+}
+
 const cardStyle = {
   borderColor: 'rgba(123,167,188,0.16)',
   backgroundColor: 'rgba(50,72,90,0.14)'
@@ -43,6 +55,7 @@ export default function Account() {
   const [bookings, setBookings] = useState([]);
   const [orders, setOrders] = useState([]);
   const [eventGoals, setEventGoals] = useState([]);
+  const [privateSessionRequests, setPrivateSessionRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
@@ -56,18 +69,21 @@ export default function Account() {
 
   const refresh = useCallback(async () => {
     try {
-      const [c, b, o, goals] = await Promise.all([
+      const [c, b, o, goals, ptRequests] = await Promise.all([
         getMyCredits(),
         getMyBookings(),
         getMyOrders(),
         // Event goals ship as an additive migration. Do not make the rest of
         // the member account unavailable while an existing install catches up.
         getMyEventGoals().catch(() => []),
+        // PT tracking is additive for existing Supabase installs.
+        getMyPrivateSessionRequests().catch(() => []),
       ]);
       setCredits(c);
       setBookings(b);
       setOrders(o);
       setEventGoals(goals);
+      setPrivateSessionRequests(ptRequests);
     } catch (e) {
       toast({
         title: 'Could not load your account',
@@ -456,6 +472,51 @@ export default function Account() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </section>
+
+        {/* Personal training requests */}
+        <section className="mb-10">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+              PT Requests
+            </h2>
+            <Link to="/timetable" className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+              Request a session
+            </Link>
+          </div>
+          {loading ? (
+            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading PT requests…</p>
+          ) : privateSessionRequests.length === 0 ? (
+            <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
+              <Dumbbell className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+              <p className="font-body text-sm flex-1" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                No personal training requests yet.
+              </p>
+              <Link to="/timetable" className="font-display text-sm uppercase px-4 py-2.5" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                Request PT
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {privateSessionRequests.map(request => (
+                <div key={request.id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
+                    <Dumbbell className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                  </div>
+                  <div className="flex-1 min-w-[12rem]">
+                    <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{request.requested_session_type}</p>
+                    <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                      {[formatDate(request.created_at), request.preferred_day, request.preferred_time].filter(Boolean).join(' · ')}
+                    </p>
+                    {request.training_goal && <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.45)' }}>Goal: {request.training_goal}</p>}
+                  </div>
+                  <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ backgroundColor: 'rgba(123,167,188,0.14)', color: '#7BA7BC' }}>
+                    {privateSessionStatus(request.status)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </section>
