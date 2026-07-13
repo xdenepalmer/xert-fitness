@@ -7,6 +7,7 @@ import PageNotFound from './lib/PageNotFound';
 import { SupabaseAuthProvider } from '@/lib/SupabaseAuthContext';
 import AdminRoute from '@/components/admin/AdminRoute';
 import ScrollToTop from './components/ScrollToTop';
+import RouteMetadata from './lib/RouteMetadata';
 
 // Routes load on demand, keeping the initial public visit lightweight.
 const Home = lazy(() => import('./pages/Home'));
@@ -77,6 +78,7 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <ScrollToTop />
+          <RouteMetadata />
           <AppRoutes />
         </Router>
         <Toaster />
