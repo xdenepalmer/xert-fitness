@@ -89,8 +89,8 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
   }, [open, query]);
 
   const run = (sectionKey, params) => {
-    onNavigate(sectionKey, params);
-    onOpenChange(false);
+    const navigated = onNavigate(sectionKey, params);
+    if (navigated !== false) onOpenChange(false);
   };
 
   return (

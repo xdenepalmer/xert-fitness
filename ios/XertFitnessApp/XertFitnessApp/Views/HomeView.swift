@@ -26,6 +26,9 @@ struct HomeView: View {
                 }
                 .padding()
             }
+            .refreshable {
+                await store.refresh()
+            }
             .xertScreenBackground()
             .navigationTitle("XERT")
             .navigationBarTitleDisplayMode(.large)

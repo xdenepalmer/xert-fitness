@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
@@ -70,10 +70,73 @@ const GRID_BG = {
 
 export default function AdminLayout({ activeSection, onSectionChange, hasUnsavedChanges = false, onConfirmLeave = () => true, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopNavigation, setDesktopNavigation] = useState(
+    () => window.matchMedia('(min-width: 1024px)').matches,
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [badges, setBadges] = useState({});
   const [badgesUnavailable, setBadgesUnavailable] = useState(false);
   const { user, profile, signOut } = useSupabaseAuth();
+  const sidebarRef = useRef(null);
+  const menuButtonRef = useRef(null);
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const sync = event => {
+      setDesktopNavigation(event.matches);
+      if (event.matches) setSidebarOpen(false);
+    };
+    sync(query);
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    if (!desktopNavigation && !sidebarOpen) sidebar.setAttribute('inert', '');
+    else sidebar.removeAttribute('inert');
+  }, [desktopNavigation, sidebarOpen]);
+
+  useEffect(() => {
+    if (!sidebarOpen || desktopNavigation) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.requestAnimationFrame(() => {
+      sidebarRef.current?.querySelector('button, a[href]')?.focus();
+    });
+
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSidebarOpen(false);
+        menuButtonRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(sidebarRef.current?.querySelectorAll('button:not([disabled]), a[href]') || [])
+        .filter(element => element.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!sidebarRef.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [desktopNavigation, sidebarOpen]);
 
   // ⌘K / Ctrl+K opens the command palette.
   useEffect(() => {
@@ -135,6 +198,10 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     <div className="min-h-screen flex" style={{ backgroundColor: '#0b1218' }}>
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
+        ref={sidebarRef}
+        id="admin-navigation"
+        aria-label="Admin navigation"
+        aria-hidden={!desktopNavigation && !sidebarOpen ? 'true' : undefined}
         className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col transform transition-transform lg:translate-x-0 lg:static ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{
           background: 'linear-gradient(180deg, #101820 0%, #0b1218 100%)',
@@ -157,14 +224,14 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
               </p>
             </div>
           </div>
-          <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close admin navigation" title="Close navigation"
-            className="lg:hidden absolute top-4 right-4 p-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
+          <button type="button" onClick={() => { setSidebarOpen(false); menuButtonRef.current?.focus(); }} aria-label="Close admin navigation" title="Close navigation"
+            className="lg:hidden absolute top-2 right-2 inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: 'rgba(209,221,230,0.5)' }}>
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3">
+        <nav aria-label="Command centre sections" className="flex-1 overflow-y-auto py-3">
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi} className="mb-1">
               {group.heading && (
@@ -179,8 +246,12 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                   <button
                     type="button"
                     key={item.key}
-                    onClick={() => { onSectionChange(item.key); setSidebarOpen(false); }}
-                    className="relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-all group"
+                    onClick={() => {
+                      const navigated = onSectionChange(item.key);
+                      if (navigated !== false) setSidebarOpen(false);
+                    }}
+                    aria-current={active ? 'page' : undefined}
+                    className="relative flex min-h-11 w-full items-center gap-3 px-5 py-2.5 text-left transition-all group"
                     style={{
                       backgroundColor: active ? 'rgba(123,167,188,0.1)' : 'transparent',
                       color: active ? '#F1F3F4' : 'rgba(209,221,230,0.55)',
@@ -221,14 +292,14 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Link to="/" onClick={event => { if (!onConfirmLeave()) event.preventDefault(); }}
-              className="flex items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
+              className="flex min-h-11 items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
               <ExternalLink className="w-3 h-3" /> Site
             </Link>
             <button type="button" onClick={() => { if (onConfirmLeave()) void signOut(); }}
-              className="flex items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
+              className="flex min-h-11 items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
@@ -240,7 +311,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
 
       {/* Overlay */}
       {sidebarOpen && (
-        <button type="button" className="fixed inset-0 z-40 bg-black/70 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Close admin navigation" />
+        <button type="button" className="fixed inset-0 z-40 bg-black/70 lg:hidden" onClick={() => { setSidebarOpen(false); menuButtonRef.current?.focus(); }} aria-label="Close admin navigation" />
       )}
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
@@ -253,7 +324,9 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             backdropFilter: 'blur(10px)',
           }}>
           <div className="flex items-center gap-4">
-            <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation" title="Open navigation" className="lg:hidden p-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
+            <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation" title="Open navigation"
+              aria-expanded={sidebarOpen} aria-controls="admin-navigation"
+              className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: 'rgba(209,221,230,0.5)' }}>
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-3">
@@ -270,7 +343,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
               </span>
             )}
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search admin tools" title="Search admin tools"
-              className="flex items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
+              className="flex min-h-11 items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.25)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.25)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
