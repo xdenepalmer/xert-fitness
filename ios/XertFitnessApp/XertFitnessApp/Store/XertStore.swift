@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class XertStore: ObservableObject {
@@ -28,6 +29,8 @@ final class XertStore: ObservableObject {
     @Published var isRequestingClassInterest = false
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
     @Published private(set) var classReminderLeadTime = ClassReminderPreference.leadTime()
+    @Published private(set) var memberPushEnabled = MemberPushPreference.isEnabled()
+    @Published private(set) var isUpdatingMemberPush = false
     @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var isReconcilingCheckout = false
     @Published private(set) var isCheckoutConfirmationPending = false
@@ -71,6 +74,7 @@ final class XertStore: ObservableObject {
         await refresh()
         hasBootstrapped = true
         await reconcilePendingCheckout()
+        await restoreMemberPushRegistration()
     }
 
     func refresh() async {
@@ -314,6 +318,7 @@ final class XertStore: ObservableObject {
             try KeychainStore.saveSession(session)
             await refresh()
             await reconcilePendingCheckout()
+            await restoreMemberPushRegistration()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -340,11 +345,13 @@ final class XertStore: ObservableObject {
 
     func signOut() {
         let currentSession = authSession
+        let pushToken = PushDeviceTokenStore.load()
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
             if let currentSession {
+                if let pushToken { try? await api.updatePushSubscription(session: currentSession, token: pushToken, enabled: false) }
                 try? await api.signOut(session: currentSession)
             }
         }
@@ -455,6 +462,66 @@ final class XertStore: ObservableObject {
         if classRemindersEnabled {
             await ClassReminderScheduler.shared.sync(bookings: bookings, leadTime: leadTime)
         }
+    }
+
+    func setMemberPushEnabled(_ enabled: Bool) async {
+        guard enabled != memberPushEnabled, !isUpdatingMemberPush else { return }
+        guard isSignedIn else {
+            errorMessage = "Sign in to enable member notice notifications."
+            return
+        }
+        isUpdatingMemberPush = true
+        defer { isUpdatingMemberPush = false }
+
+        if enabled {
+            guard await MemberPushRegistration.requestAndRegister() else {
+                MemberPushPreference.setEnabled(false)
+                memberPushEnabled = false
+                errorMessage = "Notifications are disabled for XERT. Allow them in Settings to receive member notices."
+                return
+            }
+            MemberPushPreference.setEnabled(true)
+            memberPushEnabled = true
+            await syncMemberPushToken()
+        } else {
+            if let token = PushDeviceTokenStore.load(), let session = try? await validAuthSession() {
+                do {
+                    try await api.updatePushSubscription(session: session, token: token, enabled: false)
+                } catch {
+                    present(error)
+                    return
+                }
+            }
+            MemberPushPreference.setEnabled(false)
+            memberPushEnabled = false
+            UIApplication.shared.unregisterForRemoteNotifications()
+        }
+    }
+
+    func syncMemberPushToken(_ token: DevicePushToken? = nil) async {
+        guard memberPushEnabled, let token = token ?? PushDeviceTokenStore.load() else { return }
+        do {
+            let session = try await validAuthSession()
+            try await api.updatePushSubscription(session: session, token: token, enabled: true)
+        } catch {
+            present(error)
+        }
+    }
+
+    func handlePushRegistrationFailure() {
+        MemberPushPreference.setEnabled(false)
+        memberPushEnabled = false
+        errorMessage = "This device could not register for XERT notifications. Check notification settings and try again."
+    }
+
+    private func restoreMemberPushRegistration() async {
+        guard memberPushEnabled, isSignedIn else { return }
+        guard await MemberPushRegistration.requestAndRegister() else {
+            MemberPushPreference.setEnabled(false)
+            memberPushEnabled = false
+            return
+        }
+        await syncMemberPushToken()
     }
 
     func toggleEventGoal(_ event: EventItem) async {
@@ -701,6 +768,7 @@ final class XertStore: ObservableObject {
             try KeychainStore.saveSession(session)
             await refresh()
             await reconcilePendingCheckout()
+            await restoreMemberPushRegistration()
         } catch {
             errorMessage = error.localizedDescription
         }

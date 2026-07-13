@@ -38,6 +38,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/waitlist_fifo_promotion_upgrade.sql', '../supabase/migrations/20260714004100_waitlist_fifo_promotion.sql'],
     ['../src/supabase/member_pt_request_tracking.sql', '../supabase/migrations/20260714004200_member_pt_request_tracking.sql'],
     ['../src/supabase/public_form_integrity_upgrade.sql', '../supabase/migrations/20260714004300_public_form_integrity.sql'],
+    ['../src/supabase/member_push_notifications_upgrade.sql', '../supabase/migrations/20260714009000_member_push_notifications.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {
     const normalize = (sql) => sql

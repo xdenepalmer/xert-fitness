@@ -81,4 +81,15 @@ The signed release workflow also loads the shared `appstore` group. It expects t
 
 Create or use the shared App Store Connect integration named `codemagic`, then enable **Push Notifications** for `com.xertfitness.app` in Apple Developer and fetch its App Store provisioning profile. The release guard verifies `aps-environment`, `application-identifier`, and the bundled `PrivacyInfo.xcprivacy` in the signed IPA before TestFlight upload, so it intentionally fails when the App ID/profile is missing that capability or the App Store privacy declarations are absent.
 
-Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 22 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability.
+Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 23 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability.
+
+Remote member notices also require these server-only Vercel variables. Never place them in `xert_env`, the app bundle, or a `VITE_` variable:
+
+```text
+APNS_KEY_ID       # Apple Push Notification authentication key ID
+APNS_TEAM_ID      # Apple Developer Team ID
+APNS_PRIVATE_KEY  # complete .p8 private key, stored as a Vercel secret
+APNS_BUNDLE_ID    # com.xertfitness.app
+```
+
+The APNs authentication key is team-wide and reusable across apps, so keep one stable key rather than creating per-build certificates. TestFlight calls `/api/push-health` and stops before signing unless production delivery is configured.

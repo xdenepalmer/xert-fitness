@@ -22,6 +22,7 @@ with required (capability, migration) as (
     ('database_security_hardening', 'supabase/migrations/20260714006000_database_security_hardening.sql'),
     ('rls_policy_performance', 'supabase/migrations/20260714007000_rls_policy_performance.sql'),
     ('request_status_audit', 'supabase/migrations/20260714008000_admin_request_status_audit.sql'),
+    ('member_push_notifications', 'supabase/migrations/20260714009000_member_push_notifications.sql'),
     ('credit_expiry_follow_up', 'supabase/migrations/20260713060000_credit_expiry_follow_up.sql'),
     ('member_pt_request_tracking', 'supabase/migrations/20260714004200_member_pt_request_tracking.sql'),
     ('public_form_integrity', 'supabase/migrations/20260714004300_public_form_integrity.sql')

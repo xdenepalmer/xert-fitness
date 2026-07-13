@@ -5,6 +5,7 @@ import {
   createMemberAnnouncement,
   deleteMemberAnnouncement,
   getAllMemberAnnouncements,
+  publishMemberAnnouncement,
   updateMemberAnnouncement,
 } from '@/lib/adminData';
 import { announcementState, ANNOUNCEMENT_TONES, normalizeAnnouncementInput } from '@/lib/memberAnnouncements';
@@ -102,17 +103,22 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
       if (publish && payload.expires_at && new Date(payload.expires_at) <= new Date()) {
         throw new Error('Choose an expiry time in the future before publishing.');
       }
-      const publishFields = publish
-        ? { published_at: editing?.published_at || new Date().toISOString() }
-        : {};
-      if (editing?.id) {
-        await updateMemberAnnouncement(editing.id, { ...payload, ...publishFields });
+      let publishResult = null;
+      if (publish) {
+        publishResult = await publishMemberAnnouncement(editing?.id, payload);
+      } else if (editing?.id) {
+        await updateMemberAnnouncement(editing.id, payload);
       } else {
-        await createMemberAnnouncement({ ...payload, ...publishFields });
+        await createMemberAnnouncement(payload);
       }
+      const push = publishResult?.push;
+      const pushDescription = !publish ? 'The notice remains hidden until you publish it.'
+        : push?.configured === false ? 'Members can see it now. APNs delivery needs the Vercel push secrets.'
+        : push?.attempted > 0 ? `${push.delivered} device notification${push.delivered === 1 ? '' : 's'} delivered${push.failed ? `; ${push.failed} failed` : ''}.`
+        : 'Members can see it now. No enabled iOS devices were registered.';
       toast({
         title: publish ? 'Announcement published' : editing?.id ? 'Announcement saved' : 'Draft created',
-        description: publish ? 'Signed-in members can now see this notice.' : 'The notice remains hidden until you publish it.',
+        description: pushDescription,
       });
       setEditing(null);
       setForm(EMPTY_FORM);
@@ -130,8 +136,16 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
       if (publish && item.expires_at && new Date(item.expires_at) <= new Date()) {
         throw new Error('Edit this notice and choose a future expiry before publishing it again.');
       }
-      await updateMemberAnnouncement(item.id, { published_at: publish ? new Date().toISOString() : null });
-      toast({ title: publish ? 'Announcement published' : 'Announcement unpublished' });
+      const result = publish
+        ? await publishMemberAnnouncement(item.id, item)
+        : await updateMemberAnnouncement(item.id, { published_at: null });
+      const push = result?.push;
+      toast({
+        title: publish ? 'Announcement published' : 'Announcement unpublished',
+        description: publish && push?.attempted > 0
+          ? `${push.delivered} device notification${push.delivered === 1 ? '' : 's'} delivered${push.failed ? `; ${push.failed} failed` : ''}.`
+          : undefined,
+      });
       await load({ quiet: true });
     } catch (publishError) {
       toast({ title: 'Status not changed', description: publishError.message, variant: 'destructive' });
@@ -213,6 +227,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
                       {item.published_at && <span>Published {formatDateTime(item.published_at)}</span>}
                       {item.expires_at && <span className="inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" /> Expires {formatDateTime(item.expires_at)}</span>}
                       {item.published_at && <span>Seen by {item.read_count || 0} member{item.read_count === 1 ? '' : 's'} · {item.dismissed_count || 0} dismissed</span>}
+                      {item.push_last_attempted_at && <span>Push: {item.push_delivered_count || 0} delivered · {item.push_failed_count || 0} failed</span>}
                       {item.cta_label && item.cta_url && <span>Action: {item.cta_label} · {item.cta_url}</span>}
                     </div>
                   </div>

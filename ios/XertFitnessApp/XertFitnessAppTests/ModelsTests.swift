@@ -683,6 +683,37 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(ClassReminderNavigation.consumePendingBookingID(defaults: defaults))
     }
 
+    func testMemberPushPreferenceAndDeviceTokenAreExplicitAndPersistent() throws {
+        let suiteName = "MemberPushPreferenceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(MemberPushPreference.isEnabled(defaults: defaults))
+        MemberPushPreference.setEnabled(true, defaults: defaults)
+        XCTAssertTrue(MemberPushPreference.isEnabled(defaults: defaults))
+
+        let token = DevicePushToken(value: String(repeating: "ab", count: 32), environment: "sandbox")
+        PushDeviceTokenStore.save(token, defaults: defaults)
+        XCTAssertEqual(PushDeviceTokenStore.load(defaults: defaults), token)
+        PushDeviceTokenStore.clear(defaults: defaults)
+        XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
+    }
+
+    func testAnnouncementPushRoutingSurvivesColdLaunchAndConsumesOnce() throws {
+        let suiteName = "AnnouncementPushNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let announcementID = UUID()
+
+        XCTAssertNil(AnnouncementPushNavigation.consumePendingAnnouncementID(defaults: defaults))
+        AnnouncementPushNavigation.markPending(announcementID: announcementID, defaults: defaults)
+        XCTAssertEqual(
+            AnnouncementPushNavigation.consumePendingAnnouncementID(defaults: defaults),
+            announcementID
+        )
+        XCTAssertNil(AnnouncementPushNavigation.consumePendingAnnouncementID(defaults: defaults))
+    }
+
     func testBookingCalendarPlannerUsesValidEndOrOneHourFallback() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let explicitEnd = start.addingTimeInterval(45 * 60)

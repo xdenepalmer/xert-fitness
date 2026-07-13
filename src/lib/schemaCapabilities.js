@@ -18,6 +18,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   database_security_hardening: 'Apply supabase/migrations/20260714006000_database_security_hardening.sql in Supabase.',
   rls_policy_performance: 'Apply supabase/migrations/20260714007000_rls_policy_performance.sql in Supabase.',
   request_status_audit: 'Apply supabase/migrations/20260714008000_admin_request_status_audit.sql in Supabase.',
+  member_push_notifications: 'Apply supabase/migrations/20260714009000_member_push_notifications.sql in Supabase.',
   credit_expiry_follow_up: 'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
   member_pt_request_tracking: 'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',

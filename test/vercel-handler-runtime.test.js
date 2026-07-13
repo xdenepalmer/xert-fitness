@@ -6,6 +6,9 @@ import commerceHealthHandler from '../api/admin-commerce-health.js';
 import stripeWebhookHandler from '../api/stripe-webhook.js';
 import adminRefundHandler from '../api/admin-refund-order.js';
 import adminReconcileHandler from '../api/admin-reconcile-order.js';
+import pushSubscriptionHandler from '../api/push-subscription.js';
+import adminPublishAnnouncementHandler from '../api/admin-publish-announcement.js';
+import pushHealthHandler from '../api/push-health.js';
 
 function createVercelResponse() {
   return {
@@ -39,6 +42,9 @@ for (const [name, handler, method] of [
   ['Stripe webhook', stripeWebhookHandler, 'GET'],
   ['admin refund', adminRefundHandler, 'GET'],
   ['admin order reconciliation', adminReconcileHandler, 'GET'],
+  ['push subscription', pushSubscriptionHandler, 'GET'],
+  ['admin announcement publishing', adminPublishAnnouncementHandler, 'GET'],
+  ['push health', pushHealthHandler, 'POST'],
 ]) {
   test(`${name} completes the Vercel Node response for an unsupported method`, async () => {
     const response = createVercelResponse();

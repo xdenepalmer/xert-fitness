@@ -370,6 +370,21 @@ final class XertAPI {
         }
     }
 
+    func updatePushSubscription(session auth: AuthSession, token: DevicePushToken, enabled: Bool) async throws {
+        let response: PushSubscriptionResponse = try await vercelRequest(
+            path: "/api/push-subscription",
+            body: PushSubscriptionRequest(
+                action: enabled ? "register" : "unregister",
+                device_token: token.value,
+                environment: token.environment
+            ),
+            auth: auth
+        )
+        guard response.registered == enabled else {
+            throw APIError(message: "XERT could not confirm your notification preference.")
+        }
+    }
+
     private func authRequest<T: Decodable, Body: Encodable>(
         path: String,
         queryItems: [URLQueryItem] = [],
@@ -506,6 +521,16 @@ private struct EmptyResponse: Decodable {
 
 private struct DeleteAccountResponse: Decodable {
     let deleted: Bool
+}
+
+private struct PushSubscriptionRequest: Encodable {
+    let action: String
+    let device_token: String
+    let environment: String
+}
+
+private struct PushSubscriptionResponse: Decodable {
+    let registered: Bool
 }
 
 private extension ISO8601DateFormatter {

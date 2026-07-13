@@ -48,9 +48,25 @@ struct RootView: View {
             lockAndAuthenticate()
         }
         .onOpenURL(perform: handleOpenURL)
-        .onAppear(perform: consumePendingReminderRoute)
+        .onAppear {
+            consumePendingReminderRoute()
+            consumePendingAnnouncementRoute()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xertPushTokenUpdated)) { notification in
+            guard let token = notification.object as? DevicePushToken else { return }
+            Task { await store.syncMemberPushToken(token) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xertPushRegistrationFailed)) { _ in
+            store.handlePushRegistrationFailure()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xertOpenAnnouncements)) { _ in
+            consumePendingAnnouncementRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xertRefreshAnnouncements)) { _ in
+            Task { await store.refresh() }
         }
     }
 
@@ -175,6 +191,12 @@ struct RootView: View {
                 await store.refresh()
             }
         }
+    }
+
+    private func consumePendingAnnouncementRoute() {
+        guard AnnouncementPushNavigation.consumePendingAnnouncementID() != nil else { return }
+        selectedTab = 0
+        Task { await store.refresh() }
     }
 
     private func consumePendingReminderRoute() {

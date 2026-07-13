@@ -490,18 +490,40 @@ export async function deleteEvent(id) {
 // ─── Member announcements ───────────────────────────────────────────────────
 
 export async function getAllMemberAnnouncements() {
-  const [announcementResult, metricResult] = await Promise.all([
+  const [announcementResult, metricResult, pushMetricResult] = await Promise.all([
     supabase.from('member_announcements').select('*').order('created_at', { ascending: false }),
     supabase.rpc('admin_announcement_metrics'),
+    supabase.rpc('admin_announcement_push_metrics'),
   ]);
   if (announcementResult.error) throw new Error(announcementResult.error.message);
   if (metricResult.error) throw new Error(metricResult.error.message);
+  if (pushMetricResult.error) throw new Error(pushMetricResult.error.message);
   const metrics = new Map((metricResult.data || []).map(item => [item.announcement_id, item]));
+  const pushMetrics = new Map((pushMetricResult.data || []).map(item => [item.announcement_id, item]));
   return (announcementResult.data || []).map(item => ({
     ...item,
     read_count: Number(metrics.get(item.id)?.read_count) || 0,
     dismissed_count: Number(metrics.get(item.id)?.dismissed_count) || 0,
+    push_delivered_count: Number(pushMetrics.get(item.id)?.delivered_count) || 0,
+    push_failed_count: (Number(pushMetrics.get(item.id)?.failed_count) || 0) + (Number(pushMetrics.get(item.id)?.invalid_token_count) || 0),
+    push_last_attempted_at: pushMetrics.get(item.id)?.last_attempted_at || null,
   }));
+}
+
+export async function publishMemberAnnouncement(id, announcement) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-publish-announcement', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ id: id || null, announcement }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Announcement could not be published.');
+  return body;
 }
 
 export async function createMemberAnnouncement(announcement) {

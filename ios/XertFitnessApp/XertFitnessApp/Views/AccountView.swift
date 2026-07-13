@@ -224,6 +224,16 @@ struct AccountView: View {
     private var reminderSettingsSection: some View {
         Section {
             Toggle(
+                "Member notice notifications",
+                isOn: Binding(
+                    get: { store.memberPushEnabled },
+                    set: { enabled in Task { await store.setMemberPushEnabled(enabled) } }
+                )
+            )
+            .tint(.xertSteel)
+            .disabled(store.isUpdatingMemberPush)
+
+            Toggle(
                 "Class reminders",
                 isOn: Binding(
                     get: { store.classRemindersEnabled },
@@ -253,7 +263,7 @@ struct AccountView: View {
                 .disabled(store.isUpdatingReminderPreference)
             }
 
-            Text("Receive a device notification \(store.classReminderLeadTime.label.lowercased()) each confirmed class. You can switch this off at any time.")
+            Text("Member notices arrive when staff publish an update. Class reminders stay on this device and follow your selected lead time.")
                 .font(.footnote)
                 .foregroundStyle(Color.xertMuted)
         } header: {

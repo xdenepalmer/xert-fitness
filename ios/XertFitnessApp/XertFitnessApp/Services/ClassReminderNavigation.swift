@@ -39,6 +39,26 @@ enum ClassReminderNavigation {
     }
 }
 
+enum AnnouncementPushNavigation {
+    static let pendingAnnouncementIDKey = "xert.navigation.pendingAnnouncementID"
+
+    static func markPending(announcementID: UUID, defaults: UserDefaults = .standard) {
+        defaults.set(announcementID.uuidString, forKey: pendingAnnouncementIDKey)
+    }
+
+    static func consumePendingAnnouncementID(defaults: UserDefaults = .standard) -> UUID? {
+        guard
+            let rawAnnouncementID = defaults.string(forKey: pendingAnnouncementIDKey),
+            let announcementID = UUID(uuidString: rawAnnouncementID)
+        else {
+            defaults.removeObject(forKey: pendingAnnouncementIDKey)
+            return nil
+        }
+        defaults.removeObject(forKey: pendingAnnouncementIDKey)
+        return announcementID
+    }
+}
+
 extension Notification.Name {
     static let xertOpenBookings = Notification.Name("xert.navigation.openBookings")
 }
@@ -52,11 +72,27 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         return true
     }
 
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let value = deviceToken.map { String(format: "%02x", $0) }.joined()
+        let token = DevicePushToken(value: value, environment: MemberPushRegistration.environment)
+        PushDeviceTokenStore.save(token)
+        NotificationCenter.default.post(name: .xertPushTokenUpdated, object: token)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError _: Error) {
+        NotificationCenter.default.post(name: .xertPushRegistrationFailed, object: nil)
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        if notification.request.content.userInfo["announcement_id"] != nil {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .xertRefreshAnnouncements, object: nil)
+            }
+        }
         completionHandler([.banner, .sound])
     }
 
@@ -65,6 +101,16 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        if response.notification.request.content.userInfo["announcement_id"] != nil,
+           let rawAnnouncementID = response.notification.request.content.userInfo["announcement_id"] as? String,
+           let announcementID = UUID(uuidString: rawAnnouncementID) {
+            AnnouncementPushNavigation.markPending(announcementID: announcementID)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .xertOpenAnnouncements, object: announcementID)
+            }
+            completionHandler()
+            return
+        }
         let request = response.notification.request
         if let bookingID = ClassReminderNotification.bookingID(
             identifier: request.identifier,
