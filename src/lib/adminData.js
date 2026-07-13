@@ -2,7 +2,10 @@ import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertAdminMutation, assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
-import { filterMembers, normalizeMemberDirectoryQuery, normalizeRoleChange } from './memberAdmin';
+import {
+  filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
+  normalizeMemberNoteArchive, normalizeRoleChange
+} from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
 import {
@@ -598,6 +601,39 @@ export async function adminSetRole(userId, role) {
   }
 }
 
+export async function adminListMemberNotes(userId, includeArchived = false) {
+  const member = normalizeMemberDirectoryQuery({ memberId: userId, pageSize: 1 });
+  const { data, error } = await supabase.rpc('admin_list_member_notes', {
+    p_user_id: member.memberId,
+    p_include_archived: Boolean(includeArchived)
+  });
+  if (!error) return { rows: data || [], available: true };
+  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_list_member_notes.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (functionUnavailable) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
+export async function adminAddMemberNote(userId, category, body) {
+  const note = normalizeMemberNote(userId, category, body);
+  const { data, error } = await supabase.rpc('admin_add_member_note', {
+    p_user_id: note.userId,
+    p_category: note.category,
+    p_body: note.body
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function adminSetMemberNoteArchived(noteId, archived) {
+  const note = normalizeMemberNoteArchive(noteId, archived);
+  const { error } = await supabase.rpc('admin_set_member_note_archived', {
+    p_note_id: note.noteId,
+    p_archived: note.archived
+  });
+  if (error) throw new Error(error.message);
+}
+
 async function getAuditProfiles(ids) {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   const profiles = [];
@@ -1025,7 +1061,7 @@ export async function getOperationsHealth() {
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders, grants] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false })]);
+  const [credits, bookings, orders, grants, notes] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }), adminListMemberNotes(userId, true)]);
   for (const r of [credits, bookings, orders]) {
     if (r.error) throw new Error(r.error.message);
   }
@@ -1034,7 +1070,9 @@ export async function adminMemberDetail(userId) {
     bookings: bookings.data || [],
     orders: orders.data || [],
     grants: grants.error ? [] : grants.data || [],
-    creditAuditAvailable: !grants.error
+    creditAuditAvailable: !grants.error,
+    notes: notes.rows,
+    memberNotesAvailable: notes.available
   };
 }
 

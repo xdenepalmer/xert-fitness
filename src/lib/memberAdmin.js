@@ -53,3 +53,29 @@ export function normalizeRoleChange(userId, role) {
   if (!['member', 'admin'].includes(role)) throw new Error('Role must be member or admin.');
   return { userId: normalizedId, role };
 }
+
+const MEMBER_NOTE_CATEGORIES = new Set(['general', 'coaching', 'follow_up', 'billing']);
+
+export function normalizeMemberNote(userId, category, body) {
+  const normalizedUserId = String(userId || '').trim();
+  const normalizedCategory = String(category || '').trim().toLowerCase();
+  const normalizedBody = String(body || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedUserId)) {
+    throw new Error('A valid member account is required.');
+  }
+  if (!MEMBER_NOTE_CATEGORIES.has(normalizedCategory)) {
+    throw new Error('Choose a valid member note category.');
+  }
+  if (normalizedBody.length < 3 || normalizedBody.length > 1000) {
+    throw new Error('Member notes must be between 3 and 1,000 characters.');
+  }
+  return { userId: normalizedUserId, category: normalizedCategory, body: normalizedBody };
+}
+
+export function normalizeMemberNoteArchive(noteId, archived) {
+  const normalizedNoteId = String(noteId || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedNoteId)) {
+    throw new Error('A valid member note is required.');
+  }
+  return { noteId: normalizedNoteId, archived: Boolean(archived) };
+}

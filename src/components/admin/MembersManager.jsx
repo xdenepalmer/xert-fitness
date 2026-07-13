@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { ChevronLeft, ChevronRight, Download, X, Ticket, CalendarDays, Receipt, Loader2, RefreshCw } from 'lucide-react';
-import { adminExportMembers, adminGrantCredits, adminListMembersPage, adminMemberDetail, adminSetRole } from '@/lib/adminData';
+import { Archive, ArchiveRestore, CalendarDays, ChevronLeft, ChevronRight, Download, Loader2, MessageSquarePlus, Receipt, RefreshCw, Ticket, X } from 'lucide-react';
+import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMembersPage, adminMemberDetail, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
@@ -29,6 +29,11 @@ const PAGE_SIZE = 50;
 function MemberDrawer({ member, onClose, onGrant }) {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
+  const [noteCategory, setNoteCategory] = useState('general');
+  const [noteBody, setNoteBody] = useState('');
+  const [noteError, setNoteError] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
 
   const loadDetail = () => {
     setDetail(null);
@@ -39,6 +44,38 @@ function MemberDrawer({ member, onClose, onGrant }) {
   };
 
   useEffect(() => { loadDetail(); }, [member.id]);
+
+  const handleAddNote = async event => {
+    event.preventDefault();
+    setNoteSaving(true);
+    setNoteError('');
+    try {
+      await adminAddMemberNote(member.id, noteCategory, noteBody);
+      setNoteBody('');
+      toast({ title: 'Staff note added' });
+      loadDetail();
+    } catch (error) {
+      setNoteError(error.message || 'Could not add the staff note.');
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const handleNoteArchive = async note => {
+    const shouldArchive = !note.archived_at;
+    if (shouldArchive && !window.confirm('Archive this staff note? It can be restored later.')) return;
+    setNoteSaving(true);
+    setNoteError('');
+    try {
+      await adminSetMemberNoteArchived(note.id, shouldArchive);
+      toast({ title: shouldArchive ? 'Staff note archived' : 'Staff note restored' });
+      loadDetail();
+    } catch (error) {
+      setNoteError(error.message || 'Could not update the staff note.');
+    } finally {
+      setNoteSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -70,6 +107,77 @@ function MemberDrawer({ member, onClose, onGrant }) {
           </div>
         ) : (
           <div className="p-5 space-y-7">
+            {/* Staff notes */}
+            <section>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                  <MessageSquarePlus className="w-3.5 h-3.5" /> Staff notes
+                </h4>
+                {detail.notes.some(note => note.archived_at) && (
+                  <label className="inline-flex min-h-11 items-center gap-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                    <input type="checkbox" checked={showArchivedNotes} onChange={event => setShowArchivedNotes(event.target.checked)} className="accent-xert-steel" />
+                    Show archived
+                  </label>
+                )}
+              </div>
+
+              {!detail.memberNotesAvailable ? (
+                <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+                  Staff notes are paused until admin_member_notes_upgrade.sql is applied.
+                </p>
+              ) : (
+                <>
+                  <form onSubmit={handleAddNote} className="space-y-2">
+                    <label htmlFor="member-note-category" className="sr-only">Staff note category</label>
+                    <select id="member-note-category" value={noteCategory} onChange={event => setNoteCategory(event.target.value)} disabled={noteSaving}
+                      className="w-full min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-steel">
+                      <option value="general">General</option>
+                      <option value="coaching">Coaching</option>
+                      <option value="follow_up">Follow-up</option>
+                      <option value="billing">Billing</option>
+                    </select>
+                    <label htmlFor="member-note-body" className="sr-only">Staff note</label>
+                    <textarea id="member-note-body" value={noteBody} onChange={event => setNoteBody(event.target.value)} disabled={noteSaving}
+                      minLength={3} maxLength={1000} rows={3} required placeholder="Add operational context for staff"
+                      className="w-full resize-y bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite placeholder:text-xert-concrete/30 focus:outline-none focus:border-xert-steel" />
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-body text-[10px] leading-relaxed" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                        Use factual operational or coaching context. Avoid unnecessary clinical or sensitive personal information.
+                      </p>
+                      <button type="submit" disabled={noteSaving || noteBody.trim().length < 3}
+                        className="min-h-11 shrink-0 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
+                        {noteSaving ? 'Saving...' : 'Add note'}
+                      </button>
+                    </div>
+                  </form>
+                  {noteError && <p role="alert" className="font-body text-xs text-xert-red mt-2">{noteError}</p>}
+
+                  <div className="mt-4 space-y-2">
+                    {detail.notes.filter(note => showArchivedNotes || !note.archived_at).length === 0 ? (
+                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No staff notes yet.</p>
+                    ) : detail.notes.filter(note => showArchivedNotes || !note.archived_at).map(note => (
+                      <article key={note.id} className="p-3" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)', opacity: note.archived_at ? 0.55 : 1 }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-body text-[10px] uppercase tracking-wider" style={{ color: '#7BA7BC' }}>{String(note.category || 'general').replace('_', '-')}</p>
+                            <p className="font-body text-sm whitespace-pre-wrap break-words mt-1" style={{ color: '#D1DDE6' }}>{note.body}</p>
+                          </div>
+                          <button type="button" disabled={noteSaving} onClick={() => handleNoteArchive(note)}
+                            title={note.archived_at ? 'Restore staff note' : 'Archive staff note'} aria-label={note.archived_at ? 'Restore staff note' : 'Archive staff note'}
+                            className="min-h-11 min-w-11 inline-flex shrink-0 items-center justify-center border border-xert-steel/20 text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
+                            {note.archived_at ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="font-body text-[10px] mt-2" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                          {note.author_name || 'Former admin'} · {fmtDateTime(note.created_at)}{note.archived_at ? ' · Archived' : ''}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+
             {/* Credits */}
             <section>
               <div className="flex items-center justify-between mb-3">
