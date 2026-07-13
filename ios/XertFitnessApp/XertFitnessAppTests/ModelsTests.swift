@@ -359,6 +359,18 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testClassReminderPreferenceIsExplicitAndPersistent() throws {
+        let suiteName = "ClassReminderPreferenceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(ClassReminderPreference.isEnabled(defaults: defaults))
+        ClassReminderPreference.setEnabled(true, defaults: defaults)
+        XCTAssertTrue(ClassReminderPreference.isEnabled(defaults: defaults))
+        ClassReminderPreference.setEnabled(false, defaults: defaults)
+        XCTAssertFalse(ClassReminderPreference.isEnabled(defaults: defaults))
+    }
+
     func testBookingCancellationCreditPolicyMatchesServerRules() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 

@@ -91,6 +91,7 @@ struct AccountView: View {
 
         membershipSection
         accountDetailsSection
+        reminderSettingsSection
         signOutSection
         accountControlSection
         legalSection
@@ -130,6 +131,29 @@ struct AccountView: View {
         } header: {
             Text("Membership").xertEyebrow()
         }
+    }
+
+    private var reminderSettingsSection: some View {
+        Section {
+            Toggle(
+                "Class reminders",
+                isOn: Binding(
+                    get: { store.classRemindersEnabled },
+                    set: { enabled in
+                        Task { await store.setClassRemindersEnabled(enabled) }
+                    }
+                )
+            )
+            .tint(.xertSteel)
+            .disabled(store.isUpdatingReminderPreference)
+
+            Text("Receive a device notification two hours before each confirmed class. You can switch this off at any time.")
+                .font(.footnote)
+                .foregroundStyle(Color.xertMuted)
+        } header: {
+            Text("Notifications").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
     }
 
     private var accountDetailsSection: some View {

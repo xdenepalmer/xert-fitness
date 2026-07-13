@@ -36,7 +36,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Booking RPC support through `book_session`.
 - Instant booking, staff-confirmed booking requests, waitlist visibility, and member cancellation or waitlist withdrawal.
 - Self-service joining for full-class waitlists without consuming a class credit.
-- Device-local reminders two hours before future confirmed classes; reminders are removed when a booking is cancelled or the member signs out.
+- Member-controlled device reminders two hours before future confirmed classes; permission is requested only when enabled, and reminders are removed when disabled, cancelled, or signed out.
 - Interest-only class handoff to the live XERT timetable/registration form.
 - Vercel checkout launch through `/api/checkout`.
 - Refresh-token renewal on launch and focused decoding tests for the Supabase data contract.

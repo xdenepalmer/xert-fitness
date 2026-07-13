@@ -1,6 +1,18 @@
 import Foundation
 import UserNotifications
 
+enum ClassReminderPreference {
+    static let key = "xert.classRemindersEnabled"
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: key)
+    }
+
+    static func setEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: key)
+    }
+}
+
 enum ClassReminderPlanner {
     static let leadTime: TimeInterval = 2 * 60 * 60
 
@@ -57,14 +69,30 @@ actor ClassReminderScheduler {
         await clearManagedReminders()
     }
 
+    func requestAuthorizationAndSync(bookings: [BookingItem], now: Date = Date()) async -> Bool {
+        let settings = await center.notificationSettings()
+        let authorized: Bool
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            authorized = true
+        case .notDetermined:
+            authorized = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+        case .denied:
+            authorized = false
+        @unknown default:
+            authorized = false
+        }
+        guard authorized else { return false }
+        await sync(bookings: bookings, now: now)
+        return true
+    }
+
     private func isAuthorizedForReminders() async -> Bool {
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
-        case .notDetermined:
-            return (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
-        case .denied:
+        case .notDetermined, .denied:
             return false
         @unknown default:
             return false

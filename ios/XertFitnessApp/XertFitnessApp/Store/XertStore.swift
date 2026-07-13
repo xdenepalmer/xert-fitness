@@ -22,6 +22,8 @@ final class XertStore: ObservableObject {
     @Published var isDeletingAccount = false
     @Published var isRequestingPrivateSession = false
     @Published var isRequestingClassInterest = false
+    @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
+    @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -144,7 +146,11 @@ final class XertStore: ObservableObject {
             }
             do {
                 bookings = try await bookingRequest
-                await ClassReminderScheduler.shared.sync(bookings: bookings)
+                if classRemindersEnabled {
+                    await ClassReminderScheduler.shared.sync(bookings: bookings)
+                } else {
+                    await ClassReminderScheduler.shared.clearAll()
+                }
                 bookingsLoaded = true
             } catch {
                 unavailableDataSources.insert(.bookings)
@@ -327,6 +333,28 @@ final class XertStore: ObservableObject {
             await refresh()
         } catch {
             errorMessage = friendlyBookingError(error.localizedDescription)
+        }
+    }
+
+    func setClassRemindersEnabled(_ enabled: Bool) async {
+        guard enabled != classRemindersEnabled, !isUpdatingReminderPreference else { return }
+        isUpdatingReminderPreference = true
+        defer { isUpdatingReminderPreference = false }
+
+        if enabled {
+            let authorized = await ClassReminderScheduler.shared.requestAuthorizationAndSync(bookings: bookings)
+            guard authorized else {
+                ClassReminderPreference.setEnabled(false)
+                classRemindersEnabled = false
+                errorMessage = "Notifications are disabled for XERT. Allow them in Settings to enable class reminders."
+                return
+            }
+            ClassReminderPreference.setEnabled(true)
+            classRemindersEnabled = true
+        } else {
+            ClassReminderPreference.setEnabled(false)
+            classRemindersEnabled = false
+            await ClassReminderScheduler.shared.clearAll()
         }
     }
 
