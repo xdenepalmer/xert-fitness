@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Archive, ArchiveRestore, CalendarDays, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Ticket, UserRoundSearch, X } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Ticket, UserRoundSearch, X } from 'lucide-react';
 import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberFollowUps, adminListMembersPage, adminMemberDetail, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
+import { createFollowUpCopy, createFollowUpLog } from '@/lib/memberFollowUp';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
@@ -303,7 +304,7 @@ function followUpDetail(member) {
   return `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`;
 }
 
-function FollowUpQueue({ rows, available, error, loading, onRetry, onView }) {
+function FollowUpQueue({ rows, available, error, loading, onRetry, onView, onLog }) {
   return (
     <section aria-labelledby="member-follow-up-title" className="mb-6 border-y border-xert-steel/20 py-4">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -325,30 +326,93 @@ function FollowUpQueue({ rows, available, error, loading, onRetry, onView }) {
         <p className="font-body text-sm text-xert-concrete/40">No follow-ups due.</p>
       ) : (
         <div className="divide-y divide-xert-steel/10 border-t border-xert-steel/10">
-          {rows.map(member => (
-            <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
-              <div className="min-w-[12rem] flex-1">
-                <p className="font-display text-sm text-xert-offwhite uppercase">{member.full_name || member.email}</p>
-                <p className="font-body text-[11px] text-xert-concrete/45">
-                  {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {followUpDetail(member)}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <a href={`mailto:${member.email}`} title={`Email ${member.full_name || member.email}`} aria-label={`Email ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                  <Mail className="w-4 h-4" />
-                </a>
-                {member.phone && (
-                  <a href={`tel:${member.phone}`} title={`Call ${member.full_name || member.email}`} aria-label={`Call ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                    <Phone className="w-4 h-4" />
+          {rows.map(member => {
+            const contact = createFollowUpCopy(member, window.location.origin);
+            return (
+              <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
+                <div className="min-w-[12rem] flex-1">
+                  <p className="font-display text-sm text-xert-offwhite uppercase">{member.full_name || member.email}</p>
+                  <p className="font-body text-[11px] text-xert-concrete/45">
+                    {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {followUpDetail(member)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a href={contact.mailto} title={`Draft email to ${member.full_name || member.email}`} aria-label={`Draft email to ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                    <Mail className="w-4 h-4" />
                   </a>
-                )}
-                <button type="button" onClick={() => onView(member)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
+                  {member.phone && (
+                    <a href={`tel:${member.phone}`} title={`Call ${member.full_name || member.email}`} aria-label={`Call ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                      <Phone className="w-4 h-4" />
+                    </a>
+                  )}
+                  <button type="button" onClick={() => onLog(member)} title={`Log follow-up with ${member.full_name || member.email}`} className="min-h-11 inline-flex items-center gap-1.5 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">
+                    <CheckCircle2 className="w-4 h-4" /> Log
+                  </button>
+                  <button type="button" onClick={() => onView(member)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
+  );
+}
+
+function FollowUpModal({ member, onDone, onCancel }) {
+  const [channel, setChannel] = useState('email');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const body = createFollowUpLog(member, channel, note);
+      await adminAddMemberNote(member.id, 'follow_up', body);
+      toast({ title: 'Follow-up recorded', description: `${member.full_name || member.email} will leave the queue for seven days.` });
+      onDone();
+    } catch (submitError) {
+      setError(submitError.message || 'Could not record this follow-up.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="follow-up-log-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
+        <div className="p-6 border-b border-xert-steel/20">
+          <h3 id="follow-up-log-title" className="font-display text-xl text-xert-offwhite uppercase">Log Follow-up</h3>
+          <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label htmlFor="follow-up-channel" className="block font-body text-xs text-xert-concrete/50 uppercase tracking-wider mb-1">Contact method</label>
+            <select id="follow-up-channel" value={channel} onChange={event => setChannel(event.target.value)} disabled={saving} className={`${inputCls} w-full min-h-11`}>
+              <option value="email">Email</option>
+              <option value="phone">Phone call</option>
+              <option value="sms">SMS</option>
+              <option value="in_person">In person</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="follow-up-context" className="block font-body text-xs text-xert-concrete/50 uppercase tracking-wider mb-1">Context (optional)</label>
+            <textarea id="follow-up-context" value={note} onChange={event => setNote(event.target.value)} disabled={saving} maxLength={500} rows={3} placeholder="Outcome, callback requested, or anything staff should know" className={`${inputCls} w-full resize-y`} />
+            <p className="mt-1 font-body text-[10px] text-xert-concrete/35 text-right">{note.length}/500</p>
+          </div>
+          <p className="font-body text-xs leading-relaxed text-xert-concrete/45">This adds a dated staff note and removes the member from the follow-up queue for seven days.</p>
+          {error && <p role="alert" className="font-body text-xs text-xert-red">{error}</p>}
+        </div>
+        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
+          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} className="flex-1 min-h-11 bg-xert-steel text-xert-navy font-display text-sm uppercase disabled:opacity-50">
+            {saving ? 'Saving...' : 'Mark Contacted'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -427,6 +491,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [granting, setGranting] = useState(null);
+  const [loggingFollowUp, setLoggingFollowUp] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -500,6 +565,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     setPage(1);
     setViewing(null);
     setGranting(null);
+    setLoggingFollowUp(null);
   }, [creditFilter, debouncedSearch, roleFilter]);
 
   useEffect(() => {
@@ -570,7 +636,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         </div>
       </div>
 
-      <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} />
+      <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} onLog={setLoggingFollowUp} />
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
@@ -670,6 +736,10 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
 
       {granting && (
         <GrantCreditsModal member={granting} onDone={() => { setGranting(null); setViewing(null); refresh(); }} onCancel={() => setGranting(null)} />
+      )}
+
+      {loggingFollowUp && (
+        <FollowUpModal member={loggingFollowUp} onDone={() => { setLoggingFollowUp(null); refresh(); }} onCancel={() => setLoggingFollowUp(null)} />
       )}
     </div>
   );

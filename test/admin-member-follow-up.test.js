@@ -23,7 +23,7 @@ test('member admin renders direct contact actions and refreshes after staff foll
   assert.match(source, /Credits expiring/);
   assert.match(source, /Credits inactive/);
   assert.match(source, /Renewal due/);
-  assert.match(source, /href=\{`mailto:\$\{member\.email\}`\}/);
+  assert.match(source, /href=\{contact\.mailto\}/);
   assert.match(source, /href=\{`tel:\$\{member\.phone\}`\}/);
   assert.match(source, /onNotesChanged\?\.\(\)/);
   assert.match(source, /onNotesChanged=\{refresh\}/);
