@@ -3,6 +3,8 @@ import { Dumbbell, Instagram, Target, Users } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import PageHeader from '@/components/public/PageHeader';
+import Skeleton from '@/components/public/Skeleton';
 import { getCoaches } from '@/lib/bookingData';
 
 const CATEGORY_LABELS = {
@@ -108,24 +110,32 @@ export default function Coaches() {
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
-      <main className="pt-28 pb-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-            <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>The Team</span>
-          </div>
-          <h1 className="font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-            Coaches &amp;<br />
-            <span style={{ color: '#7BA7BC' }}>Practitioners.</span>
-          </h1>
-          <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)', fontSize: '1.0625rem' }}>
-            Every XERT session is coach-led. Our team brings functional fitness coaching together with nutrition,
-            recovery and allied health support — so you can train with structure and progress sustainably.
-          </p>
+      <main id="main" className="pb-20">
+        <PageHeader
+          eyebrow="The Team"
+          title={<>Coaches &amp;<br /></>}
+          accent="Practitioners."
+          intro="Every XERT session is coach-led. Our team brings functional fitness coaching together with nutrition, recovery and allied health support — so you can train with structure and progress sustainably."
+          containerClassName="max-w-6xl"
+        />
 
-          <div className="mt-12">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="mt-10">
             {loading && (
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading the team…</p>
+              <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <span className="sr-only">Loading the team…</span>
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="border flex flex-col" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
+                    <Skeleton className="aspect-[4/5] w-full" />
+                    <div className="p-5 space-y-3">
+                      <Skeleton className="h-6 w-2/3" />
+                      <Skeleton className="h-3 w-1/3" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-5/6" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
             {error && (
               <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Couldn’t load coaches: {error}</p>
@@ -156,8 +166,7 @@ export default function Coaches() {
           <div className="mt-8 pt-8 border-t" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
             <a
               href="/booking"
-              className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
             >
               Train With Us
             </a>

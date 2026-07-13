@@ -12,7 +12,7 @@ import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
-  requested: 'bg-xert-red/20 text-xert-red',
+  requested: 'bg-xert-steel/20 text-xert-red',
   confirmed: 'bg-green-900/30 text-green-400',
   waitlisted: 'bg-yellow-900/30 text-yellow-400',
   cancelled: 'bg-xert-steel/30 text-xert-concrete/40',
@@ -353,7 +353,7 @@ export default function BookingRequestsTable() {
               <button type="button" disabled={savingNotes} onClick={() => setSelectedBooking(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
               <button type="button" disabled={savingNotes} onClick={saveNotes}
-                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{savingNotes ? 'Saving...' : 'Save'}</button>
+                className="flex-1 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">{savingNotes ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>

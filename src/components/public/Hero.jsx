@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSiteContent } from '@/lib/siteContent';
 import { HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
@@ -7,9 +7,14 @@ const LOGO_FULL_WHITE = '/assets/xert-logo-horizontal-light.png';
 
 const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Quality', 'Longevity', 'Community', 'Preparation'];
 
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
 export default function Hero() {
   const [photoIndex, setPhotoIndex] = useState(0);
-  const [scrollY, setScrollY] = useState(0);
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia?.(DESKTOP_QUERY).matches ?? true);
+  const bgRef = useRef(null);
+  const contentRef = useRef(null);
+  const overlayRef = useRef(null);
   const content = useSiteContent('hero', HERO_DEFAULTS);
   const headlineWords = (content.headline || HERO_DEFAULTS.headline).split(' ');
   const photos = content.photos?.length > 0 ? content.photos : HERO_PHOTOS;
@@ -21,12 +26,29 @@ export default function Hero() {
     return () => clearInterval(t);
   }, [photos.length]);
 
+  // Feature photo is desktop-only — skip rendering (and downloading) it on mobile.
+  useEffect(() => {
+    const mq = window.matchMedia?.(DESKTOP_QUERY);
+    if (!mq) return undefined;
+    const onChange = e => setIsDesktop(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Scroll parallax — writes transforms/opacity straight to the DOM via refs
+  // so scrolling never re-renders the component tree.
   useEffect(() => {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
     let frame = 0;
     const update = () => {
       frame = 0;
-      setScrollY(Math.min(window.scrollY, 800));
+      const y = Math.min(window.scrollY, 800);
+      const bgY = Math.min(160, y * 0.2);
+      const contentY = -Math.min(60, y * 0.1);
+      const overlayOpacity = Math.max(0.4, 1 - y * 0.0012);
+      if (bgRef.current) bgRef.current.style.transform = `translate3d(0,${bgY}px,0)`;
+      if (contentRef.current) contentRef.current.style.transform = `translate3d(0,${contentY}px,0)`;
+      if (overlayRef.current) overlayRef.current.style.opacity = String(overlayOpacity);
     };
     const schedule = () => {
       if (!frame) frame = window.requestAnimationFrame(update);
@@ -39,14 +61,10 @@ export default function Hero() {
     };
   }, []);
 
-  const bgY = Math.min(160, scrollY * 0.2);
-  const contentY = -Math.min(60, scrollY * 0.1);
-  const overlayOpacity = Math.max(0.4, 1 - scrollY * 0.0012);
-
   return (
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-xert-navy">
       {/* Background photo with parallax + blue-steel grade */}
-      <div className="absolute inset-0 will-change-transform" style={{ transform: `translate3d(0,${bgY}px,0)` }}>
+      <div ref={bgRef} className="absolute inset-0 will-change-transform" style={{ transform: 'translate3d(0,0,0)' }}>
         {photos.map((src, i) => (
           <div
             key={src}
@@ -56,6 +74,8 @@ export default function Hero() {
             <img
               src={src}
               alt=""
+              loading={i === 0 ? 'eager' : 'lazy'}
+              decoding="async"
               className="w-full h-full object-cover object-center scale-110"
               style={{ filter: 'saturate(0.5) brightness(0.38)' }}
             />
@@ -65,9 +85,10 @@ export default function Hero() {
 
       {/* Steel-blue gradient overlay */}
       <div
+        ref={overlayRef}
         className="absolute inset-0"
         style={{
-          opacity: overlayOpacity,
+          opacity: 1,
           background: 'linear-gradient(160deg, rgba(16,24,32,0.92) 0%, rgba(50,72,90,0.6) 50%, rgba(16,24,32,0.97) 100%)',
         }}
       />
@@ -94,26 +115,26 @@ export default function Hero() {
       <div className="relative z-10 h-14" />
 
       {/* Main hero content */}
-      <div className="relative z-10 flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-8 pb-20 will-change-transform" style={{ transform: `translate3d(0,${contentY}px,0)` }}>
+      <div ref={contentRef} className="relative z-10 flex-1 flex flex-col justify-center px-6 pt-5 pb-8 sm:px-10 sm:pt-8 sm:pb-20 lg:px-16 will-change-transform" style={{ transform: 'translate3d(0,0,0)' }}>
         <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
 
           {/* Left — brand + copy */}
           <div>
-            <div className="xert-enter xert-enter-up mb-8">
+            <div className="xert-enter xert-enter-up mb-5 sm:mb-8">
               <img
                 src={LOGO_FULL_WHITE}
                 alt="XERT Fitness"
-                className="h-16 sm:h-20 w-auto object-contain"
+                className="h-14 w-auto object-contain sm:h-20"
               />
             </div>
 
-            <div className="xert-enter xert-enter-left mb-6 flex items-center gap-3" style={{ animationDelay: '150ms' }}>
-              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="font-body text-xs uppercase tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Functional Fitness Training Facility</span>
+            <div className="xert-enter xert-enter-left mb-4 flex min-w-0 items-start gap-3 sm:mb-6" style={{ animationDelay: '150ms' }}>
+              <div className="mt-2 h-px w-6 shrink-0" style={{ backgroundColor: '#7BA7BC' }} />
+              <span className="min-w-0 font-body text-xs uppercase leading-relaxed tracking-[0.2em] sm:tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Functional Fitness Training Facility</span>
             </div>
 
             {/* Headline — line-by-line reveal */}
-            <h1 className="font-display text-[clamp(3rem,10vw,7rem)] leading-[0.9] text-xert-offwhite uppercase mb-6 tracking-tight overflow-hidden">
+            <h1 className="mb-4 overflow-hidden font-display text-[clamp(3rem,10vw,7rem)] uppercase leading-[0.9] tracking-tight text-xert-offwhite sm:mb-6">
               {headlineWords.map((line, i) => (
                 <span key={`${line}-${i}`} className="block overflow-hidden">
                   <span className="xert-headline-enter block" style={{ color: i === headlineWords.length - 1 ? '#7BA7BC' : undefined, animationDelay: `${200 + i * 120}ms` }}>
@@ -127,97 +148,108 @@ export default function Hero() {
               <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
                 {content.subheading}
               </p>
-              <p className="font-body text-sm leading-relaxed mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
+              <p className="mb-5 font-body text-sm leading-relaxed sm:mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
                 {content.supporting}
               </p>
 
-              <div className="flex items-center gap-3 mb-8">
-                <div className="flex items-center gap-2 px-3 py-1.5 border" style={{ borderColor: 'rgba(123,167,188,0.4)' }}>
-                  <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
-                  <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>Booking-based semi-private classes</span>
+              <div className="mb-5 flex flex-col items-start gap-2 sm:mb-8 sm:flex-row sm:items-center sm:gap-3">
+                <div className="flex max-w-full items-start gap-2 border px-3 py-1.5" style={{ borderColor: 'rgba(123,167,188,0.4)' }}>
+                  <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
+                  <span className="font-body text-xs uppercase leading-relaxed tracking-wider" style={{ color: '#7BA7BC' }}>Booking-based semi-private classes</span>
                 </div>
                 <span className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>Initial classes capped at 8</span>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link to="/booking"
-                  className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-                  style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#D1DDE6'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#7BA7BC'}>
+                  className="xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
                   Book Your First Session
                 </Link>
                 <Link to="/timetable"
-                  className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide border transition-all active:scale-[0.98]"
-                  style={{ borderColor: 'rgba(123,167,188,0.5)', color: '#D1DDE6' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#D1DDE6'; }}>
+                  className="xert-btn-ghost inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
                   View Timetable
                 </Link>
               </div>
             </div>
           </div>
 
-          {/* Right — feature photo */}
-          <div className="xert-feature-enter hidden lg:block relative" style={{ animationDelay: '300ms' }}>
-            <div className="relative aspect-[3/4] overflow-hidden">
-              <img
-                src={photos[idx]}
-                alt="XERT Training"
-                className="w-full h-full object-cover transition-opacity duration-1000"
-                style={{ filter: 'saturate(0.7) brightness(0.75)' }}
-              />
-              <div className="absolute inset-0"
-                style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.3) 0%, transparent 40%, rgba(16,24,32,0.7) 100%)' }}
-              />
-              {/* Frame ticks */}
-              <div className="absolute top-4 left-4 w-8 h-8 border-t border-l" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
-              <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
-              <div className="absolute bottom-4 left-4 right-16">
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.4)' }} />
-                  <span className="font-body text-xs uppercase tracking-widest" style={{ color: '#7BA7BC' }}>Kingaroy, QLD</span>
+          {/* Right — feature photo (desktop only; not rendered on mobile so it never downloads there) */}
+          {isDesktop && (
+            <div className="xert-feature-enter hidden lg:block relative" style={{ animationDelay: '300ms' }}>
+              <div className="relative aspect-[3/4] overflow-hidden">
+                <img
+                  src={photos[idx]}
+                  alt="XERT Training"
+                  decoding="async"
+                  className="w-full h-full object-cover transition-opacity duration-1000"
+                  style={{ filter: 'saturate(0.7) brightness(0.75)' }}
+                />
+                <div className="absolute inset-0"
+                  style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.3) 0%, transparent 40%, rgba(16,24,32,0.7) 100%)' }}
+                />
+                {/* Frame ticks */}
+                <div className="absolute top-4 left-4 w-8 h-8 border-t border-l" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
+                <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
+                <div className="absolute bottom-4 left-4 right-16">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.4)' }} />
+                    <span className="font-body text-xs uppercase tracking-widest" style={{ color: '#7BA7BC' }}>Kingaroy, QLD</span>
+                  </div>
+                </div>
+                {/* Photo index dots */}
+                <div className="absolute top-4 right-4 flex flex-col gap-1.5">
+                  {photos.map((_, i) => (
+                    <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-500"
+                      style={{ backgroundColor: i === idx ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
+                  ))}
                 </div>
               </div>
-              {/* Photo index dots */}
-              <div className="absolute top-4 right-4 flex flex-col gap-1.5">
-                {photos.map((_, i) => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-500"
-                    style={{ backgroundColor: i === idx ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
-                ))}
+              <div className="absolute -right-4 top-1/2 -translate-y-1/2 font-display text-[5rem] leading-none uppercase -rotate-90 origin-right"
+                style={{ color: 'rgba(123,167,188,0.06)', whiteSpace: 'nowrap' }}>
+                Beat Your Best
               </div>
             </div>
-            <div className="absolute -right-4 top-1/2 -translate-y-1/2 font-display text-[5rem] leading-none uppercase -rotate-90 origin-right"
-              style={{ color: 'rgba(123,167,188,0.06)', whiteSpace: 'nowrap' }}>
-              Beat Your Best
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Values strip */}
+      {/* Values strip — infinite marquee */}
       <div className="relative z-10 border-t" style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(16,24,32,0.85)', backdropFilter: 'blur(8px)' }}>
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-0 overflow-x-auto scrollbar-hide">
-          {VALUES.map((v, i) => (
-            <React.Fragment key={v}>
-              <span className="font-display text-sm uppercase tracking-[0.15em] whitespace-nowrap shrink-0 py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
-              {i < VALUES.length - 1 && <span className="mx-4 shrink-0" style={{ color: 'rgba(123,167,188,0.25)' }}>·</span>}
-            </React.Fragment>
-          ))}
+        <div
+          className="overflow-hidden py-4"
+          style={{
+            maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
+            WebkitMaskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
+          }}
+        >
+          <div className="xert-marquee-track flex whitespace-nowrap">
+            {[0, 1].map(dup => (
+              <div key={dup} className="flex items-center shrink-0" aria-hidden={dup === 1 ? 'true' : undefined}>
+                {/* VALUES twice per half so each half outruns wide viewports —
+                    the -50% loop is only seamless when half-width >= container. */}
+                {[...VALUES, ...VALUES].map((v, i) => (
+                  <React.Fragment key={`${v}-${i}`}>
+                    <span className="font-display text-sm uppercase tracking-[0.15em] py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
+                    <span className="mx-4" style={{ color: 'rgba(123,167,188,0.25)' }}>·</span>
+                  </React.Fragment>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Stats bar */}
       <div className="relative z-10" style={{ backgroundColor: 'rgba(50,72,90,0.6)', backdropFilter: 'blur(8px)' }}>
-        <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
           {[
             { label: 'Coached Model', value: 'Semi-private' },
             { label: 'Programming', value: '12-week blocks' },
             { label: 'Location', value: 'Kingaroy QLD' },
           ].map((stat, i) => (
-            <div key={i} className={`px-6 ${i === 0 ? 'pl-0' : ''} ${i === 2 ? 'pr-0' : ''}`}>
-              <p className="font-body text-xs uppercase tracking-wider mb-1" style={{ color: '#7BA7BC' }}>{stat.label}</p>
-              <p className="font-display text-xl text-xert-offwhite uppercase">{stat.value}</p>
+            <div key={i} className={`px-3 sm:px-6 ${i === 0 ? 'pl-0 sm:pl-0' : ''} ${i === 2 ? 'pr-0 sm:pr-0' : ''}`}>
+              <p className="font-body text-[10px] sm:text-xs uppercase tracking-wider mb-0.5 sm:mb-1" style={{ color: '#7BA7BC' }}>{stat.label}</p>
+              <p className="font-display text-base sm:text-xl leading-tight text-xert-offwhite uppercase">{stat.value}</p>
             </div>
           ))}
         </div>

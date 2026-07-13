@@ -5,6 +5,7 @@ import Countdown from '@/components/public/Countdown';
 import BookingRequestForm from '@/components/public/BookingRequestForm';
 import PTRequestForm from '@/components/public/PTRequestForm';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 const CLASS_COLORS = {
@@ -78,18 +79,19 @@ function ClassCard({ session, bookingsEnabled, onBook }) {
 
       {bookingsEnabled && !isFull && (
         <button onClick={() => onBook(session)}
-          className="w-full py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+          className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
           Request spot
         </button>
       )}
       {bookingsEnabled && isFull && (
-        <button className="w-full py-3 border border-xert-steel/30 text-xert-concrete/40 font-display text-sm uppercase cursor-not-allowed">
+        <button type="button" disabled aria-disabled="true"
+          className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
           Class full
         </button>
       )}
       {!bookingsEnabled && (
         <a href="/#eoi"
-          className="block text-center w-full py-3 border border-xert-red/40 text-xert-red font-display text-sm uppercase hover:bg-xert-red/10 transition-colors">
+          className="xert-btn-ghost block text-center w-full py-3 font-display text-sm uppercase">
           Register interest
         </a>
       )}
@@ -121,12 +123,12 @@ export default function SoftLaunchTimetable() {
     <div className="bg-xert-black min-h-screen flex flex-col">
       <PublicNav />
 
-      <main className="flex-1 pt-16">
+      <main id="main" className="flex-1 pt-16">
         {/* Header */}
         <section className="bg-xert-ink border-b border-xert-steel/20 py-16 px-6">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-3 mb-6">
-              <div className="h-0.5 w-6 bg-xert-red" />
+              <div className="h-0.5 w-6 bg-xert-steel" />
               <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Soft Launch</span>
             </div>
             <h1 className="font-display text-[clamp(2rem,6vw,4rem)] leading-tight text-xert-offwhite uppercase mb-4">
@@ -171,7 +173,7 @@ export default function SoftLaunchTimetable() {
                   Classes will be published here before the August soft launch. Register your interest now to be notified first.
                 </p>
                 <a href="/#eoi"
-                  className="inline-flex items-center justify-center px-8 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+                  className="xert-btn-primary inline-flex items-center justify-center px-8 py-3 font-display text-sm uppercase">
                   Register interest
                 </a>
               </div>
@@ -194,7 +196,7 @@ export default function SoftLaunchTimetable() {
             </p>
             {!showPTForm && !ptSuccess && (
               <button onClick={() => setShowPTForm(true)}
-                className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors">
+                className="xert-btn-primary px-8 py-3 font-display text-base uppercase">
                 Request PT session
               </button>
             )}
@@ -214,37 +216,44 @@ export default function SoftLaunchTimetable() {
       </main>
 
       {/* Booking modal */}
-      {selectedSession && !bookingSuccess && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-xert-ink border border-xert-steel/20 w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-display text-xl text-xert-offwhite uppercase">Request spot</h3>
-              <button onClick={() => setSelectedSession(null)} className="text-xert-concrete/40 hover:text-xert-offwhite text-xl">✕</button>
-            </div>
+      <Dialog open={Boolean(selectedSession) && !bookingSuccess} onOpenChange={(open) => { if (!open) setSelectedSession(null); }}>
+        <DialogContent
+          aria-describedby={undefined}
+          className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-y-auto p-6 gap-0"
+        >
+          <DialogHeader className="text-left mb-6">
+            <DialogTitle className="font-display font-normal tracking-normal text-xl text-xert-offwhite uppercase">
+              Request spot
+            </DialogTitle>
+          </DialogHeader>
+          {selectedSession && (
             <BookingRequestForm
               session={selectedSession}
               onSuccess={() => { setBookingSuccess(true); setSelectedSession(null); }}
               onCancel={() => setSelectedSession(null)}
             />
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
 
-      {bookingSuccess && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-xert-ink border border-xert-steel/20 p-8 text-center max-w-sm w-full">
-            <div className="w-12 h-12 bg-xert-red/20 border-2 border-xert-red rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-xert-red text-xl">✓</span>
-            </div>
-            <h3 className="font-display text-2xl text-xert-offwhite uppercase mb-2">Request received.</h3>
-            <p className="font-body text-sm text-xert-concrete/60 mb-6">We'll confirm your spot before the class. Keep an eye on your email.</p>
-            <button onClick={() => setBookingSuccess(false)}
-              className="px-6 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
-              Done
-            </button>
+      {/* Booking success */}
+      <Dialog open={bookingSuccess} onOpenChange={(open) => { if (!open) setBookingSuccess(false); }}>
+        <DialogContent className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-sm p-8 gap-0 text-center">
+          <div className="w-12 h-12 bg-xert-steel/20 border-2 border-xert-red rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-xert-red text-xl" aria-hidden="true">✓</span>
           </div>
-        </div>
-      )}
+          <DialogTitle className="font-display font-normal tracking-normal leading-none text-2xl text-xert-offwhite uppercase mb-2">
+            Request received.
+          </DialogTitle>
+          <DialogDescription className="font-body text-sm text-xert-concrete/60 mb-6">
+            We'll confirm your spot before the class. Keep an eye on your email.
+          </DialogDescription>
+          <button onClick={() => setBookingSuccess(false)}
+            className="xert-btn-primary mx-auto px-6 py-3 font-display text-sm uppercase">
+            Done
+          </button>
+        </DialogContent>
+      </Dialog>
 
       <PublicFooter />
       <StickyMobileCTA />

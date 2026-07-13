@@ -51,7 +51,9 @@ export default function PWAInstallPrompt() {
 
   return (
     visible ? (
-        <div className="xert-sheet-enter fixed bottom-0 left-0 right-0 z-[60] p-4 sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm">
+        // Below md the StickyMobileCTA docks to the bottom edge, so the sheet
+        // sits above its height (incl. safe area) instead of overlapping it.
+        <div className="xert-sheet-enter fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-[60] p-4 sm:left-auto sm:right-4 sm:max-w-sm md:bottom-4">
           <div
             className="flex items-center gap-4 p-4 border"
             style={{
@@ -74,13 +76,16 @@ export default function PWAInstallPrompt() {
             </div>
             <button
               onClick={install}
-              className="shrink-0 px-4 py-2 font-display text-sm uppercase"
-              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+              className="xert-btn-primary shrink-0 px-4 py-3 font-display text-sm uppercase"
             >
               Add
             </button>
-            <button onClick={dismiss} className="shrink-0 p-1" aria-label="Dismiss">
-              <X className="w-4 h-4" style={{ color: 'rgba(209,221,230,0.5)' }} />
+            <button
+              onClick={dismiss}
+              className="shrink-0 -my-2 -mr-2 flex h-11 w-11 items-center justify-center"
+              aria-label="Dismiss install prompt"
+            >
+              <X className="w-4 h-4 text-xert-pale/70" aria-hidden="true" />
             </button>
           </div>
         </div>

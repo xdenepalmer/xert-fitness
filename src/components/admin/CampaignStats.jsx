@@ -26,7 +26,7 @@ function Breakdown({ title, items, total, emptyText }) {
               <span className="font-body text-sm text-xert-offwhite min-w-0 truncate" title={item.label}>{item.label}</span>
               <div className="flex items-center gap-3 shrink-0">
                 <div className="w-20 h-1.5 bg-xert-steel/20 overflow-hidden" aria-hidden="true">
-                  <div className="h-full bg-xert-red" style={{ width: `${Math.min(100, (item.count / Math.max(total, 1)) * 100)}%` }} />
+                  <div className="h-full bg-xert-steel" style={{ width: `${Math.min(100, (item.count / Math.max(total, 1)) * 100)}%` }} />
                 </div>
                 <span className="font-display text-sm text-xert-concrete/70 tabular-nums w-8 text-right">{item.count}</span>
               </div>
@@ -141,7 +141,7 @@ export default function CampaignStats() {
             {data.dailySignups.map((day, index) => (
               <div key={day.date} role="listitem" aria-label={`${day.date}: ${day.count} signup${day.count === 1 ? '' : 's'}`} className="h-full flex flex-col justify-end items-center gap-1 group">
                 <span className="font-body text-[10px] text-xert-concrete/0 group-hover:text-xert-concrete/60 tabular-nums">{day.count || ''}</span>
-                <div className="w-full min-h-px bg-xert-red/60 hover:bg-xert-red transition-colors"
+                <div className="w-full min-h-px bg-xert-steel/70 hover:bg-xert-steel transition-colors"
                   style={{ height: `${Math.max(day.count ? 5 : 1, (day.count / chartMaximum) * 110)}px` }}
                   title={`${day.date}: ${day.count} signup${day.count === 1 ? '' : 's'}`}
                   aria-hidden="true" />

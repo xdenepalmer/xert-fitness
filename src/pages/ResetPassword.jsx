@@ -2,11 +2,14 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertTriangle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+
+const fieldClasses =
+  "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
+const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -78,11 +81,12 @@ export default function ResetPassword() {
     return (
       <AuthLayout
         icon={Lock}
+        eyebrow="Account recovery"
         title="Checking reset link"
         subtitle="One moment while we verify your Supabase session"
       >
         <div className="flex justify-center">
-          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          <Loader2 className="w-5 h-5 animate-spin text-xert-steel" />
         </div>
       </AuthLayout>
     );
@@ -92,20 +96,21 @@ export default function ResetPassword() {
     return (
       <AuthLayout
         icon={AlertTriangle}
+        eyebrow="Account recovery"
         title="Invalid reset link"
         subtitle="This password reset link is missing, invalid or expired"
         footer={
-          <Link to="/forgot-password" className="text-primary font-medium hover:underline">
+          <Link to="/forgot-password" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Request a new link
           </Link>
         }
       >
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
             {error}
           </div>
         )}
-        <p className="text-sm text-foreground text-center">
+        <p className="font-body text-sm text-xert-pale/80 text-center">
           Please request a new password reset email from the login screen.
         </p>
       </AuthLayout>
@@ -115,19 +120,20 @@ export default function ResetPassword() {
   return (
     <AuthLayout
       icon={Lock}
+      eyebrow="Account recovery"
       title="New password"
       subtitle="Enter your new password below"
     >
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
           {error}
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="password">New Password</Label>
+          <Label htmlFor="password" className={labelClasses}>New Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="password"
               type="password"
@@ -136,15 +142,15 @@ export default function ResetPassword() {
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirm">Confirm Password</Label>
+          <Label htmlFor="confirm" className={labelClasses}>Confirm Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="confirm"
               type="password"
@@ -152,12 +158,16 @@ export default function ResetPassword() {
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+        <button
+          type="submit"
+          className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
+          disabled={loading}
+        >
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -166,7 +176,7 @@ export default function ResetPassword() {
           ) : (
             "Reset password"
           )}
-        </Button>
+        </button>
       </form>
     </AuthLayout>
   );

@@ -290,7 +290,7 @@ function SectionEditor({ section, initial, onSaved, onDirtyChange }) {
 
       <div className="flex items-center gap-3 px-5 pb-5">
         <button type="button" onClick={handleSave} disabled={saving || !dirty}
-          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-40">
+          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-40">
           {saving ? 'Saving…' : dirty ? 'Save section' : 'Saved'}
         </button>
         <button type="button" onClick={handleRestore} title="Reset the fields below to the original site copy"

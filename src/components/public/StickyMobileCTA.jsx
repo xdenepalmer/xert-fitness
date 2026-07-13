@@ -3,13 +3,14 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function StickyMobileCTA() {
-  const [visible, setVisible] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [footerInView, setFooterInView] = useState(false);
 
   useEffect(() => {
     let frame = 0;
     const update = () => {
       frame = 0;
-      setVisible(window.scrollY > 400);
+      setScrolled(window.scrollY > 400);
     };
     const handle = () => {
       if (!frame) frame = window.requestAnimationFrame(update);
@@ -21,6 +22,22 @@ export default function StickyMobileCTA() {
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
+
+  // Yield to the footer: slide away once it scrolls into view so the CTA
+  // never covers the legal links. Footer padding is the no-JS fallback.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return undefined;
+    const footer = document.querySelector('[data-public-footer]');
+    if (!footer) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => setFooterInView(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, []);
+
+  const visible = scrolled && !footerInView;
 
   return (
     <div
@@ -35,10 +52,9 @@ export default function StickyMobileCTA() {
     >
       <Link to="/booking"
         tabIndex={visible ? 0 : -1}
-        className="flex items-center justify-center gap-2 w-full text-center py-3.5 font-display text-base uppercase tracking-wide transition-transform active:scale-[0.98]"
-        style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+        className="xert-btn-primary flex items-center justify-center gap-2 w-full text-center py-3.5 font-display text-base uppercase tracking-wide">
         Book Your First Session
-        <ArrowRight className="w-4 h-4" />
+        <ArrowRight className="w-4 h-4" aria-hidden="true" />
       </Link>
     </div>
   );

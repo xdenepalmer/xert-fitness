@@ -2,7 +2,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function AdminLoadError({ message, onRetry }) {
   return (
-    <div role="alert" className="border border-xert-red/30 bg-xert-red/10 px-4 py-3 flex items-start justify-between gap-4">
+    <div role="alert" className="border border-xert-red/30 bg-xert-steel/10 px-4 py-3 flex items-start justify-between gap-4">
       <div className="flex items-start gap-3">
         <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-xert-red" />
         <p className="font-body text-sm leading-relaxed text-xert-offwhite">

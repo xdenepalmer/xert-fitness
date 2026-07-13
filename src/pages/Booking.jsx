@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Check, Loader2, RefreshCw, Ticket, Users } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
+import PageHeader from '@/components/public/PageHeader';
+import Skeleton from '@/components/public/Skeleton';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import {
   getProducts, startCheckout, getAvailableSessions, bookSession, joinSessionWaitlist, getMyBookings, getMyCredits,
@@ -135,25 +137,18 @@ export default function Booking() {
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
-      <main className="pt-28 pb-20">
-        <div className="max-w-6xl mx-auto px-6">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-            <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>
-              Classes, Programs, Products
-            </span>
-          </div>
-          <h1 className="font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-            Simple booking.<br />
-            <span style={{ color: '#7BA7BC' }}>Structured training.</span>
-          </h1>
-          <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)' }}>
-            {pageContent.intro}
-          </p>
+      <main id="main" className="pb-20">
+        <PageHeader
+          eyebrow="Classes, Programs, Products"
+          title={<>Simple booking.<br /></>}
+          accent="Structured training."
+          intro={pageContent.intro}
+          containerClassName="max-w-6xl"
+        />
 
+        <div className="max-w-6xl mx-auto px-6">
           {loadErrors.length > 0 && (
-            <div role="alert" className="mt-6 border border-xert-red/40 bg-xert-red/10 p-4 flex flex-wrap items-start gap-3">
+            <div role="alert" className="mt-6 border border-xert-red/40 bg-xert-steel/10 p-4 flex flex-wrap items-start gap-3">
               <AlertTriangle className="w-5 h-5 shrink-0 text-xert-red" />
               <div className="flex-1 min-w-[12rem]">
                 <p className="font-display text-sm uppercase text-xert-offwhite">Some booking information is unavailable</p>
@@ -245,12 +240,7 @@ export default function Booking() {
                   <button
                     onClick={() => handleBuy(pack)}
                     disabled={buyingSlug === pack.slug}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-60"
-                    style={{
-                      backgroundColor: pack.featured ? '#7BA7BC' : 'transparent',
-                      color: pack.featured ? '#101820' : '#D1DDE6',
-                      border: pack.featured ? '1px solid #7BA7BC' : '1px solid rgba(123,167,188,0.35)',
-                    }}>
+                    className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
                     {buyingSlug === pack.slug
                       ? <Loader2 className="w-4 h-4 animate-spin" />
                       : <>{packCta(pack.slug)}<ArrowRight className="w-4 h-4" /></>}
@@ -259,7 +249,22 @@ export default function Booking() {
               ))}
             </div>
             {loading && products.length === 0 && (
-              <p className="font-body text-sm mt-4" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading session packs…</p>
+              <div role="status" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <span className="sr-only">Loading session packs…</span>
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="border p-6" style={cardStyle}>
+                    <Skeleton className="w-11 h-11 mb-5" />
+                    <Skeleton className="h-8 w-2/3 mb-3" />
+                    <Skeleton className="h-10 w-1/2 mb-5" />
+                    <div className="space-y-3 mb-6">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-5/6" />
+                      <Skeleton className="h-4 w-4/6" />
+                    </div>
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                ))}
+              </div>
             )}
           </section>
 
@@ -271,9 +276,28 @@ export default function Booking() {
             </p>
 
             {loading ? (
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading the timetable…</p>
+              <div role="status" className="space-y-8">
+                <span className="sr-only">Loading the timetable…</span>
+                {[0, 1].map(day => (
+                  <div key={day}>
+                    <Skeleton className="h-6 w-48 mb-3" />
+                    <div className="space-y-2">
+                      {[0, 1, 2].map(row => (
+                        <div key={row} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
+                          <Skeleton className="h-6 w-16 shrink-0" />
+                          <div className="flex-1 min-w-[12rem] space-y-2">
+                            <Skeleton className="h-5 w-1/2" />
+                            <Skeleton className="h-3 w-1/3" />
+                          </div>
+                          <Skeleton className="h-11 w-28 shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : timetableUnavailable ? (
-              <div className="border border-xert-red/30 bg-xert-red/5 p-8 text-center">
+              <div className="border border-xert-red/30 bg-xert-steel/5 p-8 text-center">
                 <p className="font-display text-xl uppercase text-xert-offwhite">Timetable temporarily unavailable</p>
                 <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 px-5 border border-xert-steel/40 font-display text-sm uppercase text-xert-offwhite">Try again</button>
               </div>
@@ -334,8 +358,7 @@ export default function Booking() {
                             )}
                             {isInterestOnly ? (
                               <Link to="/timetable"
-                                className="px-5 py-2.5 font-display text-base uppercase tracking-wide shrink-0 border"
-                                style={{ borderColor: 'rgba(123,167,188,0.4)', color: '#D1DDE6' }}>
+                                className="xert-btn-ghost inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide shrink-0">
                                 Register interest
                               </Link>
                             ) : (
@@ -343,8 +366,7 @@ export default function Booking() {
                                 onClick={() => handleBook(s)}
                                 disabled={Boolean(existingBooking) || Boolean(timeConflict) || bookingId === s.id}
                                 aria-describedby={timeConflict ? `booking-conflict-${s.id}` : undefined}
-                                className="px-5 py-2.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 shrink-0"
-                                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                                className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide disabled:opacity-40 shrink-0">
                                 {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}
                               </button>
                             )}

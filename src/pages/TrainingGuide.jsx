@@ -30,7 +30,7 @@ export default function TrainingGuide() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
-      <main className="max-w-3xl mx-auto px-6 pt-28 pb-20">
+      <main id="main" className="max-w-3xl mx-auto px-6 pt-28 pb-20">
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
           <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Training Guide</span>

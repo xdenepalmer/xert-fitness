@@ -8,21 +8,21 @@ export default function ThankYou() {
   const shareUrl = encodeURIComponent(window.location.origin);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen flex flex-col bg-xert-navy">
       <PublicNav />
 
-      <main className="flex-1 flex items-center justify-center px-6 py-24">
+      <main id="main" className="flex-1 flex items-center justify-center px-6 py-24">
         <div className="max-w-lg w-full">
-          {/* Accent */}
+          {/* Eyebrow */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="h-0.5 w-8 bg-xert-red" />
-            <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Foundation List</span>
+            <div className="h-px w-6 bg-xert-steel" />
+            <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Foundation List</span>
           </div>
 
           {/* Heading */}
           <h1 className="font-display text-[clamp(2.5rem,8vw,4rem)] leading-tight text-xert-offwhite uppercase mb-6">
             You're on the<br />
-            <span className="text-xert-red">XERT foundation list.</span>
+            <span className="text-xert-steel">XERT foundation list.</span>
           </h1>
 
           {/* Body */}
@@ -39,17 +39,17 @@ export default function ThankYou() {
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Link to="/"
-              className="flex-1 text-center py-3.5 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-concrete transition-colors">
+              className="xert-btn-ghost flex-1 text-center py-3.5 font-display text-sm uppercase">
               Back to home
             </Link>
             <Link to="/timetable"
-              className="flex-1 text-center py-3.5 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-concrete transition-colors">
+              className="xert-btn-ghost flex-1 text-center py-3.5 font-display text-sm uppercase">
               View soft launch plan
             </Link>
             <a
               href={`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}&quote=${shareText}`}
               target="_blank" rel="noopener noreferrer"
-              className="flex-1 text-center py-3.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+              className="xert-btn-primary flex-1 text-center py-3.5 font-display text-sm uppercase">
               Share with a mate
             </a>
           </div>

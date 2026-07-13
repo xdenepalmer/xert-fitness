@@ -10,7 +10,7 @@ import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
-  requested: 'bg-xert-red/20 text-xert-red',
+  requested: 'bg-xert-steel/20 text-xert-red',
   approved: 'bg-green-900/30 text-green-400',
   declined: 'bg-xert-steel/30 text-xert-concrete/40',
   reschedule_requested: 'bg-yellow-900/30 text-yellow-400',
@@ -330,7 +330,7 @@ export default function PTRequestsTable() {
               <button type="button" disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
               <button type="button" disabled={updatingId === notesModal.id} onClick={() => void handleUpdate(notesModal.id, notesModal.status, notes)}
-                className="flex-1 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
+                className="flex-1 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>

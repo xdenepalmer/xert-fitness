@@ -4,6 +4,7 @@ import { ExternalLink, Mail, MapPin, Phone, Instagram } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import PageHeader from '@/components/public/PageHeader';
 import { useSiteContent } from '@/lib/siteContent';
 import { CONTACT_DEFAULTS, HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
 
@@ -17,21 +18,11 @@ export default function Contact() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
-      <main className="max-w-6xl mx-auto px-6 pt-28 pb-20">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Contact</span>
-        </div>
+      <main id="main" className="pb-20">
+        <PageHeader eyebrow="Contact" title="Get in" accent="Touch" intro={content.intro} containerClassName="max-w-6xl" />
 
-        <h1 className="font-display uppercase mb-8 text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-          Get in Touch
-        </h1>
-
-        <p className="font-body leading-relaxed mb-10" style={{ color: 'rgba(209,221,230,0.75)', fontSize: '1.0625rem', maxWidth: '50ch' }}>
-          {content.intro}
-        </p>
-
-        <section aria-labelledby="contact-gallery-title" className="mb-12">
+        <div className="max-w-6xl mx-auto px-6">
+        <section aria-labelledby="contact-gallery-title" className="mt-8 mb-12">
           <div className="flex items-baseline justify-between gap-4 mb-4">
             <h2 id="contact-gallery-title" className="font-display text-2xl uppercase text-xert-offwhite">Train with XERT</h2>
             <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>Coaching · Strength · Community</span>
@@ -50,10 +41,8 @@ export default function Contact() {
           <div className="space-y-4">
           {/* Email */}
           <a href={`mailto:${content.email}`}
-            className="flex items-center gap-4 p-5 border transition-colors group"
-            style={{ borderColor: 'rgba(123,167,188,0.18)', backgroundColor: 'rgba(50,72,90,0.15)' }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.18)'}>
+            className="flex items-center gap-4 p-5 border border-[rgba(123,167,188,0.18)] hover:border-xert-steel transition-colors group"
+            style={{ backgroundColor: 'rgba(50,72,90,0.15)' }}>
             <div className="shrink-0 w-11 h-11 flex items-center justify-center" style={{ backgroundColor: '#7BA7BC' }}>
               <Mail className="w-5 h-5" style={{ color: '#101820' }} />
             </div>
@@ -66,10 +55,8 @@ export default function Contact() {
           {/* Phone (only when provided via CMS) */}
           {content.phone && (
             <a href={`tel:${content.phone.replace(/\s+/g, '')}`}
-              className="flex items-center gap-4 p-5 border transition-colors"
-              style={{ borderColor: 'rgba(123,167,188,0.18)', backgroundColor: 'rgba(50,72,90,0.15)' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.18)'}>
+              className="flex items-center gap-4 p-5 border border-[rgba(123,167,188,0.18)] hover:border-xert-steel transition-colors"
+              style={{ backgroundColor: 'rgba(50,72,90,0.15)' }}>
               <div className="shrink-0 w-11 h-11 flex items-center justify-center" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }}>
                 <Phone className="w-5 h-5" style={{ color: '#7BA7BC' }} />
               </div>
@@ -124,10 +111,10 @@ export default function Contact() {
 
         <div className="mt-12 pt-8" style={{ borderTop: '1px solid rgba(123,167,188,0.12)' }}>
           <Link to="/booking"
-            className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-            style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+            className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide">
             Book Your First Session
           </Link>
+        </div>
         </div>
       </main>
       <PublicFooter />

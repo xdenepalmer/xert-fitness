@@ -4,6 +4,8 @@ import { CalendarDays, CalendarPlus, ExternalLink, MapPin, Target, Trophy } from
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import PageHeader from '@/components/public/PageHeader';
+import Skeleton from '@/components/public/Skeleton';
 import { addMyEventGoal, getEvents, getMyEventGoals, removeMyEventGoal } from '@/lib/bookingData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -112,24 +114,16 @@ export default function Events() {
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
-      <main className="pt-28 pb-20">
-        <div className="max-w-6xl mx-auto px-6">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-            <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>
-              South East Queensland
-            </span>
-          </div>
-          <h1 className="font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-            Event Schedule
-            <br />
-            <span style={{ color: '#7BA7BC' }}>2026.</span>
-          </h1>
-          <p className="font-body leading-relaxed max-w-2xl mt-6" style={{ color: 'rgba(209,221,230,0.72)', fontSize: '1.0625rem' }}>
-            XERT programming follows the South East Queensland sporting and fitness calendar. Choose your events, train with purpose and build toward shared goals through the year — from marathons and triathlons to functional fitness, ultra running and community racing.
-          </p>
+      <main id="main" className="pb-20">
+        <PageHeader
+          eyebrow="South East Queensland"
+          title={<>Event Schedule<br /></>}
+          accent="2026."
+          intro="XERT programming follows the South East Queensland sporting and fitness calendar. Choose your events, train with purpose and build toward shared goals through the year — from marathons and triathlons to functional fitness, ultra running and community racing."
+          containerClassName="max-w-6xl"
+        />
 
+        <div className="max-w-6xl mx-auto px-6">
           {/* Category filter */}
           {!loading && !error && events.length > 0 && (
             <div className="mt-8 space-y-5">
@@ -201,11 +195,33 @@ export default function Events() {
           )}
 
           {/* Body */}
-          <div className="mt-12">
+          <div className="mt-10">
             {loading && (
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
-                Loading the 2026 calendar…
-              </p>
+              <div role="status">
+                <span className="sr-only">Loading the 2026 calendar…</span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="border p-4" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
+                      <Skeleton className="h-3 w-20 mb-3" />
+                      <Skeleton className="h-6 w-3/4 mb-3" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ))}
+                </div>
+                <Skeleton className="h-8 w-40 mb-4" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[0, 1, 2, 3].map(i => (
+                    <div key={i} className="border p-5" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-5 w-16" />
+                      </div>
+                      <Skeleton className="h-7 w-3/4 mb-3" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
             {error && (
               <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>
@@ -338,7 +354,7 @@ export default function Events() {
                 Training toward one of these? Book a session and prepare with structured coaching.
               </p>
             </div>
-            <a href="/booking" className="inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] sm:ml-auto shrink-0" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+            <a href="/booking" className="xert-btn-primary inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
               Book A Session
             </a>
           </div>

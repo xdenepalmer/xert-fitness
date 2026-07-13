@@ -95,9 +95,10 @@ export default function AdminCommandCentre() {
       case 'overview': return <AdminOverview onNavigate={setSection} />;
       case 'health': return <OperationsHealth onNavigate={setSection} />;
       case 'audit': return <AdminAuditLog />;
-      case 'members': return <LeadTable type="member" />;
-      case 'trainers': return <LeadTable type="trainer" />;
-      case 'partners': return <LeadTable type="partner" />;
+      // key remounts the shared table per section so filters/selection don't bleed between lead types
+      case 'members': return <LeadTable key={section} type="member" />;
+      case 'trainers': return <LeadTable key={section} type="trainer" />;
+      case 'partners': return <LeadTable key={section} type="partner" />;
       case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;

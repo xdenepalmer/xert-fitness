@@ -29,28 +29,34 @@ export default function EoiSelector() {
 
         {/* Tab selector */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10">
-          {TABS.map(tab => (
-            <button key={tab.key} onClick={() => setActive(tab.key)}
-              className="p-4 border text-left transition-all"
-              style={{
-                borderColor: active === tab.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
-                backgroundColor: active === tab.key ? 'rgba(123,167,188,0.1)' : 'transparent',
-              }}>
-              <div className="flex items-center gap-2 mb-1">
-                <p className="font-display text-base uppercase"
-                  style={{ color: active === tab.key ? '#F1F3F4' : 'rgba(209,221,230,0.6)' }}>
-                  {tab.label}
-                </p>
-                {tab.tag && (
-                  <span className="font-body text-xs px-1.5 py-0.5 uppercase"
-                    style={{ backgroundColor: 'rgba(123,167,188,0.2)', color: '#7BA7BC' }}>
-                    {tab.tag}
-                  </span>
-                )}
-              </div>
-              <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.6)' }}>{tab.desc}</p>
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const isActive = active === tab.key;
+            return (
+              <button key={tab.key} onClick={() => setActive(tab.key)}
+                aria-pressed={isActive}
+                className="p-4 border text-left transition-all"
+                style={{
+                  borderColor: isActive ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
+                  backgroundColor: isActive ? 'rgba(123,167,188,0.1)' : 'transparent',
+                }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="font-display text-base uppercase"
+                    style={{ color: isActive ? '#F1F3F4' : 'rgba(209,221,230,0.6)' }}>
+                    {tab.label}
+                  </p>
+                  {tab.tag && (
+                    <span className="font-body text-xs px-1.5 py-0.5 uppercase"
+                      style={{ backgroundColor: 'rgba(123,167,188,0.2)', color: '#7BA7BC' }}>
+                      {tab.tag}
+                    </span>
+                  )}
+                </div>
+                <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.6)' }}>{tab.desc}</p>
+                <span aria-hidden="true" className="mt-3 block h-0.5 w-8 transition-all"
+                  style={{ backgroundColor: isActive ? '#7BA7BC' : 'transparent' }} />
+              </button>
+            );
+          })}
         </div>
 
         {/* Form panel */}

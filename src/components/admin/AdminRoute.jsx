@@ -10,9 +10,11 @@ import AdminLogin from '@/pages/AdminLogin';
  * admin content only when profiles.role = 'admin'.
  */
 export default function AdminRoute({ children }) {
-  const { session, isAdmin, loading, signOut } = useSupabaseAuth();
+  const { session, isAdmin, loading, profileLoading, signOut } = useSupabaseAuth();
 
-  if (loading) {
+  // Wait for the profile fetch too — evaluating isAdmin before the profile
+  // resolves flashes the access-denied screen at genuine admins mid-login.
+  if (loading || (session && profileLoading)) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-xert-black">
         <div className="flex flex-col items-center gap-4">

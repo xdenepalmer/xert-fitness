@@ -3,6 +3,7 @@ import { CalendarDays, BellRing, CreditCard, Target, Trophy, WifiOff } from 'luc
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import PageHeader from '@/components/public/PageHeader';
 
 const FEATURES = [
   {
@@ -41,22 +42,17 @@ export default function AppLanding() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
-      <main className="max-w-5xl mx-auto px-6 pt-28 pb-20">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>iOS App</span>
-        </div>
+      <main id="main" className="pb-20">
+        <PageHeader
+          eyebrow="iOS App"
+          title="XERT In Your"
+          accent="Pocket"
+          intro="The XERT Fitness app for iPhone puts your bookings, session credits, training goals and event calendar in one place — built dark, sharp and fast, just like the gym."
+          containerClassName="max-w-5xl"
+        />
 
-        <h1 className="font-display uppercase mb-6 text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-          XERT In Your Pocket
-        </h1>
-
-        <p className="font-body leading-relaxed max-w-2xl" style={{ color: 'rgba(209,221,230,0.78)', fontSize: '1.0625rem' }}>
-          The XERT Fitness app for iPhone puts your bookings, session credits, training goals
-          and event calendar in one place — built dark, sharp and fast, just like the gym.
-        </p>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">
+        <div className="max-w-5xl mx-auto px-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-10">
           {FEATURES.map(({ icon: Icon, title, copy }) => (
             <div
               key={title}
@@ -84,15 +80,13 @@ export default function AppLanding() {
           <div className="flex flex-wrap gap-4">
             <a
               href="/register"
-              className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-              style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
             >
               Create Member Account
             </a>
             <a
               href="/contact"
-              className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-              style={{ border: '1px solid rgba(123,167,188,0.6)', color: '#7BA7BC' }}
+              className="xert-btn-ghost inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
             >
               Request A Beta Invite
             </a>
@@ -103,6 +97,7 @@ export default function AppLanding() {
           Requires iPhone with iOS 16 or later. Read how the app handles your data in the{' '}
           <a href="/privacy" className="underline" style={{ color: '#7BA7BC' }}>Privacy Policy</a>.
         </p>
+        </div>
       </main>
       <PublicFooter />
       <StickyMobileCTA />

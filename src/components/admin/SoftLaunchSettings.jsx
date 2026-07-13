@@ -75,7 +75,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         {desc && <p className="font-body text-xs text-xert-concrete/40 mt-0.5">{desc}</p>}
       </div>
       <button type="button" role="switch" aria-checked={Boolean(settings[field])} aria-labelledby={`${field}-description`} onClick={() => set(field, !settings[field])}
-        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 ${settings[field] ? 'bg-xert-red' : 'bg-xert-steel/40'}`}>
+        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 ${settings[field] ? 'bg-xert-steel' : 'bg-xert-steel/40'}`}>
         <div className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white transition-transform ${settings[field] ? 'translate-x-7' : 'translate-x-1'}`} />
       </button>
     </div>
@@ -113,7 +113,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
 
       <div className="flex flex-col sm:flex-row gap-3">
         <button onClick={handleSave} disabled={saving || !dirty}
-          className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-white' : 'bg-xert-red text-white hover:bg-xert-orange'}`}>
+          className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-xert-navy' : 'bg-xert-steel text-xert-navy hover:bg-xert-pale'}`}>
           {saved ? 'Saved ✓' : saving ? 'Saving...' : dirty ? 'Save settings' : 'Settings saved'}
         </button>
         {dirty && (

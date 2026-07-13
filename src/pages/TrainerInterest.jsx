@@ -8,11 +8,11 @@ export default function TrainerInterest() {
     <div className="bg-xert-black min-h-screen flex flex-col">
       <PublicNav />
 
-      <main className="flex-1 pt-20 pb-16 px-6">
+      <main id="main" className="flex-1 pt-20 pb-16 px-6">
         <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 mt-8">
-            <div className="h-0.5 w-6 bg-xert-red" />
+            <div className="h-0.5 w-6 bg-xert-steel" />
             <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Coaching Team</span>
           </div>
 

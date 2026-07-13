@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarDays, Clock, Target, Trophy } from 'lucide-react';
 import {
   XERT_2026_EVENTS,
@@ -49,6 +50,8 @@ export default function EventWall() {
         <img
           src={PHOTO}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover"
           style={{ filter: 'saturate(0.3) brightness(0.5)' }}
         />
@@ -101,9 +104,12 @@ export default function EventWall() {
                   return (
                     <div
                       key={`${event.name}-${event.date_label}`}
-                      className="flex items-start gap-4 p-4 border"
+                      className={`flex items-start gap-4 p-4 border transition-[border-color,transform] duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] ${
+                        state.key === 'live'
+                          ? 'border-xert-steel'
+                          : 'border-[rgba(123,167,188,0.12)] hover:border-xert-steel'
+                      }`}
                       style={{
-                        borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.12)',
                         backgroundColor: state.key === 'live' ? 'rgba(123,167,188,0.12)' : 'rgba(50,72,90,0.16)',
                       }}
                     >
@@ -210,6 +216,18 @@ export default function EventWall() {
                   </article>
                 );
               })}
+            </div>
+
+            <div className="mt-8">
+              <Link
+                to="/events"
+                className="xert-btn-ghost group inline-flex min-h-[44px] items-center gap-2 px-6 py-3 font-display text-sm uppercase tracking-widest"
+              >
+                View full calendar
+                <span aria-hidden="true" className="transition-transform duration-200 group-hover:translate-x-1">
+                  &rarr;
+                </span>
+              </Link>
             </div>
           </div>
         </div>

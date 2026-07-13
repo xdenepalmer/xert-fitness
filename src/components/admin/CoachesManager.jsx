@@ -101,7 +101,7 @@ function CoachEditor({ coach, onSave, onCancel }) {
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -157,7 +157,7 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
       <div className="flex items-center justify-between mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Coaches &amp; Practitioners</h2>
         <button onClick={() => { setEditing(null); setShowEditor(true); }}
-          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
           + Add Person
         </button>
       </div>

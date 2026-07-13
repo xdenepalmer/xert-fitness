@@ -6,7 +6,7 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }) 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
-      <main className="max-w-3xl mx-auto px-6 pt-32 pb-20">
+      <main id="main" className="max-w-3xl mx-auto px-6 pt-32 pb-20">
         <p className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>{eyebrow}</p>
         <h1 className="font-display text-4xl sm:text-5xl uppercase text-xert-offwhite mt-3">{title}</h1>
         <p className="font-body text-xs mt-3" style={{ color: 'rgba(209,221,230,0.45)' }}>Last updated {updated}</p>

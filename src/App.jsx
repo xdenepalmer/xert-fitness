@@ -34,8 +34,8 @@ const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
 
 function RouteLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-xert-black" role="status" aria-label="Loading page">
-      <span className="w-7 h-7 border-2 border-xert-steel/30 border-t-xert-red rounded-full animate-spin" />
+    <div className="min-h-screen flex items-center justify-center bg-xert-navy" role="status" aria-label="Loading page">
+      <span className="w-7 h-7 border-2 border-xert-steel/30 border-t-xert-steel rounded-full animate-spin" />
     </div>
   );
 }

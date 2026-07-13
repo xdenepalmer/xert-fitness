@@ -1,5 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Bebas+Neue&display=swap');
-
+/* Fonts load from index.html (<link rel="preconnect"> + stylesheet) instead of a
+   CSS @import, which created a render-blocking 3-hop chain before the hero could
+   paint. Keep the family list in index.html in sync with tailwind.config.js. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,6 +57,10 @@
 .xert-scroll-cue { animation-name: xert-scroll-cue-enter; animation-duration: 800ms; animation-delay: 1400ms; }
 .xert-scroll-pulse { animation: xert-scroll-pulse 2s ease-in-out infinite; }
 .xert-marquee-track { width: max-content; animation: xert-marquee 28s linear infinite; }
+/* WCAG 2.2.2: auto-scrolling content must be pausable — hover or keyboard focus
+   anywhere in the track holds it still. */
+.xert-marquee-track:hover,
+.xert-marquee-track:focus-within { animation-play-state: paused; }
 .xert-sheet-enter { animation: xert-enter-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .xert-reveal { transition-property: opacity, transform; transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
 
@@ -214,10 +219,36 @@
   .border-xert-red { border-color: var(--xert-steel); }
   .border-xert-orange { border-color: var(--xert-pale); }
   .border-steel { border-color: var(--xert-deep); }
-  .bg-xert-red { background-color: var(--xert-steel); }
   .bg-xert-orange { background-color: var(--xert-pale); }
-  .hover\:bg-xert-orange:hover { background-color: var(--xert-pale) !important; }
   .bg-offwhite { background-color: var(--xert-offwhite); }
+
+  /* Shared interactive system: one button language for the whole public site.
+     CSS-driven hover/press/focus so keyboard and touch get the same feedback
+     as mouse (replaces per-component onMouseEnter style mutations). */
+  .xert-btn-primary {
+    background-color: var(--xert-steel);
+    color: var(--xert-navy);
+    transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease;
+  }
+  .xert-btn-primary:hover { background-color: var(--xert-pale); }
+  .xert-btn-primary:active { transform: scale(0.98); }
+  .xert-btn-ghost {
+    border: 1px solid rgba(123, 167, 188, 0.6);
+    color: var(--xert-steel);
+    background-color: transparent;
+    transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease;
+  }
+  .xert-btn-ghost:hover { border-color: var(--xert-steel); color: var(--xert-pale); }
+  .xert-btn-ghost:active { transform: scale(0.98); }
+}
+
+/* Visible keyboard focus on the dark theme (inputs keep their own treatment) */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--xert-steel);
+  outline-offset: 2px;
 }
 
 /* Reduced motion */

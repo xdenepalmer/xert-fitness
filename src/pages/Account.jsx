@@ -240,7 +240,7 @@ export default function Account() {
     return (
       <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
         <PublicNav />
-        <main className="max-w-md mx-auto px-6 pt-40 pb-20 text-center">
+        <main id="main" className="max-w-md mx-auto px-6 pt-40 pb-20 text-center">
           <h1 className="font-display text-3xl uppercase text-xert-offwhite mb-3">Sign in to your account</h1>
           <p className="font-body text-sm mb-8" style={{ color: 'rgba(209,221,230,0.6)' }}>
             View your class credits, bookings and purchases.
@@ -273,7 +273,7 @@ export default function Account() {
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
-      <main className="max-w-4xl mx-auto px-6 pt-28 pb-20">
+      <main id="main" className="max-w-4xl mx-auto px-6 pt-28 pb-20">
         {purchaseSuccess && (
           <div
             className="flex items-center gap-3 border p-4 mb-8"

@@ -2,12 +2,15 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserPlus, Mail, Lock, Loader2, CheckCircle2, User } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+
+const fieldClasses =
+  "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
+const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
@@ -85,25 +88,26 @@ export default function Register() {
     return (
       <AuthLayout
         icon={CheckCircle2}
+        eyebrow="Confirm email"
         title="Check your email"
         subtitle={`We sent a confirmation link to ${email}`}
         footer={
-          <Link to="/login" className="text-primary font-medium hover:underline">
+          <Link to="/login" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Back to log in
           </Link>
         }
       >
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
             {error}
           </div>
         )}
-        <p className="text-sm text-foreground text-center mb-4">
+        <p className="font-body text-sm text-xert-pale/80 text-center mb-4">
           Open the confirmation link from Supabase to activate the account.
         </p>
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center font-body text-sm text-xert-pale/60">
           Didn't receive it?{" "}
-          <button onClick={handleResend} className="text-primary font-medium hover:underline">
+          <button onClick={handleResend} className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Resend
           </button>
         </p>
@@ -114,46 +118,47 @@ export default function Register() {
   return (
     <AuthLayout
       icon={UserPlus}
+      eyebrow="Join XERT"
       title="Create your account"
       subtitle="Sign up to get started"
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="text-primary font-medium hover:underline">
+          <Link to="/login" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Log in
           </Link>
         </>
       }
     >
-      <Button
-        variant="outline"
-        className="w-full h-12 text-sm font-medium mb-6"
+      <button
+        type="button"
+        className="xert-btn-ghost w-full h-12 inline-flex items-center justify-center font-body text-sm font-medium mb-6"
         onClick={handleGoogle}
       >
         <GoogleIcon className="w-5 h-5 mr-2" />
         Continue with Google
-      </Button>
+      </button>
 
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border" />
+          <div className="w-full border-t border-xert-steel/20" />
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-3 text-muted-foreground">or</span>
+        <div className="relative flex justify-center text-xs uppercase tracking-[0.2em]">
+          <span className="bg-xert-ink px-3 font-body text-xert-pale/60">or</span>
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="fullName">Full Name</Label>
+          <Label htmlFor="fullName" className={labelClasses}>Full Name</Label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="fullName"
               type="text"
@@ -162,15 +167,15 @@ export default function Register() {
               placeholder="Your name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email" className={labelClasses}>Email</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="email"
               type="email"
@@ -178,15 +183,15 @@ export default function Register() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password" className={labelClasses}>Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="password"
               type="password"
@@ -194,15 +199,15 @@ export default function Register() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirm">Confirm Password</Label>
+          <Label htmlFor="confirm" className={labelClasses}>Confirm Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
             <Input
               id="confirm"
               type="password"
@@ -210,12 +215,16 @@ export default function Register() {
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pl-10 h-12"
+              className={fieldClasses}
               required
             />
           </div>
         </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+        <button
+          type="submit"
+          className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
+          disabled={loading}
+        >
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -224,9 +233,9 @@ export default function Register() {
           ) : (
             "Create account"
           )}
-        </Button>
-        <p className="text-xs text-center text-muted-foreground leading-relaxed">
-          By creating an account, you agree to the <Link to="/terms" className="underline">Terms of Use</Link> and acknowledge the <Link to="/privacy" className="underline">Privacy Policy</Link>.
+        </button>
+        <p className="text-xs text-center font-body text-xert-pale/60 leading-relaxed">
+          By creating an account, you agree to the <Link to="/terms" className="text-xert-steel underline hover:text-xert-pale">Terms of Use</Link> and acknowledge the <Link to="/privacy" className="text-xert-steel underline hover:text-xert-pale">Privacy Policy</Link>.
         </p>
       </form>
     </AuthLayout>

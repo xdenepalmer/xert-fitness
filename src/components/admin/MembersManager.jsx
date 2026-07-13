@@ -474,7 +474,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" disabled={saving} onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
           <button type="button" onClick={handleGrant} disabled={saving}
-            className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Granting…' : `Grant ${sessions}`}
           </button>
         </div>

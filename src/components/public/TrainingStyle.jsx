@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeImage from '@/components/public/FadeImage';
 
 const PHOTO = '/assets/training-style.jpg';
 
@@ -33,7 +34,7 @@ export default function TrainingStyle() {
             </p>
           </div>
           <div className="relative aspect-video lg:aspect-square overflow-hidden">
-            <img src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
+            <FadeImage src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
               style={{ filter: 'saturate(0.65) brightness(0.7)' }} />
             <div className="absolute inset-0"
               style={{ background: 'linear-gradient(135deg, rgba(16,24,32,0.5) 0%, transparent 60%)' }} />

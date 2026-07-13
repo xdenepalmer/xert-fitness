@@ -9,16 +9,17 @@ const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1
 const GOALS = ['Strength', 'Conditioning', 'Weight loss / body composition', 'Rehab / return to fitness', 'Event preparation', 'Sport performance', 'General health'];
 const EXPERIENCE = ['Complete beginner', 'Some experience', 'Regular trainer', 'Advanced'];
 
-function FieldLabel({ children, required = false }) {
+function FieldLabel({ children, required = false, htmlFor = undefined }) {
+  const Component = htmlFor ? 'label' : 'span';
   return (
-    <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1">*</span>}
-    </label>
+    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    </Component>
   );
 }
 function Input({ ...props }) {
   return (
-    <input aria-label={props['aria-label'] || props.placeholder} {...props}
+    <input {...props}
       className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
   );
 }
@@ -65,40 +66,44 @@ export default function PTRequestForm({ onSuccess }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
+      {/* Honeypot must never be browser-autofilled: a filled value silently
+          drops the submission server-side while the UI still reports success. */}
       <input type="text" name="company_website" value={form.company_website}
-        onChange={e => set('company_website', e.target.value)}
+        onChange={e => set('company_website', e.target.value)} autoComplete="off"
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
-      <div><FieldLabel required>Full name</FieldLabel><Input placeholder="Your name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
-      <div><FieldLabel required>Email</FieldLabel><Input type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
-      <div><FieldLabel required>Phone</FieldLabel><Input type="tel" placeholder="Mobile" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+      <div><FieldLabel htmlFor="pt-full-name" required>Full name</FieldLabel><Input id="pt-full-name" name="full_name" autoComplete="name" aria-required="true" placeholder="Your name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+      <div><FieldLabel htmlFor="pt-email" required>Email</FieldLabel><Input id="pt-email" name="email" autoComplete="email" aria-required="true" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
+      <div><FieldLabel htmlFor="pt-phone" required>Phone</FieldLabel><Input id="pt-phone" name="phone" autoComplete="tel" aria-required="true" type="tel" placeholder="Mobile" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
 
-      <div>
-        <FieldLabel required>Session type</FieldLabel>
+      <fieldset aria-required="true">
+        <legend className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+          Session type<span className="text-xert-red ml-1" aria-hidden="true">*</span>
+        </legend>
         <div className="flex flex-wrap gap-2">
           {PT_SESSION_TYPES.map(t => (
             <button type="button" key={t} onClick={() => set('requested_session_type', t)}
               aria-pressed={form.requested_session_type === t}
-              className={`px-3 py-2 text-sm font-body border transition-all ${form.requested_session_type === t ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.requested_session_type === t ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {t}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <FieldLabel>Preferred day</FieldLabel>
-          <select aria-label="Preferred day" value={form.preferred_day} onChange={e => set('preferred_day', e.target.value)}
+          <FieldLabel htmlFor="pt-preferred-day">Preferred day</FieldLabel>
+          <select id="pt-preferred-day" name="preferred_day" value={form.preferred_day} onChange={e => set('preferred_day', e.target.value)}
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
             <option value="">Any day</option>
             {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
         <div>
-          <FieldLabel>Preferred time</FieldLabel>
-          <select aria-label="Preferred time" value={form.preferred_time} onChange={e => set('preferred_time', e.target.value)}
+          <FieldLabel htmlFor="pt-preferred-time">Preferred time</FieldLabel>
+          <select id="pt-preferred-time" name="preferred_time" value={form.preferred_time} onChange={e => set('preferred_time', e.target.value)}
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
             <option value="">Any time</option>
             {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -106,37 +111,37 @@ export default function PTRequestForm({ onSuccess }) {
         </div>
       </div>
 
-      <div>
-        <FieldLabel>Training goal</FieldLabel>
+      <fieldset>
+        <legend className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">Training goal</legend>
         <div className="flex flex-wrap gap-2">
           {GOALS.map(g => (
             <button type="button" key={g} onClick={() => set('training_goal', g)}
               aria-pressed={form.training_goal === g}
-              className={`px-3 py-2 text-sm font-body border transition-all ${form.training_goal === g ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.training_goal === g ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {g}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
-      <div>
-        <FieldLabel>Experience level</FieldLabel>
+      <fieldset>
+        <legend className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">Experience level</legend>
         <div className="flex flex-wrap gap-2">
           {EXPERIENCE.map(exp => (
             <button type="button" key={exp} onClick={() => set('experience_level', exp)}
               aria-pressed={form.experience_level === exp}
-              className={`px-3 py-2 text-sm font-body border transition-all ${form.experience_level === exp ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              className={`px-3 py-2 text-sm font-body border transition-all ${form.experience_level === exp ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {exp}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       <div>
-        <FieldLabel>Notes</FieldLabel>
-        <textarea aria-label="Notes for the coach" value={form.notes} onChange={e => set('notes', e.target.value)}
+        <FieldLabel htmlFor="pt-notes">Notes</FieldLabel>
+        <textarea id="pt-notes" name="notes" value={form.notes} onChange={e => set('notes', e.target.value)}
           rows={2} placeholder="Anything you'd like the coach to know (optional)"
-          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>
 
       <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
@@ -144,13 +149,13 @@ export default function PTRequestForm({ onSuccess }) {
       </FormCheckbox>
 
       {error && (
-        <div className="p-3 border border-xert-red/50 bg-xert-red/10">
+        <div role="alert" className="p-3 border border-xert-red/50 bg-xert-steel/10">
           <p className="font-body text-sm text-xert-red">{error}</p>
         </div>
       )}
 
       <button type="submit" disabled={loading}
-        className="w-full py-4 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+        className="xert-btn-primary w-full py-4 font-display text-base uppercase disabled:opacity-50">
         {loading ? 'Requesting...' : 'Request PT session'}
       </button>
     </form>

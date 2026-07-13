@@ -126,7 +126,7 @@ export default function AvailabilityManager() {
         <div className="flex gap-2">
           {['availability', 'blackouts'].map(t => (
             <button key={t} onClick={() => setTab(t)} disabled={removingId !== null}
-              className={`min-h-11 px-5 py-2 font-display text-sm uppercase transition-colors disabled:opacity-50 ${tab === t ? 'bg-xert-red text-white' : 'border border-xert-steel/40 text-xert-concrete/60 hover:border-xert-steel'}`}>
+              className={`min-h-11 px-5 py-2 font-display text-sm uppercase transition-colors disabled:opacity-50 ${tab === t ? 'bg-xert-steel text-xert-navy' : 'border border-xert-steel/40 text-xert-concrete/60 hover:border-xert-steel'}`}>
               {t === 'availability' ? 'Availability blocks' : 'Blackout periods'}
             </button>
           ))}
@@ -138,7 +138,7 @@ export default function AvailabilityManager() {
       </div>
 
       {loadError && (
-        <div role="alert" className="mb-5 border border-xert-red/30 bg-xert-red/10 px-4 py-3 flex items-center justify-between gap-4">
+        <div role="alert" className="mb-5 border border-xert-red/30 bg-xert-steel/10 px-4 py-3 flex items-center justify-between gap-4">
           <p className="font-body text-sm text-xert-offwhite">Could not load availability records: {loadError}</p>
           <button type="button" onClick={load} className="font-body text-xs uppercase text-xert-red hover:text-xert-orange transition-colors">Retry</button>
         </div>
@@ -148,7 +148,7 @@ export default function AvailabilityManager() {
         <div>
           <div className="flex justify-end mb-4">
             <button onClick={() => { setEditingBlock(null); setBlockForm(emptyBlock()); setShowBlockForm(true); }} disabled={removingId !== null}
-              className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+              className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
               + Add block
             </button>
           </div>
@@ -228,7 +228,7 @@ export default function AvailabilityManager() {
                   <button onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlock} disabled={saving}
-                    className="flex-1 min-h-11 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+                    className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
                     {saving ? 'Saving...' : editingBlock ? 'Update block' : 'Save block'}
                   </button>
                 </div>
@@ -242,7 +242,7 @@ export default function AvailabilityManager() {
         <div>
           <div className="flex justify-end mb-4">
             <button onClick={() => { setEditingBlackout(null); setBlackoutForm(emptyBlackout()); setShowBlackoutForm(true); }} disabled={removingId !== null}
-              className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+              className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
               + Add blackout
             </button>
           </div>
@@ -320,7 +320,7 @@ export default function AvailabilityManager() {
                   <button onClick={() => { setShowBlackoutForm(false); setEditingBlackout(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlackout} disabled={saving}
-                    className="flex-1 min-h-11 py-2.5 bg-xert-red text-white font-display text-xs uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+                    className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
                     {saving ? 'Saving...' : editingBlackout ? 'Update blackout' : 'Save blackout'}
                   </button>
                 </div>

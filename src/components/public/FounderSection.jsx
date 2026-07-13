@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeImage from '@/components/public/FadeImage';
 
 const PHOTO = '/assets/training-philosophy.jpg';
 
@@ -22,7 +23,7 @@ export default function FounderSection() {
             </h2>
 
             {/* Badges */}
-            <div className="flex flex-wrap gap-2 mb-8">
+            <div className="flex flex-wrap gap-2 mb-8 lg:mb-0">
               {['Real-world events', 'Sustainable progress', 'Community accountability'].map(b => (
                 <span key={b} className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border"
                   style={{ borderColor: 'rgba(123,167,188,0.3)', color: '#7BA7BC' }}>
@@ -30,15 +31,17 @@ export default function FounderSection() {
                 </span>
               ))}
             </div>
-
-            {/* Photo on mobile */}
-            <div className="lg:hidden mb-8 aspect-video overflow-hidden">
-              <img src={PHOTO} alt="Training" className="w-full h-full object-cover"
-                style={{ filter: 'saturate(0.6) brightness(0.7)' }} />
-            </div>
           </div>
 
           <div className="space-y-4">
+            <div className="relative aspect-video overflow-hidden mb-6">
+              <FadeImage src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
+                style={{ filter: 'saturate(0.6) brightness(0.7)' }} />
+              {/* Frame ticks */}
+              <div className="absolute top-4 left-4 w-8 h-8 border-t border-l" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
+              <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
+            </div>
+
             <p className="font-body leading-relaxed" style={{ color: '#D1DDE6', fontSize: '1rem' }}>
               XERT is built around preparing members for real-world events, from local sport to endurance racing, functional fitness competitions and personal challenges.
             </p>

@@ -354,7 +354,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           <div className="flex gap-6">
             <label className="flex min-h-11 items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.beginner_friendly} onChange={e => set('beginner_friendly', e.target.checked)} className="peer sr-only" />
-              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-xert-red peer-checked:bg-xert-red peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.beginner_friendly && <span className="text-white text-xs">&#10003;</span>}</span>
+              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-xert-red peer-checked:bg-xert-steel peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.beginner_friendly && <span className="text-xert-navy text-xs">&#10003;</span>}</span>
               <span className="font-body text-sm text-xert-concrete/80">Beginner friendly</span>
             </label>
             <label className="flex min-h-11 items-center gap-2 cursor-pointer">
@@ -375,7 +375,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={saving}
-            className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Saving...' : 'Save class'}
           </button>
         </div>
@@ -449,7 +449,7 @@ function RepeatModal({ session, onDone, onCancel }) {
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" onClick={onCancel} disabled={saving} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
           <button type="button" onClick={handleRepeat} disabled={saving}
-            className="flex-1 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Creating…' : `Create ${count} copies`}
           </button>
         </div>
@@ -478,6 +478,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
   const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
+  const [duplicatingSessionId, setDuplicatingSessionId] = useState(null);
   const [attendanceSession, setAttendanceSession] = useState(null);
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
@@ -599,10 +600,13 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   };
 
   const handleDuplicate = async (session) => {
+    if (duplicatingSessionId) return;
+    setDuplicatingSessionId(session.id);
     try {
       await duplicateClassSession(session);
-      load();
+      await load();
     } catch (e) { toast({ title: 'Duplicate failed', description: e.message, variant: 'destructive' }); }
+    finally { setDuplicatingSessionId(null); }
   };
 
   const handleCancel = async () => {
@@ -765,7 +769,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
           </div>
         </div>
         <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
-          className="px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors">
+          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
           + New Class
         </button>
       </div>
@@ -831,9 +835,9 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
                       className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                       Edit
                     </button>
-                    <button onClick={() => handleDuplicate(s)}
-                      className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
-                      Dupe
+                    <button onClick={() => handleDuplicate(s)} disabled={Boolean(duplicatingSessionId)}
+                      className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">
+                      {duplicatingSessionId === s.id ? 'Duping…' : 'Dupe'}
                     </button>
                     <button onClick={() => setRepeating(s)}
                       className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
@@ -1052,7 +1056,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
                 type="button"
                 disabled={isCancellingSession}
                 onClick={handleCancel}
-                className="bg-xert-red px-4 py-2.5 font-display text-xs uppercase text-white transition-colors hover:bg-xert-orange disabled:opacity-50"
+                className="bg-xert-steel px-4 py-2.5 font-display text-xs uppercase text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-50"
               >
                 {isCancellingSession ? 'Cancelling...' : 'Cancel class'}
               </button>

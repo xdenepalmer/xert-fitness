@@ -12,7 +12,7 @@ const PARTNER_STATUSES = ['new', 'reviewing', 'contacted', 'meeting', 'approved'
 const PAGE_SIZE = 50;
 
 const STATUS_COLORS = {
-  new: 'bg-xert-red/20 text-xert-red',
+  new: 'bg-xert-steel/20 text-xert-red',
   contacted: 'bg-blue-900/30 text-blue-400',
   warm: 'bg-yellow-900/30 text-yellow-400',
   hot: 'bg-orange-900/30 text-xert-orange',
@@ -100,7 +100,7 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
         </div>
 
         <button type="button" onClick={save} disabled={saving}
-          className="w-full py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          className="w-full py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
           {saving ? 'Saving...' : 'Save changes'}
         </button>
       </div>
@@ -247,7 +247,7 @@ export default function LeadTable({ type = 'member' }) {
             <option value="">Move selected to...</option>
             {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
           </select>
-          <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className="px-4 py-2 bg-xert-red text-white font-display text-xs uppercase disabled:opacity-40">
+          <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className="px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
             {bulkSaving ? 'Updating...' : 'Apply'}
           </button>
         </div>

@@ -7,18 +7,19 @@ const STEPS = ['Contact', 'Experience', 'Details', 'Confirm'];
 const SPECIALTIES = ['Strength & conditioning', 'Endurance', 'Olympic lifting', 'Gymnastics', 'Nutrition', 'Rehabilitation', 'Youth training', 'Sport specific', 'Group fitness', 'Mindset / mental performance'];
 const AVAILABILITY = ['Early morning', 'Mid-morning', 'Lunch', 'Afternoon', 'After work', 'Evening', 'Weekends', 'Flexible'];
 
-function FieldLabel({ children, required = false }) {
+function FieldLabel({ children, required = false, htmlFor = undefined, as = undefined }) {
+  const Component = as || (htmlFor ? 'label' : 'span');
   return (
-    <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1">*</span>}
-    </label>
+    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    </Component>
   );
 }
 
 function Input({ ...props }) {
   return (
-    <input aria-label={props['aria-label'] || props.placeholder} {...props}
-      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
+    <input {...props}
+      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red transition-colors" />
   );
 }
 
@@ -34,7 +35,7 @@ function MultiSelect({ options, value = [], onChange }) {
           onClick={() => toggle(opt)}
           aria-pressed={value.includes(opt)}
           className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
-            ? 'border-xert-red bg-xert-red/10 text-xert-red'
+            ? 'border-xert-red bg-xert-steel/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
           {opt}
         </button>
@@ -99,8 +100,8 @@ export default function TrainerInterestForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input type="text" name="company_website" value={form.company_website}
+    <form onSubmit={handleSubmit} autoComplete="off">
+      <input type="text" name="company_website" value={form.company_website} autoComplete="off"
         onChange={e => set('company_website', e.target.value)}
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
@@ -109,57 +110,57 @@ export default function TrainerInterestForm() {
         {STEPS.map((s, i) => (
           <React.Fragment key={i}>
             <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-red text-white' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-steel text-xert-navy' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
                 {i < step ? '✓' : i + 1}
               </div>
               <span className="hidden sm:block font-body text-xs text-xert-concrete/60">{s}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-red' : 'bg-xert-steel/30'}`} />}
+            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-steel' : 'bg-xert-steel/30'}`} />}
           </React.Fragment>
         ))}
       </div>
 
       {step === 0 && (
         <div className="space-y-5">
-          <div><FieldLabel required>Full name</FieldLabel><Input placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
-          <div><FieldLabel required>Email</FieldLabel><Input type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
-          <div><FieldLabel required>Phone</FieldLabel><Input type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="trainer-full-name" required>Full name</FieldLabel><Input id="trainer-full-name" name="full_name" autoComplete="name" placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="trainer-email" required>Email</FieldLabel><Input id="trainer-email" name="email" autoComplete="email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="trainer-phone" required>Phone</FieldLabel><Input id="trainer-phone" name="phone" autoComplete="tel" type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
         </div>
       )}
 
       {step === 1 && (
         <div className="space-y-5">
           <div>
-            <FieldLabel required>Qualifications</FieldLabel>
-            <Input placeholder="e.g. Cert IV in Fitness, ASCA Level 2" value={form.qualifications} onChange={e => set('qualifications', e.target.value)} />
+            <FieldLabel htmlFor="trainer-qualifications" required>Qualifications</FieldLabel>
+            <Input id="trainer-qualifications" name="qualifications" placeholder="e.g. Cert IV in Fitness, ASCA Level 2" value={form.qualifications} onChange={e => set('qualifications', e.target.value)} />
           </div>
           <div>
-            <FieldLabel required>Years of experience</FieldLabel>
-            <select aria-label="Years of experience" value={form.years_experience} onChange={e => set('years_experience', e.target.value)}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <FieldLabel htmlFor="trainer-years-experience" required>Years of experience</FieldLabel>
+            <select id="trainer-years-experience" name="years_experience" value={form.years_experience} onChange={e => set('years_experience', e.target.value)}
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:border-xert-red">
               <option value="">Select</option>
               {['Under 1 year', '1–2 years', '3–5 years', '5–10 years', '10+ years'].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
           <div>
-            <FieldLabel required>Functional training experience</FieldLabel>
-            <textarea aria-label="Functional training experience" value={form.functional_training_experience} onChange={e => set('functional_training_experience', e.target.value)}
+            <FieldLabel htmlFor="trainer-functional-experience" required>Functional training experience</FieldLabel>
+            <textarea id="trainer-functional-experience" name="functional_training_experience" value={form.functional_training_experience} onChange={e => set('functional_training_experience', e.target.value)}
               rows={3} placeholder="Describe your experience with functional training approaches"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
-          <div>
-            <FieldLabel required>Availability</FieldLabel>
+          <fieldset>
+            <FieldLabel as="legend" required>Availability</FieldLabel>
             <MultiSelect options={AVAILABILITY} value={form.availability} onChange={v => set('availability', v)} />
-          </div>
+          </fieldset>
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-5">
-          <div>
-            <FieldLabel>Specialties</FieldLabel>
+          <fieldset>
+            <FieldLabel as="legend">Specialties</FieldLabel>
             <MultiSelect options={SPECIALTIES} value={form.specialties} onChange={v => set('specialties', v)} />
-          </div>
+          </fieldset>
           <div className="space-y-3">
             {[
               { key: 'interested_in_group_classes', label: 'Available for group classes' },
@@ -173,22 +174,22 @@ export default function TrainerInterestForm() {
             ))}
           </div>
           <div>
-            <FieldLabel>Insurance status</FieldLabel>
-            <select aria-label="Insurance status" value={form.insurance_status} onChange={e => set('insurance_status', e.target.value)}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <FieldLabel htmlFor="trainer-insurance-status">Insurance status</FieldLabel>
+            <select id="trainer-insurance-status" name="insurance_status" value={form.insurance_status} onChange={e => set('insurance_status', e.target.value)}
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:border-xert-red">
               <option value="">Select (optional)</option>
               {['Current PI/PL insurance', 'Expired — can renew', 'Not currently insured', 'Unsure'].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
           <div>
-            <FieldLabel>Short intro</FieldLabel>
-            <textarea aria-label="Short introduction" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
+            <FieldLabel htmlFor="trainer-short-intro">Short intro</FieldLabel>
+            <textarea id="trainer-short-intro" name="short_intro" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
               rows={3} placeholder="Tell us a bit about yourself and your coaching approach"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
           <div>
-            <FieldLabel>Social / website links</FieldLabel>
-            <Input placeholder="Instagram, LinkedIn or website URL (optional)" value={form.social_links} onChange={e => set('social_links', e.target.value)} />
+            <FieldLabel htmlFor="trainer-social-links">Social / website links</FieldLabel>
+            <Input id="trainer-social-links" name="social_links" placeholder="Instagram, LinkedIn or website URL (optional)" value={form.social_links} onChange={e => set('social_links', e.target.value)} />
           </div>
         </div>
       )}
@@ -206,11 +207,13 @@ export default function TrainerInterestForm() {
         </div>
       )}
 
-      {error && (
-        <div className="mt-4 p-3 border border-xert-red/50 bg-xert-red/10">
-          <p className="font-body text-sm text-xert-red">{error}</p>
-        </div>
-      )}
+      <div role="alert" aria-live="assertive">
+        {error && (
+          <div className="mt-4 p-3 border border-xert-red/50 bg-xert-steel/10">
+            <p className="font-body text-sm text-xert-red">{error}</p>
+          </div>
+        )}
+      </div>
 
       <div className="flex justify-between mt-8">
         {step > 0 ? (
@@ -221,12 +224,12 @@ export default function TrainerInterestForm() {
         ) : <div />}
         {step < STEPS.length - 1 ? (
           <button type="button" onClick={next}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors">
             Continue
           </button>
         ) : (
           <button type="submit" disabled={loading}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {loading ? 'Submitting...' : 'Submit application'}
           </button>
         )}

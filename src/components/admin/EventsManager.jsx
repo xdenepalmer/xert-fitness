@@ -116,7 +116,7 @@ function EventEditor({ event, onSave, onCancel }) {
           <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             Cancel
           </button>
-          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -155,7 +155,7 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
               <span className="sr-only">Loading training group</span>
             </div>
           ) : error ? (
-            <div className="border border-xert-red/30 bg-xert-red/5 p-4">
+            <div className="border border-xert-red/30 bg-xert-steel/5 p-4">
               <p className="font-body text-sm text-xert-red">{error}</p>
             </div>
           ) : members.length === 0 ? (
@@ -338,7 +338,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
               setShowEditor(true);
             }}
             disabled={deletingId !== null}
-            className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50"
+            className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50"
           >
             + Add Event
           </button>

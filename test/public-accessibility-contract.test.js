@@ -60,9 +60,17 @@ test('public motion uses native reduced-motion-aware effects without a runtime d
 
 test('every remaining acquisition form names custom inputs and non-input controls', () => {
   for (const source of formSources) {
-    assert.match(source, /<input aria-label=\{props\['aria-label'\] \|\| props\.placeholder\}/);
+    // The accessible name comes from an associated label (htmlFor/id) — it must
+    // never fall back to placeholder text.
+    assert.doesNotMatch(source, /aria-label=\{props\['aria-label'\] \|\| props\.placeholder\}/);
+    assert.match(source, /htmlFor="/);
+    assert.match(source, /\bid="/);
+    // Selects and textareas are named by an associated label (id) or aria-label.
     for (const tag of source.match(/<(select|textarea)\b[^>]*>/g) || []) {
-      assert.match(tag, /aria-label=/);
+      assert.match(tag, /aria-label=|\bid=/);
     }
+    // Browser autofill must never fill the spam honeypot: a filled honeypot
+    // silently drops the lead while the UI still reports success.
+    assert.match(source, /name="company_website"[\s\S]{0,200}?autoComplete="off"/);
   }
 });

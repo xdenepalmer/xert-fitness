@@ -114,7 +114,7 @@ function ProductCard({ product, onSaved }) {
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
         </label>
         <button onClick={handleSave} disabled={saving || Boolean(transitionError)}
-          className="ml-auto px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+          className="ml-auto px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -191,7 +191,7 @@ function NewProductDialog({ onClose, onCreated }) {
         </div>
         <footer className="flex gap-3 p-5 border-t border-xert-steel/20">
           <button type="button" onClick={onClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
-          <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-11 bg-xert-red text-white font-display text-sm uppercase disabled:opacity-40">{saving ? 'Creating...' : 'Create pack'}</button>
+          <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-11 bg-xert-steel text-xert-navy font-display text-sm uppercase disabled:opacity-40">{saving ? 'Creating...' : 'Create pack'}</button>
         </footer>
       </div>
     </div>
@@ -227,7 +227,7 @@ export default function ProductsManager({ initialAction, onIntentHandled }) {
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 mb-2">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Session Packs</h2>
-        <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase">+ Add Pack</button>
+        <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase">+ Add Pack</button>
       </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
         Price changes apply to new purchases immediately. Existing credits are unaffected.

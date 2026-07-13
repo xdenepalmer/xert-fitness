@@ -23,7 +23,7 @@ function MultiSelect({ options, value = [], onChange }) {
           onClick={() => toggle(opt)}
           aria-pressed={value.includes(opt)}
           className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
-            ? 'border-xert-red bg-xert-red/10 text-xert-red'
+            ? 'border-xert-red bg-xert-steel/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
           {opt}
         </button>
@@ -32,8 +32,8 @@ function MultiSelect({ options, value = [], onChange }) {
   );
 }
 
-function FieldLabel({ children, required = false, htmlFor = undefined }) {
-  const Component = htmlFor ? 'label' : 'span';
+function FieldLabel({ children, required = false, htmlFor = undefined, as = undefined }) {
+  const Component = as || (htmlFor ? 'label' : 'span');
   return (
     <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
       {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
@@ -44,7 +44,7 @@ function FieldLabel({ children, required = false, htmlFor = undefined }) {
 function Input({ ...props }) {
   return (
     <input {...props}
-      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
+      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red transition-colors" />
   );
 }
 
@@ -112,7 +112,7 @@ export default function MemberInterestForm() {
   return (
     <form onSubmit={handleSubmit} autoComplete="off">
       {/* Honeypot */}
-      <input type="text" name="company_website" value={form.company_website}
+      <input type="text" name="company_website" value={form.company_website} autoComplete="off"
         onChange={e => set('company_website', e.target.value)}
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
@@ -121,12 +121,12 @@ export default function MemberInterestForm() {
         {STEPS.map((s, i) => (
           <React.Fragment key={i}>
             <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-red text-white' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-steel text-xert-navy' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
                 {i < step ? '✓' : i + 1}
               </div>
               <span className="hidden sm:block font-body text-xs text-xert-concrete/60">{s}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-red' : 'bg-xert-steel/30'}`} />}
+            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-steel' : 'bg-xert-steel/30'}`} />}
           </React.Fragment>
         ))}
       </div>
@@ -137,24 +137,24 @@ export default function MemberInterestForm() {
           <div><FieldLabel htmlFor="member-full-name" required>Full name</FieldLabel><Input id="member-full-name" name="full_name" required autoComplete="name" placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
           <div><FieldLabel htmlFor="member-email" required>Email</FieldLabel><Input id="member-email" name="email" required autoComplete="email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
           <div><FieldLabel htmlFor="member-phone" required>Phone</FieldLabel><Input id="member-phone" name="phone" required autoComplete="tel" type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
-          <div>
-            <FieldLabel required>Age range</FieldLabel>
+          <fieldset>
+            <FieldLabel as="legend" required>Age range</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {AGE_RANGES.map(a => (
                 <button type="button" key={a}
                   onClick={() => set('age_range', a)}
                   aria-pressed={form.age_range === a}
-                  className={`px-4 py-2 font-body text-sm border transition-all ${form.age_range === a ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+                  className={`px-4 py-2 font-body text-sm border transition-all ${form.age_range === a ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
                   {a}
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
           <div><FieldLabel htmlFor="member-suburb" required>Suburb / town</FieldLabel><Input id="member-suburb" name="suburb_town" required autoComplete="address-level2" placeholder="e.g. Kingaroy" value={form.suburb_town} onChange={e => set('suburb_town', e.target.value)} /></div>
           <div>
             <FieldLabel htmlFor="member-occupation">Occupation group</FieldLabel>
             <select id="member-occupation" name="occupation_group" value={form.occupation_group} onChange={e => set('occupation_group', e.target.value)}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:border-xert-red">
               <option value="">Select (optional)</option>
               {OCCUPATION_GROUPS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -165,27 +165,27 @@ export default function MemberInterestForm() {
       {/* Step 1: Training */}
       {step === 1 && (
         <div className="space-y-6">
-          <div>
-            <FieldLabel required>Current training level</FieldLabel>
+          <fieldset>
+            <FieldLabel as="legend" required>Current training level</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {TRAINING_LEVELS.map(l => (
                 <button type="button" key={l}
                   onClick={() => set('current_training_level', l)}
                   aria-pressed={form.current_training_level === l}
-                  className={`px-3 py-2 text-sm font-body border transition-all ${form.current_training_level === l ? 'border-xert-red bg-xert-red/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+                  className={`px-3 py-2 text-sm font-body border transition-all ${form.current_training_level === l ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
                   {l}
                 </button>
               ))}
             </div>
-          </div>
-          <div>
-            <FieldLabel required>Main training goals (select all that apply)</FieldLabel>
+          </fieldset>
+          <fieldset>
+            <FieldLabel as="legend" required>Main training goals (select all that apply)</FieldLabel>
             <MultiSelect options={TRAINING_GOALS} value={form.main_training_goals} onChange={v => set('main_training_goals', v)} />
-          </div>
-          <div>
-            <FieldLabel required>Preferred training times (select all that apply)</FieldLabel>
+          </fieldset>
+          <fieldset>
+            <FieldLabel as="legend" required>Preferred training times (select all that apply)</FieldLabel>
             <MultiSelect options={PREFERRED_TIMES} value={form.preferred_training_times} onChange={v => set('preferred_training_times', v)} />
-          </div>
+          </fieldset>
         </div>
       )}
 
@@ -208,14 +208,14 @@ export default function MemberInterestForm() {
             <textarea id="member-limitations" name="injuries_or_limitations_optional" value={form.injuries_or_limitations_optional}
               onChange={e => set('injuries_or_limitations_optional', e.target.value)}
               rows={2} placeholder="Optional — helps us coach you appropriately"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
           <div>
             <FieldLabel htmlFor="member-reason">What's the biggest reason you're joining?</FieldLabel>
             <textarea id="member-reason" name="biggest_reason_for_joining" value={form.biggest_reason_for_joining}
               onChange={e => set('biggest_reason_for_joining', e.target.value)}
               rows={2} placeholder="Optional — helps us understand what matters to you"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
         </div>
       )}
@@ -244,11 +244,13 @@ export default function MemberInterestForm() {
       )}
 
       {/* Error */}
-      {error && (
-        <div className="mt-4 p-3 border border-xert-red/50 bg-xert-red/10">
-          <p className="font-body text-sm text-xert-red">{error}</p>
-        </div>
-      )}
+      <div role="alert" aria-live="assertive">
+        {error && (
+          <div className="mt-4 p-3 border border-xert-red/50 bg-xert-steel/10">
+            <p className="font-body text-sm text-xert-red">{error}</p>
+          </div>
+        )}
+      </div>
 
       {/* Navigation */}
       <div className="flex justify-between mt-8">
@@ -261,12 +263,12 @@ export default function MemberInterestForm() {
 
         {step < STEPS.length - 1 ? (
           <button type="button" onClick={next}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors">
             Continue
           </button>
         ) : (
           <button type="submit" disabled={loading}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {loading ? 'Submitting...' : 'Register interest'}
           </button>
         )}

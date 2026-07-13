@@ -6,18 +6,19 @@ import FormCheckbox from '@/components/public/FormCheckbox';
 const STEPS = ['Contact', 'Practice', 'Confirm'];
 const SERVICES = ['Physiotherapy', 'Nutrition / dietetics', 'Psychology / mental performance', 'Massage therapy', 'Strength & conditioning education', 'Medical / GP', 'Podiatry', 'Occupational therapy', 'Other allied health'];
 
-function FieldLabel({ children, required = false }) {
+function FieldLabel({ children, required = false, htmlFor = undefined, as = undefined }) {
+  const Component = as || (htmlFor ? 'label' : 'span');
   return (
-    <label className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1">*</span>}
-    </label>
+    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
+      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    </Component>
   );
 }
 
 function Input({ ...props }) {
   return (
-    <input aria-label={props['aria-label'] || props.placeholder} {...props}
-      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
+    <input {...props}
+      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red transition-colors" />
   );
 }
 
@@ -33,7 +34,7 @@ function MultiSelect({ options, value = [], onChange }) {
           onClick={() => toggle(opt)}
           aria-pressed={value.includes(opt)}
           className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
-            ? 'border-xert-red bg-xert-red/10 text-xert-red'
+            ? 'border-xert-red bg-xert-steel/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
           {opt}
         </button>
@@ -96,8 +97,8 @@ export default function PartnerInterestForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input type="text" name="company_website" value={form.company_website}
+    <form onSubmit={handleSubmit} autoComplete="off">
+      <input type="text" name="company_website" value={form.company_website} autoComplete="off"
         onChange={e => set('company_website', e.target.value)}
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
@@ -106,35 +107,35 @@ export default function PartnerInterestForm() {
         {STEPS.map((s, i) => (
           <React.Fragment key={i}>
             <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-red text-white' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-steel text-xert-navy' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
                 {i < step ? '✓' : i + 1}
               </div>
               <span className="hidden sm:block font-body text-xs text-xert-concrete/60">{s}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-red' : 'bg-xert-steel/30'}`} />}
+            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-steel' : 'bg-xert-steel/30'}`} />}
           </React.Fragment>
         ))}
       </div>
 
       {step === 0 && (
         <div className="space-y-5">
-          <div><FieldLabel required>Full name</FieldLabel><Input placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
-          <div><FieldLabel required>Business / practice name</FieldLabel><Input placeholder="Business name" value={form.business_name} onChange={e => set('business_name', e.target.value)} /></div>
-          <div><FieldLabel required>Email</FieldLabel><Input type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
-          <div><FieldLabel required>Phone</FieldLabel><Input type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="partner-full-name" required>Full name</FieldLabel><Input id="partner-full-name" name="full_name" autoComplete="name" placeholder="Your full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="partner-business-name" required>Business / practice name</FieldLabel><Input id="partner-business-name" name="business_name" autoComplete="organization" placeholder="Business name" value={form.business_name} onChange={e => set('business_name', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="partner-email" required>Email</FieldLabel><Input id="partner-email" name="email" autoComplete="email" type="email" placeholder="you@email.com" value={form.email} onChange={e => set('email', e.target.value)} /></div>
+          <div><FieldLabel htmlFor="partner-phone" required>Phone</FieldLabel><Input id="partner-phone" name="phone" autoComplete="tel" type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
         </div>
       )}
 
       {step === 1 && (
         <div className="space-y-5">
           <div>
-            <FieldLabel required>Profession / specialty</FieldLabel>
-            <Input placeholder="e.g. Physiotherapist, Nutritionist" value={form.profession} onChange={e => set('profession', e.target.value)} />
+            <FieldLabel htmlFor="partner-profession" required>Profession / specialty</FieldLabel>
+            <Input id="partner-profession" name="profession" placeholder="e.g. Physiotherapist, Nutritionist" value={form.profession} onChange={e => set('profession', e.target.value)} />
           </div>
-          <div>
-            <FieldLabel required>Services offered</FieldLabel>
+          <fieldset>
+            <FieldLabel as="legend" required>Services offered</FieldLabel>
             <MultiSelect options={SERVICES} value={form.services_offered} onChange={v => set('services_offered', v)} />
-          </div>
+          </fieldset>
           <div className="space-y-3">
             {[
               { key: 'subcontract_interest', label: 'Open to subcontracting at XERT' },
@@ -146,26 +147,26 @@ export default function PartnerInterestForm() {
             ))}
           </div>
           <div>
-            <FieldLabel>Preferred partnership model</FieldLabel>
-            <select aria-label="Preferred partnership model" value={form.preferred_model} onChange={e => set('preferred_model', e.target.value)}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red">
+            <FieldLabel htmlFor="partner-preferred-model">Preferred partnership model</FieldLabel>
+            <select id="partner-preferred-model" name="preferred_model" value={form.preferred_model} onChange={e => set('preferred_model', e.target.value)}
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:border-xert-red">
               <option value="">Select (optional)</option>
               {['Referral partner', 'Regular sessions at XERT', 'Workshops only', 'Online services', 'Flexible / open to discussion'].map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div>
-            <FieldLabel>Availability</FieldLabel>
-            <Input placeholder="e.g. Evenings and weekends" value={form.availability} onChange={e => set('availability', e.target.value)} />
+            <FieldLabel htmlFor="partner-availability">Availability</FieldLabel>
+            <Input id="partner-availability" name="availability" placeholder="e.g. Evenings and weekends" value={form.availability} onChange={e => set('availability', e.target.value)} />
           </div>
           <div>
-            <FieldLabel>Website or social link</FieldLabel>
-            <Input aria-label="Website or social link" placeholder="Optional" value={form.website_social_link} onChange={e => set('website_social_link', e.target.value)} />
+            <FieldLabel htmlFor="partner-website-social">Website or social link</FieldLabel>
+            <Input id="partner-website-social" name="website_social_link" placeholder="Optional" value={form.website_social_link} onChange={e => set('website_social_link', e.target.value)} />
           </div>
           <div>
-            <FieldLabel>Short intro</FieldLabel>
-            <textarea aria-label="Short introduction" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
+            <FieldLabel htmlFor="partner-short-intro">Short intro</FieldLabel>
+            <textarea id="partner-short-intro" name="short_intro" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
               rows={3} placeholder="Tell us about your practice and what you'd bring to XERT"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
         </div>
       )}
@@ -183,11 +184,13 @@ export default function PartnerInterestForm() {
         </div>
       )}
 
-      {error && (
-        <div className="mt-4 p-3 border border-xert-red/50 bg-xert-red/10">
-          <p className="font-body text-sm text-xert-red">{error}</p>
-        </div>
-      )}
+      <div role="alert" aria-live="assertive">
+        {error && (
+          <div className="mt-4 p-3 border border-xert-red/50 bg-xert-steel/10">
+            <p className="font-body text-sm text-xert-red">{error}</p>
+          </div>
+        )}
+      </div>
 
       <div className="flex justify-between mt-8">
         {step > 0 ? (
@@ -198,12 +201,12 @@ export default function PartnerInterestForm() {
         ) : <div />}
         {step < STEPS.length - 1 ? (
           <button type="button" onClick={next}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors">
             Continue
           </button>
         ) : (
           <button type="submit" disabled={loading}
-            className="px-8 py-3 bg-xert-red text-white font-display text-base uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
+            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {loading ? 'Submitting...' : 'Submit enquiry'}
           </button>
         )}
