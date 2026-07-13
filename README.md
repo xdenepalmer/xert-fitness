@@ -58,7 +58,10 @@ then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 The Supabase schema is defined in:
 
-- `src/supabase/rls_policies.sql` — lead/booking tables + Row Level Security
+- `src/supabase/rls_policies.sql` — Row Level Security for the lead/booking
+  form tables and admin settings; admin access is role-gated via
+  `public.is_admin()` (aligned with `rls_hardening.sql`, so re-running it never
+  downgrades a hardened database)
 - `src/supabase/booking_schema.sql` — members, session packs, orders, credits,
   bookings, coaches, events, and the booking functions
 - `src/supabase/admin_cms_schema.sql` — CMS, member/admin actions and class
@@ -87,17 +90,28 @@ The Supabase schema is defined in:
   attendance audit metadata, and automatic class completion
 - `src/supabase/member_waitlist_upgrade.sql` — lets signed-in members join a
   full class waitlist without consuming a credit
+- `src/supabase/member_pt_request_tracking.sql` — links PT requests to signed-in
+  members and enforces a trusted initial request status, consent and ownership
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
-For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
-`admin_cms_schema.sql`, `availability_schema.sql`, and finally `rls_hardening.sql`.
+For a fresh database: first create the lead/request tables (`member_interest`,
+`trainer_interest`, `partner_interest`, `class_bookings`,
+`private_session_requests`, `class_sessions`, `admin_settings`) — these were
+originally created through the Supabase dashboard and no checked-in SQL file
+creates them, so `rls_policies.sql` will error if they don't exist yet. Then
+run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
+`rls_policies.sql`, and finally `rls_hardening.sql`. This sequence produces the
+hardened state: every admin-scope policy checks `public.is_admin()` (a
+signed-in user whose `profiles.role` is `'admin'`), never just "any
+authenticated user". `rls_hardening.sql` runs last because it also adds the
+profile-privilege trigger and the availability/blackout policies.
 For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
 `rls_hardening.sql`, `product_validation_upgrade.sql`, and
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
 `admin_role_safety_upgrade.sql`, `business_metrics_upgrade.sql`, and
 `attendance_roll_call_upgrade.sql`, and `member_waitlist_upgrade.sql` after
-those prerequisites. The scripts are idempotent;
+those prerequisites, followed by `member_pt_request_tracking.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
@@ -147,4 +161,5 @@ Recommended Vercel settings:
 
 ## Supabase
 
-Database and RLS policy notes live in `src/supabase/rls_policies.sql`.
+Database and RLS policy notes live in `src/supabase/rls_policies.sql` and
+`src/supabase/rls_hardening.sql`.

@@ -29,8 +29,12 @@ drop policy if exists "public_insert_private_session_requests" on public.private
 create policy "public_insert_private_session_requests" on public.private_session_requests
   for insert to anon, authenticated
   with check (
-    (auth.uid() is null and user_id is null)
-    or (auth.uid() is not null and user_id = auth.uid())
+    status = 'requested'
+    and consent_to_contact is true
+    and (
+      (auth.uid() is null and user_id is null)
+      or (auth.uid() is not null and user_id = auth.uid())
+    )
   );
 
 drop policy if exists "members_read_own_private_session_requests" on public.private_session_requests;

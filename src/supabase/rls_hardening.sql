@@ -7,8 +7,9 @@
 -- `to authenticated`. Public form INSERTs and public reads are unchanged.
 --
 -- Requires booking_schema.sql (public.is_admin()) to be applied first.
--- Idempotent — safe to re-run. This supersedes the admin policies in
--- rls_policies.sql; re-running that file will undo this hardening, so don't.
+-- Idempotent — safe to re-run. rls_policies.sql has since been rewritten to
+-- these same is_admin()-gated policies, so re-running either file is safe;
+-- this file remains the canonical hardening pass (it also covers profiles).
 -- ============================================================================
 
 -- ── Lead / request tables: public INSERT stays, admin access now role-gated ──
@@ -34,6 +35,19 @@ create policy "admin_all_class_bookings" on public.class_bookings
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- private_session_requests
+alter table public.private_session_requests
+  add column if not exists user_id uuid references auth.users(id) on delete set null default auth.uid();
+drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
+create policy "public_insert_private_session_requests" on public.private_session_requests
+  for insert to anon, authenticated
+  with check (
+    status = 'requested'
+    and consent_to_contact is true
+    and (
+      (auth.uid() is null and user_id is null)
+      or (auth.uid() is not null and user_id = auth.uid())
+    )
+  );
 drop policy if exists "admin_all_private_session_requests" on public.private_session_requests;
 create policy "admin_all_private_session_requests" on public.private_session_requests
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
