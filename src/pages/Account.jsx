@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
+import { AlertTriangle, BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
+import { summarizeExpiringCredits } from '@/lib/creditExpiry';
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 
@@ -66,6 +67,7 @@ export default function Account() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const expiringCredits = useMemo(() => summarizeExpiringCredits(credits?.batches), [credits]);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
 
@@ -443,6 +445,17 @@ export default function Account() {
 
         {/* Credits */}
         <section className="mb-10">
+          {expiringCredits && (
+            <div role="status" className="mb-3 flex flex-wrap items-center gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
+              <p className="min-w-0 flex-1 font-body text-sm text-xert-pale">
+                {expiringCredits.credits} class credit{expiringCredits.credits === 1 ? '' : 's'} expire{expiringCredits.credits === 1 ? 's' : ''} in {expiringCredits.daysRemaining} day{expiringCredits.daysRemaining === 1 ? '' : 's'}, on {formatDate(expiringCredits.expiresAt)}.
+              </p>
+              <Link to="/booking" className="inline-flex min-h-11 items-center px-4 font-display text-sm uppercase text-xert-navy bg-[#e0b36a]">
+                Book A Class
+              </Link>
+            </div>
+          )}
           <div className="border p-6 flex flex-col sm:flex-row sm:items-center gap-6" style={cardStyle}>
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 flex items-center justify-center shrink-0" style={{ backgroundColor: '#7BA7BC' }}>
@@ -456,9 +469,9 @@ export default function Account() {
               </div>
             </div>
             <div className="sm:ml-auto flex flex-wrap items-center gap-3">
-              {!loading && credits?.batches?.length > 0 && (
+              {!loading && credits?.batches?.some(batch => batch.expires_at) && (
                 <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
-                  Next expiry: {formatDate(credits.batches[0].expires_at)}
+                  Next expiry: {formatDate(credits.batches.find(batch => batch.expires_at)?.expires_at)}
                 </p>
               )}
               <Link to="/booking" className="px-5 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>

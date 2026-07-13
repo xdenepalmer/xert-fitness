@@ -55,6 +55,10 @@ final class XertStore: ObservableObject {
         credits.reduce(0) { $0 + $1.remaining }
     }
 
+    var creditExpirySummary: CreditExpirySummary? {
+        credits.expirySummary()
+    }
+
     func bootstrap() async {
         if let cached = PublicDataCache.load() {
             products = cached.products

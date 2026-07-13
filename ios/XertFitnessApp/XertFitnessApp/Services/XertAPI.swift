@@ -200,12 +200,14 @@ final class XertAPI {
         try await perform(request)
     }
 
-    func credits(session auth: AuthSession) async throws -> [CreditBatch] {
-        try await restRequest(
+    func credits(session auth: AuthSession, now: Date = Date()) async throws -> [CreditBatch] {
+        let timestamp = ISO8601DateFormatter.standard.string(from: now)
+        return try await restRequest(
             path: "/rest/v1/credit_batches",
             queryItems: [
                 URLQueryItem(name: "select", value: "*"),
                 URLQueryItem(name: "remaining", value: "gt.0"),
+                URLQueryItem(name: "or", value: "(expires_at.is.null,expires_at.gt.\(timestamp))"),
                 URLQueryItem(name: "order", value: "expires_at.asc")
             ],
             auth: auth

@@ -289,9 +289,19 @@ const inputCls = 'bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-bo
 
 const FOLLOW_UP_LABELS = {
   no_first_booking: 'No first booking',
+  credits_expiring: 'Credits expiring',
   idle_credits: 'Credits inactive',
   renewal_due: 'Renewal due'
 };
+
+function followUpDetail(member) {
+  if (member.reason === 'no_first_booking') return `Joined ${fmtDate(member.joined_at)}`;
+  if (member.reason === 'credits_expiring') {
+    const count = Number(member.credits_expiring);
+    return `${count} credit${count === 1 ? '' : 's'} expire ${fmtDate(member.next_credit_expiry)}`;
+  }
+  return `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`;
+}
 
 function FollowUpQueue({ rows, available, error, loading, onRetry, onView }) {
   return (
@@ -320,9 +330,7 @@ function FollowUpQueue({ rows, available, error, loading, onRetry, onView }) {
               <div className="min-w-[12rem] flex-1">
                 <p className="font-display text-sm text-xert-offwhite uppercase">{member.full_name || member.email}</p>
                 <p className="font-body text-[11px] text-xert-concrete/45">
-                  {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {member.reason === 'no_first_booking'
-                    ? `Joined ${fmtDate(member.joined_at)}`
-                    : `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`}
+                  {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {followUpDetail(member)}
                 </p>
               </div>
               <div className="flex items-center gap-2">

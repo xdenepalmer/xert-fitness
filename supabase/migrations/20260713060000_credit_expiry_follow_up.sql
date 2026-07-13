@@ -1,7 +1,5 @@
--- Additive admin member follow-up queue. Apply after admin_member_notes_upgrade.sql.
+-- Proactive retention queue for active credits expiring within seven days.
 
-create index if not exists session_bookings_member_status_session_idx
-  on public.session_bookings (user_id, status, class_session_id);
 create index if not exists credit_batches_member_expiry_active_idx
   on public.credit_batches (user_id, expires_at)
   where remaining > 0 and expires_at is not null;

@@ -14,6 +14,7 @@ with required (capability, migration) as (
     ('checkout_reconciliation', 'supabase/migrations/20260713030000_checkout_reconciliation.sql'),
     ('member_announcements', 'supabase/migrations/20260713040000_member_announcements.sql'),
     ('announcement_receipts', 'supabase/migrations/20260713050000_announcement_receipts.sql'),
+    ('credit_expiry_follow_up', 'supabase/migrations/20260713060000_credit_expiry_follow_up.sql'),
     ('member_pt_request_tracking', 'src/supabase/member_pt_request_tracking.sql'),
     ('public_form_integrity', 'src/supabase/public_form_integrity_upgrade.sql')
 ), readiness as (

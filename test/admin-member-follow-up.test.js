@@ -20,6 +20,7 @@ test('member admin renders direct contact actions and refreshes after staff foll
   const source = read('../src/components/admin/MembersManager.jsx');
   assert.match(source, /Follow-up queue/);
   assert.match(source, /No first booking/);
+  assert.match(source, /Credits expiring/);
   assert.match(source, /Credits inactive/);
   assert.match(source, /Renewal due/);
   assert.match(source, /href=\{`mailto:\$\{member\.email\}`\}/);
@@ -36,6 +37,9 @@ for (const path of ['../src/supabase/admin_cms_schema.sql', '../src/supabase/adm
     assert.match(sql, /greatest\(1, least\(coalesce\(p_limit, 20\), 50\)\)/i);
     assert.match(sql, /if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/i);
     assert.match(sql, /bookings_count = 0[\s\S]*interval '7 days'[\s\S]*'no_first_booking'/i);
+    assert.match(sql, /credits_expiring > 0 then 'credits_expiring'/i);
+    assert.match(sql, /expires_at > now\(\)[\s\S]*expires_at <= now\(\) \+ interval '7 days'/i);
+    assert.match(sql, /credits_expiring bigint, next_credit_expiry timestamptz/i);
     assert.match(sql, /credits_remaining > 0[\s\S]*next_booking_at is null[\s\S]*interval '14 days'[\s\S]*'idle_credits'/i);
     assert.match(sql, /credits_remaining = 0[\s\S]*last_attended_at >= now\(\) - interval '30 days'[\s\S]*'renewal_due'/i);
     assert.match(sql, /last_follow_up_at is null or a\.last_follow_up_at < now\(\) - interval '7 days'/i);

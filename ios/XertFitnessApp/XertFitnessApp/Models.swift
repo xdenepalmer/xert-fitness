@@ -168,6 +168,35 @@ struct CreditBatch: Identifiable, Codable, Hashable {
     let expires_at: Date?
 }
 
+struct CreditExpirySummary: Equatable {
+    let credits: Int
+    let expiresAt: Date
+    let daysRemaining: Int
+}
+
+extension Collection where Element == CreditBatch {
+    func expirySummary(now: Date = Date(), windowDays: Int = 7) -> CreditExpirySummary? {
+        guard windowDays > 0,
+              let cutoff = Calendar.current.date(byAdding: .day, value: windowDays, to: now)
+        else { return nil }
+
+        let expiring = compactMap { batch -> (CreditBatch, Date)? in
+            guard batch.remaining > 0,
+                  let expiry = batch.expires_at,
+                  expiry > now,
+                  expiry <= cutoff
+            else { return nil }
+            return (batch, expiry)
+        }
+        .sorted { $0.1 < $1.1 }
+
+        guard let earliest = expiring.first?.1 else { return nil }
+        let credits = expiring.reduce(0) { $0 + $1.0.remaining }
+        let daysRemaining = max(1, Int(ceil(earliest.timeIntervalSince(now) / 86_400)))
+        return CreditExpirySummary(credits: credits, expiresAt: earliest, daysRemaining: daysRemaining)
+    }
+}
+
 struct OrderProduct: Codable, Hashable {
     let name: String
 }

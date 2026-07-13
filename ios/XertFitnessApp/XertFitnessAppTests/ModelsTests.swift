@@ -275,6 +275,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(batch.remaining, 7)
     }
 
+    func testCreditExpirySummaryIncludesOnlyActiveCreditsInsideSevenDays() throws {
+        let now = Date(timeIntervalSince1970: 1_784_006_400)
+        let batches = [
+            CreditBatch(id: UUID(), total: 2, remaining: 2, expires_at: now.addingTimeInterval(2 * 86_400)),
+            CreditBatch(id: UUID(), total: 3, remaining: 3, expires_at: now.addingTimeInterval(6 * 86_400)),
+            CreditBatch(id: UUID(), total: 4, remaining: 4, expires_at: now.addingTimeInterval(8 * 86_400)),
+            CreditBatch(id: UUID(), total: 5, remaining: 5, expires_at: nil),
+            CreditBatch(id: UUID(), total: 1, remaining: 0, expires_at: now.addingTimeInterval(86_400)),
+        ]
+
+        let summary = try XCTUnwrap(batches.expirySummary(now: now))
+
+        XCTAssertEqual(summary.credits, 5)
+        XCTAssertEqual(summary.expiresAt, now.addingTimeInterval(2 * 86_400))
+        XCTAssertEqual(summary.daysRemaining, 2)
+    }
+
+    func testCreditExpirySummaryExcludesExpiredAndDistantCredits() {
+        let now = Date(timeIntervalSince1970: 1_784_006_400)
+        let batches = [
+            CreditBatch(id: UUID(), total: 2, remaining: 2, expires_at: now.addingTimeInterval(-86_400)),
+            CreditBatch(id: UUID(), total: 4, remaining: 4, expires_at: now.addingTimeInterval(8 * 86_400)),
+            CreditBatch(id: UUID(), total: 5, remaining: 5, expires_at: nil),
+        ]
+
+        XCTAssertNil(batches.expirySummary(now: now))
+    }
+
     func testCheckoutReconciliationRequiresBothPaidOrderAndGrantedCredits() {
         let baselineOrderID = UUID()
         let newOrderID = UUID()

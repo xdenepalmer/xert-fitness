@@ -195,6 +195,12 @@ struct AccountView: View {
                 .xertEyebrow()
             Text("\(store.creditTotal)")
                 .xertDisplay(34)
+            if let expiry = store.creditExpirySummary {
+                Text("\(expiry.credits) expire \(expiry.expiresAt.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundStyle(Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
         .padding(14)

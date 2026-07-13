@@ -15,6 +15,7 @@ struct HomeView: View {
 
                     heroHeader
                     announcementsSection
+                    creditExpirySection
                     quickActions
                     glanceSection
                     nextUpSection
@@ -71,6 +72,36 @@ struct HomeView: View {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Credit expiry
+
+    @ViewBuilder
+    private var creditExpirySection: some View {
+        if let summary = store.creditExpirySummary {
+            XertSection(title: "Credits Expiring Soon") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label {
+                        Text("\(summary.credits) class credit\(summary.credits == 1 ? "" : "s") expire\(summary.credits == 1 ? "s" : "") in \(summary.daysRemaining) day\(summary.daysRemaining == 1 ? "" : "s").")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.xertOffWhite)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255))
+                    }
+                    Text("Use them by \(summary.expiresAt.formatted(date: .abbreviated, time: .omitted)).")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale)
+                    Button("Book A Class") {
+                        onNavigate(1)
+                    }
+                    .buttonStyle(.xertPrimary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .xertCardStyle()
             }
         }
     }
