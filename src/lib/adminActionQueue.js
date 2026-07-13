@@ -23,7 +23,7 @@ const ACTION_DEFINITIONS = [
     title: 'Review class waitlists',
     singular: 'member is waiting for a class place',
     plural: 'members are waiting for class places',
-    target: 'bookings',
+    target: 'calendar',
     tone: 'attention',
   },
   {

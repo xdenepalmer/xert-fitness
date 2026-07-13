@@ -16,7 +16,7 @@ test('prioritizes only actionable admin queues with direct destinations', () => 
   assert.deepEqual(queue.map(item => [item.key, item.count, item.target]), [
     ['pending-bookings', 3, 'bookings'],
     ['pt-requests', 1, 'pt-requests'],
-    ['waitlists', 2, 'bookings'],
+    ['waitlists', 2, 'calendar'],
   ]);
   assert.match(queue[0].detail, /3 booking requests need a decision/);
   assert.match(queue[1].detail, /1 private training request is waiting/);

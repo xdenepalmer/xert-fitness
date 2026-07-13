@@ -711,6 +711,16 @@ export async function adminSessionRoster(sessionId) {
   return data || [];
 }
 
+export async function adminWaitlistOverview(limit = 20) {
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 20));
+  const { data, error } = await supabase.rpc('admin_waitlist_overview', { p_limit: safeLimit });
+  if (!error) return { rows: data || [], available: true };
+  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_waitlist_overview.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (functionUnavailable) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
 export async function adminSetBookingStatus(bookingId, status) {
   const mutation = normalizeBookingStatusMutation(bookingId, status);
   const { error } = await supabase.rpc('admin_set_booking_status', {

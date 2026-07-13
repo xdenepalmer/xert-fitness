@@ -99,7 +99,8 @@ The Supabase schema is defined in:
 - `src/supabase/member_waitlist_upgrade.sql` — lets signed-in members join a
   full class waitlist without consuming a credit
 - `src/supabase/waitlist_fifo_promotion_upgrade.sql` — displays member queue
-  positions and atomically promotes only the next waitlisted member
+  positions and atomically promotes only the next waitlisted member, with a
+  bounded operational waitlist desk for admins
 - `src/supabase/member_pt_request_tracking.sql` — links PT requests to signed-in
   members and enforces a trusted initial request status, consent and ownership
 - `src/supabase/public_form_integrity_upgrade.sql` — prevents direct clients

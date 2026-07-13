@@ -505,6 +505,54 @@ begin
   return v_booking_id;
 end; $$;
 
+-- Bounded operational desk for future class queues. One row per class keeps
+-- the FIFO head and credit blocker visible without loading every full roster.
+create or replace function public.admin_waitlist_overview(p_limit integer default 20)
+returns table (
+  session_id uuid, title text, start_time timestamptz, capacity integer,
+  active_count bigint, waitlist_count bigint, spots_available integer,
+  can_promote boolean, next_booking_id uuid, next_member_id uuid,
+  next_full_name text, next_email text, next_phone text,
+  next_booked_at timestamptz, next_available_credits bigint
+) language plpgsql security definer stable set search_path = public as $$
+declare
+  v_limit integer := greatest(1, least(coalesce(p_limit, 20), 50));
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  return query
+  with queued_sessions as materialized (
+    select s.id, s.title, s.start_time, s.capacity,
+           count(b.id) filter (where b.status in ('requested', 'confirmed')) as active_count,
+           count(b.id) filter (where b.status = 'waitlisted') as waitlist_count
+      from public.class_sessions s
+      left join public.session_bookings b on b.class_session_id = s.id
+     where s.status = 'published' and s.start_time > now()
+     group by s.id, s.title, s.start_time, s.capacity
+    having count(b.id) filter (where b.status = 'waitlisted') > 0
+  )
+  select q.id, q.title, q.start_time, q.capacity,
+         q.active_count, q.waitlist_count,
+         case when q.capacity is null then null
+              else greatest(q.capacity - q.active_count, 0)::integer end,
+         q.capacity is null or q.active_count < q.capacity,
+         head.id, head.user_id, p.full_name, p.email, p.phone, head.created_at,
+         coalesce((select sum(cb.remaining) from public.credit_batches cb
+                    where cb.user_id = head.user_id and cb.remaining > 0
+                      and (cb.expires_at is null or cb.expires_at > now())), 0)
+    from queued_sessions q
+    join lateral (
+      select b.id, b.user_id, b.created_at
+        from public.session_bookings b
+       where b.class_session_id = q.id and b.status = 'waitlisted'
+       order by b.created_at, b.id
+       limit 1
+    ) head on true
+    left join public.profiles p on p.id = head.user_id
+   order by (q.capacity is null or q.active_count < q.capacity) desc,
+            q.start_time, q.id
+   limit v_limit;
+end; $$;
+
 -- Members training toward a specific calendar event, including the contact
 -- details staff need to coordinate an event group.
 create or replace function public.admin_event_goal_members(p_event_id uuid)
@@ -649,6 +697,7 @@ revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 revoke execute on function public.admin_session_roster(uuid) from public, anon;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 revoke execute on function public.admin_promote_next_waitlisted(uuid) from public, anon;
+revoke execute on function public.admin_waitlist_overview(integer) from public, anon;
 revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
 revoke execute on function public.admin_event_goal_members(uuid) from public, anon;
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
@@ -664,6 +713,7 @@ grant execute on function public.admin_set_role(uuid, text)              to auth
 grant execute on function public.admin_session_roster(uuid)              to authenticated;
 grant execute on function public.admin_set_booking_status(uuid, text)    to authenticated;
 grant execute on function public.admin_promote_next_waitlisted(uuid)     to authenticated;
+grant execute on function public.admin_waitlist_overview(integer)        to authenticated;
 grant execute on function public.admin_cancel_class_session(uuid)         to authenticated;
 grant execute on function public.admin_event_goal_members(uuid)            to authenticated;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;

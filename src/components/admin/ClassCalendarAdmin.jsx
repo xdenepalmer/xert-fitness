@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, ClipboardCheck, Download, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 
@@ -20,6 +20,75 @@ function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
     return [status, 'requested', 'confirmed'];
   }
   return ['confirmed', 'attended', 'no_show', 'cancelled'];
+}
+
+function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onRetry, onOpen, onPromote }) {
+  return (
+    <section aria-labelledby="waitlist-desk-title" className="mb-6 border-y border-xert-steel/20 py-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h3 id="waitlist-desk-title" className="flex items-center gap-2 font-display text-sm text-xert-offwhite uppercase">
+            <UserCheck className="w-4 h-4 text-xert-steel" /> Waitlist desk
+            {!loading && available && <span className="font-body text-xs text-xert-concrete/40">({rows.length})</span>}
+          </h3>
+          <p className="font-body text-xs text-xert-concrete/40 mt-1">Future class queues, ordered with open places first.</p>
+        </div>
+      </div>
+      {loading ? (
+        <div className="h-16 bg-xert-ink animate-pulse" />
+      ) : error ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p role="alert" className="font-body text-xs text-xert-red">{error}</p>
+          <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
+        </div>
+      ) : !available ? (
+        <p className="font-body text-xs" style={{ color: '#e0b36a' }}>The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
+      ) : rows.length === 0 ? (
+        <p className="font-body text-sm text-xert-concrete/40">No upcoming class waitlists.</p>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {rows.map(item => {
+            const credits = Number(item.next_available_credits || 0);
+            const capacityLabel = item.capacity == null ? `${item.active_count}/unlimited` : `${item.active_count}/${item.capacity}`;
+            const nextMember = item.next_full_name || item.next_email || 'Member';
+            return (
+              <article key={item.session_id} className="border border-xert-steel/15 bg-xert-ink p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-[12rem] flex-1">
+                    <p className="font-display text-base text-xert-offwhite uppercase">{item.title}</p>
+                    <p className="font-body text-xs text-xert-concrete/50 mt-1">
+                      {new Date(item.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                    <p className="font-body text-[11px] text-xert-concrete/45 mt-2">
+                      {Number(item.waitlist_count)} waiting · {capacityLabel} active
+                    </p>
+                    <p className="font-body text-xs text-xert-concrete/65 mt-2">
+                      Next: {nextMember} · {credits} credit{credits === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ color: item.can_promote ? '#101820' : '#D1DDE6', backgroundColor: item.can_promote ? '#7BA7BC' : 'rgba(123,167,188,0.14)' }}>
+                    {item.can_promote ? 'Place open' : 'Class full'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-4">
+                  <button type="button" onClick={() => onOpen(item.session_id)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/65 hover:border-xert-steel">
+                    Open roster
+                  </button>
+                  {item.can_promote && credits > 0 && (
+                    <button type="button" onClick={() => onPromote(item)} disabled={Boolean(promotingSessionId)} className="inline-flex min-h-11 items-center gap-1.5 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel hover:border-xert-steel disabled:opacity-40">
+                      <UserCheck className="w-3.5 h-3.5" />
+                      {promotingSessionId === item.session_id ? 'Promoting...' : 'Promote next'}
+                    </button>
+                  )}
+                  {item.can_promote && credits === 0 && <span className="font-body text-xs" style={{ color: '#e0b36a' }}>Next member needs a credit</span>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function rosterExportFilename(session) {
@@ -284,6 +353,10 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [waitlistOverview, setWaitlistOverview] = useState([]);
+  const [waitlistOverviewAvailable, setWaitlistOverviewAvailable] = useState(true);
+  const [waitlistOverviewError, setWaitlistOverviewError] = useState('');
+  const [waitlistOverviewLoading, setWaitlistOverviewLoading] = useState(true);
   const [blackouts, setBlackouts] = useState([]);
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
@@ -295,6 +368,22 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
 
+  const refreshWaitlistOverview = async () => {
+    setWaitlistOverviewLoading(true);
+    setWaitlistOverviewError('');
+    try {
+      const result = await adminWaitlistOverview(20);
+      setWaitlistOverview(result.rows);
+      setWaitlistOverviewAvailable(result.available);
+    } catch (error) {
+      setWaitlistOverview([]);
+      setWaitlistOverviewAvailable(true);
+      setWaitlistOverviewError(error.message || 'Check the waitlist overview permissions.');
+    } finally {
+      setWaitlistOverviewLoading(false);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -304,6 +393,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
           toast({ title: 'Blackout checks unavailable', description: error.message, variant: 'destructive' });
           return [];
         }),
+        refreshWaitlistOverview(),
       ]);
       setSessions(loadedSessions);
       setBlackouts(loadedBlackouts);
@@ -347,6 +437,17 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
     }
   };
 
+  const openWaitlistRoster = async sessionId => {
+    setTimeFilter('upcoming');
+    try {
+      await refreshBookings(sessionId);
+      setExpandedBookings(sessionId);
+      window.requestAnimationFrame(() => document.getElementById(`class-session-${sessionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    } catch (error) {
+      toast({ title: 'Could not load class roster', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const handleRosterStatus = async (bookingId, status) => {
     const sessionId = expandedBookings;
     if (!sessionId) return;
@@ -371,7 +472,10 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
     setPromotingSessionId(session.id);
     try {
       await adminPromoteNextWaitlisted(session.id);
-      await refreshBookings(session.id);
+      await Promise.all([
+        refreshWaitlistOverview(),
+        ...(expandedBookings === session.id ? [refreshBookings(session.id)] : []),
+      ]);
       toast({ title: 'Next member promoted', description: 'Their earliest-expiring available credit is now reserved.' });
     } catch (error) {
       toast({ title: 'Promotion paused', description: error.message, variant: 'destructive' });
@@ -522,6 +626,17 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
         </button>
       </div>
 
+      <WaitlistDesk
+        rows={waitlistOverview}
+        available={waitlistOverviewAvailable}
+        error={waitlistOverviewError}
+        loading={waitlistOverviewLoading}
+        promotingSessionId={promotingSessionId}
+        onRetry={refreshWaitlistOverview}
+        onOpen={openWaitlistRoster}
+        onPromote={item => handlePromoteNext({ id: item.session_id })}
+      />
+
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-xert-ink animate-pulse" />)}</div>
       ) : filtered.length === 0 ? (
@@ -541,7 +656,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
             const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
             const hasOpenPlace = s.capacity == null || activeRosterCount < s.capacity;
             return (
-            <div key={s.id} className="bg-xert-ink border border-xert-steel/20">
+            <div id={`class-session-${s.id}`} key={s.id} className="bg-xert-ink border border-xert-steel/20 scroll-mt-20">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
