@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { inspectCommerceEnvironment, inspectCommerceProducts, inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
+import adminCommerceHealthHandler, { inspectCommerceEnvironment, inspectCommerceProducts, inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
 
 const validProduct = {
   slug: 'starter-4',
@@ -116,4 +116,16 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(source, /profile\?\.role !== 'admin'/);
   assert.match(source, /environmentIssues\(environment\)/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);
+});
+
+test('commerce health authenticates before reporting server configuration', async () => {
+  const response = {
+    statusCode: 200,
+    setHeader() {},
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  await adminCommerceHealthHandler({ method: 'GET', headers: {} }, response);
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.body, { error: 'Not authenticated.' });
 });

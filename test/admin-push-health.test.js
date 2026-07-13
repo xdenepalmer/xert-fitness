@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { summarizePushOperations } from '../api/admin-push-health.js';
+import adminPushHealthHandler, { summarizePushOperations } from '../api/admin-push-health.js';
 
 function count(value) {
   return { count: value, error: null };
@@ -14,6 +14,15 @@ function configuredEnvironment() {
     APNS_KEY_ID: 'KEY123',
     APNS_TEAM_ID: 'TEAM123',
     APNS_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  };
+}
+
+function responseRecorder() {
+  return {
+    statusCode: 200,
+    setHeader() {},
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
   };
 }
 
@@ -61,4 +70,11 @@ test('admin push health is authenticated, service-only, and integrated into oper
   assert.match(adminData, /Missing APNs|missing APNs|missing APNs values|missing APNs values in the production Vercel project/i);
   assert.match(operations, /'push-notifications': 'announcements'/);
   assert.match(operations, /BellRing/);
+});
+
+test('admin push health authenticates before reporting server configuration', async () => {
+  const response = responseRecorder();
+  await adminPushHealthHandler({ method: 'GET', headers: {} }, response);
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.body, { error: 'Not authenticated.' });
 });
