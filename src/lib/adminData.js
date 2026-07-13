@@ -805,6 +805,9 @@ export async function adminSetBookingStatus(bookingId, status) {
     if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(error.message || '')) {
       throw new Error('Promote the next waitlisted member before reopening another booking.');
     }
+    if (/BOOKING_TIME_CONFLICT/i.test(error.message || '')) {
+      throw new Error('This member already has another active class at the same time. Resolve that booking before confirming this place.');
+    }
     throw new Error(error.message);
   }
 }
@@ -821,6 +824,9 @@ export async function adminPromoteNextWaitlisted(sessionId) {
     throw new Error('The next member has no available class credit. Contact them before changing the queue.');
   }
   if (/SESSION_FULL/i.test(message)) throw new Error('This class is still full. Refresh the roster before promoting anyone.');
+  if (/BOOKING_TIME_CONFLICT/i.test(message)) {
+    throw new Error('The next member already has another active class at the same time. Contact them before changing the queue.');
+  }
   throw new Error(message);
 }
 

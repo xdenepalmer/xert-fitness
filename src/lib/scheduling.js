@@ -172,6 +172,9 @@ export function classSessionUpdateRpcError(message) {
   if (/USE_ATTENDANCE_WORKFLOW/i.test(value)) {
     return 'Use Take attendance to complete the class with a full roll call.';
   }
+  if (/SESSION_TIME_CONFLICTS_WITH_MEMBER_BOOKING/i.test(value)) {
+    return 'This new time overlaps another active booking held by one or more members. Resolve those bookings before rescheduling the class.';
+  }
   if (/TERMINAL_SESSION_IMMUTABLE/i.test(value)) {
     return 'Cancelled and completed classes cannot be reopened. Create a new class instead.';
   }

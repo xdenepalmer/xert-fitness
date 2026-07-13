@@ -229,11 +229,19 @@ struct BookingView: View {
 
     private func sessionCard(for session: ClassSession) -> some View {
         let booking = activeBookings[session.id]
+        let timeConflict = session.isFull ? nil : BookingItem.timeConflict(for: session, in: store.bookings)
         return VStack(alignment: .leading, spacing: 12) {
             sessionHeader(session)
             sessionMetadata(session)
             .font(.caption)
             .foregroundStyle(Color.xertPale)
+
+            if let timeConflict, booking == nil {
+                Label("Overlaps \(timeConflict.title)", systemImage: "calendar.badge.exclamationmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.red)
+                    .accessibilityLabel("Time conflict with \(timeConflict.title)")
+            }
 
             DisclosureGroup(isExpanded: expansionBinding(for: session.id)) {
                 sessionDetails(for: session)
@@ -245,7 +253,7 @@ struct BookingView: View {
             }
             .tint(.xertSteel)
 
-            sessionAction(for: session, booking: booking)
+            sessionAction(for: session, booking: booking, timeConflict: timeConflict)
         }
         .padding(14)
         .xertCardStyle()
@@ -383,7 +391,7 @@ struct BookingView: View {
     }
 
     @ViewBuilder
-    private func sessionAction(for session: ClassSession, booking: BookingItem?) -> some View {
+    private func sessionAction(for session: ClassSession, booking: BookingItem?, timeConflict: BookingItem?) -> some View {
         if let booking {
             Label(
                 booking.stateLabel,
@@ -410,6 +418,10 @@ struct BookingView: View {
             }
             .buttonStyle(.xertPrimary)
             .disabled(store.bookingSessionID == session.id)
+        } else if timeConflict != nil {
+            Label("Time conflict", systemImage: "exclamationmark.circle")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.red)
         } else {
             Button {
                 if store.isSignedIn {

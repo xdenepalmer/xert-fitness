@@ -11,6 +11,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   announcement_receipts: 'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
   announcement_actions: 'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',
+  booking_time_conflict_guard: 'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
   credit_expiry_follow_up: 'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
   member_pt_request_tracking: 'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',

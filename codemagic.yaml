@@ -245,6 +245,7 @@ workflows:
               "member_announcements",
               "announcement_receipts",
               "announcement_actions",
+              "booking_time_conflict_guard",
               "credit_expiry_follow_up",
               "member_pt_request_tracking",
               "public_form_integrity",

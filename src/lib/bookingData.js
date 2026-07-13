@@ -101,6 +101,7 @@ const BOOKING_ERRORS = {
   SESSION_NOT_BOOKABLE: 'That class is not open for booking yet.',
   SESSION_IN_PAST: 'That class has already started.',
   ALREADY_BOOKED: "You've already booked this class.",
+  BOOKING_TIME_CONFLICT: 'That class overlaps another active booking in your schedule.',
   SESSION_FULL: 'Sorry, this class is now full.',
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
   SESSION_HAS_CAPACITY: 'A place is available now. Book the class instead of joining its waitlist.',

@@ -15,6 +15,7 @@ enum BookingErrorMessage {
         ("SESSION_NOT_BOOKABLE", "That class is not currently open for booking."),
         ("SESSION_IN_PAST", "That class has already started."),
         ("ALREADY_BOOKED", "You already have an active place in that class."),
+        ("BOOKING_TIME_CONFLICT", "That class overlaps another active booking in your schedule."),
         ("SESSION_FULL", "That class is now full. Refresh to check whether its waitlist is available."),
         ("SESSION_INTEREST_ONLY", "This class is collecting interest only."),
         ("SESSION_HAS_CAPACITY", "A place is available now. Refresh and book the class instead."),

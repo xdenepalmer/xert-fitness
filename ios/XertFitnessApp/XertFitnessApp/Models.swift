@@ -114,6 +114,11 @@ struct ClassSession: Identifiable, Codable, Hashable {
     let spots_left: Int?
 
     var isFull: Bool { spots_left.map { $0 <= 0 } ?? false }
+
+    var effectiveEndTime: Date {
+        if let end_time, end_time > start_time { return end_time }
+        return start_time.addingTimeInterval(TimeInterval(max(duration_minutes ?? 60, 1) * 60))
+    }
 }
 
 struct EventItem: Identifiable, Codable, Hashable {
@@ -297,6 +302,15 @@ struct BookingItem: Identifiable, Codable, Hashable {
         ["requested", "confirmed", "waitlisted"].contains(status)
     }
 
+    var holdsClassTime: Bool {
+        ["requested", "confirmed"].contains(status)
+    }
+
+    var effectiveEndTime: Date {
+        if let end_time, end_time > start_time { return end_time }
+        return start_time.addingTimeInterval(60 * 60)
+    }
+
     var stateLabel: String {
         switch status {
         case "requested": return "Request sent"
@@ -334,6 +348,15 @@ struct BookingItem: Identifiable, Codable, Hashable {
                     && (candidate.booked_at ?? .distantPast) > (current.booked_at ?? .distantPast)) {
                 index[candidate.session_id] = candidate
             }
+        }
+    }
+
+    static func timeConflict(for session: ClassSession, in bookings: [BookingItem]) -> BookingItem? {
+        bookings.first { booking in
+            booking.holdsClassTime
+                && booking.session_id != session.id
+                && booking.start_time < session.effectiveEndTime
+                && booking.effectiveEndTime > session.start_time
         }
     }
 

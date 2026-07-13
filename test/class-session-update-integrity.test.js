@@ -53,6 +53,7 @@ test('capacity cannot be reduced below active bookings and RPC errors stay actio
   );
   assert.match(classSessionUpdateRpcError('USE_CANCELLATION_WORKFLOW'), /credits are returned/);
   assert.match(classSessionUpdateRpcError('USE_ATTENDANCE_WORKFLOW'), /full roll call/);
+  assert.match(classSessionUpdateRpcError('SESSION_TIME_CONFLICTS_WITH_MEMBER_BOOKING'), /overlaps another active booking/);
 });
 
 test('class update uses a transactional RPC with a guarded legacy preflight', () => {

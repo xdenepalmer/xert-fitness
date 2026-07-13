@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
-import { activeBookingsBySession, classActionLabel } from '@/lib/bookingUi';
+import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
 
 const steps = [
   'Purchase a session pack.',
@@ -297,7 +297,8 @@ export default function Booking() {
                         const existingBooking = memberBookingsBySession.get(s.id);
                         const isInterestOnly = s.booking_mode === 'interest_only';
                         const isRequest = s.booking_mode === 'request_to_book';
-                        const actionLabel = classActionLabel({ booking: existingBooking, full, bookingMode: s.booking_mode });
+                        const timeConflict = !full && !existingBooking ? bookingTimeConflict(s, myBookings) : null;
+                        const actionLabel = classActionLabel({ booking: existingBooking, conflict: timeConflict, full, bookingMode: s.booking_mode });
                         return (
                           <div key={s.id} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
                             <p className="font-display text-lg uppercase tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
@@ -314,6 +315,11 @@ export default function Booking() {
                               {isRequest && (
                                 <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.7)' }}>
                                   Staff confirmation required
+                                </p>
+                              )}
+                              {timeConflict && (
+                                <p id={`booking-conflict-${s.id}`} className="font-body text-xs mt-1 text-xert-red">
+                                  Overlaps {timeConflict.title || timeConflict.class_type || 'another active booking'}
                                 </p>
                               )}
                             </div>
@@ -335,7 +341,8 @@ export default function Booking() {
                             ) : (
                               <button
                                 onClick={() => handleBook(s)}
-                                disabled={Boolean(existingBooking) || bookingId === s.id}
+                                disabled={Boolean(existingBooking) || Boolean(timeConflict) || bookingId === s.id}
+                                aria-describedby={timeConflict ? `booking-conflict-${s.id}` : undefined}
                                 className="px-5 py-2.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 shrink-0"
                                 style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
                                 {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}

@@ -814,6 +814,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('stripe_refund_reconciliation') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('credit_expiry_follow_up') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('booking_time_conflict_guard') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

@@ -837,6 +837,30 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testBookingTimeConflictsIgnoreWaitlistsAndAllowBackToBackClasses() {
+        let target = classSession(
+            spotsLeft: 4,
+            startTime: queenslandDate(2026, 7, 14, 8, 0)
+        )
+        let overlap = booking(
+            status: "confirmed",
+            startTime: queenslandDate(2026, 7, 14, 8, 30),
+            endTime: queenslandDate(2026, 7, 14, 9, 30)
+        )
+        let waitlist = booking(
+            status: "waitlisted",
+            startTime: queenslandDate(2026, 7, 14, 8, 15)
+        )
+        let backToBack = booking(
+            status: "requested",
+            startTime: queenslandDate(2026, 7, 14, 9, 0),
+            endTime: queenslandDate(2026, 7, 14, 10, 0)
+        )
+
+        XCTAssertEqual(BookingItem.timeConflict(for: target, in: [waitlist, overlap])?.id, overlap.id)
+        XCTAssertNil(BookingItem.timeConflict(for: target, in: [waitlist, backToBack]))
+    }
+
     private func booking(
         status: String,
         startTime: Date,
