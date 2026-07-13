@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BellRing, ChevronLeft, ChevronRight, ClipboardCheck, Download, RefreshCw, ScrollText, ShieldCheck, Ticket, UserRoundSearch } from 'lucide-react';
+import { BellRing, CalendarClock, ChevronLeft, ChevronRight, ClipboardCheck, Download, RefreshCw, ScrollText, ShieldCheck, Ticket, UserRoundSearch } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAdminAuditRecords } from '@/lib/adminData';
 import {
@@ -27,7 +27,7 @@ function formatDateTime(value) {
 }
 
 function ActionMark({ type }) {
-  const Icon = type === 'role' ? ShieldCheck : type === 'credit' ? Ticket : type === 'announcement' ? BellRing : type === 'lead' ? UserRoundSearch : ClipboardCheck;
+  const Icon = type === 'role' ? ShieldCheck : type === 'credit' ? Ticket : type === 'announcement' ? BellRing : type === 'lead' ? UserRoundSearch : type === 'schedule' ? CalendarClock : ClipboardCheck;
   return (
     <span className="w-9 h-9 shrink-0 inline-flex items-center justify-center bg-xert-steel/10 border border-xert-steel/20" aria-hidden="true">
       <Icon className="w-4 h-4 text-xert-steel" />
@@ -102,7 +102,7 @@ export default function AdminAuditLog() {
             <h2 className="font-display text-lg text-xert-offwhite uppercase">Admin Audit</h2>
           </div>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">
-            Permanent role, credit, lead, request and member notice history
+            Permanent role, credit, lead, schedule, request and member notice history
             {updatedAt ? ` · refreshed ${updatedAt.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}
           </p>
         </div>
@@ -126,11 +126,12 @@ export default function AdminAuditLog() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         {[
           { label: 'Actions', value: summary.total },
           { label: 'Role changes', value: summary.roleChanges },
           { label: 'Lead changes', value: summary.leadChanges },
+          { label: 'Schedule changes', value: summary.scheduleChanges },
           { label: 'Request changes', value: summary.requestChanges },
           { label: 'Notice changes', value: summary.announcementChanges },
           { label: 'Credits granted', value: summary.creditsGranted },
@@ -148,7 +149,7 @@ export default function AdminAuditLog() {
           <h3 id="audit-ledger-title" className="font-display text-sm text-xert-concrete/60 uppercase tracking-wider">Audit Ledger</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <input type="search" value={search} onChange={event => setSearch(event.target.value)} aria-label="Search admin audit"
-              placeholder="Search admin, lead, notice or reason"
+              placeholder="Search admin, lead, class or reason"
               className="sm:col-span-1 min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite placeholder:text-xert-concrete/30 focus:outline-none focus:border-xert-steel" />
             <select value={type} onChange={event => setType(event.target.value)} aria-label="Audit action type"
               className="min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite">
@@ -156,6 +157,7 @@ export default function AdminAuditLog() {
               <option value="role">Role changes</option>
               <option value="credit">Credit grants</option>
               <option value="lead">Lead pipeline changes</option>
+              <option value="schedule">Schedule changes</option>
               <option value="request">Booking & PT changes</option>
               <option value="announcement">Member notice changes</option>
             </select>
@@ -181,7 +183,7 @@ export default function AdminAuditLog() {
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <p className="font-body text-sm text-xert-offwhite">{event.summary}</p>
                       <span className="font-body text-[10px] uppercase tracking-wider text-xert-steel">
-                        {event.type === 'role' ? 'Role' : event.type === 'credit' ? 'Credit' : event.type === 'announcement' ? 'Notice' : event.type === 'lead' ? 'Lead' : 'Request'}
+                        {event.type === 'role' ? 'Role' : event.type === 'credit' ? 'Credit' : event.type === 'announcement' ? 'Notice' : event.type === 'lead' ? 'Lead' : event.type === 'schedule' ? 'Schedule' : 'Request'}
                       </span>
                     </div>
                     <p className="font-body text-xs text-xert-concrete/55 mt-1 break-words">{event.detail}</p>

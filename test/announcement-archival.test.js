@@ -56,5 +56,5 @@ test('announcement lifecycle events appear in the immutable Admin Audit ledger',
   assert.match(view, /Member notice changes/);
   assert.match(view, /summary\.announcementChanges/);
   assert.match(view, /label: 'Subject ID'/);
-  assert.match(view, /Search admin, lead, notice or reason/);
+  assert.match(view, /Search admin, .* reason/);
 });

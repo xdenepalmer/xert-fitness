@@ -258,6 +258,7 @@ workflows:
               "member_pt_request_tracking",
               "public_form_integrity",
               "lead_pipeline_audit",
+              "schedule_change_audit",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

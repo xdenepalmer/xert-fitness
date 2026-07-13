@@ -1,4 +1,12 @@
-const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement', 'lead']);
+const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement', 'lead', 'schedule']);
+const AUDIT_ACTION_LABELS = Object.freeze({
+  role: 'Role change',
+  credit: 'Credit grant',
+  request: 'Request change',
+  announcement: 'Announcement change',
+  lead: 'Lead change',
+  schedule: 'Schedule change',
+});
 
 function clean(value) {
   return String(value || '').trim();
@@ -10,7 +18,7 @@ function identity(profile, fallbackId) {
   return fallbackId ? `User ${String(fallbackId).slice(0, 8)}` : 'Deleted user';
 }
 
-export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], leadChanges = [], profiles = [] } = {}) {
+export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], leadChanges = [], scheduleChanges = [], profiles = [] } = {}) {
   const profileById = new Map(profiles.map(profile => [profile.id, profile]));
   const roleEvents = roleChanges.map(change => ({
     id: `role:${change.id}`,
@@ -102,8 +110,56 @@ export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], req
       sessions: null,
     };
   });
+  const scheduleEvents = scheduleChanges.map(change => {
+    const previous = change.previous_snapshot || {};
+    const next = change.new_snapshot || {};
+    const action = clean(change.action) || 'updated';
+    const resourceLabel = change.resource_type === 'class_session'
+      ? 'Class session'
+      : change.resource_type === 'availability_block'
+        ? 'Availability block'
+        : 'Blackout period';
+    const statusChanged = clean(previous.status) !== clean(next.status);
+    const changedFields = [
+      ['title', 'title'],
+      ['class_type', 'class type'],
+      ['start_time', 'start time'],
+      ['end_time', 'end time'],
+      ['coach_name', 'coach'],
+      ['capacity', 'capacity'],
+      ['status', 'status'],
+      ['public_visible', 'public visibility'],
+      ['booking_mode', 'booking mode'],
+      ['location', 'location'],
+      ['intensity', 'intensity'],
+      ['type', 'type'],
+      ['is_bookable', 'bookability'],
+      ['affects', 'scope'],
+      ['reason', 'reason'],
+      ['notes', 'notes'],
+    ].filter(([key]) => clean(previous[key]) !== clean(next[key])).map(([, label]) => label);
+    return {
+      id: `schedule:${change.id}`,
+      sourceId: change.id,
+      type: 'schedule',
+      at: change.created_at,
+      actorId: change.changed_by,
+      actor: identity(profileById.get(change.changed_by), change.changed_by),
+      subjectId: change.resource_id,
+      subject: clean(change.subject_label) || `${resourceLabel} ${clean(change.resource_id).slice(0, 8)}`,
+      summary: `${resourceLabel} ${action}`,
+      detail: ['created', 'deleted'].includes(action)
+        ? `${resourceLabel} ${action}`
+        : statusChanged
+          ? `Status ${clean(previous.status) || 'unknown'} -> ${clean(next.status) || 'unknown'}`
+          : changedFields.length > 0
+            ? `Changed ${changedFields.join(', ')}`
+            : `${resourceLabel} ${action}`,
+      sessions: null,
+    };
+  });
 
-  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents, ...leadEvents].sort((left, right) => {
+  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents, ...leadEvents, ...scheduleEvents].sort((left, right) => {
     const timeDifference = new Date(right.at).getTime() - new Date(left.at).getTime();
     return timeDifference || right.id.localeCompare(left.id);
   });
@@ -134,6 +190,7 @@ export function summarizeAdminAuditEvents(events) {
     requestChanges: rows.filter(event => event.type === 'request').length,
     announcementChanges: rows.filter(event => event.type === 'announcement').length,
     leadChanges: rows.filter(event => event.type === 'lead').length,
+    scheduleChanges: rows.filter(event => event.type === 'schedule').length,
     creditsGranted: rows.reduce((total, event) => total + (event.type === 'credit' ? event.sessions || 0 : 0), 0),
     activeAdmins: new Set(rows.map(event => event.actorId).filter(Boolean)).size,
   };
@@ -142,15 +199,7 @@ export function summarizeAdminAuditEvents(events) {
 export function adminAuditCsvRows(events) {
   return (Array.isArray(events) ? events : []).map(event => ({
     timestamp: event.at,
-    action: event.type === 'role'
-      ? 'Role change'
-      : event.type === 'credit'
-        ? 'Credit grant'
-        : event.type === 'request'
-          ? 'Request change'
-          : event.type === 'announcement'
-            ? 'Announcement change'
-            : 'Lead change',
+    action: AUDIT_ACTION_LABELS[event.type] || 'Admin change',
     administrator: event.actor,
     administrator_id: event.actorId || '',
     member: event.subject,
