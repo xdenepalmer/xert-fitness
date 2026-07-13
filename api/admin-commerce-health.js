@@ -1,0 +1,103 @@
+import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
+import { assertCheckoutProduct, assertStripePriceMatchesProduct } from './checkout.js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, no-store, max-age=0',
+    },
+  });
+}
+
+export async function inspectCommerceProducts(products, retrieveStripePrice) {
+  const issues = [];
+  let stripePriceCount = 0;
+  let dynamicPriceCount = 0;
+
+  for (const product of products || []) {
+    const slug = String(product?.slug || 'unknown-product');
+    try {
+      assertCheckoutProduct(product);
+    } catch {
+      issues.push({ slug, reason: 'Supabase product values are invalid.' });
+      continue;
+    }
+
+    if (!product.stripe_price_id) {
+      dynamicPriceCount += 1;
+      continue;
+    }
+
+    stripePriceCount += 1;
+    let stripePrice;
+    try {
+      stripePrice = await retrieveStripePrice(product.stripe_price_id);
+    } catch {
+      issues.push({ slug, reason: 'Stripe Price ID could not be loaded.' });
+      continue;
+    }
+    try {
+      assertStripePriceMatchesProduct(product, stripePrice);
+    } catch {
+      issues.push({ slug, reason: 'Stripe amount, currency, type, or active state does not match.' });
+    }
+  }
+
+  return {
+    ready: (products?.length || 0) > 0 && issues.length === 0,
+    active_product_count: products?.length || 0,
+    stripe_price_count: stripePriceCount,
+    dynamic_price_count: dynamicPriceCount,
+    issues,
+  };
+}
+
+export default async function handler(request) {
+  if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
+
+  const authHeader = request.headers.get('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return json({ error: 'Not authenticated.' }, 401);
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: { user }, error: userError } = await admin.auth.getUser(token);
+  if (userError || !user) return json({ error: 'Invalid or expired session.' }, 401);
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError) return json({ error: 'Could not verify admin access.' }, 500);
+  if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return json({
+      ready: false,
+      active_product_count: 0,
+      stripe_price_count: 0,
+      dynamic_price_count: 0,
+      issues: [{ slug: 'server', reason: 'Stripe secret is not configured.' }],
+    });
+  }
+
+  const { data: products, error: productError } = await admin
+    .from('products')
+    .select('slug,price_cents,currency,sessions_count,validity_days,stripe_price_id')
+    .eq('active', true)
+    .order('sort_order');
+  if (productError) return json({ error: 'Could not load active products.' }, 500);
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const result = await inspectCommerceProducts(
+    products || [],
+    priceId => stripe.prices.retrieve(priceId)
+  );
+  return json(result);
+}

@@ -671,6 +671,17 @@ async function healthCheck(key, label, fn) {
   }
 }
 
+async function getCommerceConfigurationHealth() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-commerce-health', {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Commerce health check failed.');
+  return body;
+}
+
 export async function getOperationsHealth() {
   const nowIso = new Date().toISOString();
 
@@ -715,6 +726,25 @@ export async function getOperationsHealth() {
         count: products.length,
         detail: missingStripePrices > 0 ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} use ad-hoc Stripe pricing.` : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
         action: missingStripePrices > 0 ? 'Add Stripe Price IDs for cleaner product reporting.' : null
+      };
+    }),
+
+    healthCheck('commerce-config', 'Stripe checkout', async () => {
+      const result = await getCommerceConfigurationHealth();
+      if (!result.ready) {
+        const affected = (result.issues || []).map(issue => issue.slug).join(', ');
+        return {
+          status: 'attention',
+          count: result.active_product_count,
+          detail: affected
+            ? `Checkout configuration needs attention for: ${affected}.`
+            : 'No active checkout products are configured.',
+          action: 'Review Session Packs and the Stripe configuration in Vercel.'
+        };
+      }
+      return {
+        count: result.active_product_count,
+        detail: `${result.stripe_price_count} Stripe-linked and ${result.dynamic_price_count} dynamic-price pack${result.active_product_count === 1 ? '' : 's'} verified.`
       };
     }),
 
