@@ -252,6 +252,14 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(APIError(message: "network offline").invalidatesSession)
     }
 
+    func testBookingErrorsAreSafeAndActionableForMembers() {
+        XCTAssertTrue(BookingErrorMessage.display(for: "P0001: SESSION_IN_PAST").contains("already started"))
+        XCTAssertTrue(BookingErrorMessage.display(for: "P0001: SESSION_NOT_BOOKABLE").contains("not currently open"))
+        XCTAssertTrue(BookingErrorMessage.display(for: "P0001: BOOKING_NOT_FOUND").contains("Pull to refresh"))
+        XCTAssertEqual(BookingErrorMessage.display(for: "Unexpected service response"), "Unexpected service response")
+        XCTAssertEqual(BookingErrorMessage.display(for: ""), "Could not complete the booking.")
+    }
+
     func testWebBaseURLAcceptsAHostnameAndRejectsUnsafeSchemes() {
         XCTAssertEqual(
             AppConfig.normalizedWebBaseURL("xert-fitness.vercel.app")?.absoluteString,

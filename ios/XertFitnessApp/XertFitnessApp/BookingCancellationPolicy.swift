@@ -7,3 +7,24 @@ enum BookingCancellationPolicy {
         status == "requested" || (status == "confirmed" && startTime.timeIntervalSince(now) > creditRefundLeadTime)
     }
 }
+
+enum BookingErrorMessage {
+    private static let messages: [(code: String, message: String)] = [
+        ("AUTH_REQUIRED", "Sign in to book a class."),
+        ("SESSION_NOT_FOUND", "That class could not be found. Pull to refresh the timetable."),
+        ("SESSION_NOT_BOOKABLE", "That class is not currently open for booking."),
+        ("SESSION_IN_PAST", "That class has already started."),
+        ("ALREADY_BOOKED", "You already have an active place in that class."),
+        ("SESSION_FULL", "That class is now full. Refresh to check whether its waitlist is available."),
+        ("SESSION_INTEREST_ONLY", "This class is collecting interest only."),
+        ("SESSION_HAS_CAPACITY", "A place is available now. Refresh and book the class instead."),
+        ("NO_CREDITS", "You need available credits before booking this class."),
+        ("BOOKING_NOT_FOUND", "That booking could not be found. Pull to refresh your account."),
+        ("NOT_CANCELLABLE", "This booking can no longer be cancelled.")
+    ]
+
+    static func display(for rawMessage: String) -> String {
+        messages.first { rawMessage.contains($0.code) }?.message
+            ?? (rawMessage.isEmpty ? "Could not complete the booking." : rawMessage)
+    }
+}

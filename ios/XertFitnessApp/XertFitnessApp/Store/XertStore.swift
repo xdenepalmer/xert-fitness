@@ -300,7 +300,7 @@ final class XertStore: ObservableObject {
             try await api.book(session: authSession, classSessionID: session.id)
             await refresh()
         } catch {
-            errorMessage = friendlyBookingError(error.localizedDescription)
+            errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
 
@@ -312,7 +312,7 @@ final class XertStore: ObservableObject {
             try await api.joinWaitlist(session: authSession, classSessionID: session.id)
             await refresh()
         } catch {
-            errorMessage = friendlyBookingError(error.localizedDescription)
+            errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
 
@@ -324,7 +324,7 @@ final class XertStore: ObservableObject {
             try await api.cancelBooking(session: authSession, bookingID: booking.id)
             await refresh()
         } catch {
-            errorMessage = friendlyBookingError(error.localizedDescription)
+            errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
 
@@ -467,31 +467,6 @@ final class XertStore: ObservableObject {
         authSession = refreshed
         try KeychainStore.saveSession(refreshed)
         return refreshed
-    }
-
-    private func friendlyBookingError(_ message: String) -> String {
-        if message.contains("NO_CREDITS") {
-            return "You need available credits before booking this class."
-        }
-        if message.contains("SESSION_FULL") {
-            return "That class is now full."
-        }
-        if message.contains("ALREADY_BOOKED") {
-            return "You are already booked into that class."
-        }
-        if message.contains("AUTH_REQUIRED") {
-            return "Sign in to book a class."
-        }
-        if message.contains("SESSION_INTEREST_ONLY") {
-            return "This class is collecting interest only."
-        }
-        if message.contains("SESSION_HAS_CAPACITY") {
-            return "A place is available now. Refresh and book the class instead."
-        }
-        if message.contains("NOT_CANCELLABLE") {
-            return "This booking can no longer be cancelled."
-        }
-        return message
     }
 
     private func present(_ error: Error) {
