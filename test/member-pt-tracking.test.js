@@ -19,6 +19,8 @@ test('PT tracking migration preserves public enquiries and isolates member reads
   assert.match(migration, /auth\.uid\(\) is null and user_id is null/i);
   assert.match(migration, /user_id = auth\.uid\(\)/i);
   assert.match(migration, /having count\(\*\) = 1/i);
+  assert.match(migration, /values \('member_pt_request_tracking'\)/i);
+  assert.match(migration, /xert_public_capabilities/i);
 });
 
 test('every PT policy entry point enforces trusted request state, consent, and ownership', () => {

@@ -100,7 +100,8 @@ For a fresh database: first create the lead/request tables (`member_interest`,
 originally created through the Supabase dashboard and no checked-in SQL file
 creates them, so `rls_policies.sql` will error if they don't exist yet. Then
 run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
-`rls_policies.sql`, and finally `rls_hardening.sql`. This sequence produces the
+`rls_policies.sql`, `rls_hardening.sql`, and finally
+`member_pt_request_tracking.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the

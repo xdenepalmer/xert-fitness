@@ -816,14 +816,14 @@ export async function getOperationsHealth() {
         return {
           status: 'attention',
           detail: 'Database capability reporting is not installed.',
-          action: 'Apply the latest booking_modes_upgrade.sql and admin_role_safety_upgrade.sql files.'
+          action: 'Apply the required upgrade SQL files listed in src/lib/schemaCapabilities.js.'
         };
       }
       const summary = summarizeSchemaCapabilities(data);
       return summary.ready
         ? {
             count: summary.installed.length,
-            detail: 'Required booking, waitlist, attendance, and admin safety migrations are installed.'
+            detail: 'Required booking, waitlist, attendance, PT tracking, and admin safety migrations are installed.'
           }
         : {
             status: 'attention',
