@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertAdminMutation, assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
-import { normalizeRoleChange } from './memberAdmin';
+import { filterMembers, normalizeMemberDirectoryQuery, normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { normalizeClassSession } from './scheduling';
 import {
@@ -504,6 +504,57 @@ export async function adminSearchMembers(search, limit = 12) {
     .limit(normalizedLimit);
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+export async function adminListMembersPage(filters = {}) {
+  const query = normalizeMemberDirectoryQuery(filters);
+  const response = await supabase.rpc('admin_list_members_page', {
+    p_search: query.search || null,
+    p_role: query.role,
+    p_credit: query.credit,
+    p_limit: query.pageSize,
+    p_offset: query.offset,
+    p_user_id: query.memberId
+  });
+
+  if (!response.error) {
+    const rows = (response.data || []).map(({ total_count: _totalCount, ...member }) => member);
+    return {
+      rows,
+      total: Number(response.data?.[0]?.total_count || 0),
+      page: query.page,
+      pageSize: query.pageSize,
+      serverPaged: true
+    };
+  }
+
+  const functionUnavailable = ['42883', 'PGRST202'].includes(response.error.code)
+    || /admin_list_members_page.*(?:not found|schema cache|does not exist)/i.test(response.error.message || '');
+  if (!functionUnavailable) throw new Error(response.error.message);
+
+  const allMembers = await adminListMembers();
+  const filtered = filterMembers(
+    query.memberId ? allMembers.filter(member => member.id === query.memberId) : allMembers,
+    query
+  );
+  return {
+    rows: filtered.slice(query.offset, query.offset + query.pageSize),
+    total: filtered.length,
+    page: query.page,
+    pageSize: query.pageSize,
+    serverPaged: false
+  };
+}
+
+export async function adminExportMembers(filters = {}) {
+  const query = normalizeMemberDirectoryQuery({ ...filters, page: 1, pageSize: 100, memberId: null });
+  const first = await adminListMembersPage(query);
+  if (!first.serverPaged) {
+    return filterMembers(await adminListMembers(), query);
+  }
+  return collectAdminPages(page => (
+    page === 1 ? first : adminListMembersPage({ ...query, page })
+  ));
 }
 
 export async function adminRecentMembers(limit = 6) {

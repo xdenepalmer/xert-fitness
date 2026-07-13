@@ -23,6 +23,30 @@ export function filterMembers(members, { search = '', role = 'all', credit = 'al
   });
 }
 
+export function normalizeMemberDirectoryQuery({
+  search = '', role = 'all', credit = 'all', page = 1, pageSize = 50, memberId = null
+} = {}) {
+  const normalizedSearch = String(search || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  const normalizedRole = ['all', 'member', 'admin'].includes(role) ? role : 'all';
+  const normalizedCredit = ['all', 'available', 'none'].includes(credit) ? credit : 'all';
+  const normalizedPage = Math.max(1, Number.parseInt(String(page), 10) || 1);
+  const normalizedPageSize = Math.max(1, Math.min(100, Number.parseInt(String(pageSize), 10) || 50));
+  const normalizedMemberId = String(memberId || '').trim() || null;
+  if (normalizedMemberId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedMemberId)) {
+    throw new Error('A valid member account is required.');
+  }
+
+  return {
+    search: normalizedSearch,
+    role: normalizedRole,
+    credit: normalizedCredit,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    offset: (normalizedPage - 1) * normalizedPageSize,
+    memberId: normalizedMemberId
+  };
+}
+
 export function normalizeRoleChange(userId, role) {
   const normalizedId = String(userId || '').trim();
   if (!normalizedId) throw new Error('A member account is required.');

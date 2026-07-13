@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight, Download, X, Ticket, CalendarDays, Receipt, Loader2, RefreshCw } from 'lucide-react';
-import { adminListMembers, adminGrantCredits, adminSetRole, adminMemberDetail } from '@/lib/adminData';
+import { adminExportMembers, adminGrantCredits, adminListMembersPage, adminMemberDetail, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
-import { creditGrantValidationError, filterMembers } from '@/lib/memberAdmin';
+import { creditGrantValidationError } from '@/lib/memberAdmin';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
@@ -248,8 +248,10 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
 export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const { user } = useSupabaseAuth();
   const [members, setMembers] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [granting, setGranting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -257,35 +259,84 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [creditFilter, setCreditFilter] = useState('all');
   const [roleChangingId, setRoleChangingId] = useState(null);
   const [page, setPage] = useState(1);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
-  const load = async () => {
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    let active = true;
     setLoading(true);
     setLoadError('');
-    try { setMembers(await adminListMembers()); }
-    catch (error) { setLoadError(error.message || 'Check the member admin RPC and permissions.'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+    adminListMembersPage({
+      search: debouncedSearch,
+      role: roleFilter,
+      credit: creditFilter,
+      page,
+      pageSize: PAGE_SIZE
+    }).then(result => {
+      if (!active) return;
+      setMembers(result.rows);
+      setTotal(result.total);
+    }).catch(error => {
+      if (!active) return;
+      setMembers([]);
+      setTotal(0);
+      setLoadError(error.message || 'Check the member admin RPC and permissions.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [creditFilter, debouncedSearch, page, refreshVersion, roleFilter]);
 
-  const filtered = useMemo(() => filterMembers(members, { search, role: roleFilter, credit: creditFilter }), [creditFilter, members, roleFilter, search]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const visibleMembers = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
-  const firstResult = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastResult = Math.min(page * PAGE_SIZE, filtered.length);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min((page - 1) * PAGE_SIZE + members.length, total);
+  const hasFilters = Boolean(debouncedSearch) || roleFilter !== 'all' || creditFilter !== 'all';
+  const searchPending = search.trim() !== debouncedSearch;
+  const refresh = () => setRefreshVersion(version => version + 1);
 
   useEffect(() => {
     setPage(1);
     setViewing(null);
     setGranting(null);
-  }, [creditFilter, roleFilter, search]);
+  }, [creditFilter, debouncedSearch, roleFilter]);
 
   useEffect(() => {
-    if (!initialMemberId || loading) return;
-    const member = members.find(item => item.id === initialMemberId);
-    if (member) setViewing(member);
-    else toast({ title: 'Member not found', description: 'This member may have been removed or is no longer accessible.', variant: 'destructive' });
-    onIntentHandled?.();
-  }, [initialMemberId, loading, members, onIntentHandled]);
+    if (!initialMemberId) return undefined;
+    let active = true;
+    adminListMembersPage({ memberId: initialMemberId, pageSize: 1 })
+      .then(result => {
+        if (!active) return;
+        if (result.rows[0]) setViewing(result.rows[0]);
+        else toast({ title: 'Member not found', description: 'This member may have been removed or is no longer accessible.', variant: 'destructive' });
+      })
+      .catch(error => {
+        if (active) toast({ title: 'Member unavailable', description: error.message, variant: 'destructive' });
+      })
+      .finally(() => { if (active) onIntentHandled?.(); });
+    return () => { active = false; };
+  }, [initialMemberId, onIntentHandled]);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const rows = await adminExportMembers({ search: debouncedSearch, role: roleFilter, credit: creditFilter });
+      downloadCsv(`xert-members-${new Date().toISOString().slice(0, 10)}.csv`, rows.map(member => ({ ...member, total_spent: (Number(member.total_spent_cents) / 100).toFixed(2) })), [
+        { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' }, { key: 'role', label: 'Role' },
+        { key: 'credits_remaining', label: 'Credits' }, { key: 'bookings_count', label: 'Bookings' },
+        { key: 'total_spent', label: 'Spent (AUD)' }, { key: 'joined_at', label: 'Joined' },
+      ]);
+    } catch (error) {
+      toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleRole = async (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
@@ -297,8 +348,8 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     try {
       await adminSetRole(m.id, role);
       toast({ title: 'Role updated', description: `${m.full_name || m.email} is now ${role}.` });
-      await load();
       setPage(1);
+      refresh();
     } catch (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
     finally { setRoleChangingId(null); }
   };
@@ -306,23 +357,18 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Members ({members.length})</h2>
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Members ({total})</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search members" placeholder="Search name or email…"
+          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search members" placeholder="Search name, email or phone…"
             className={`${inputCls} w-64`} />
           <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Filter members by role" className={inputCls}><option value="all">All roles</option><option value="member">Members</option><option value="admin">Admins</option></select>
           <select value={creditFilter} onChange={event => setCreditFilter(event.target.value)} aria-label="Filter members by credits" className={inputCls}><option value="all">All credits</option><option value="available">Has credits</option><option value="none">No credits</option></select>
-          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh members" aria-label="Refresh members" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button type="button" onClick={refresh} disabled={loading} title="Refresh members" aria-label="Refresh members" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <button
-            onClick={() => downloadCsv(`xert-members-${new Date().toISOString().slice(0, 10)}.csv`, filtered.map(member => ({ ...member, total_spent: (Number(member.total_spent_cents) / 100).toFixed(2) })), [
-              { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
-              { key: 'phone', label: 'Phone' }, { key: 'role', label: 'Role' },
-              { key: 'credits_remaining', label: 'Credits' }, { key: 'bookings_count', label: 'Bookings' },
-              { key: 'total_spent', label: 'Spent (AUD)' }, { key: 'joined_at', label: 'Joined' },
-            ])}
-            disabled={filtered.length === 0}
+            onClick={() => void handleExport()}
+            disabled={total === 0 || exporting || searchPending}
             className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
-            <Download className="w-3.5 h-3.5" /> CSV
+            <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
           </button>
         </div>
       </div>
@@ -330,19 +376,19 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={() => load()} />
-      ) : filtered.length === 0 ? (
+        <AdminLoadError message={loadError} onRetry={refresh} />
+      ) : total === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
-            {members.length === 0 ? 'No members yet' : 'No matches'}
+            {hasFilters ? 'No matches' : 'No members yet'}
           </p>
           <p className="font-body text-sm text-xert-concrete/40">
-            {members.length === 0 ? 'Members appear here as soon as they create an account on the site.' : 'Try a different search.'}
+            {hasFilters ? 'Try a different search or filter.' : 'Members appear here as soon as they create an account on the site.'}
           </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {visibleMembers.map(m => (
+          {members.map(m => (
             <div key={m.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex flex-wrap items-center gap-4">
               <div className="flex-1 min-w-[14rem]">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -398,9 +444,8 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="font-body text-xs text-xert-concrete/40">
-          {filtered.length === 0 ? '0 results' : `${firstResult}-${lastResult} of ${filtered.length} matching members`}
-          {filtered.length !== members.length ? ` · ${members.length} total` : ''}
+        <p role="status" aria-live="polite" className="font-body text-xs text-xert-concrete/40">
+          {total === 0 ? '0 results' : `${firstResult}-${lastResult} of ${total} matching members`}
         </p>
         {pageCount > 1 && (
           <nav aria-label="Member result pages" className="flex items-center gap-2">
@@ -424,7 +469,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       )}
 
       {granting && (
-        <GrantCreditsModal member={granting} onDone={() => { setGranting(null); setViewing(null); load(); }} onCancel={() => setGranting(null)} />
+        <GrantCreditsModal member={granting} onDone={() => { setGranting(null); setViewing(null); refresh(); }} onCancel={() => setGranting(null)} />
       )}
     </div>
   );

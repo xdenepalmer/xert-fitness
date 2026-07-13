@@ -86,6 +86,8 @@ The Supabase schema is defined in:
   being demoted and records every privilege change
 - `src/supabase/admin_member_search_upgrade.sql` — adds bounded server-side
   member search for the admin command palette
+- `src/supabase/admin_member_directory_upgrade.sql` — adds server-filtered
+  member directory paging, exact member deep links and complete paged exports
 - `src/supabase/business_metrics_upgrade.sql` — indexes exact paged revenue and
   active-credit dashboard scans as order volume grows
 - `src/supabase/attendance_roll_call_upgrade.sql` — adds atomic class roll call,
@@ -117,7 +119,8 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
 `admin_role_safety_upgrade.sql`, `admin_member_search_upgrade.sql`,
 `business_metrics_upgrade.sql`, and
-`attendance_roll_call_upgrade.sql`, and `member_waitlist_upgrade.sql` after
+`admin_member_directory_upgrade.sql`, `attendance_roll_call_upgrade.sql`, and
+`member_waitlist_upgrade.sql` after
 those prerequisites, followed by `member_pt_request_tracking.sql` and
 `public_form_integrity_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
