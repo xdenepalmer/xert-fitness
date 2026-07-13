@@ -117,7 +117,7 @@ struct ClassSession: Identifiable, Codable, Hashable {
 
     var effectiveEndTime: Date {
         if let end_time, end_time > start_time { return end_time }
-        return start_time.addingTimeInterval(TimeInterval(max(duration_minutes ?? 60, 1) * 60))
+        return start_time.addingTimeInterval(TimeInterval(Swift.max(duration_minutes ?? 60, 1) * 60))
     }
 }
 
@@ -235,7 +235,7 @@ extension Collection where Element == CreditBatch {
 
         guard let earliest = expiring.first?.1 else { return nil }
         let credits = expiring.reduce(0) { $0 + $1.0.remaining }
-        let daysRemaining = max(1, Int(ceil(earliest.timeIntervalSince(now) / 86_400)))
+        let daysRemaining = Swift.max(1, Int(ceil(earliest.timeIntervalSince(now) / 86_400)))
         return CreditExpirySummary(credits: credits, expiresAt: earliest, daysRemaining: daysRemaining)
     }
 }

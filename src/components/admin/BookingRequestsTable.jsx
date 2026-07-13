@@ -6,6 +6,7 @@ import {
   updateMemberBookingStatus, updateLegacyBookingNotes,
 } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
 import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
@@ -37,6 +38,7 @@ export default function BookingRequestsTable() {
   const [selectedKeys, setSelectedKeys] = useState(() => new Set());
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -88,6 +90,19 @@ export default function BookingRequestsTable() {
   const allVisibleSelected = visibleBookings.length > 0 && visibleBookings.every(booking => selectedKeys.has(bookingSelectionKey(booking)));
   const selectedBookings = useMemo(() => bookings.filter(booking => selectedKeys.has(bookingSelectionKey(booking))), [bookings, selectedKeys]);
   const bulkStatusOptions = useMemo(() => bulkBookingStatusOptions(selectedBookings), [selectedBookings]);
+  const bulkConfirmation = useMemo(() => {
+    if (!bulkStatus || selectedBookings.length === 0) return null;
+    const warning = bulkStatus === 'cancelled'
+      ? 'Confirmed member bookings will follow the server cancellation credit policy.'
+      : 'This updates every selected enquiry and member booking.';
+    const [description, detail] = adminBulkConfirmation({
+      count: selectedBookings.length,
+      recordLabel: 'booking',
+      status: bulkStatus,
+      warning,
+    }).split('\n\n');
+    return { description, warning: detail };
+  }, [bulkStatus, selectedBookings]);
 
   useEffect(() => {
     if (bulkStatus && !bulkStatusOptions.includes(bulkStatus)) setBulkStatus('');
@@ -135,12 +150,8 @@ export default function BookingRequestsTable() {
   };
 
   const handleBulkUpdate = async () => {
-    if (!bulkStatus || selectedKeys.size === 0) return;
+    if (!bulkStatus || selectedKeys.size === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
     const selected = selectedBookings;
-    const warning = bulkStatus === 'cancelled'
-      ? 'Confirmed member bookings will follow the server cancellation credit policy.'
-      : 'This updates every selected enquiry and member booking.';
-    if (!window.confirm(adminBulkConfirmation({ count: selected.length, recordLabel: 'booking', status: bulkStatus, warning }))) return;
     setBulkSaving(true);
     const results = await settleAdminMutations(selected, booking => (
       booking.source === 'member'
@@ -233,7 +244,7 @@ export default function BookingRequestsTable() {
           <option value="">Move selected to...</option>
           {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedKeys.size === 0 || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
           {bulkSaving ? 'Updating...' : 'Apply'}
         </button>
       </div>
@@ -358,6 +369,16 @@ export default function BookingRequestsTable() {
           </div>
         </div>
       )}
+      <AdminConfirmDialog
+        open={bulkConfirmationOpen}
+        onOpenChange={setBulkConfirmationOpen}
+        title="Confirm booking update"
+        description={bulkConfirmation?.description || ''}
+        warning={bulkConfirmation?.warning}
+        confirmLabel="Apply update"
+        onConfirm={() => void handleBulkUpdate()}
+        busy={bulkSaving}
+      />
     </div>
   );
 }

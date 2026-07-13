@@ -35,6 +35,8 @@ test('web and native member homes expose an actionable expiry warning', () => {
 
   assert.match(account, /summarizeExpiringCredits/);
   assert.match(account, /expiringCredits\.daysRemaining/);
+  assert.match(models, /Swift\.max\(1, Int\(ceil\(/);
+  assert.doesNotMatch(models, /(?<!Swift\.)\bmax\s*\(/);
   assert.match(account, /Book A Class/);
   assert.match(home, /creditExpirySection/);
   assert.match(home, /Credits Expiring Soon/);

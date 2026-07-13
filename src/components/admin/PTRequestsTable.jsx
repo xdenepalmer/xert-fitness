@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
 import { bulkPTRequestStatusOptions, isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows, selectedPTRequestIds } from '@/lib/ptRequestAnalytics';
 import { collectAdminPages } from '@/lib/adminPagination';
@@ -39,6 +40,7 @@ export default function PTRequestsTable() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
   const requestIdRef = useRef(0);
 
   const load = useCallback(async (targetPage = 1) => {
@@ -85,6 +87,16 @@ export default function PTRequestsTable() {
   const allVisibleSelected = requests.length > 0 && requests.every(request => selectedIds.has(request.id));
   const selectedRequests = useMemo(() => requests.filter(request => selectedIds.has(request.id)), [requests, selectedIds]);
   const bulkStatusOptions = useMemo(() => bulkPTRequestStatusOptions(selectedRequests), [selectedRequests]);
+  const bulkConfirmation = useMemo(() => {
+    if (!bulkStatus || selectedRequests.length === 0) return null;
+    const [description, warning] = adminBulkConfirmation({
+      count: selectedRequests.length,
+      recordLabel: 'PT request',
+      status: bulkStatus,
+      warning: 'This updates every selected member request.',
+    }).split('\n\n');
+    return { description, warning };
+  }, [bulkStatus, selectedRequests]);
 
   useEffect(() => {
     if (bulkStatus && !bulkStatusOptions.includes(bulkStatus)) setBulkStatus('');
@@ -149,12 +161,6 @@ export default function PTRequestsTable() {
 
   const handleBulkUpdate = async () => {
     if (!bulkStatus || selectedRequests.length === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
-    if (!window.confirm(adminBulkConfirmation({
-      count: selectedRequests.length,
-      recordLabel: 'PT request',
-      status: bulkStatus,
-      warning: 'This updates every selected member request.',
-    }))) return;
     setBulkSaving(true);
     const results = await settleAdminMutations(selectedRequests, request => updatePTRequestStatus(request.id, bulkStatus));
     const failedIds = new Set();
@@ -234,7 +240,7 @@ export default function PTRequestsTable() {
           <option value="">Move selected to...</option>
           {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
           {bulkSaving ? 'Updating...' : 'Apply'}
         </button>
       </div>
@@ -335,6 +341,16 @@ export default function PTRequestsTable() {
           </div>
         </div>
       )}
+      <AdminConfirmDialog
+        open={bulkConfirmationOpen}
+        onOpenChange={setBulkConfirmationOpen}
+        title="Confirm PT request update"
+        description={bulkConfirmation?.description || ''}
+        warning={bulkConfirmation?.warning}
+        confirmLabel="Apply update"
+        onConfirm={() => void handleBulkUpdate()}
+        busy={bulkSaving}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { adminBulkConfirmation, settleAdminMutations } from '../src/lib/adminBulk.js';
@@ -34,4 +35,19 @@ test('describes bulk mutations before they execute', () => {
     'Move 3 bookings to cancelled?\n\nCredit policy applies.',
   );
   assert.throws(() => adminBulkConfirmation({ count: 0, recordLabel: 'request', status: 'approved' }), /Select at least one record/);
+});
+
+test('destructive admin bulk updates use the accessible confirmation surface', () => {
+  const dialog = readFileSync(new URL('../src/components/admin/AdminConfirmDialog.jsx', import.meta.url), 'utf8');
+  const bookings = readFileSync(new URL('../src/components/admin/BookingRequestsTable.jsx', import.meta.url), 'utf8');
+  const ptRequests = readFileSync(new URL('../src/components/admin/PTRequestsTable.jsx', import.meta.url), 'utf8');
+
+  assert.match(dialog, /AlertDialogContent/);
+  assert.match(dialog, /AlertDialogDescription/);
+  assert.match(dialog, /Keep unchanged/);
+  for (const source of [bookings, ptRequests]) {
+    assert.match(source, /<AdminConfirmDialog/);
+    assert.match(source, /adminBulkConfirmation/);
+    assert.doesNotMatch(source, /window\.confirm/);
+  }
 });
