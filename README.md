@@ -139,14 +139,11 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
-Operations Health and the TestFlight release workflow verify the
-`admin_role_safety`, `booking_waitlist_withdrawal`, `member_waitlist_join`,
-`waitlist_fifo_promotion`,
-`attendance_roll_call`, `class_session_update_guard`, `product_update_guard`,
-`stripe_refund_reconciliation`,
-`member_pt_request_tracking`, and
-`public_form_integrity` capability markers. A release intentionally stops until
-all ten current upgrade scripts have been run. Run
+Operations Health and the TestFlight release workflow verify every production
+capability declared in `src/lib/schemaCapabilities.js`, including booking,
+waitlist, attendance, commerce, announcements, admin notes, schedule integrity,
+public-form integrity, and database security hardening. A release intentionally
+stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.
 

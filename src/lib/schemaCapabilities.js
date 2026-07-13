@@ -1,5 +1,6 @@
 export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_role_safety: 'Apply src/supabase/admin_role_safety_upgrade.sql in Supabase.',
+  audited_credit_grants: 'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
   booking_waitlist_withdrawal: 'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
   waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
@@ -14,6 +15,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   booking_time_conflict_guard: 'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
   admin_member_notes: 'Apply supabase/migrations/20260714003000_admin_member_notes.sql in Supabase.',
   schedule_blackout_guard: 'Apply supabase/migrations/20260714004000_schedule_blackout_guard.sql in Supabase.',
+  database_security_hardening: 'Apply supabase/migrations/20260714006000_database_security_hardening.sql in Supabase.',
   credit_expiry_follow_up: 'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
   member_pt_request_tracking: 'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',

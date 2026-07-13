@@ -1,7 +1,8 @@
 -- ============================================================================
 -- XERT Fitness — Storage: public site-images bucket (coach photos etc.)
 -- ============================================================================
--- Public read (photos are displayed on the site); uploads/edits admin-only.
+-- Public object URLs are served by the public bucket without a SELECT policy.
+-- Omitting broad SELECT prevents anonymous directory enumeration.
 -- Idempotent — safe to re-run.
 -- ============================================================================
 
@@ -13,10 +14,6 @@ drop policy if exists "site_images_public_read"  on storage.objects;
 drop policy if exists "site_images_admin_insert" on storage.objects;
 drop policy if exists "site_images_admin_update" on storage.objects;
 drop policy if exists "site_images_admin_delete" on storage.objects;
-
-create policy "site_images_public_read" on storage.objects
-  for select to anon, authenticated
-  using (bucket_id = 'site-images');
 
 create policy "site_images_admin_insert" on storage.objects
   for insert to authenticated

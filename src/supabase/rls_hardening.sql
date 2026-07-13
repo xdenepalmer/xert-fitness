@@ -108,6 +108,8 @@ create trigger before_profile_write
   before insert or update on public.profiles
   for each row execute function public.guard_profile_write();
 
+revoke execute on function public.guard_profile_write() from public, anon, authenticated;
+
 drop policy if exists "profiles_insert_self" on public.profiles;
 
 -- ── admin_settings: public read stays; writes admin-only ────────────────────

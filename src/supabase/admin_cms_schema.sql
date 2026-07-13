@@ -57,6 +57,9 @@ begin
   return new;
 end; $$;
 
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.guard_profile_write() from public, anon, authenticated;
+
 -- Backfill any existing profiles.
 update public.profiles p set email = u.email
 from auth.users u where u.id = p.id and p.email is distinct from u.email;
@@ -764,7 +767,7 @@ revoke execute on function public.admin_list_member_notes(uuid, boolean) from pu
 revoke execute on function public.admin_add_member_note(uuid, text, text) from public, anon;
 revoke execute on function public.admin_set_member_note_archived(uuid, boolean) from public, anon;
 revoke execute on function public.admin_member_follow_up_queue(integer) from public, anon;
-revoke execute on function public.admin_grant_credits(uuid, integer, integer) from public, anon;
+revoke execute on function public.admin_grant_credits(uuid, integer, integer) from public, anon, authenticated;
 revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 revoke execute on function public.admin_session_roster(uuid) from public, anon;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
@@ -781,7 +784,6 @@ grant execute on function public.admin_list_member_notes(uuid, boolean) to authe
 grant execute on function public.admin_add_member_note(uuid, text, text) to authenticated;
 grant execute on function public.admin_set_member_note_archived(uuid, boolean) to authenticated;
 grant execute on function public.admin_member_follow_up_queue(integer) to authenticated;
-grant execute on function public.admin_grant_credits(uuid, integer, integer) to authenticated;
 grant execute on function public.admin_set_role(uuid, text)              to authenticated;
 grant execute on function public.admin_session_roster(uuid)              to authenticated;
 grant execute on function public.admin_set_booking_status(uuid, text)    to authenticated;

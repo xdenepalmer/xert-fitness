@@ -6,9 +6,10 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
+      'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
       'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
       'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
@@ -23,12 +24,14 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
       'Apply supabase/migrations/20260714003000_admin_member_notes.sql in Supabase.',
       'Apply supabase/migrations/20260714004000_schedule_blackout_guard.sql in Supabase.',
+      'Apply supabase/migrations/20260714006000_database_security_hardening.sql in Supabase.',
       'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
       'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
       'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',
     ],
   });
   assert.equal(summarizeSchemaCapabilities([
+    { capability: 'audited_credit_grants' },
     { capability: 'attendance_roll_call' },
     { capability: 'class_session_update_guard' },
     { capability: 'product_update_guard' },
@@ -40,6 +43,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'booking_time_conflict_guard' },
     { capability: 'admin_member_notes' },
     { capability: 'schedule_blackout_guard' },
+    { capability: 'database_security_hardening' },
     { capability: 'credit_expiry_follow_up' },
     { capability: 'booking_waitlist_withdrawal' },
     { capability: 'member_waitlist_join' },
@@ -52,6 +56,8 @@ test('reports the exact missing production database capabilities', () => {
 
 test('fresh and upgrade SQL paths register the same capability contract', () => {
   const pairs = [
+    ['../src/supabase/credit_grant_audit_upgrade.sql', 'audited_credit_grants'],
+    ['../supabase/migrations/20260714005500_credit_grant_audit.sql', 'audited_credit_grants'],
     ['../src/supabase/booking_schema.sql', 'booking_waitlist_withdrawal'],
     ['../src/supabase/booking_modes_upgrade.sql', 'booking_waitlist_withdrawal'],
     ['../src/supabase/booking_schema.sql', 'member_waitlist_join'],
@@ -83,6 +89,7 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260714003000_admin_member_notes.sql', 'admin_member_notes'],
     ['../src/supabase/availability_schema.sql', 'schedule_blackout_guard'],
     ['../supabase/migrations/20260714004000_schedule_blackout_guard.sql', 'schedule_blackout_guard'],
+    ['../supabase/migrations/20260714006000_database_security_hardening.sql', 'database_security_hardening'],
     ['../src/supabase/admin_cms_schema.sql', 'credit_expiry_follow_up'],
     ['../supabase/migrations/20260713060000_credit_expiry_follow_up.sql', 'credit_expiry_follow_up'],
     ['../src/supabase/member_pt_request_tracking.sql', 'member_pt_request_tracking'],
@@ -104,6 +111,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   const yaml = readFileSync(new URL('../codemagic.yaml', import.meta.url), 'utf8');
   assert.match(yaml, /Verify production service contract/);
   assert.match(yaml, /admin_role_safety/);
+  assert.match(yaml, /audited_credit_grants/);
   assert.match(yaml, /booking_waitlist_withdrawal/);
   assert.match(yaml, /member_waitlist_join/);
   assert.match(yaml, /waitlist_fifo_promotion/);
@@ -118,6 +126,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /booking_time_conflict_guard/);
   assert.match(yaml, /admin_member_notes/);
   assert.match(yaml, /schedule_blackout_guard/);
+  assert.match(yaml, /database_security_hardening/);
   assert.match(yaml, /credit_expiry_follow_up/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
@@ -135,6 +144,7 @@ test('read-only production check reports every release capability and migration'
   const sql = readFileSync(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8');
   const capabilities = [
     'admin_role_safety',
+    'audited_credit_grants',
     'booking_waitlist_withdrawal',
     'member_waitlist_join',
     'waitlist_fifo_promotion',
@@ -149,6 +159,7 @@ test('read-only production check reports every release capability and migration'
     'booking_time_conflict_guard',
     'admin_member_notes',
     'schedule_blackout_guard',
+    'database_security_hardening',
     'credit_expiry_follow_up',
     'member_pt_request_tracking',
     'public_form_integrity',

@@ -76,6 +76,9 @@ create trigger before_profile_write
   before insert or update on public.profiles
   for each row execute function public.guard_profile_write();
 
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.guard_profile_write() from public, anon, authenticated;
+
 
 -- ── products (session packs) ────────────────────────────────────────────────
 create table if not exists public.products (
