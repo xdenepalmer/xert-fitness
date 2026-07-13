@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
   PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
-  AlertTriangle, CheckCircle2, Circle, Gauge, RefreshCw,
+  AlertTriangle, CheckCircle2, Circle, Gauge, RefreshCw, Clock3, MapPin,
+  ClipboardCheck, UsersRound,
 } from 'lucide-react';
 import AdminStatCard from './AdminStatCard';
 import {
   getDashboardStats, getSoftLaunchSettings, getDefaultSettings,
   getBusinessStats, getRecentOrders, adminRecentMembers,
-  getAllCoaches, getAllEvents, getAllSiteContent,
+  getAllCoaches, getAllEvents, getAllSiteContent, getAdminDailyOperations,
 } from '@/lib/adminData';
 import { getAvailableSessions } from '@/lib/bookingData';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
@@ -53,6 +54,82 @@ const ACTION_TONES = {
   standard: { color: '#7BA7BC', border: 'rgba(123,167,188,0.22)', background: 'rgba(16,24,32,0.6)' },
 };
 
+function TodayOperationsDesk({ rows, available, error, onOpen }) {
+  return (
+    <section aria-labelledby="today-operations-heading">
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h2 id="today-operations-heading" className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+            Today&apos;s Classes
+          </h2>
+          <p className="mt-1 font-body text-xs" style={{ color: 'rgba(209,221,230,0.42)' }}>
+            Brisbane time · rosters, queues and roll call
+          </p>
+        </div>
+        {available && rows.length > 0 && (
+          <span className="font-display text-sm tabular-nums text-xert-steel">{rows.length} class{rows.length === 1 ? '' : 'es'}</span>
+        )}
+      </div>
+
+      {!available ? (
+        <div className="flex items-start gap-3 border border-amber-500/25 bg-amber-500/5 p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+          <p className="font-body text-sm text-amber-200/80">Install the admin daily operations migration to activate this desk.</p>
+        </div>
+      ) : error ? (
+        <div role="status" className="flex items-start gap-3 border border-amber-500/25 bg-amber-500/5 p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+          <p className="font-body text-sm text-amber-200/80">Today&apos;s class workload is unavailable: {error}</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex items-center gap-3 border border-xert-steel/15 bg-xert-ink/60 p-4">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400" />
+          <p className="font-body text-sm text-xert-pale/70">No non-draft classes are scheduled today.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {rows.map(session => {
+            const activeCount = Number(session.requested_count || 0) + Number(session.confirmed_count || 0);
+            const attendanceCount = Number(session.attended_count || 0) + Number(session.no_show_count || 0);
+            const action = session.attendance_due ? 'attendance' : 'roster';
+            return (
+              <article key={session.session_id} className="border border-xert-steel/15 bg-xert-ink/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 font-body text-[11px] uppercase tracking-wider text-xert-steel">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        {new Date(session.start_time).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                      <span className="border border-xert-steel/25 px-2 py-0.5 font-body text-[10px] uppercase text-xert-pale/55">{session.status}</span>
+                    </div>
+                    <h3 className="truncate font-display text-xl uppercase text-xert-offwhite">{session.title}</h3>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-body text-xs text-xert-pale/45">
+                      {session.coach_name && <span>{session.coach_name}</span>}
+                      {session.location_zone && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{session.location_zone}</span>}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => onOpen(session.session_id, action)}
+                    className="inline-flex min-h-11 shrink-0 items-center gap-2 bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy transition-colors hover:bg-xert-pale">
+                    {session.attendance_due ? <ClipboardCheck className="h-4 w-4" /> : <UsersRound className="h-4 w-4" />}
+                    {session.attendance_due ? 'Roll call' : 'Roster'}
+                  </button>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="border-l-2 border-xert-steel/50 pl-2"><strong className="block font-display text-lg text-xert-offwhite">{activeCount}{session.capacity ? `/${session.capacity}` : ''}</strong><span className="font-body text-[10px] uppercase text-xert-pale/40">Active</span></div>
+                  <div className="border-l-2 border-amber-400/50 pl-2"><strong className="block font-display text-lg text-xert-offwhite">{Number(session.waitlist_count || 0)}</strong><span className="font-body text-[10px] uppercase text-xert-pale/40">Waiting</span></div>
+                  <div className="border-l-2 border-xert-steel/25 pl-2"><strong className="block font-display text-lg text-xert-offwhite">{Number(session.public_request_count || 0)}</strong><span className="font-body text-[10px] uppercase text-xert-pale/40">Enquiries</span></div>
+                  <div className="border-l-2 border-green-400/40 pl-2"><strong className="block font-display text-lg text-xert-offwhite">{attendanceCount}</strong><span className="font-body text-[10px] uppercase text-xert-pale/40">Marked</span></div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function AdminOverview({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [biz, setBiz] = useState(null);
@@ -66,6 +143,9 @@ export default function AdminOverview({ onNavigate }) {
   const [error, setError] = useState('');
   const [businessWarning, setBusinessWarning] = useState('');
   const [partialWarning, setPartialWarning] = useState('');
+  const [dailyOperations, setDailyOperations] = useState([]);
+  const [dailyOperationsAvailable, setDailyOperationsAvailable] = useState(true);
+  const [dailyOperationsError, setDailyOperationsError] = useState('');
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
@@ -79,13 +159,14 @@ export default function AdminOverview({ onNavigate }) {
     setError('');
     setBusinessWarning('');
     setPartialWarning('');
+    setDailyOperationsError('');
 
     const readinessRequest = Promise.allSettled([
       getAllCoaches(), getAllEvents(), getAllSiteContent(), getAvailableSessions()
     ]);
 
     try {
-      const [s, settingsResult, businessResult, feed] = await Promise.all([
+      const [s, settingsResult, businessResult, feed, dailyResult] = await Promise.all([
         getDashboardStats(),
         getSoftLaunchSettings()
           .then(data => ({ data, error: null }))
@@ -93,7 +174,10 @@ export default function AdminOverview({ onNavigate }) {
         getBusinessStats()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error })),
-        Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]).then(activityFromSettled)
+        Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]).then(activityFromSettled),
+        getAdminDailyOperations()
+          .then(data => ({ data, error: null }))
+          .catch(error => ({ data: null, error }))
       ]);
       if (requestId !== requestIdRef.current) return;
       setStats(s);
@@ -111,6 +195,11 @@ export default function AdminOverview({ onNavigate }) {
       setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
       setActivity(feed.feed);
       if (feed.errors.length) setPartialWarning(current => [current, `Recent activity incomplete: ${feed.errors.join(' | ')}`].filter(Boolean).join(' '));
+      if (dailyResult.data) {
+        setDailyOperations(dailyResult.data.rows);
+        setDailyOperationsAvailable(dailyResult.data.available);
+      }
+      if (dailyResult.error) setDailyOperationsError(dailyResult.error.message || 'Check Supabase permissions.');
       setLastUpdated(new Date());
     } catch (loadError) {
       if (requestId === requestIdRef.current) setError(loadError.message);
@@ -275,6 +364,15 @@ export default function AdminOverview({ onNavigate }) {
             </div>
           )}
         </section>
+      )}
+
+      {!loading && (
+        <TodayOperationsDesk
+          rows={dailyOperations}
+          available={dailyOperationsAvailable}
+          error={dailyOperationsError}
+          onOpen={(session, action) => onNavigate?.('calendar', { session, action })}
+        />
       )}
 
       {/* ── Launch checklist + class fill rate ── */}

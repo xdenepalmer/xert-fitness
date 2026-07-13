@@ -903,6 +903,15 @@ export async function adminWaitlistOverview(limit = 20) {
   throw new Error(error.message);
 }
 
+export async function getAdminDailyOperations() {
+  const { data, error } = await supabase.rpc('admin_daily_operations');
+  if (!error) return { rows: data || [], available: true };
+  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_daily_operations.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (functionUnavailable) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
 export async function adminSetBookingStatus(bookingId, status) {
   const mutation = normalizeBookingStatusMutation(bookingId, status);
   const { error } = await supabase.rpc('admin_set_booking_status', {

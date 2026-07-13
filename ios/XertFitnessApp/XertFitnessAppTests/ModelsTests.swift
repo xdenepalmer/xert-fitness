@@ -892,6 +892,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(BookingItem.timeConflict(for: target, in: [waitlist, backToBack]))
     }
 
+    func testBookingDayUsesBrisbaneBoundariesWhileTravelling() {
+        let reference = queenslandDate(2026, 7, 14, 23, 45)
+        let sameBrisbaneDay = booking(
+            status: "confirmed",
+            startTime: queenslandDate(2026, 7, 14, 5, 30)
+        )
+        let nextBrisbaneDay = booking(
+            status: "confirmed",
+            startTime: queenslandDate(2026, 7, 15, 0, 15)
+        )
+
+        XCTAssertTrue(sameBrisbaneDay.occursOnBrisbaneDay(containing: reference))
+        XCTAssertFalse(nextBrisbaneDay.occursOnBrisbaneDay(containing: reference))
+    }
+
     private func booking(
         status: String,
         startTime: Date,

@@ -325,6 +325,12 @@ struct BookingItem: Identifiable, Codable, Hashable {
         isActiveClassPlace && start_time > now
     }
 
+    func occursOnBrisbaneDay(containing referenceDate: Date = Date()) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane")!
+        return calendar.isDate(start_time, inSameDayAs: referenceDate)
+    }
+
     func timelineSection(now: Date = Date()) -> BookingTimelineSection {
         guard start_time > now else { return .history }
         switch status {

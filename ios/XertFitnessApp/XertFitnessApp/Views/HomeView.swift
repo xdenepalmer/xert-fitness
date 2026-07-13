@@ -19,6 +19,7 @@ struct HomeView: View {
                     creditExpirySection
                     quickActions
                     glanceSection
+                    todayTrainingSection
                     nextUpSection
                     nextEventSection
                     sessionPacksSection
@@ -217,6 +218,47 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
+    private var todayTrainingSection: some View {
+        if store.isSignedIn && !todayBookings.isEmpty {
+            XertSection(title: "Today's training") {
+                VStack(spacing: 10) {
+                    ForEach(todayBookings) { booking in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(booking.start_time.formatted(date: .omitted, time: .shortened))
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                                .frame(minWidth: 72, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(booking.title)
+                                    .font(.headline)
+                                    .foregroundStyle(Color.xertOffWhite)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(booking.stateLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.xertPale)
+                                if let location = booking.location_zone {
+                                    Label(location, systemImage: "mappin")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.xertMuted)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .xertCardStyle()
+                    }
+                    Button("Manage today's bookings") {
+                        onNavigate(3)
+                    }
+                    .buttonStyle(.xertPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
     private var nextEventSection: some View {
         XertSection(title: "Next event") {
             if let event = nextEvent {
@@ -273,9 +315,15 @@ struct HomeView: View {
 
     private var nextBooking: BookingItem? {
         store.bookings
-            .filter { $0.isActiveClassPlace && $0.start_time > Date() }
+            .filter { $0.isActiveClassPlace && $0.start_time > Date() && !$0.occursOnBrisbaneDay() }
             .sorted { $0.start_time < $1.start_time }
             .first
+    }
+
+    private var todayBookings: [BookingItem] {
+        store.bookings
+            .filter { $0.isActiveClassPlace && $0.occursOnBrisbaneDay() }
+            .sorted { $0.start_time < $1.start_time }
     }
 
     private var nextEvent: EventItem? {

@@ -458,7 +458,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   );
 }
 
-export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
+export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
@@ -535,7 +535,46 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
     ]);
     setBookings(requests);
     setRoster(members);
+    return { requests, members };
   };
+
+  useEffect(() => {
+    if (loading || !initialSessionId || !['roster', 'attendance'].includes(initialAction)) return;
+    const target = sessions.find(session => session.id === initialSessionId);
+    if (!target) {
+      toast({ title: 'Class not found', description: 'That class is no longer available in the calendar.', variant: 'destructive' });
+      onIntentHandled?.();
+      return;
+    }
+
+    let active = true;
+    const openIntent = async () => {
+      try {
+        const { members } = await refreshBookings(target.id);
+        if (!active) return;
+        setTimeFilter(new Date(target.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
+        setExpandedBookings(target.id);
+        if (initialAction === 'attendance') {
+          const eligible = members.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status));
+          if (new Date(target.start_time).getTime() <= Date.now() && eligible) {
+            setAttendanceDraft(createAttendanceDraft(members));
+            setAttendanceSession(target);
+          } else {
+            toast({ title: 'Roll call is not ready', description: 'The roster is open so you can review this class.' });
+          }
+        }
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+          document.getElementById(`class-session-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+      } catch (error) {
+        if (active) toast({ title: 'Could not load class roster', description: error.message, variant: 'destructive' });
+      } finally {
+        if (active) onIntentHandled?.();
+      }
+    };
+    void openIntent();
+    return () => { active = false; };
+  }, [initialAction, initialSessionId, loading, onIntentHandled, sessions]);
 
   const loadBookings = async (sessionId) => {
     if (expandedBookings === sessionId) {

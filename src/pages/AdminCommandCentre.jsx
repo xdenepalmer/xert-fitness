@@ -99,7 +99,7 @@ export default function AdminCommandCentre() {
       case 'members': return <LeadTable key={section} type="member" />;
       case 'trainers': return <LeadTable key={section} type="trainer" />;
       case 'partners': return <LeadTable key={section} type="partner" />;
-      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;

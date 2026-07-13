@@ -31,7 +31,8 @@ with required (capability, migration) as (
     ('schedule_change_audit', 'supabase/migrations/20260714012000_schedule_change_audit.sql'),
     ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql'),
     ('booking_lifecycle_audit', 'supabase/migrations/20260714014000_booking_lifecycle_audit.sql'),
-    ('class_cancellation_notifications', 'supabase/migrations/20260714015000_class_cancellation_notifications.sql')
+    ('class_cancellation_notifications', 'supabase/migrations/20260714015000_class_cancellation_notifications.sql'),
+    ('admin_daily_operations', 'supabase/migrations/20260714016000_admin_daily_operations.sql')
 ), readiness as (
   select
     required.capability,

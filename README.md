@@ -125,6 +125,8 @@ The Supabase schema is defined in:
   administrator and system booking, waitlist, cancellation and attendance history
 - `src/supabase/class_cancellation_notifications_upgrade.sql` — creates private,
   durable member notices and targeted Apple push delivery when staff cancel a class
+- `src/supabase/admin_daily_operations_upgrade.sql` — powers an admin-only,
+  Brisbane-local daily class desk with bounded roster, queue and attendance counts
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -142,7 +144,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `schedule_change_audit_upgrade.sql`, then
 `content_change_audit_upgrade.sql`, then
 `booking_lifecycle_audit_upgrade.sql`, then
-`class_cancellation_notifications_upgrade.sql`. This sequence produces the
+`class_cancellation_notifications_upgrade.sql`, then
+`admin_daily_operations_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -166,14 +169,15 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `schedule_change_audit_upgrade.sql`, then
 `content_change_audit_upgrade.sql`, then
 `booking_lifecycle_audit_upgrade.sql`, then
-`class_cancellation_notifications_upgrade.sql`. The scripts are idempotent;
+`class_cancellation_notifications_upgrade.sql`, then
+`admin_daily_operations_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
 Operations Health and the TestFlight release workflow verify every database
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
-and schedule audit, booking lifecycle, content/configuration history, member push delivery, schedule integrity, public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
+and schedule audit, booking lifecycle, content/configuration history, member push delivery, daily class operations, schedule integrity, public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.

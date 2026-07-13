@@ -286,6 +286,7 @@ workflows:
               "content_change_audit",
               "booking_lifecycle_audit",
               "class_cancellation_notifications",
+              "admin_daily_operations",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

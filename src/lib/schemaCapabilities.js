@@ -28,6 +28,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   content_change_audit: 'Apply supabase/migrations/20260714013000_content_change_audit.sql in Supabase.',
   booking_lifecycle_audit: 'Apply supabase/migrations/20260714014000_booking_lifecycle_audit.sql in Supabase.',
   class_cancellation_notifications: 'Apply supabase/migrations/20260714015000_class_cancellation_notifications.sql in Supabase.',
+  admin_daily_operations: 'Apply supabase/migrations/20260714016000_admin_daily_operations.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {
