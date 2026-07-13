@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xert-runtime-v3';
+const CACHE_NAME = 'xert-runtime-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
