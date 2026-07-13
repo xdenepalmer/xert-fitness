@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeLaunchSettings } from '../src/lib/launchSettings.js';
+import { launchSettingsChanged, normalizeLaunchSettings } from '../src/lib/launchSettings.js';
 
 test('normalizes only launch settings that the public app actually consumes', () => {
   const result = normalizeLaunchSettings({
@@ -24,4 +24,20 @@ test('normalizes only launch settings that the public app actually consumes', ()
 test('rejects an empty enabled banner and impossible launch date', () => {
   assert.throws(() => normalizeLaunchSettings({ target_launch_date: '2026-08-01', announcement_banner_enabled: true }), /announcement text/i);
   assert.throws(() => normalizeLaunchSettings({ target_launch_date: '2026-02-30' }), /valid target launch date/i);
+});
+
+test('tracks only live launch fields against the last saved snapshot', () => {
+  const saved = {
+    id: 'row-id',
+    countdown_enabled: true,
+    bookings_enabled: false,
+    announcement_banner_enabled: false,
+    target_launch_date: '2026-08-01',
+    announcement_banner_text: null,
+  };
+
+  assert.equal(launchSettingsChanged({ ...saved }, saved), false);
+  assert.equal(launchSettingsChanged({ ...saved, id: 'different-row-id' }, saved), false);
+  assert.equal(launchSettingsChanged({ ...saved, bookings_enabled: true }, saved), true);
+  assert.equal(launchSettingsChanged({ ...saved, announcement_banner_text: '' }, saved), false);
 });

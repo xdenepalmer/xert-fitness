@@ -264,7 +264,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
           <div className="flex items-center gap-3">
             {hasUnsavedChanges && (
               <span className="hidden sm:inline font-body text-[10px] uppercase tracking-wider" style={{ color: '#e0b36a' }} role="status">
-                Unsaved CMS changes
+                Unsaved admin changes
               </span>
             )}
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search admin tools" title="Search admin tools"

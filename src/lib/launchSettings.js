@@ -23,3 +23,14 @@ export function normalizeLaunchSettings(settings = {}) {
     announcement_banner_text: announcement || null,
   };
 }
+
+export function launchSettingsChanged(current = {}, saved = {}) {
+  const fields = [
+    'countdown_enabled',
+    'bookings_enabled',
+    'announcement_banner_enabled',
+    'target_launch_date',
+    'announcement_banner_text',
+  ];
+  return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
+}

@@ -1,5 +1,5 @@
 export const SITE_CONTENT_DRAFT_PREFIX = 'xert:admin:site-content-draft:';
-export const UNSAVED_SITE_CONTENT_MESSAGE = 'You have unsaved site content changes. Leave without saving them?';
+export const UNSAVED_ADMIN_CHANGES_MESSAGE = 'You have unsaved admin changes. Leave without saving them?';
 
 function draftKey(sectionKey) {
   return `${SITE_CONTENT_DRAFT_PREFIX}${String(sectionKey || '').trim()}`;

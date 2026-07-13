@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
-import { UNSAVED_SITE_CONTENT_MESSAGE } from '@/lib/siteContentDraft';
+import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
@@ -35,13 +35,13 @@ export default function AdminCommandCentre() {
   const navigate = useNavigate();
   const routeSection = getAdminSectionFromPath(location.pathname);
   const [section, setActiveSection] = useState(routeSection);
-  const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const canonicalPath = getAdminSectionPath(section);
   const intent = new URLSearchParams(location.search);
 
   const confirmDiscard = useCallback(() => (
-    !hasUnsavedContent || window.confirm(UNSAVED_SITE_CONTENT_MESSAGE)
-  ), [hasUnsavedContent]);
+    !hasUnsavedChanges || window.confirm(UNSAVED_ADMIN_CHANGES_MESSAGE)
+  ), [hasUnsavedChanges]);
 
   useEffect(() => {
     if (routeSection === section) {
@@ -52,19 +52,19 @@ export default function AdminCommandCentre() {
       navigate(canonicalPath, { replace: true });
       return;
     }
-    setHasUnsavedContent(false);
+    setHasUnsavedChanges(false);
     setActiveSection(routeSection);
   }, [canonicalPath, confirmDiscard, location.pathname, navigate, routeSection, section]);
 
   useEffect(() => {
-    if (!hasUnsavedContent) return undefined;
+    if (!hasUnsavedChanges) return undefined;
     const warnBeforeUnload = event => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warnBeforeUnload);
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [hasUnsavedContent]);
+  }, [hasUnsavedChanges]);
 
   const setSection = useCallback((nextSection, params) => {
     if (nextSection === section) {
@@ -72,7 +72,7 @@ export default function AdminCommandCentre() {
       return true;
     }
     if (!confirmDiscard()) return false;
-    setHasUnsavedContent(false);
+    setHasUnsavedChanges(false);
     setActiveSection(nextSection);
     navigate(getAdminSectionPath(nextSection, params));
     return true;
@@ -80,7 +80,7 @@ export default function AdminCommandCentre() {
 
   const confirmLeaveAdmin = useCallback(() => {
     if (!confirmDiscard()) return false;
-    setHasUnsavedContent(false);
+    setHasUnsavedChanges(false);
     return true;
   }, [confirmDiscard]);
 
@@ -101,18 +101,18 @@ export default function AdminCommandCentre() {
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
       case 'orders': return <OrdersManager />;
       case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
-      case 'content': return <ContentManager onDirtyChange={setHasUnsavedContent} />;
+      case 'content': return <ContentManager onDirtyChange={setHasUnsavedChanges} />;
       case 'bookings': return <BookingRequestsTable />;
       case 'pt-requests': return <PTRequestsTable />;
       case 'availability': return <AvailabilityManager />;
-      case 'settings': return <SoftLaunchSettings />;
+      case 'settings': return <SoftLaunchSettings onDirtyChange={setHasUnsavedChanges} />;
       case 'campaigns': return <CampaignStats />;
       default: return <AdminOverview onNavigate={setSection} />;
     }
   };
 
   return (
-    <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedContent} onConfirmLeave={confirmLeaveAdmin}>
+    <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
       <Suspense fallback={<SectionLoader />}>
         {renderSection()}
       </Suspense>

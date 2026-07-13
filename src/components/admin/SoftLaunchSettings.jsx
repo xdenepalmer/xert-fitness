@@ -2,10 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
-import { normalizeLaunchSettings } from '@/lib/launchSettings';
+import { launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
 
-export default function SoftLaunchSettings() {
-  const [settings, setSettings] = useState(getDefaultSettings());
+/** @param {boolean} _dirty */
+const NOOP = _dirty => {};
+
+export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
+  const defaults = getDefaultSettings();
+  const [settings, setSettings] = useState(defaults);
+  const [savedSettings, setSavedSettings] = useState(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -16,7 +21,10 @@ export default function SoftLaunchSettings() {
     setLoadError('');
     try {
       const loadedSettings = await getSoftLaunchSettings();
-      if (loadedSettings) setSettings(loadedSettings);
+      if (loadedSettings) {
+        setSettings(loadedSettings);
+        setSavedSettings(loadedSettings);
+      }
     } catch (error) {
       setLoadError(error.message || 'Check the admin settings table and admin permissions.');
     } finally {
@@ -28,12 +36,26 @@ export default function SoftLaunchSettings() {
     load();
   }, []);
 
-  const set = (k, v) => setSettings(p => ({ ...p, [k]: v }));
+  const dirty = launchSettingsChanged(settings, savedSettings);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const set = (k, v) => {
+    setSaved(false);
+    setSettings(p => ({ ...p, [k]: v }));
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateSoftLaunchSettings(normalizeLaunchSettings(settings));
+      const normalized = normalizeLaunchSettings(settings);
+      await updateSoftLaunchSettings(normalized);
+      setSettings(current => ({ ...current, ...normalized }));
+      setSavedSettings(current => ({ ...current, ...normalized }));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -63,6 +85,11 @@ export default function SoftLaunchSettings() {
     <div className="p-6 max-w-2xl">
       <h2 className="font-display text-xl text-xert-offwhite uppercase mb-6">Soft Launch Settings</h2>
       <p className="font-body text-xs text-xert-concrete/50 mb-4">Every control below updates a live public-site behavior.</p>
+      {dirty && (
+        <div className="mb-4 px-4 py-3 border border-xert-steel/40 bg-xert-steel/10 font-body text-xs text-xert-pale" role="status">
+          Unsaved changes. The public site will not change until these settings are saved.
+        </div>
+      )}
 
       <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6 space-y-0">
         <Toggle label="Countdown enabled" desc="Shows countdown timer on public pages." field="countdown_enabled" />
@@ -84,10 +111,18 @@ export default function SoftLaunchSettings() {
         </div>
       </div>
 
-      <button onClick={handleSave} disabled={saving}
-        className={`w-full py-4 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-white' : 'bg-xert-red text-white hover:bg-xert-orange'}`}>
-        {saved ? 'Saved ✓' : saving ? 'Saving...' : 'Save settings'}
-      </button>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button onClick={handleSave} disabled={saving || !dirty}
+          className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-white' : 'bg-xert-red text-white hover:bg-xert-orange'}`}>
+          {saved ? 'Saved ✓' : saving ? 'Saving...' : dirty ? 'Save settings' : 'Settings saved'}
+        </button>
+        {dirty && (
+          <button type="button" onClick={() => { setSettings(savedSettings); setSaved(false); }} disabled={saving}
+            className="min-h-12 px-5 py-3 border border-xert-red/30 font-body text-xs uppercase tracking-wider text-xert-red/70 hover:border-xert-red hover:text-xert-red disabled:opacity-50">
+            Discard changes
+          </button>
+        )}
+      </div>
     </div>
   );
 }
