@@ -119,6 +119,8 @@ The Supabase schema is defined in:
   lead-pipeline changes atomic and records immutable administrator history
 - `src/supabase/schedule_change_audit_upgrade.sql` — records immutable class,
   availability and blackout lifecycle history for operational accountability
+- `src/supabase/content_change_audit_upgrade.sql` — records immutable CMS,
+  coach, event, session-pack and launch-setting administrator history
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -133,7 +135,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `member_push_notifications_upgrade.sql`, then
 `announcement_archival_upgrade.sql`, then
 `lead_pipeline_audit_upgrade.sql`, then
-`schedule_change_audit_upgrade.sql`. This sequence produces the
+`schedule_change_audit_upgrade.sql`, then
+`content_change_audit_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -154,14 +157,15 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `member_push_notifications_upgrade.sql`, then
 `announcement_archival_upgrade.sql`, then
 `lead_pipeline_audit_upgrade.sql`, then
-`schedule_change_audit_upgrade.sql`. The scripts are idempotent;
+`schedule_change_audit_upgrade.sql`, then
+`content_change_audit_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
 Operations Health and the TestFlight release workflow verify every production
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
-and schedule audit, member push delivery, schedule integrity, public-form integrity, and database security hardening. A release intentionally
+and schedule audit, content/configuration history, member push delivery, schedule integrity, public-form integrity, and database security hardening. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.

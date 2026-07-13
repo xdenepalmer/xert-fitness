@@ -52,22 +52,34 @@ const records = {
       created_at: '2026-07-13T20:00:00Z',
     },
   ],
+  contentChanges: [
+    {
+      id: 'content-change-1', resource_type: 'site_content', resource_id: 'hero',
+      action: 'updated', changed_by: 'admin-1', subject_label: 'hero',
+      previous_snapshot: { key: 'hero', data: { headline: 'Train together', photos: ['old.jpg'] } },
+      new_snapshot: { key: 'hero', data: { headline: 'Beat your best', photos: ['new.jpg'] } },
+      created_at: '2026-07-13T21:00:00Z',
+    },
+  ],
 };
 
 test('builds a newest-first audit ledger with resolved and durable fallback identities', () => {
   const events = buildAdminAuditEvents(records);
-  assert.deepEqual(events.map(event => event.id), ['schedule:schedule-change-1', 'lead:lead-change-1', 'announcement:notice-event-1', 'request:request-change-1', 'credit:credit-1', 'role:role-1', 'credit:credit-2']);
+  assert.deepEqual(events.map(event => event.id), ['content:content-change-1', 'schedule:schedule-change-1', 'lead:lead-change-1', 'announcement:notice-event-1', 'request:request-change-1', 'credit:credit-1', 'role:role-1', 'credit:credit-2']);
   assert.equal(events[0].actor, 'Dene Palmer');
-  assert.equal(events[0].subject, 'XERT Engine');
-  assert.match(events[0].summary, /Class session cancelled/);
-  assert.equal(events[1].subject, 'Jordan Coach');
-  assert.match(events[1].summary, /Trainer lead changed from reviewing to interview/);
-  assert.equal(events[2].subject, 'Weekend session');
-  assert.match(events[2].summary, /notice archived/);
-  assert.equal(events[3].subject, 'Taylor Athlete');
-  assert.match(events[3].summary, /PT request changed from requested to approved/);
-  assert.equal(events[6].actor, 'Deleted user');
-  assert.equal(events[6].subject, 'User deleted-');
+  assert.equal(events[0].subject, 'hero');
+  assert.match(events[0].summary, /Site content updated/);
+  assert.match(events[0].detail, /headline, photos/);
+  assert.equal(events[1].subject, 'XERT Engine');
+  assert.match(events[1].summary, /Class session cancelled/);
+  assert.equal(events[2].subject, 'Jordan Coach');
+  assert.match(events[2].summary, /Trainer lead changed from reviewing to interview/);
+  assert.equal(events[3].subject, 'Weekend session');
+  assert.match(events[3].summary, /notice archived/);
+  assert.equal(events[4].subject, 'Taylor Athlete');
+  assert.match(events[4].summary, /PT request changed from requested to approved/);
+  assert.equal(events[7].actor, 'Deleted user');
+  assert.equal(events[7].subject, 'User deleted-');
 });
 
 test('filters by action, rolling range, and searchable reason or identity', () => {
@@ -78,6 +90,7 @@ test('filters by action, rolling range, and searchable reason or identity', () =
   assert.deepEqual(filterAdminAuditEvents(events, { type: 'announcement', days: '30' }, now).map(event => event.id), ['announcement:notice-event-1']);
   assert.deepEqual(filterAdminAuditEvents(events, { type: 'lead', days: '30' }, now).map(event => event.id), ['lead:lead-change-1']);
   assert.deepEqual(filterAdminAuditEvents(events, { type: 'schedule', days: '30' }, now).map(event => event.id), ['schedule:schedule-change-1']);
+  assert.deepEqual(filterAdminAuditEvents(events, { type: 'content', days: '30' }, now).map(event => event.id), ['content:content-change-1']);
   assert.deepEqual(filterAdminAuditEvents(events, { search: 'competition', days: 'all' }, now).map(event => event.id), ['credit:credit-1']);
   assert.deepEqual(filterAdminAuditEvents(events, { search: 'alex', days: 'all' }, now).map(event => event.id), ['credit:credit-1', 'role:role-1']);
 });
@@ -85,13 +98,14 @@ test('filters by action, rolling range, and searchable reason or identity', () =
 test('summarises the filtered ledger and exports traceable IDs', () => {
   const events = buildAdminAuditEvents(records);
   assert.deepEqual(summarizeAdminAuditEvents(events), {
-    total: 7,
+    total: 8,
     roleChanges: 1,
     creditGrants: 2,
     requestChanges: 1,
     announcementChanges: 1,
     leadChanges: 1,
     scheduleChanges: 1,
+    contentChanges: 1,
     creditsGranted: 5,
     activeAdmins: 1,
   });
@@ -105,6 +119,8 @@ test('summarises the filtered ledger and exports traceable IDs', () => {
   assert.equal(leadRow.member_id, 'trainer-1');
   const scheduleRow = csv.find(row => row.action === 'Schedule change');
   assert.equal(scheduleRow.member_id, 'class-1');
+  const contentRow = csv.find(row => row.action === 'Content change');
+  assert.equal(contentRow.member_id, 'hero');
   const creditRow = csv.find(row => row.action === 'Credit grant' && row.member_id === 'member-1');
   assert.equal(creditRow.detail, 'Competition prize');
 });
@@ -121,6 +137,7 @@ test('admin audit loader pages every immutable source and resolves profiles in b
   assert.match(body, /member_announcement_admin_events/);
   assert.match(body, /admin_lead_changes/);
   assert.match(body, /admin_schedule_changes/);
+  assert.match(body, /admin_content_changes/);
   assert.match(body, /Promise\.allSettled/);
   assert.match(body, /getAuditProfiles/);
 });

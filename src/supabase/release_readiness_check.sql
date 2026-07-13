@@ -28,7 +28,8 @@ with required (capability, migration) as (
     ('member_pt_request_tracking', 'supabase/migrations/20260714004200_member_pt_request_tracking.sql'),
     ('public_form_integrity', 'supabase/migrations/20260714004300_public_form_integrity.sql'),
     ('lead_pipeline_audit', 'supabase/migrations/20260714011000_lead_pipeline_audit.sql'),
-    ('schedule_change_audit', 'supabase/migrations/20260714012000_schedule_change_audit.sql')
+    ('schedule_change_audit', 'supabase/migrations/20260714012000_schedule_change_audit.sql'),
+    ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql')
 ), readiness as (
   select
     required.capability,

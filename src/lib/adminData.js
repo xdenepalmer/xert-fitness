@@ -824,6 +824,7 @@ export async function getAdminAuditRecords() {
     loadTable('member_announcement_admin_events', 'id, announcement_id, announcement_title, action, actor_id, previous_published_at, new_published_at, previous_archived_at, new_archived_at, created_at'),
     loadTable('admin_lead_changes', 'id, lead_type, lead_id, changed_by, previous_status, new_status, previous_admin_notes, new_admin_notes, subject_label, subject_email, created_at'),
     loadTable('admin_schedule_changes', 'id, resource_type, resource_id, action, changed_by, subject_label, previous_snapshot, new_snapshot, created_at'),
+    loadTable('admin_content_changes', 'id, resource_type, resource_id, action, changed_by, subject_label, previous_snapshot, new_snapshot, created_at'),
   ]);
   const warnings = [];
   const sourceValue = (index, label) => {
@@ -837,6 +838,7 @@ export async function getAdminAuditRecords() {
   const announcementEvents = sourceValue(3, 'Announcement changes');
   const leadChanges = sourceValue(4, 'Lead changes');
   const scheduleChanges = sourceValue(5, 'Schedule changes');
+  const contentChanges = sourceValue(6, 'Content changes');
   if (sources.every(result => result.status === 'rejected')) {
     throw new Error(warnings.join(' | '));
   }
@@ -848,6 +850,7 @@ export async function getAdminAuditRecords() {
     ...announcementEvents.map(row => row.actor_id),
     ...leadChanges.map(row => row.changed_by),
     ...scheduleChanges.map(row => row.changed_by),
+    ...contentChanges.map(row => row.changed_by),
   ];
   let profiles = [];
   try {
@@ -855,7 +858,7 @@ export async function getAdminAuditRecords() {
   } catch (error) {
     warnings.push(`User identities: ${error.message || 'unavailable'}`);
   }
-  return { roleChanges, creditGrants, requestChanges, announcementEvents, leadChanges, scheduleChanges, profiles, warnings };
+  return { roleChanges, creditGrants, requestChanges, announcementEvents, leadChanges, scheduleChanges, contentChanges, profiles, warnings };
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────

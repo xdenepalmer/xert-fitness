@@ -1,4 +1,4 @@
-const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement', 'lead', 'schedule']);
+const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement', 'lead', 'schedule', 'content']);
 const AUDIT_ACTION_LABELS = Object.freeze({
   role: 'Role change',
   credit: 'Credit grant',
@@ -6,6 +6,7 @@ const AUDIT_ACTION_LABELS = Object.freeze({
   announcement: 'Announcement change',
   lead: 'Lead change',
   schedule: 'Schedule change',
+  content: 'Content change',
 });
 
 function clean(value) {
@@ -18,7 +19,33 @@ function identity(profile, fallbackId) {
   return fallbackId ? `User ${String(fallbackId).slice(0, 8)}` : 'Deleted user';
 }
 
-export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], leadChanges = [], scheduleChanges = [], profiles = [] } = {}) {
+function valuesDiffer(left, right) {
+  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+}
+
+function displayFieldName(key) {
+  return clean(key).replaceAll('_', ' ');
+}
+
+function contentChangedFields(previous, next) {
+  const ignored = new Set(['id', 'key', 'created_at', 'updated_at']);
+  const fields = new Set([...Object.keys(previous), ...Object.keys(next)]);
+  const changed = [];
+  for (const key of fields) {
+    if (ignored.has(key) || !valuesDiffer(previous[key], next[key])) continue;
+    if (key === 'data' && previous.data && next.data && typeof previous.data === 'object' && typeof next.data === 'object') {
+      const contentKeys = new Set([...Object.keys(previous.data), ...Object.keys(next.data)]);
+      for (const contentKey of contentKeys) {
+        if (valuesDiffer(previous.data[contentKey], next.data[contentKey])) changed.push(displayFieldName(contentKey));
+      }
+    } else {
+      changed.push(displayFieldName(key));
+    }
+  }
+  return [...new Set(changed)];
+}
+
+export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], leadChanges = [], scheduleChanges = [], contentChanges = [], profiles = [] } = {}) {
   const profileById = new Map(profiles.map(profile => [profile.id, profile]));
   const roleEvents = roleChanges.map(change => ({
     id: `role:${change.id}`,
@@ -137,7 +164,7 @@ export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], req
       ['affects', 'scope'],
       ['reason', 'reason'],
       ['notes', 'notes'],
-    ].filter(([key]) => clean(previous[key]) !== clean(next[key])).map(([, label]) => label);
+    ].filter(([key]) => valuesDiffer(previous[key], next[key])).map(([, label]) => label);
     return {
       id: `schedule:${change.id}`,
       sourceId: change.id,
@@ -158,8 +185,42 @@ export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], req
       sessions: null,
     };
   });
+  const contentEvents = contentChanges.map(change => {
+    const previous = change.previous_snapshot || {};
+    const next = change.new_snapshot || {};
+    const action = clean(change.action) || 'updated';
+    const resourceLabel = change.resource_type === 'site_content'
+      ? 'Site content'
+      : change.resource_type === 'coach'
+        ? 'Coach profile'
+        : change.resource_type === 'event'
+          ? 'Calendar event'
+          : change.resource_type === 'product'
+            ? 'Session pack'
+            : 'Launch settings';
+    const changedFields = contentChangedFields(previous, next);
+    const visibleFields = changedFields.slice(0, 6);
+    const remaining = changedFields.length - visibleFields.length;
+    return {
+      id: `content:${change.id}`,
+      sourceId: change.id,
+      type: 'content',
+      at: change.created_at,
+      actorId: change.changed_by,
+      actor: identity(profileById.get(change.changed_by), change.changed_by),
+      subjectId: change.resource_id,
+      subject: clean(change.subject_label) || `${resourceLabel} ${clean(change.resource_id).slice(0, 8)}`,
+      summary: `${resourceLabel} ${action}`,
+      detail: ['created', 'deleted'].includes(action)
+        ? `${resourceLabel} ${action}`
+        : visibleFields.length > 0
+          ? `Changed ${visibleFields.join(', ')}${remaining > 0 ? `, +${remaining} more` : ''}`
+          : `${resourceLabel} ${action}`,
+      sessions: null,
+    };
+  });
 
-  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents, ...leadEvents, ...scheduleEvents].sort((left, right) => {
+  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents, ...leadEvents, ...scheduleEvents, ...contentEvents].sort((left, right) => {
     const timeDifference = new Date(right.at).getTime() - new Date(left.at).getTime();
     return timeDifference || right.id.localeCompare(left.id);
   });
@@ -191,6 +252,7 @@ export function summarizeAdminAuditEvents(events) {
     announcementChanges: rows.filter(event => event.type === 'announcement').length,
     leadChanges: rows.filter(event => event.type === 'lead').length,
     scheduleChanges: rows.filter(event => event.type === 'schedule').length,
+    contentChanges: rows.filter(event => event.type === 'content').length,
     creditsGranted: rows.reduce((total, event) => total + (event.type === 'credit' ? event.sessions || 0 : 0), 0),
     activeAdmins: new Set(rows.map(event => event.actorId).filter(Boolean)).size,
   };
