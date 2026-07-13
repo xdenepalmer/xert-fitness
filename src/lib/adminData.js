@@ -19,6 +19,7 @@ import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
 import { productStripeTransitionError } from './products.js';
+import { adminAuditRangeStart } from './adminAudit.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -804,15 +805,17 @@ async function getAuditProfiles(ids) {
   return profiles;
 }
 
-export async function getAdminAuditRecords() {
+export async function getAdminAuditRecords(days = '30') {
+  const cutoffIso = adminAuditRangeStart(days);
   const loadTable = (table, columns) => collectAdminBatches(async (page, pageSize) => {
     const from = (page - 1) * pageSize;
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select(columns)
       .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(from, from + pageSize - 1);
+      .order('id', { ascending: false });
+    if (cutoffIso) query = query.gte('created_at', cutoffIso);
+    const { data, error } = await query.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     return data || [];
   });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BellRing, CalendarCheck2, CalendarClock, ChevronLeft, ChevronRight, ClipboardCheck, Download, FileClock, RefreshCw, ScrollText, ShieldCheck, Ticket, UserRoundSearch } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAdminAuditRecords } from '@/lib/adminData';
@@ -63,23 +63,32 @@ export default function AdminAuditLog() {
   const [type, setType] = useState('all');
   const [days, setDays] = useState('30');
   const [page, setPage] = useState(1);
+  const loadVersion = useRef(0);
 
-  const load = async () => {
+  const load = async (range = days) => {
+    const version = loadVersion.current + 1;
+    loadVersion.current = version;
     setLoading(true);
     setLoadError('');
     try {
-      setRecords(await getAdminAuditRecords());
+      const nextRecords = await getAdminAuditRecords(range);
+      if (version !== loadVersion.current) return;
+      setRecords(nextRecords);
       setUpdatedAt(new Date());
     } catch (error) {
+      if (version !== loadVersion.current) return;
       const message = error.message || 'Check audit migrations and administrator permissions.';
       if (!records) setLoadError(message);
       toast({ title: 'Admin audit unavailable', description: message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load(days);
+    return () => { loadVersion.current += 1; };
+  }, [days]);
   useEffect(() => { setPage(1); }, [days, search, type]);
 
   const allEvents = useMemo(() => buildAdminAuditEvents(records || {}), [records]);
@@ -110,7 +119,7 @@ export default function AdminAuditLog() {
   );
 
   if (!records && loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
-  if (!records && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
+  if (!records && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={() => void load(days)} /></div>;
 
   return (
     <div className="p-6 space-y-6">
@@ -130,7 +139,7 @@ export default function AdminAuditLog() {
             className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-xs text-xert-concrete/70 uppercase tracking-wider hover:border-xert-steel disabled:opacity-40">
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
-          <button type="button" onClick={() => void load()} disabled={loading} title="Refresh admin audit" aria-label="Refresh admin audit"
+          <button type="button" onClick={() => void load(days)} disabled={loading} title="Refresh admin audit" aria-label="Refresh admin audit"
             className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-40">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>

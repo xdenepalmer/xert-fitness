@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   adminAuditCsvRows,
+  adminAuditRangeStart,
   buildAdminAuditEvents,
   filterAdminAuditEvents,
   summarizeAdminAuditEvents,
@@ -71,6 +72,14 @@ const records = {
     },
   ],
 };
+
+test('computes a bounded server range while preserving explicit all-time history', () => {
+  const now = new Date('2026-07-14T00:00:00Z');
+  assert.equal(adminAuditRangeStart('30', now), '2026-06-14T00:00:00.000Z');
+  assert.equal(adminAuditRangeStart('90', now), '2026-04-15T00:00:00.000Z');
+  assert.equal(adminAuditRangeStart('all', now), null);
+  assert.equal(adminAuditRangeStart('999999', now), '2016-07-16T00:00:00.000Z');
+});
 
 test('builds a newest-first audit ledger with resolved and durable fallback identities', () => {
   const events = buildAdminAuditEvents(records);
@@ -161,6 +170,8 @@ test('admin audit loader pages every immutable source and resolves profiles in b
   const end = source.indexOf('// ─── Class rosters', start);
   const body = source.slice(start, end);
   assert.match(body, /collectAdminBatches/);
+  assert.match(body, /adminAuditRangeStart\(days\)/);
+  assert.match(body, /query\.gte\('created_at', cutoffIso\)/);
   assert.match(body, /admin_role_changes/);
   assert.match(body, /admin_credit_grants/);
   assert.match(body, /admin_request_status_changes/);
@@ -171,4 +182,13 @@ test('admin audit loader pages every immutable source and resolves profiles in b
   assert.match(body, /session_booking_changes/);
   assert.match(body, /Promise\.allSettled/);
   assert.match(body, /getAuditProfiles/);
+});
+
+test('admin audit range changes reload safely without stale responses winning', async () => {
+  const source = await readFile(new URL('../src/components/admin/AdminAuditLog.jsx', import.meta.url), 'utf8');
+  assert.match(source, /const loadVersion = useRef\(0\)/);
+  assert.match(source, /getAdminAuditRecords\(range\)/);
+  assert.match(source, /version !== loadVersion\.current/);
+  assert.match(source, /void load\(days\)/);
+  assert.match(source, /\}, \[days\]\)/);
 });

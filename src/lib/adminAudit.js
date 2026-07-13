@@ -20,6 +20,15 @@ function identity(profile, fallbackId) {
   return fallbackId ? `User ${String(fallbackId).slice(0, 8)}` : 'Deleted user';
 }
 
+export function adminAuditRangeStart(days, now = new Date()) {
+  if (days === 'all') return null;
+  const parsedDays = Number.parseInt(String(days || 30), 10);
+  const boundedDays = Math.max(1, Math.min(Number.isFinite(parsedDays) ? parsedDays : 30, 3650));
+  const nowTime = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const safeNow = Number.isFinite(nowTime) ? nowTime : Date.now();
+  return new Date(safeNow - boundedDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
 function valuesDiffer(left, right) {
   return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 }
