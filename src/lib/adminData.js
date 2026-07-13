@@ -182,6 +182,22 @@ export async function cancelClassSession(id) {
   return data || 0;
 }
 
+export async function notifyClassCancellation(id) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-notify-class-cancellation', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ session_id: id }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Member push delivery could not be completed.');
+  return body;
+}
+
 export async function duplicateClassSession(session) {
   return createClassSession({
     ...session,
@@ -510,7 +526,7 @@ export async function deleteEvent(id) {
 
 export async function getAllMemberAnnouncements() {
   const [announcementResult, metricResult, pushMetricResult] = await Promise.all([
-    supabase.from('member_announcements').select('*').order('created_at', { ascending: false }),
+    supabase.from('member_announcements').select('*').eq('audience', 'all').order('created_at', { ascending: false }),
     supabase.rpc('admin_announcement_metrics'),
     supabase.rpc('admin_announcement_push_metrics'),
   ]);

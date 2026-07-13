@@ -123,6 +123,8 @@ The Supabase schema is defined in:
   coach, event, session-pack and launch-setting administrator history
 - `src/supabase/booking_lifecycle_audit_upgrade.sql` — records immutable member,
   administrator and system booking, waitlist, cancellation and attendance history
+- `src/supabase/class_cancellation_notifications_upgrade.sql` — creates private,
+  durable member notices and targeted Apple push delivery when staff cancel a class
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -139,7 +141,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `lead_pipeline_audit_upgrade.sql`, then
 `schedule_change_audit_upgrade.sql`, then
 `content_change_audit_upgrade.sql`, then
-`booking_lifecycle_audit_upgrade.sql`. This sequence produces the
+`booking_lifecycle_audit_upgrade.sql`, then
+`class_cancellation_notifications_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -162,7 +165,8 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `lead_pipeline_audit_upgrade.sql`, then
 `schedule_change_audit_upgrade.sql`, then
 `content_change_audit_upgrade.sql`, then
-`booking_lifecycle_audit_upgrade.sql`. The scripts are idempotent;
+`booking_lifecycle_audit_upgrade.sql`, then
+`class_cancellation_notifications_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

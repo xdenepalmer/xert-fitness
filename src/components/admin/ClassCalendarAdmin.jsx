@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
@@ -137,6 +137,29 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
         </div>
 
         <div className="overflow-y-auto p-5 sm:p-6">
+          {followUp.notification ? (
+            <div className="mb-4 flex gap-3 border border-xert-steel/30 bg-xert-steel/10 p-3">
+              <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-xert-steel" aria-hidden="true" />
+              <div>
+                <p className="font-body text-xs font-semibold text-xert-offwhite">
+                  Private in-app notice created for {followUp.notification.recipients} member {followUp.notification.recipients === 1 ? 'account' : 'accounts'}.
+                </p>
+                <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">
+                  {followUp.notification.push?.delivered > 0
+                    ? `${followUp.notification.push.delivered} Apple push ${followUp.notification.push.delivered === 1 ? 'notification was' : 'notifications were'} delivered.`
+                    : followUp.notification.push?.configured === false
+                      ? 'The notice is available in XERT, but Apple push delivery is not configured. Use the contact fallback below.'
+                      : followUp.notification.push?.attempted > 0
+                        ? 'Apple push delivery was attempted but did not reach a registered device. Use the contact fallback below.'
+                        : 'No enabled Apple device was registered. The notice remains available when the member opens XERT.'}
+                </p>
+              </div>
+            </div>
+          ) : followUp.notificationError ? (
+            <p role="alert" className="mb-4 border border-xert-orange/30 bg-xert-orange/10 p-3 font-body text-xs leading-relaxed text-xert-concrete/80">
+              {followUp.notificationError} Use the contact fallback below so no affected member is missed.
+            </p>
+          ) : null}
           {followUp.contactLookupIncomplete && (
             <p role="alert" className="mb-4 border border-xert-orange/30 bg-xert-orange/10 p-3 font-body text-xs leading-relaxed text-xert-concrete/80">
               One booking source could not be checked. Review the class bookings queue before considering follow-up complete.
@@ -598,6 +621,13 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
       const message = buildClassCancellationMessage(session);
       const affectedBookings = await cancelClassSession(session.id);
       if (affectedBookings > 0) {
+        let notification = null;
+        let notificationError = '';
+        try {
+          notification = await notifyClassCancellation(session.id);
+        } catch (error) {
+          notificationError = error.message || 'Push delivery status could not be confirmed.';
+        }
         setCancellationFollowUp({
           session,
           affectedBookings,
@@ -605,6 +635,8 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
           message,
           mailto: buildClassCancellationMailto(contacts, message.subject, message.body),
           contactLookupIncomplete: contactResults.some(result => result.status === 'rejected'),
+          notification,
+          notificationError,
         });
       }
       const noun = affectedBookings === 1 ? 'booking' : 'bookings';

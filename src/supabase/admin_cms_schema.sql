@@ -671,6 +671,10 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if v_status = 'completed' then raise exception 'SESSION_ALREADY_COMPLETED'; end if;
 
+  if to_regprocedure('public.create_class_cancellation_notice(uuid)') is not null then
+    perform public.create_class_cancellation_notice(p_session_id);
+  end if;
+
   with cancelled_bookings as (
     update public.session_bookings
        set status = 'cancelled', cancelled_at = now()

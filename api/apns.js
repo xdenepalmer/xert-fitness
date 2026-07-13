@@ -3,6 +3,7 @@ import { createSign } from 'node:crypto';
 
 const INVALID_TOKEN_REASONS = new Set(['BadDeviceToken', 'DeviceTokenNotForTopic', 'Unregistered']);
 const DELIVERY_BATCH_SIZE = 25;
+const TARGET_USER_BATCH_SIZE = 100;
 
 function clean(value) {
   return String(value || '').trim();
@@ -88,20 +89,34 @@ function sendNotification(client, subscription, announcement, config, providerTo
   });
 }
 
-async function loadSubscriptions(admin) {
+export async function loadSubscriptions(admin, targetUserIds = null) {
   const rows = [];
   const pageSize = 500;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await admin
-      .from('push_subscriptions')
-      .select('id,user_id,device_token,environment')
-      .eq('enabled', true)
-      .order('id')
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    rows.push(...(data || []));
-    if ((data || []).length < pageSize) return rows;
+  const userIds = Array.isArray(targetUserIds)
+    ? [...new Set(targetUserIds.filter(Boolean))]
+    : null;
+  if (userIds && userIds.length === 0) return rows;
+
+  const userBatches = userIds
+    ? Array.from({ length: Math.ceil(userIds.length / TARGET_USER_BATCH_SIZE) }, (_, index) =>
+        userIds.slice(index * TARGET_USER_BATCH_SIZE, (index + 1) * TARGET_USER_BATCH_SIZE))
+    : [null];
+  for (const userBatch of userBatches) {
+    for (let from = 0; ; from += pageSize) {
+      let query = admin
+        .from('push_subscriptions')
+        .select('id,user_id,device_token,environment')
+        .eq('enabled', true)
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (userBatch) query = query.in('user_id', userBatch);
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...(data || []));
+      if ((data || []).length < pageSize) break;
+    }
   }
+  return rows;
 }
 
 async function saveDeliveryResults(admin, announcementId, results) {
@@ -124,10 +139,10 @@ async function saveDeliveryResults(admin, announcementId, results) {
   }
 }
 
-export async function sendMemberAnnouncementPushes({ admin, announcement, environment = process.env }) {
+export async function sendMemberAnnouncementPushes({ admin, announcement, targetUserIds = null, environment = process.env }) {
   const config = inspectAPNsEnvironment(environment);
   if (!config.ready) return { configured: false, missing: config.missing, attempted: 0, delivered: 0, failed: 0 };
-  const subscriptions = await loadSubscriptions(admin);
+  const subscriptions = await loadSubscriptions(admin, targetUserIds);
   if (subscriptions.length === 0) return { configured: true, attempted: 0, delivered: 0, failed: 0 };
   const providerToken = createAPNsProviderToken(config);
   const results = [];

@@ -30,7 +30,8 @@ with required (capability, migration) as (
     ('lead_pipeline_audit', 'supabase/migrations/20260714011000_lead_pipeline_audit.sql'),
     ('schedule_change_audit', 'supabase/migrations/20260714012000_schedule_change_audit.sql'),
     ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql'),
-    ('booking_lifecycle_audit', 'supabase/migrations/20260714014000_booking_lifecycle_audit.sql')
+    ('booking_lifecycle_audit', 'supabase/migrations/20260714014000_booking_lifecycle_audit.sql'),
+    ('class_cancellation_notifications', 'supabase/migrations/20260714015000_class_cancellation_notifications.sql')
 ), readiness as (
   select
     required.capability,
