@@ -172,7 +172,7 @@ struct HomeView: View {
                     }
                     Spacer()
                     Text(product.displayPrice)
-                        .font(XertTheme.displayFont(size: 20))
+                        .font(XertTheme.displayFont(size: 20, relativeTo: .title3))
                         .tracking(1.0)
                         .foregroundStyle(.xertSteel)
                 }

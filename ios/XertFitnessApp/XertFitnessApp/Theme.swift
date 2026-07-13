@@ -24,17 +24,18 @@ extension Color {
 enum XertTheme {
     /// Bundled brand display font. Falls back to a condensed system face if the
     /// font failed to register so headlines never silently render in Times.
-    static func displayFont(size: CGFloat) -> Font {
+    static func displayFont(size: CGFloat, relativeTo textStyle: Font.TextStyle) -> Font {
         if UIFont(name: "BebasNeue-Regular", size: size) != nil {
-            return .custom("BebasNeue-Regular", size: size)
+            return .custom("BebasNeue-Regular", size: size, relativeTo: textStyle)
         }
-        return .system(size: size, weight: .heavy)
+        return .system(textStyle, design: .default).weight(.heavy)
     }
 
     /// UIKit twin of `displayFont` for appearance proxies.
-    static func displayUIFont(size: CGFloat) -> UIFont {
-        UIFont(name: "BebasNeue-Regular", size: size)
+    static func displayUIFont(size: CGFloat, textStyle: UIFont.TextStyle) -> UIFont {
+        let base = UIFont(name: "BebasNeue-Regular", size: size)
             ?? .systemFont(ofSize: size, weight: .heavy)
+        return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
     }
 
     /// Global UIKit chrome: navy tab bar and navigation bars with Bebas titles,
@@ -50,12 +51,12 @@ enum XertTheme {
         nav.backgroundColor = navy
         nav.shadowColor = steel.withAlphaComponent(0.25)
         nav.titleTextAttributes = [
-            .font: displayUIFont(size: 22),
+            .font: displayUIFont(size: 22, textStyle: .headline),
             .foregroundColor: offWhite,
             .kern: 1.5,
         ]
         nav.largeTitleTextAttributes = [
-            .font: displayUIFont(size: 40),
+            .font: displayUIFont(size: 40, textStyle: .largeTitle),
             .foregroundColor: offWhite,
             .kern: 1.5,
         ]
@@ -84,7 +85,16 @@ extension View {
     /// Uppercase tracked headline in the brand display font, like the site's
     /// Bebas Neue headings.
     func xertDisplay(_ size: CGFloat) -> some View {
-        font(XertTheme.displayFont(size: size))
+        let textStyle: Font.TextStyle = if size >= 36 {
+            .largeTitle
+        } else if size >= 28 {
+            .title
+        } else if size >= 22 {
+            .title2
+        } else {
+            .title3
+        }
+        return font(XertTheme.displayFont(size: size, relativeTo: textStyle))
             .textCase(.uppercase)
             .tracking(1.2)
             .foregroundStyle(Color.xertOffWhite)
