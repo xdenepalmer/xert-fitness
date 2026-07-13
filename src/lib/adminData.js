@@ -521,6 +521,62 @@ export async function adminSetRole(userId, role) {
   }
 }
 
+async function getAuditProfiles(ids) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  const profiles = [];
+  for (let index = 0; index < uniqueIds.length; index += 100) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', uniqueIds.slice(index, index + 100));
+    if (error) throw new Error(error.message);
+    profiles.push(...(data || []));
+  }
+  return profiles;
+}
+
+export async function getAdminAuditRecords() {
+  const loadTable = (table, columns) => collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+
+  const sources = await Promise.allSettled([
+    loadTable('admin_role_changes', 'id, target_user_id, changed_by, previous_role, new_role, created_at'),
+    loadTable('admin_credit_grants', 'id, user_id, granted_by, sessions, validity_days, note, created_at'),
+  ]);
+  const warnings = [];
+  const sourceValue = (index, label) => {
+    if (sources[index].status === 'fulfilled') return sources[index].value;
+    warnings.push(`${label}: ${sources[index].reason?.message || 'unavailable'}`);
+    return [];
+  };
+  const roleChanges = sourceValue(0, 'Role changes');
+  const creditGrants = sourceValue(1, 'Credit grants');
+  if (sources.every(result => result.status === 'rejected')) {
+    throw new Error(warnings.join(' | '));
+  }
+
+  const ids = [
+    ...roleChanges.flatMap(row => [row.target_user_id, row.changed_by]),
+    ...creditGrants.flatMap(row => [row.user_id, row.granted_by]),
+  ];
+  let profiles = [];
+  try {
+    profiles = await getAuditProfiles(ids);
+  } catch (error) {
+    warnings.push(`User identities: ${error.message || 'unavailable'}`);
+  }
+  return { roleChanges, creditGrants, profiles, warnings };
+}
+
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────
 
 export async function adminSessionRoster(sessionId) {

@@ -21,6 +21,7 @@ const OrdersManager = lazy(() => import('@/components/admin/OrdersManager'));
 const ProductsManager = lazy(() => import('@/components/admin/ProductsManager'));
 const ContentManager = lazy(() => import('@/components/admin/ContentManager'));
 const OperationsHealth = lazy(() => import('@/components/admin/OperationsHealth'));
+const AdminAuditLog = lazy(() => import('@/components/admin/AdminAuditLog'));
 
 function SectionLoader() {
   return (
@@ -92,6 +93,7 @@ export default function AdminCommandCentre() {
     switch (section) {
       case 'overview': return <AdminOverview onNavigate={setSection} />;
       case 'health': return <OperationsHealth onNavigate={setSection} />;
+      case 'audit': return <AdminAuditLog />;
       case 'members': return <LeadTable type="member" />;
       case 'trainers': return <LeadTable type="trainer" />;
       case 'partners': return <LeadTable type="partner" />;

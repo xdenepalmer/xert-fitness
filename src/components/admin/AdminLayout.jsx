@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
   Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
-  CircleAlert, ShieldCheck,
+  CircleAlert, ShieldCheck, ScrollText,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
@@ -19,6 +19,7 @@ const NAV_GROUPS = [
     items: [
       { key: 'overview', label: 'Overview', icon: LayoutDashboard },
       { key: 'health', label: 'Operations Health', icon: ShieldCheck },
+      { key: 'audit', label: 'Admin Audit', icon: ScrollText },
     ],
   },
   {
