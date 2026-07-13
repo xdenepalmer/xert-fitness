@@ -9,6 +9,8 @@ struct RootView: View {
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
     @State private var privacyLockError: String?
+    @State private var reminderBookingID: UUID?
+    @State private var reminderNavigationRequest = 0
 
     var body: some View {
         Group {
@@ -46,6 +48,10 @@ struct RootView: View {
             lockAndAuthenticate()
         }
         .onOpenURL(perform: handleOpenURL)
+        .onAppear(perform: consumePendingReminderRoute)
+        .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
+            consumePendingReminderRoute()
+        }
     }
 
     private var memberTabs: some View {
@@ -68,7 +74,10 @@ struct RootView: View {
                 }
                 .tag(2)
 
-            AccountView()
+            AccountView(
+                reminderBookingID: reminderBookingID,
+                reminderNavigationRequest: reminderNavigationRequest
+            )
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
                 }
@@ -166,6 +175,13 @@ struct RootView: View {
                 await store.refresh()
             }
         }
+    }
+
+    private func consumePendingReminderRoute() {
+        guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
+        reminderBookingID = bookingID
+        reminderNavigationRequest += 1
+        selectedTab = 3
     }
 }
 

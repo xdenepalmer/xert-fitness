@@ -309,6 +309,30 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(order.activityDate, try XCTUnwrap(order.paid_at))
     }
 
+    func testRefundedOrderUsesRefundAuditValues() throws {
+        let data = """
+        {
+          "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "status": "refunded",
+          "amount_cents": 4800,
+          "currency": "aud",
+          "created_at": "2026-07-12T01:00:00Z",
+          "paid_at": "2026-07-12T01:01:00Z",
+          "refunded_at": "2026-07-13T02:30:00Z",
+          "refunded_amount_cents": 4800,
+          "products": { "name": "4 Class Starter Pack" }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let order = try decoder.decode(OrderItem.self, from: data)
+
+        XCTAssertEqual(order.displayStatus, "Refunded")
+        XCTAssertTrue(try XCTUnwrap(order.refundedAmount).contains("48"))
+        XCTAssertEqual(order.activityDate, try XCTUnwrap(order.refunded_at))
+    }
+
     func testMemberProfileDecodesTheWebProfileColumns() throws {
         let data = """
         {
@@ -549,6 +573,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(ClassReminderPreference.leadTime(defaults: defaults), .twoHours)
     }
 
+    func testClassReminderTapRoutingIsValidatedAndSurvivesColdLaunch() throws {
+        let bookingID = UUID()
+        XCTAssertEqual(ClassReminderNotification.bookingID(
+            identifier: "\(ClassReminderNotification.identifierPrefix)\(bookingID.uuidString)",
+            userInfo: [ClassReminderNotification.bookingIDKey: bookingID.uuidString]
+        ), bookingID)
+        XCTAssertNil(ClassReminderNotification.bookingID(
+            identifier: "unmanaged.notification",
+            userInfo: [ClassReminderNotification.bookingIDKey: bookingID.uuidString]
+        ))
+        XCTAssertNil(ClassReminderNotification.bookingID(
+            identifier: "\(ClassReminderNotification.identifierPrefix)invalid",
+            userInfo: [ClassReminderNotification.bookingIDKey: "not-a-uuid"]
+        ))
+        XCTAssertNil(ClassReminderNotification.bookingID(
+            identifier: "\(ClassReminderNotification.identifierPrefix)\(UUID().uuidString)",
+            userInfo: [ClassReminderNotification.bookingIDKey: bookingID.uuidString]
+        ))
+
+        let suiteName = "ClassReminderNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        XCTAssertNil(ClassReminderNavigation.consumePendingBookingID(defaults: defaults))
+        ClassReminderNavigation.markPending(bookingID: bookingID, defaults: defaults)
+        XCTAssertEqual(ClassReminderNavigation.consumePendingBookingID(defaults: defaults), bookingID)
+        XCTAssertNil(ClassReminderNavigation.consumePendingBookingID(defaults: defaults))
+    }
+
     func testBookingCalendarPlannerUsesValidEndOrOneHourFallback() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let explicitEnd = start.addingTimeInterval(45 * 60)
@@ -766,6 +818,8 @@ final class ModelsTests: XCTestCase {
             currency: "aud",
             created_at: Date(),
             paid_at: status == "paid" ? Date() : nil,
+            refunded_at: status == "refunded" ? Date() : nil,
+            refunded_amount_cents: status == "refunded" ? 4800 : nil,
             products: nil
         )
     }

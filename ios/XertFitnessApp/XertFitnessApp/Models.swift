@@ -160,6 +160,8 @@ struct OrderItem: Identifiable, Codable, Hashable {
     let currency: String?
     let created_at: Date
     let paid_at: Date?
+    let refunded_at: Date?
+    let refunded_amount_cents: Int?
     let products: OrderProduct?
 
     var displayAmount: String {
@@ -172,7 +174,14 @@ struct OrderItem: Identifiable, Codable, Hashable {
         status.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
-    var activityDate: Date { paid_at ?? created_at }
+    var refundedAmount: String? {
+        guard status == "refunded", let refundedAmountCents = refunded_amount_cents else { return nil }
+        let normalizedCode = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let code = normalizedCode.flatMap { $0.isEmpty ? nil : $0 } ?? "AUD"
+        return (Double(refundedAmountCents) / 100).formatted(.currency(code: code))
+    }
+
+    var activityDate: Date { refunded_at ?? paid_at ?? created_at }
 }
 
 struct MemberProfile: Identifiable, Codable, Hashable {

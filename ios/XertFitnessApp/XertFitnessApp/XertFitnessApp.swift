@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct XertFitnessApp: App {
+    @UIApplicationDelegateAdaptor(XertAppDelegate.self) private var appDelegate
     @StateObject private var store = XertStore()
 
     init() {

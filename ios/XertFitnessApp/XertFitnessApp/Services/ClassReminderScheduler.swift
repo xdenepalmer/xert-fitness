@@ -84,7 +84,6 @@ actor ClassReminderScheduler {
     static let shared = ClassReminderScheduler()
 
     private let center = UNUserNotificationCenter.current()
-    private let identifierPrefix = "xert.booking."
 
     func sync(
         bookings: [BookingItem],
@@ -114,7 +113,7 @@ actor ClassReminderScheduler {
             content.title = "XERT class reminder"
             content.body = "\(booking.title) starts in \(leadTime.notificationLead)."
             content.sound = .default
-            content.userInfo = ["booking_id": booking.booking_id.uuidString]
+            content.userInfo = [ClassReminderNotification.bookingIDKey: booking.booking_id.uuidString]
 
             let trigger = UNTimeIntervalNotificationTrigger(
                 timeInterval: reminderDate.timeIntervalSince(now),
@@ -135,7 +134,7 @@ actor ClassReminderScheduler {
 
     func remove(bookingID: UUID) {
         center.removePendingNotificationRequests(
-            withIdentifiers: ["\(identifierPrefix)\(bookingID.uuidString)"]
+            withIdentifiers: ["\(ClassReminderNotification.identifierPrefix)\(bookingID.uuidString)"]
         )
     }
 
@@ -176,11 +175,11 @@ actor ClassReminderScheduler {
     private func clearManagedReminders() async {
         let identifiers = await center.pendingNotificationRequests()
             .map(\.identifier)
-            .filter { $0.hasPrefix(identifierPrefix) }
+            .filter { $0.hasPrefix(ClassReminderNotification.identifierPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
     private func identifier(for booking: BookingItem) -> String {
-        "\(identifierPrefix)\(booking.booking_id.uuidString)"
+        "\(ClassReminderNotification.identifierPrefix)\(booking.booking_id.uuidString)"
     }
 }

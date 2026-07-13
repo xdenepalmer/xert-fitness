@@ -216,7 +216,7 @@ final class XertAPI {
         try await restRequest(
             path: "/rest/v1/orders",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,status,amount_cents,currency,created_at,paid_at,products(name)"),
+                URLQueryItem(name: "select", value: "id,status,amount_cents,currency,created_at,paid_at,refunded_at,refunded_amount_cents,products(name)"),
                 URLQueryItem(name: "order", value: "created_at.desc")
             ],
             auth: auth

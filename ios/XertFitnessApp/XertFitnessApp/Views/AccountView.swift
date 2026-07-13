@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct AccountView: View {
+    let reminderBookingID: UUID?
+    let reminderNavigationRequest: Int
+
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
@@ -21,71 +24,115 @@ struct AccountView: View {
     @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
+    @State private var handledReminderNavigationRequest = 0
     @FocusState private var focusedProfileField: ProfileField?
 
     private enum ProfileField {
         case fullName, phone
     }
 
+    private enum ScrollTarget: Hashable {
+        case bookings, upcoming, history
+    }
+
     var body: some View {
         let timeline = BookingTimeline(bookings: store.bookings)
         NavigationStack {
-            Form {
-                if store.isSignedIn {
-                    signedInSections(timeline: timeline)
-                } else {
-                    signedOutSections
+            ScrollViewReader { proxy in
+                Form {
+                    if store.isSignedIn {
+                        signedInSections(timeline: timeline)
+                    } else {
+                        signedOutSections
+                    }
+                }
+                .xertListBackground()
+                .navigationTitle("Account")
+                .navigationBarTitleDisplayMode(.large)
+                .refreshable {
+                    await store.refresh()
+                }
+                .onAppear(perform: syncProfileForm)
+                .onAppear {
+                    authenticationSupport = DeviceAuthenticator.support()
+                    scrollToReminderBooking(using: proxy)
+                }
+                .onChange(of: reminderNavigationRequest) { _ in
+                    scrollToReminderBooking(using: proxy)
+                }
+                .onChange(of: store.isSignedIn) { _ in
+                    scrollToReminderBooking(using: proxy)
+                }
+                .onChange(of: store.isLoading) { _ in
+                    scrollToReminderBooking(using: proxy)
+                }
+                .onChange(of: store.bookings) { _ in
+                    scrollToReminderBooking(using: proxy)
+                }
+                .onChange(of: store.profile) { _ in
+                    syncProfileForm()
+                }
+                .confirmationDialog(
+                    "Cancel booking?",
+                    isPresented: Binding(
+                        get: { bookingToCancel != nil },
+                        set: { if !$0 { bookingToCancel = nil } }
+                    ),
+                    presenting: bookingToCancel
+                ) { booking in
+                    Button("Keep booking", role: .cancel) {
+                        bookingToCancel = nil
+                    }
+                    Button("Cancel booking", role: .destructive) {
+                        bookingToCancel = nil
+                        Task { await store.cancel(booking) }
+                    }
+                } message: { booking in
+                    Text(booking.cancellationMessage)
+                }
+                .confirmationDialog(
+                    "Permanently delete your XERT account?",
+                    isPresented: $showingDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Keep Account", role: .cancel) {}
+                    Button("Delete Account", role: .destructive) {
+                        Task { _ = await store.deleteAccount() }
+                    }
+                } message: {
+                    Text("Your member profile, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized.")
+                }
+                .alert(item: $bookingCalendarNotice) { notice in
+                    Alert(
+                        title: Text(notice.title),
+                        message: Text(notice.message),
+                        dismissButton: .default(Text("OK"))
+                    )
                 }
             }
-            .xertListBackground()
-            .navigationTitle("Account")
-            .navigationBarTitleDisplayMode(.large)
-            .refreshable {
-                await store.refresh()
+        }
+    }
+
+    private func scrollToReminderBooking(using proxy: ScrollViewProxy) {
+        guard
+            reminderNavigationRequest > 0,
+            reminderNavigationRequest != handledReminderNavigationRequest,
+            store.isSignedIn,
+            !store.isLoading
+        else {
+            return
+        }
+        Task { @MainActor in
+            await Task.yield()
+            let target: AnyHashable
+            if let reminderBookingID, store.bookings.contains(where: { $0.id == reminderBookingID }) {
+                target = reminderBookingID
+            } else {
+                target = ScrollTarget.bookings
             }
-            .onAppear(perform: syncProfileForm)
-            .onAppear {
-                authenticationSupport = DeviceAuthenticator.support()
-            }
-            .onChange(of: store.profile) { _ in
-                syncProfileForm()
-            }
-            .confirmationDialog(
-                "Cancel booking?",
-                isPresented: Binding(
-                    get: { bookingToCancel != nil },
-                    set: { if !$0 { bookingToCancel = nil } }
-                ),
-                presenting: bookingToCancel
-            ) { booking in
-                Button("Keep booking", role: .cancel) {
-                    bookingToCancel = nil
-                }
-                Button("Cancel booking", role: .destructive) {
-                    bookingToCancel = nil
-                    Task { await store.cancel(booking) }
-                }
-            } message: { booking in
-                Text(booking.cancellationMessage)
-            }
-            .confirmationDialog(
-                "Permanently delete your XERT account?",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Keep Account", role: .cancel) {}
-                Button("Delete Account", role: .destructive) {
-                    Task { _ = await store.deleteAccount() }
-                }
-            } message: {
-                Text("Your member profile, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized.")
-            }
-            .alert(item: $bookingCalendarNotice) { notice in
-                Alert(
-                    title: Text(notice.title),
-                    message: Text(notice.message),
-                    dismissButton: .default(Text("OK"))
-                )
+            handledReminderNavigationRequest = reminderNavigationRequest
+            withAnimation {
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }
@@ -382,6 +429,11 @@ struct AccountView: View {
                             }
                             .font(.subheadline)
                         }
+                        if let refundedAmount = order.refundedAmount {
+                            Text("Refunded \(refundedAmount)")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Color.orange)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -453,7 +505,7 @@ struct AccountView: View {
         Text(order.displayStatus.uppercased())
             .font(.caption2.weight(.bold))
             .tracking(1.2)
-            .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.xertMuted)
+            .foregroundStyle(order.status == "paid" ? Color.xertSteel : order.status == "refunded" ? Color.orange : Color.xertMuted)
     }
 
     @ViewBuilder
@@ -465,6 +517,7 @@ struct AccountView: View {
             } header: {
                 Text("Bookings").xertEyebrow()
             }
+            .id(ScrollTarget.bookings)
             .listRowBackground(Color.xertInk)
         } else {
             if !timeline.pending.isEmpty {
@@ -473,6 +526,7 @@ struct AccountView: View {
                 } header: {
                     Text("Requests & Waitlist").xertEyebrow()
                 }
+                .id(ScrollTarget.bookings)
                 .listRowBackground(Color.xertInk)
             }
             if !timeline.upcoming.isEmpty {
@@ -481,6 +535,7 @@ struct AccountView: View {
                 } header: {
                     Text("Upcoming Classes").xertEyebrow()
                 }
+                .id(timeline.pending.isEmpty ? ScrollTarget.bookings : ScrollTarget.upcoming)
                 .listRowBackground(Color.xertInk)
             }
             if !timeline.history.isEmpty {
@@ -489,6 +544,11 @@ struct AccountView: View {
                 } header: {
                     Text("Booking History").xertEyebrow()
                 }
+                .id(
+                    timeline.pending.isEmpty && timeline.upcoming.isEmpty
+                        ? ScrollTarget.bookings
+                        : ScrollTarget.history
+                )
                 .listRowBackground(Color.xertInk)
             }
         }
@@ -720,6 +780,7 @@ struct AccountView: View {
                 }
             }
             .padding(.vertical, 4)
+            .id(booking.id)
         }
     }
 
