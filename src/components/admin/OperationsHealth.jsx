@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Database, Loader2,
   RefreshCw, ShieldCheck,
@@ -6,6 +6,8 @@ import {
 import { getOperationsHealth } from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
+import { orderOperationsHealthChecks } from '@/lib/adminHealth';
 
 const STATUS_STYLE = {
   ok: {
@@ -46,23 +48,64 @@ const ROUTES = {
 export default function OperationsHealth({ onNavigate }) {
   const [checks, setChecks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const requestIdRef = useRef(0);
+  const requestInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(Number.NaN);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ initial = false } = {}) => {
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+    const requestId = ++requestIdRef.current;
+    if (initial) setLoading(true);
+    else setRefreshing(true);
     setLoadError('');
     try {
-      setChecks(await getOperationsHealth());
+      const nextChecks = await getOperationsHealth();
+      if (requestId !== requestIdRef.current) return;
+      setChecks(nextChecks);
+      setLastUpdated(new Date());
     } catch (error) {
-      setChecks([]);
+      if (requestId !== requestIdRef.current) return;
       setLoadError(error.message);
       toast({ title: 'Health check failed', description: error.message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        lastRefreshAtRef.current = Date.now();
+      }
+      requestInFlightRef.current = false;
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load({ initial: true });
+    return () => {
+      requestIdRef.current += 1;
+      requestInFlightRef.current = false;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (shouldRefreshAdminData({
+        visibilityState: document.visibilityState,
+        lastRefreshAt: lastRefreshAtRef.current,
+        minimumAgeMs: ADMIN_OVERVIEW_REFRESH_INTERVAL_MS,
+      })) {
+        void load();
+      }
+    };
+    const intervalId = window.setInterval(refreshWhenVisible, ADMIN_OVERVIEW_REFRESH_INTERVAL_MS);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [load]);
 
   const summary = useMemo(() => {
     const errors = checks.filter(c => c.status === 'error').length;
@@ -70,6 +113,8 @@ export default function OperationsHealth({ onNavigate }) {
     const ok = checks.filter(c => c.status === 'ok').length;
     return { ok, attention, errors };
   }, [checks]);
+
+  const orderedChecks = useMemo(() => orderOperationsHealthChecks(checks), [checks]);
 
   return (
     <div className="p-6 space-y-6">
@@ -92,12 +137,19 @@ export default function OperationsHealth({ onNavigate }) {
               </h2>
             </div>
           </div>
-          <button onClick={load} disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors disabled:opacity-50"
-            style={{ borderColor: 'rgba(123,167,188,0.28)', color: '#D1DDE6' }}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Refresh
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button type="button" onClick={() => void load()} disabled={loading || refreshing}
+              className="inline-flex min-h-11 items-center gap-2 px-4 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors disabled:opacity-50"
+              style={{ borderColor: 'rgba(123,167,188,0.28)', color: '#D1DDE6' }}>
+              {loading || refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {refreshing ? 'Refreshing' : 'Refresh'}
+            </button>
+            {lastUpdated && (
+              <span role="status" aria-live="polite" className="font-body text-[10px] uppercase tracking-wider text-xert-pale/40">
+                Updated {lastUpdated.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -126,7 +178,7 @@ export default function OperationsHealth({ onNavigate }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {checks.map(check => {
+          {orderedChecks.map(check => {
             const style = STATUS_STYLE[check.status] || STATUS_STYLE.ok;
             const Icon = style.icon;
             const target = ROUTES[check.key];
@@ -162,8 +214,8 @@ export default function OperationsHealth({ onNavigate }) {
                 )}
 
                 {target && (
-                  <button onClick={() => onNavigate?.(target)}
-                    className="inline-flex items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
+                  <button type="button" onClick={() => onNavigate?.(target)}
+                    className="inline-flex min-h-11 items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
                     style={{ color: '#7BA7BC' }}>
                     Open section
                     <ArrowRight className="w-3.5 h-3.5" />
