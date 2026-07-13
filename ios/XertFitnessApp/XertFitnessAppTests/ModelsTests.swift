@@ -122,6 +122,8 @@ final class ModelsTests: XCTestCase {
           "title": "Class location update",
           "body": "Saturday training has moved indoors.",
           "tone": "action",
+          "cta_label": "Book A Class",
+          "cta_url": "/booking",
           "published_at": "2026-07-13T04:00:00Z",
           "expires_at": "2026-07-14T04:00:00Z",
           "updated_at": "2026-07-13T04:00:00Z"
@@ -134,6 +136,36 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertEqual(announcement.priorityLabel, "Action requested")
         XCTAssertNotNil(announcement.expires_at)
+        XCTAssertEqual(announcement.action?.label, "Book A Class")
+        XCTAssertEqual(announcement.action?.nativeTab, 1)
+    }
+
+    func testMemberAnnouncementActionsRouteNativeTabsAndRejectUnsafeLinks() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        func announcement(url: String) throws -> MemberAnnouncement {
+            let data = Data("""
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "title": "Action",
+              "body": "Take action now.",
+              "tone": "info",
+              "cta_label": "Open",
+              "cta_url": "\(url)",
+              "published_at": "2026-07-13T04:00:00Z",
+              "expires_at": null,
+              "updated_at": "2026-07-13T04:00:00Z"
+            }
+            """.utf8)
+            return try decoder.decode(MemberAnnouncement.self, from: data)
+        }
+
+        XCTAssertEqual(try announcement(url: "/events").action?.nativeTab, 2)
+        XCTAssertEqual(try announcement(url: "/account").action?.nativeTab, 3)
+        XCTAssertEqual(try announcement(url: "https://events.example.com/register").action?.url.host, "events.example.com")
+        XCTAssertNil(try announcement(url: "http://events.example.com").action)
+        XCTAssertNil(try announcement(url: "//events.example.com").action)
+        XCTAssertNil(try announcement(url: "https://user:pass@events.example.com").action)
     }
 
     func testPrivateSessionRequestNormalizesRequiredAndOptionalFields() throws {

@@ -8,6 +8,7 @@ import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyB
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
+import { announcementAction } from '@/lib/memberAnnouncements';
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 
@@ -320,6 +321,7 @@ export default function Account() {
             </div>
             <div className="space-y-3">
               {announcements.map(notice => {
+                const action = announcementAction(notice);
                 const tone = notice.tone === 'urgent'
                   ? { border: 'rgba(201,78,68,0.55)', label: 'Urgent', color: '#f0a1a1' }
                   : notice.tone === 'action'
@@ -335,6 +337,11 @@ export default function Account() {
                     </div>
                     <h3 className="mt-2 font-display text-xl uppercase text-xert-offwhite">{notice.title}</h3>
                     <p className="mt-2 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{notice.body}</p>
+                    {action && (action.external ? (
+                      <a href={action.href} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy">{action.label}</a>
+                    ) : (
+                      <Link to={action.href} className="mt-4 inline-flex min-h-11 items-center bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy">{action.label}</Link>
+                    ))}
                     {notice.expires_at && <p className="mt-3 font-body text-xs text-xert-pale/40">Available until {formatDateTime(notice.expires_at)}</p>}
                   </article>
                 );

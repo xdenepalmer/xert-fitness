@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -68,11 +69,21 @@ struct HomeView: View {
                         MemberAnnouncementRow(
                             announcement: announcement,
                             isDismissing: store.dismissingAnnouncementID == announcement.id,
+                            onAction: { handleAnnouncementAction(announcement) },
                             onDismiss: { Task { await store.dismissAnnouncement(announcement) } }
                         )
                     }
                 }
             }
+        }
+    }
+
+    private func handleAnnouncementAction(_ announcement: MemberAnnouncement) {
+        guard let action = announcement.action else { return }
+        if let tab = action.nativeTab {
+            onNavigate(tab)
+        } else {
+            openURL(action.url)
         }
     }
 
@@ -278,6 +289,7 @@ struct HomeView: View {
 private struct MemberAnnouncementRow: View {
     let announcement: MemberAnnouncement
     let isDismissing: Bool
+    let onAction: () -> Void
     let onDismiss: () -> Void
 
     private var accent: Color {
@@ -323,6 +335,12 @@ private struct MemberAnnouncementRow: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.xertPale)
                     .fixedSize(horizontal: false, vertical: true)
+                if let action = announcement.action {
+                    Button(action: onAction) {
+                        Label(action.label, systemImage: action.nativeTab == nil ? "arrow.up.right.square" : "arrow.right")
+                    }
+                    .buttonStyle(.xertPrimary)
+                }
                 if let expiry = announcement.expires_at {
                     Text("Available until \(expiry.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)

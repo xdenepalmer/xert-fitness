@@ -187,12 +187,28 @@ create table if not exists public.member_announcements (
   title text not null check (char_length(btrim(title)) between 1 and 120),
   body text not null check (char_length(btrim(body)) between 1 and 2000),
   tone text not null default 'info' check (tone in ('info', 'action', 'urgent')),
+  cta_label text,
+  cta_url text,
   published_at timestamptz,
   expires_at timestamptz,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (expires_at is null or published_at is null or expires_at > published_at)
+  check (expires_at is null or published_at is null or expires_at > published_at),
+  constraint member_announcements_cta_check check (
+    (cta_label is null and cta_url is null)
+    or (
+      cta_label is not null and cta_url is not null
+      and cta_label = btrim(cta_label) and char_length(cta_label) between 1 and 40
+      and cta_label !~ '[[:cntrl:]]'
+      and cta_url = btrim(cta_url) and char_length(cta_url) between 1 and 500
+      and cta_url !~ '[[:cntrl:]]'
+      and (
+        (left(cta_url, 1) = '/' and left(cta_url, 2) <> '//')
+        or (cta_url ~ '^https://' and split_part(split_part(cta_url, '://', 2), '/', 1) not like '%@%')
+      )
+    )
+  )
 );
 create index if not exists member_announcements_live_idx
   on public.member_announcements(published_at desc, id desc) where published_at is not null;
@@ -642,7 +658,7 @@ $$;
 
 create or replace function public.my_member_announcements()
 returns table (
-  id uuid, title text, body text, tone text, published_at timestamptz,
+  id uuid, title text, body text, tone text, cta_label text, cta_url text, published_at timestamptz,
   expires_at timestamptz, updated_at timestamptz
 )
 language plpgsql security definer set search_path = public as $$
@@ -658,7 +674,8 @@ begin
     set read_at = least(member_announcement_receipts.read_at, excluded.read_at);
   return query
   select announcement.id, announcement.title, announcement.body, announcement.tone,
-         announcement.published_at, announcement.expires_at, announcement.updated_at
+         announcement.cta_label, announcement.cta_url, announcement.published_at,
+         announcement.expires_at, announcement.updated_at
   from public.member_announcements as announcement
   join public.member_announcement_receipts as receipt
     on receipt.announcement_id = announcement.id and receipt.user_id = v_user_id
@@ -873,6 +890,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('member_announcements') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('announcement_receipts') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('announcement_actions') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

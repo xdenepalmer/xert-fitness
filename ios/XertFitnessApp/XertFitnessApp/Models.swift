@@ -24,6 +24,8 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
     let title: String
     let body: String
     let tone: String
+    let cta_label: String?
+    let cta_url: String?
     let published_at: Date
     let expires_at: Date?
     let updated_at: Date
@@ -35,6 +37,42 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
         default: return "Member update"
         }
     }
+
+    var action: MemberAnnouncementAction? {
+        let label = cta_label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let destination = cta_url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !label.isEmpty, label.count <= 40, !destination.isEmpty, destination.count <= 500 else {
+            return nil
+        }
+        if destination.hasPrefix("/"), !destination.hasPrefix("//") {
+            let path = URLComponents(string: destination)?.path ?? destination
+            let nativeTab: Int?
+            switch path {
+            case "/", "/home": nativeTab = 0
+            case "/booking": nativeTab = 1
+            case "/events": nativeTab = 2
+            case "/account": nativeTab = 3
+            default: nativeTab = nil
+            }
+            guard let url = URL(string: destination, relativeTo: AppConfig.vercelBaseURL)?.absoluteURL else {
+                return nil
+            }
+            return MemberAnnouncementAction(label: label, url: url, nativeTab: nativeTab)
+        }
+        guard let components = URLComponents(string: destination),
+              components.scheme?.lowercased() == "https",
+              components.host != nil,
+              components.user == nil,
+              components.password == nil,
+              let url = components.url else { return nil }
+        return MemberAnnouncementAction(label: label, url: url, nativeTab: nil)
+    }
+}
+
+struct MemberAnnouncementAction: Equatable {
+    let label: String
+    let url: URL
+    let nativeTab: Int?
 }
 
 struct Product: Identifiable, Codable, Hashable {

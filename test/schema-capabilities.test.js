@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
@@ -19,6 +19,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
       'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
       'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
+      'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',
       'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
       'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
       'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
@@ -32,6 +33,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'checkout_reconciliation' },
     { capability: 'member_announcements' },
     { capability: 'announcement_receipts' },
+    { capability: 'announcement_actions' },
     { capability: 'credit_expiry_follow_up' },
     { capability: 'booking_waitlist_withdrawal' },
     { capability: 'member_waitlist_join' },
@@ -66,6 +68,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260713040000_member_announcements.sql', 'member_announcements'],
     ['../src/supabase/booking_schema.sql', 'announcement_receipts'],
     ['../supabase/migrations/20260713050000_announcement_receipts.sql', 'announcement_receipts'],
+    ['../src/supabase/booking_schema.sql', 'announcement_actions'],
+    ['../supabase/migrations/20260714000000_announcement_actions.sql', 'announcement_actions'],
     ['../src/supabase/admin_cms_schema.sql', 'credit_expiry_follow_up'],
     ['../supabase/migrations/20260713060000_credit_expiry_follow_up.sql', 'credit_expiry_follow_up'],
     ['../src/supabase/member_pt_request_tracking.sql', 'member_pt_request_tracking'],
@@ -95,6 +99,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /checkout_reconciliation/);
   assert.match(yaml, /member_announcements/);
   assert.match(yaml, /announcement_receipts/);
+  assert.match(yaml, /announcement_actions/);
   assert.match(yaml, /credit_expiry_follow_up/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
@@ -122,6 +127,7 @@ test('read-only production check reports every release capability and migration'
     'checkout_reconciliation',
     'member_announcements',
     'announcement_receipts',
+    'announcement_actions',
     'credit_expiry_follow_up',
     'member_pt_request_tracking',
     'public_form_integrity',

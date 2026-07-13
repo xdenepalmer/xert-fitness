@@ -9,7 +9,7 @@ import {
 } from '@/lib/adminData';
 import { announcementState, ANNOUNCEMENT_TONES, normalizeAnnouncementInput } from '@/lib/memberAnnouncements';
 
-const EMPTY_FORM = { title: '', body: '', tone: 'info', expires_at: '' };
+const EMPTY_FORM = { title: '', body: '', tone: 'info', expires_at: '', cta_label: '', cta_url: '' };
 const TONE_LABELS = { info: 'Information', action: 'Action requested', urgent: 'Urgent' };
 const STATE_STYLES = {
   live: 'border-green-500/40 text-green-300',
@@ -84,6 +84,8 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
       body: item.body,
       tone: item.tone,
       expires_at: localDateTimeValue(item.expires_at),
+      cta_label: item.cta_label || '',
+      cta_url: item.cta_url || '',
     });
   };
 
@@ -211,6 +213,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
                       {item.published_at && <span>Published {formatDateTime(item.published_at)}</span>}
                       {item.expires_at && <span className="inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" /> Expires {formatDateTime(item.expires_at)}</span>}
                       {item.published_at && <span>Seen by {item.read_count || 0} member{item.read_count === 1 ? '' : 's'} · {item.dismissed_count || 0} dismissed</span>}
+                      {item.cta_label && item.cta_url && <span>Action: {item.cta_label} · {item.cta_url}</span>}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
@@ -239,6 +242,10 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
             <div className="space-y-5 p-5">
               <div><label htmlFor="announcement-title" className="mb-1 block font-body text-xs uppercase text-xert-pale/50">Title</label><input id="announcement-title" value={form.title} maxLength={120} onChange={event => setForm(current => ({ ...current, title: event.target.value }))} className={inputClass} /></div>
               <div><label htmlFor="announcement-body" className="mb-1 block font-body text-xs uppercase text-xert-pale/50">Message</label><textarea id="announcement-body" value={form.body} maxLength={2000} rows={6} onChange={event => setForm(current => ({ ...current, body: event.target.value }))} className={`${inputClass} resize-y`} /><p className="mt-1 text-right font-body text-[10px] text-xert-pale/35">{form.body.length}/2000</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><label htmlFor="announcement-cta-label" className="mb-1 block font-body text-xs uppercase text-xert-pale/50">Action label (optional)</label><input id="announcement-cta-label" value={form.cta_label} maxLength={40} placeholder="Book A Class" onChange={event => setForm(current => ({ ...current, cta_label: event.target.value }))} className={inputClass} /></div>
+                <div><label htmlFor="announcement-cta-url" className="mb-1 block font-body text-xs uppercase text-xert-pale/50">Action destination</label><input id="announcement-cta-url" value={form.cta_url} maxLength={500} placeholder="/booking" onChange={event => setForm(current => ({ ...current, cta_url: event.target.value }))} className={inputClass} /></div>
+              </div>
               <fieldset><legend className="mb-2 font-body text-xs uppercase text-xert-pale/50">Priority</legend><div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{ANNOUNCEMENT_TONES.map(tone => <label key={tone} className={`min-h-11 flex cursor-pointer items-center gap-2 border px-3 font-body text-sm ${form.tone === tone ? 'border-xert-steel text-xert-offwhite' : 'border-xert-steel/25 text-xert-pale/55'}`}><input type="radio" name="tone" value={tone} checked={form.tone === tone} onChange={() => setForm(current => ({ ...current, tone }))} className="accent-xert-steel" />{TONE_LABELS[tone]}</label>)}</div></fieldset>
               <div><label htmlFor="announcement-expiry" className="mb-1 block font-body text-xs uppercase text-xert-pale/50">Expiry (optional)</label><input id="announcement-expiry" type="datetime-local" value={form.expires_at} onChange={event => setForm(current => ({ ...current, expires_at: event.target.value }))} className={inputClass} /><p className="mt-1 font-body text-xs text-xert-pale/40">After this time the notice disappears automatically from member accounts.</p></div>
             </div>

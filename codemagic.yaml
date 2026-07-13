@@ -244,6 +244,7 @@ workflows:
               "checkout_reconciliation",
               "member_announcements",
               "announcement_receipts",
+              "announcement_actions",
               "credit_expiry_follow_up",
               "member_pt_request_tracking",
               "public_form_integrity",
