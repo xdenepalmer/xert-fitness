@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: XertStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -56,17 +57,29 @@ struct HomeView: View {
 
     // MARK: - Quick actions
 
+    @ViewBuilder
     private var quickActions: some View {
-        HStack(spacing: 12) {
-            QuickActionCard(icon: "calendar.badge.plus", title: "Book") {
-                onNavigate(1)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 12) {
+                quickActionCards
             }
-            QuickActionCard(icon: "trophy", title: "Events") {
-                onNavigate(2)
+        } else {
+            HStack(spacing: 12) {
+                quickActionCards
             }
-            QuickActionCard(icon: "person.crop.circle", title: "Account") {
-                onNavigate(3)
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var quickActionCards: some View {
+        QuickActionCard(icon: "calendar.badge.plus", title: "Book") {
+            onNavigate(1)
+        }
+        QuickActionCard(icon: "trophy", title: "Events") {
+            onNavigate(2)
+        }
+        QuickActionCard(icon: "person.crop.circle", title: "Account") {
+            onNavigate(3)
         }
     }
 
@@ -74,12 +87,23 @@ struct HomeView: View {
 
     private var glanceSection: some View {
         XertSection(title: "At a glance") {
-            HStack(spacing: 14) {
-                MetricView(value: "\(store.sessions.count)", label: "Classes")
-                MetricView(value: "\(store.creditTotal)", label: "Credits")
-                MetricView(value: "\(store.events.count)", label: "Events")
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 14) {
+                    glanceMetrics
+                }
+            } else {
+                HStack(spacing: 14) {
+                    glanceMetrics
+                }
             }
         }
+    }
+
+    @ViewBuilder
+    private var glanceMetrics: some View {
+        MetricView(value: "\(store.sessions.count)", label: "Classes")
+        MetricView(value: "\(store.creditTotal)", label: "Credits")
+        MetricView(value: "\(store.events.count)", label: "Events")
     }
 
     private var nextUpSection: some View {
