@@ -11,6 +11,7 @@ with required (capability, migration) as (
     ('class_session_update_guard', 'supabase/migrations/20260713000000_class_session_update_guard.sql'),
     ('product_update_guard', 'supabase/migrations/20260713010000_product_update_guard.sql'),
     ('stripe_refund_reconciliation', 'supabase/migrations/20260713020000_stripe_refund_reconciliation.sql'),
+    ('checkout_reconciliation', 'supabase/migrations/20260713030000_checkout_reconciliation.sql'),
     ('member_pt_request_tracking', 'src/supabase/member_pt_request_tracking.sql'),
     ('public_form_integrity', 'src/supabase/public_form_integrity_upgrade.sql')
 ), readiness as (

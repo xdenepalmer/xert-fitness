@@ -81,6 +81,34 @@ export function assertStripePriceMatchesProduct(product, stripePrice) {
   }
 }
 
+export function pendingOrderForCheckout(checkout, user, product) {
+  if (!checkout?.id || !user?.id || !product?.id) {
+    throw new Error('Pending checkout identity is incomplete.');
+  }
+  const amountCents = checkout.amount_total ?? product.price_cents;
+  const currency = String(checkout.currency || product.currency || 'aud').toLowerCase();
+  if (
+    !Number.isSafeInteger(amountCents)
+    || amountCents !== product.price_cents
+    || currency !== String(product.currency || 'aud').toLowerCase()
+  ) {
+    throw new Error('Pending checkout amount does not match the product.');
+  }
+  return {
+    user_id: user.id,
+    product_id: product.id,
+    email: user.email || null,
+    amount_cents: amountCents,
+    currency,
+    status: 'pending',
+    stripe_checkout_session_id: checkout.id,
+    stripe_payment_intent_id:
+      typeof checkout.payment_intent === 'string'
+        ? checkout.payment_intent
+        : checkout.payment_intent?.id || null,
+  };
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -156,6 +184,18 @@ export default async function handler(request, response) {
         return_target,
       },
     });
+
+    try {
+      const { error: pendingOrderError } = await admin
+        .from('orders')
+        .upsert(pendingOrderForCheckout(session, user, product), {
+          onConflict: 'stripe_checkout_session_id',
+        });
+      if (pendingOrderError) throw pendingOrderError;
+    } catch {
+      await stripe.checkout.sessions.expire(session.id).catch(() => {});
+      throw new Error('Checkout could not be recorded. No payment was taken; please try again.');
+    }
 
     return json({ url: session.url });
   } catch (e) {

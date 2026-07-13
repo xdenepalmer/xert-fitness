@@ -8,6 +8,8 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
+  'checkout.session.expired',
+  'checkout.session.async_payment_failed',
   'charge.refunded',
 ];
 

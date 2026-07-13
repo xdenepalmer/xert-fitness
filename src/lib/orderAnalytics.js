@@ -18,6 +18,7 @@ export function filterOrders(orders, filters = {}, now = Date.now()) {
       order.products?.name,
       order.stripe_checkout_session_id,
       order.stripe_payment_intent_id,
+      order.reconciled_by,
     ].some(value => String(value || '').toLowerCase().includes(search));
   });
 }
@@ -79,6 +80,8 @@ export function orderCsvRows(orders) {
       status: order.status,
       checkout_session: order.stripe_checkout_session_id || '',
       payment_intent: order.stripe_payment_intent_id || '',
+      reconciled_at: order.reconciled_at || '',
+      reconciled_by: order.reconciled_by || '',
       refunded_at: order.refunded_at || refund?.refunded_at || '',
       refunded_amount: ((Number(order.refunded_amount_cents ?? refund?.amount_cents) || 0) / 100).toFixed(2),
       credits_revoked: Number(refund?.credits_revoked) || 0,

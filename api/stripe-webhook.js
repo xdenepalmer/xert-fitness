@@ -14,6 +14,10 @@ const FULFILLMENT_EVENT_TYPES = new Set([
   'checkout.session.async_payment_succeeded',
 ]);
 const FULFILLABLE_PAYMENT_STATUSES = new Set(['paid', 'no_payment_required']);
+const FAILURE_EVENT_TYPES = new Set([
+  'checkout.session.expired',
+  'checkout.session.async_payment_failed',
+]);
 
 function parseNonNegativeInteger(value) {
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
@@ -28,7 +32,15 @@ function parseNonNegativeInteger(value) {
 export function checkoutFulfillmentForEvent(event, now = new Date()) {
   if (!FULFILLMENT_EVENT_TYPES.has(event?.type)) return null;
 
-  const checkout = event.data?.object;
+  return checkoutFulfillmentForSession(event.data?.object, now);
+}
+
+/**
+ * Builds the shared, idempotent order/credit payload from a verified Stripe
+ * Checkout Session. Webhooks and explicit admin recovery both use this path.
+ */
+export function checkoutFulfillmentForSession(checkout, now = new Date()) {
+
   if (
     !checkout ||
     checkout.mode !== 'payment' ||
@@ -40,6 +52,13 @@ export function checkoutFulfillmentForEvent(event, now = new Date()) {
   const metadata = checkout.metadata || {};
   const sessions = parseNonNegativeInteger(metadata.sessions_count);
   const validityDays = parseNonNegativeInteger(metadata.validity_days);
+  const latestCharge = typeof checkout.payment_intent === 'object'
+    ? checkout.payment_intent?.latest_charge
+    : null;
+  const chargeCreated = typeof latestCharge === 'object' ? latestCharge?.created : null;
+  const paidAt = Number.isSafeInteger(chargeCreated) && chargeCreated > 0
+    ? new Date(chargeCreated * 1000)
+    : now;
 
   if (
     !checkout.id ||
@@ -64,7 +83,7 @@ export function checkoutFulfillmentForEvent(event, now = new Date()) {
         typeof checkout.payment_intent === 'string'
           ? checkout.payment_intent
           : checkout.payment_intent?.id || null,
-      paid_at: now.toISOString(),
+      paid_at: paidAt.toISOString(),
     },
     credit: {
       user_id: metadata.user_id,
@@ -73,7 +92,7 @@ export function checkoutFulfillmentForEvent(event, now = new Date()) {
       remaining: sessions,
       expires_at:
         validityDays > 0
-          ? new Date(now.getTime() + validityDays * 86400000).toISOString()
+          ? new Date(paidAt.getTime() + validityDays * 86400000).toISOString()
           : null,
     },
   };
@@ -135,6 +154,24 @@ export async function persistCheckoutFulfillment(admin, fulfillment) {
   if (creditError) throw creditError;
 }
 
+export function checkoutFailureForEvent(event) {
+  if (!FAILURE_EVENT_TYPES.has(event?.type)) return null;
+  const checkout = event.data?.object;
+  if (!checkout?.id || checkout.mode !== 'payment') {
+    throw new Error('Failed Checkout Session data is incomplete or invalid.');
+  }
+  return { stripeCheckoutSessionId: checkout.id };
+}
+
+export async function persistCheckoutFailure(admin, failure) {
+  const { error } = await admin
+    .from('orders')
+    .update({ status: 'failed' })
+    .eq('stripe_checkout_session_id', failure.stripeCheckoutSessionId)
+    .eq('status', 'pending');
+  if (error) throw error;
+}
+
 export default async function handler(request, response) {
   const text = (body, status = 200) => sendText(response, body, status);
   if (request.method !== 'POST') return text('Method not allowed', 405);
@@ -163,6 +200,8 @@ export default async function handler(request, response) {
   try {
     const fulfillment = checkoutFulfillmentForEvent(event);
     if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
+    const failure = checkoutFailureForEvent(event);
+    if (failure) await persistCheckoutFailure(admin, failure);
     const refund = stripeRefundForEvent(event);
     if (refund) await persistStripeRefund(admin, refund);
   } catch (e) {

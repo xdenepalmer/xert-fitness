@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
@@ -16,6 +16,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
       'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
       'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
+      'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
       'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
       'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
     ],
@@ -25,6 +26,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'class_session_update_guard' },
     { capability: 'product_update_guard' },
     { capability: 'stripe_refund_reconciliation' },
+    { capability: 'checkout_reconciliation' },
     { capability: 'booking_waitlist_withdrawal' },
     { capability: 'member_waitlist_join' },
     { capability: 'waitlist_fifo_promotion' },
@@ -52,6 +54,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260713010000_product_update_guard.sql', 'product_update_guard'],
     ['../src/supabase/admin_cms_schema.sql', 'stripe_refund_reconciliation'],
     ['../supabase/migrations/20260713020000_stripe_refund_reconciliation.sql', 'stripe_refund_reconciliation'],
+    ['../src/supabase/booking_schema.sql', 'checkout_reconciliation'],
+    ['../supabase/migrations/20260713030000_checkout_reconciliation.sql', 'checkout_reconciliation'],
     ['../src/supabase/member_pt_request_tracking.sql', 'member_pt_request_tracking'],
     ['../src/supabase/public_form_integrity_upgrade.sql', 'public_form_integrity'],
   ];
@@ -76,6 +80,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /class_session_update_guard/);
   assert.match(yaml, /product_update_guard/);
   assert.match(yaml, /stripe_refund_reconciliation/);
+  assert.match(yaml, /checkout_reconciliation/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
   assert.match(yaml, /\/api\/checkout/);
@@ -83,6 +88,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(yaml, /\/api\/stripe-webhook/);
   assert.match(yaml, /\/api\/admin-refund-order/);
+  assert.match(yaml, /\/api\/admin-reconcile-order/);
   assert.match(yaml, /expected HTTP 400/);
   assert.match(yaml, /STRIPE_WEBHOOK_SECRET/);
 });
@@ -98,6 +104,7 @@ test('read-only production check reports every release capability and migration'
     'class_session_update_guard',
     'product_update_guard',
     'stripe_refund_reconciliation',
+    'checkout_reconciliation',
     'member_pt_request_tracking',
     'public_form_integrity',
   ];

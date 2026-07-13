@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct } from '../api/checkout.js';
+import { readFile } from 'node:fs/promises';
+import { assertCheckoutProduct, assertStripePriceMatchesProduct, pendingOrderForCheckout } from '../api/checkout.js';
 
 const validProduct = {
   price_cents: 4800,
@@ -53,4 +54,34 @@ test('rejects invalid pricing, credits, expiry, and currency before Checkout', (
   ]) {
     assert.throws(() => assertCheckoutProduct(product), /configuration is invalid/i);
   }
+});
+
+test('records a member-bound pending order before handing off to Stripe', async () => {
+  const order = pendingOrderForCheckout(
+    { id: 'cs_xert', amount_total: 4800, currency: 'aud', payment_intent: null },
+    { id: 'member-xert', email: 'member@example.com' },
+    { id: 'product-xert', ...validProduct },
+  );
+  assert.deepEqual(order, {
+    user_id: 'member-xert',
+    product_id: 'product-xert',
+    email: 'member@example.com',
+    amount_cents: 4800,
+    currency: 'aud',
+    status: 'pending',
+    stripe_checkout_session_id: 'cs_xert',
+    stripe_payment_intent_id: null,
+  });
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  assert.match(source, /from\('orders'\)[\s\S]*upsert\(pendingOrderForCheckout/);
+  assert.match(source, /catch \{[\s\S]*checkout\.sessions\.expire\(session\.id\)/);
+  assert.throws(
+    () => pendingOrderForCheckout(
+      { id: 'cs_xert', amount_total: 4700, currency: 'aud' },
+      { id: 'member-xert' },
+      { id: 'product-xert', ...validProduct },
+    ),
+    /does not match the product/i,
+  );
 });

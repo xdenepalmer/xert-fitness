@@ -173,9 +173,12 @@ create table if not exists public.orders (
   refunded_amount_cents       integer not null default 0 check (refunded_amount_cents >= 0),
   created_at                  timestamptz not null default now(),
   paid_at                     timestamptz,
-  refunded_at                 timestamptz
+  refunded_at                 timestamptz,
+  reconciled_at               timestamptz,
+  reconciled_by               uuid references auth.users(id) on delete set null
 );
 create index if not exists orders_status_created_idx on public.orders(status, created_at desc, id desc);
+create index if not exists orders_unresolved_checkout_idx on public.orders(created_at desc, id desc) where status in ('pending', 'failed');
 
 
 -- ── credit_batches (session credits with expiry) ────────────────────────────
@@ -728,6 +731,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('booking_waitlist_withdrawal') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('member_waitlist_join') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('checkout_reconciliation') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

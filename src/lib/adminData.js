@@ -830,6 +830,22 @@ export async function refundOrder(orderId, reason, confirmation) {
   return body;
 }
 
+export async function reconcileOrder(orderId) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-reconcile-order', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ order_id: orderId }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Payment could not be reconciled.');
+  return body;
+}
+
 // ─── Products (admin) ────────────────────────────────────────────────────────
 
 export async function getAllProducts() {

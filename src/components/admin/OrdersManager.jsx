@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, RotateCcw, X } from 'lucide-react';
-import { getAllOrders, refundOrder } from '@/lib/adminData';
+import { getAllOrders, reconcileOrder, refundOrder } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
@@ -28,6 +28,7 @@ export default function OrdersManager() {
   const [refundReason, setRefundReason] = useState('requested_by_customer');
   const [refundConfirmation, setRefundConfirmation] = useState('');
   const [refunding, setRefunding] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -73,10 +74,28 @@ export default function OrdersManager() {
   };
 
   const closeOrder = () => {
-    if (refunding) return;
+    if (refunding || reconciling) return;
     setSelectedOrder(null);
     setRefundReason('requested_by_customer');
     setRefundConfirmation('');
+  };
+
+  const submitReconciliation = async () => {
+    if (!selectedOrder) return;
+    setReconciling(true);
+    try {
+      const result = await reconcileOrder(selectedOrder.id);
+      toast({
+        title: result.already_paid ? 'Fulfilment verified' : 'Payment reconciled',
+        description: `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
+      });
+      setSelectedOrder(null);
+      await load();
+    } catch (error) {
+      toast({ title: 'Reconciliation stopped', description: error.message, variant: 'destructive' });
+    } finally {
+      setReconciling(false);
+    }
   };
 
   const submitRefund = async () => {
@@ -110,6 +129,7 @@ export default function OrdersManager() {
               { key: 'amount', label: 'Amount' }, { key: 'currency', label: 'Currency' },
               { key: 'status', label: 'Status' }, { key: 'checkout_session', label: 'Stripe Checkout Session' },
               { key: 'payment_intent', label: 'Stripe Payment Intent' },
+              { key: 'reconciled_at', label: 'Admin reconciled' }, { key: 'reconciled_by', label: 'Reconciled by admin ID' },
               { key: 'refunded_at', label: 'Refunded' }, { key: 'refunded_amount', label: 'Refund amount' },
               { key: 'credits_revoked', label: 'Unused credits revoked' },
               { key: 'credits_consumed_before_refund', label: 'Credits used before refund' },
@@ -234,7 +254,7 @@ export default function OrdersManager() {
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-xert-ink border border-xert-steel/30 p-6">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div><p className="font-body text-xs uppercase tracking-wider text-xert-steel">Order detail</p><h3 id="order-detail-title" className="font-display text-2xl uppercase text-xert-offwhite mt-1">{selectedOrder.products?.name || 'Session pack'}</h3></div>
-              <button type="button" onClick={closeOrder} disabled={refunding} title="Close order detail" aria-label="Close order detail" className="p-1.5 text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
+              <button type="button" onClick={closeOrder} disabled={refunding || reconciling} title="Close order detail" aria-label="Close order detail" className="p-1.5 text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
             </div>
             <dl className="space-y-4 font-body text-sm">
               <div><dt className="text-xs uppercase text-xert-concrete/40">Buyer</dt><dd className="text-xert-offwhite mt-1">{selectedOrder.email ? <a href={`mailto:${selectedOrder.email}`} className="hover:text-xert-steel">{selectedOrder.email}</a> : 'Anonymized buyer'}</dd></div>
@@ -242,7 +262,24 @@ export default function OrdersManager() {
               <Identifier label="Stripe checkout session" value={selectedOrder.stripe_checkout_session_id} onCopy={copyIdentifier} />
               <Identifier label="Stripe payment intent" value={selectedOrder.stripe_payment_intent_id} onCopy={copyIdentifier} />
               <Identifier label="XERT order ID" value={selectedOrder.id} onCopy={copyIdentifier} />
+              {selectedOrder.reconciled_at && (
+                <>
+                  <div><dt className="text-xs uppercase text-xert-concrete/40">Admin reconciled</dt><dd className="text-xert-concrete/70 mt-1">{new Date(selectedOrder.reconciled_at).toLocaleString('en-AU')}</dd></div>
+                  <Identifier label="Reconciled by admin" value={selectedOrder.reconciled_by} onCopy={copyIdentifier} />
+                </>
+              )}
             </dl>
+            {['pending', 'failed'].includes(selectedOrder.status) && selectedOrder.stripe_checkout_session_id && (
+              <div className="mt-6 border-t border-xert-orange/30 pt-5 space-y-3">
+                <div className="flex items-center gap-2 text-xert-orange"><RefreshCw className="w-4 h-4" /><h4 className="font-display text-sm uppercase">Payment recovery</h4></div>
+                <p className="font-body text-sm leading-relaxed text-xert-concrete/70">
+                  Ask Stripe whether this checkout was paid. Credits are granted only when the customer, product, amount and currency all match this order.
+                </p>
+                <button type="button" onClick={() => void submitReconciliation()} disabled={reconciling} className="w-full min-h-11 inline-flex items-center justify-center gap-2 border border-xert-orange/50 px-4 font-display text-sm uppercase text-xert-orange disabled:opacity-40">
+                  <RefreshCw className={`w-4 h-4 ${reconciling ? 'animate-spin' : ''}`} /> {reconciling ? 'Checking Stripe...' : 'Check and Reconcile Payment'}
+                </button>
+              </div>
+            )}
             {selectedOrder.status === 'refunded' && (() => {
               const refund = Array.isArray(selectedOrder.stripe_refunds) ? selectedOrder.stripe_refunds[0] : selectedOrder.stripe_refunds;
               return (

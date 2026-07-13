@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  checkoutFailureForEvent,
   checkoutFulfillmentForEvent,
+  persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
   stripeRefundForEvent,
@@ -40,6 +42,17 @@ test('creates one durable fulfilment record for a paid checkout', () => {
   assert.equal(fulfilment.order.stripe_checkout_session_id, 'cs_test_xert');
   assert.equal(fulfilment.credit.total, 4);
   assert.equal(fulfilment.credit.remaining, 4);
+  assert.equal(fulfilment.credit.expires_at, '2026-08-09T00:00:00.000Z');
+});
+
+test('manual recovery preserves Stripe charge time for revenue and expiry', () => {
+  const event = checkoutEvent();
+  event.data.object.payment_intent = {
+    id: 'pi_test_xert',
+    latest_charge: { id: 'ch_test_xert', created: 1783814400 },
+  };
+  const fulfilment = checkoutFulfillmentForEvent(event, new Date('2026-07-20T00:00:00Z'));
+  assert.equal(fulfilment.order.paid_at, '2026-07-12T00:00:00.000Z');
   assert.equal(fulfilment.credit.expires_at, '2026-08-09T00:00:00.000Z');
 });
 
@@ -100,6 +113,31 @@ test('persists the order first and makes the credit grant idempotent', async () 
   assert.equal(calls[1].record.order_id, 'order-xert');
   assert.equal(calls[1].options.onConflict, 'order_id');
   assert.equal(calls[1].options.ignoreDuplicates, true);
+});
+
+test('expired and delayed-failed checkouts close only their pending order', async () => {
+  for (const type of ['checkout.session.expired', 'checkout.session.async_payment_failed']) {
+    assert.deepEqual(checkoutFailureForEvent(checkoutEvent({ type })), {
+      stripeCheckoutSessionId: 'cs_test_xert',
+    });
+  }
+  assert.equal(checkoutFailureForEvent(checkoutEvent()), null);
+
+  const calls = [];
+  const query = {
+    update(payload) { calls.push({ action: 'update', payload }); return query; },
+    eq(column, value) { calls.push({ action: 'eq', column, value }); return query; },
+    then(resolve) { resolve({ error: null }); },
+  };
+  await persistCheckoutFailure({ from(table) { calls.push({ action: 'from', table }); return query; } }, {
+    stripeCheckoutSessionId: 'cs_test_xert',
+  });
+  assert.deepEqual(calls, [
+    { action: 'from', table: 'orders' },
+    { action: 'update', payload: { status: 'failed' } },
+    { action: 'eq', column: 'stripe_checkout_session_id', value: 'cs_test_xert' },
+    { action: 'eq', column: 'status', value: 'pending' },
+  ]);
 });
 
 test('accepts only a complete full charge refund for reconciliation', () => {

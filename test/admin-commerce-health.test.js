@@ -81,7 +81,8 @@ test('commerce health requires checkout and refund events on the canonical Strip
   const url = 'https://xert-fitness.vercel.app/api/stripe-webhook';
   assert.deepEqual(inspectStripeWebhookEndpoints([{
     url, status: 'enabled', enabled_events: [
-      'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'charge.refunded',
+      'checkout.session.completed', 'checkout.session.async_payment_succeeded',
+      'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
     ],
   }], 'https://xert-fitness.vercel.app'), { ready: true, missing_events: [], issue: null });
 
@@ -89,7 +90,10 @@ test('commerce health requires checkout and refund events on the canonical Strip
     url, status: 'enabled', enabled_events: ['checkout.session.completed'],
   }], 'https://xert-fitness.vercel.app');
   assert.equal(incomplete.ready, false);
-  assert.deepEqual(incomplete.missing_events, ['checkout.session.async_payment_succeeded', 'charge.refunded']);
+  assert.deepEqual(incomplete.missing_events, [
+    'checkout.session.async_payment_succeeded', 'checkout.session.expired',
+    'checkout.session.async_payment_failed', 'charge.refunded',
+  ]);
   assert.match(incomplete.issue, /charge\.refunded/);
 
   assert.equal(inspectStripeWebhookEndpoints([], 'https://xert-fitness.vercel.app').ready, false);

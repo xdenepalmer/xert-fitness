@@ -168,6 +168,25 @@ workflows:
           fi
           rm -f "$REFUND_BODY"
 
+          RECONCILE_BODY="$(mktemp)"
+          RECONCILE_CODE="$(curl --silent --show-error --max-time 20 \
+            -o "$RECONCILE_BODY" -w '%{http_code}' \
+            "$VERCEL_BASE_URL/api/admin-reconcile-order" \
+            -H 'Content-Type: application/json' \
+            --data '{}')" || RECONCILE_CODE=000
+          if [ "$RECONCILE_CODE" != "401" ]; then
+            echo "::error:: Production reconciliation preflight expected HTTP 401 but received $RECONCILE_CODE. Response body:"
+            head -c 300 "$RECONCILE_BODY"; echo
+            case "$RECONCILE_CODE" in
+              500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
+              404) echo "The /api/admin-reconcile-order Vercel Function was not deployed." ;;
+              000) echo "The reconciliation function timed out or could not be reached." ;;
+            esac
+            rm -f "$RECONCILE_BODY"
+            exit 1
+          fi
+          rm -f "$RECONCILE_BODY"
+
           WEBHOOK_BODY="$(mktemp)"
           WEBHOOK_CODE="$(curl --silent --show-error --max-time 20 \
             -o "$WEBHOOK_BODY" -w '%{http_code}' \
@@ -222,6 +241,7 @@ workflows:
               "class_session_update_guard",
               "product_update_guard",
               "stripe_refund_reconciliation",
+              "checkout_reconciliation",
               "member_pt_request_tracking",
               "public_form_integrity",
             ];
