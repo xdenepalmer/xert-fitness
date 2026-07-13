@@ -8,6 +8,7 @@ import { creditGrantValidationError } from '@/lib/memberAdmin';
 import { createFollowUpCopy, createFollowUpLog } from '@/lib/memberFollowUp';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -35,6 +36,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const [noteError, setNoteError] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
+  const [noteToArchive, setNoteToArchive] = useState(null);
 
   const loadDetail = () => {
     setDetail(null);
@@ -65,7 +67,6 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
 
   const handleNoteArchive = async note => {
     const shouldArchive = !note.archived_at;
-    if (shouldArchive && !window.confirm('Archive this staff note? It can be restored later.')) return;
     setNoteSaving(true);
     setNoteError('');
     try {
@@ -164,7 +165,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                             <p className="font-body text-[10px] uppercase tracking-wider" style={{ color: '#7BA7BC' }}>{String(note.category || 'general').replace('_', '-')}</p>
                             <p className="font-body text-sm whitespace-pre-wrap break-words mt-1" style={{ color: '#D1DDE6' }}>{note.body}</p>
                           </div>
-                          <button type="button" disabled={noteSaving} onClick={() => handleNoteArchive(note)}
+                          <button type="button" disabled={noteSaving} onClick={() => note.archived_at ? void handleNoteArchive(note) : setNoteToArchive(note)}
                             title={note.archived_at ? 'Restore staff note' : 'Archive staff note'} aria-label={note.archived_at ? 'Restore staff note' : 'Archive staff note'}
                             className="min-h-11 min-w-11 inline-flex shrink-0 items-center justify-center border border-xert-steel/20 text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
                             {note.archived_at ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
@@ -281,6 +282,20 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
             </section>
           </div>
         )}
+        <AdminConfirmDialog
+          open={Boolean(noteToArchive)}
+          onOpenChange={open => !open && setNoteToArchive(null)}
+          title="Archive staff note?"
+          description="This note will leave the active member record and move into archived history."
+          warning="Archived notes remain available to administrators and can be restored later."
+          confirmLabel="Archive note"
+          onConfirm={() => {
+            const note = noteToArchive;
+            setNoteToArchive(null);
+            if (note) void handleNoteArchive(note);
+          }}
+          busy={noteSaving}
+        />
       </div>
     </div>
   );

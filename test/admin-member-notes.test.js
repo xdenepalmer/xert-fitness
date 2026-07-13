@@ -40,6 +40,9 @@ test('member drawer exposes a bounded, safety-labelled archive workflow', () => 
   assert.match(source, /Avoid unnecessary clinical or sensitive personal information/);
   assert.match(source, /Show archived/);
   assert.match(source, /Restore staff note/);
+  assert.match(source, /<AdminConfirmDialog/);
+  assert.match(source, /Archived notes remain available to administrators and can be restored later/);
+  assert.doesNotMatch(source, /window\.confirm/);
   assert.match(source, /admin_member_notes_upgrade\.sql/);
 });
 
