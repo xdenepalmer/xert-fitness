@@ -8,6 +8,7 @@ import {
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
 import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
+import { settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -137,11 +138,11 @@ export default function BookingRequestsTable() {
     if (!bulkStatus || selectedKeys.size === 0) return;
     const selected = selectedBookings;
     setBulkSaving(true);
-    const results = await Promise.allSettled(selected.map(booking => (
+    const results = await settleAdminMutations(selected, booking => (
       booking.source === 'member'
         ? updateMemberBookingStatus(booking.id, bulkStatus)
         : updateBookingStatus(booking.id, bulkStatus)
-    )));
+    ));
     const failedKeys = new Set();
     results.forEach((result, index) => {
       if (result.status === 'rejected') failedKeys.add(bookingSelectionKey(selected[index]));
