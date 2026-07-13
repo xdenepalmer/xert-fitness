@@ -8,7 +8,7 @@ import {
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
 import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
-import { settleAdminMutations } from '@/lib/adminBulk';
+import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -137,6 +137,10 @@ export default function BookingRequestsTable() {
   const handleBulkUpdate = async () => {
     if (!bulkStatus || selectedKeys.size === 0) return;
     const selected = selectedBookings;
+    const warning = bulkStatus === 'cancelled'
+      ? 'Confirmed member bookings will follow the server cancellation credit policy.'
+      : 'This updates every selected enquiry and member booking.';
+    if (!window.confirm(adminBulkConfirmation({ count: selected.length, recordLabel: 'booking', status: bulkStatus, warning }))) return;
     setBulkSaving(true);
     const results = await settleAdminMutations(selected, booking => (
       booking.source === 'member'

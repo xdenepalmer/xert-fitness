@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { settleAdminMutations } from '../src/lib/adminBulk.js';
+import { adminBulkConfirmation, settleAdminMutations } from '../src/lib/adminBulk.js';
 
 test('settles admin mutations in input order with bounded concurrency', async () => {
   let active = 0;
@@ -25,4 +25,13 @@ test('validates the bulk worker contract', async () => {
   await assert.rejects(() => settleAdminMutations(null, () => {}), /items must be an array/);
   await assert.rejects(() => settleAdminMutations([], null), /mutation function/);
   await assert.rejects(() => settleAdminMutations([], () => {}, 0), /between 1 and 10/);
+});
+
+test('describes bulk mutations before they execute', () => {
+  assert.equal(adminBulkConfirmation({ count: 1, recordLabel: 'booking', status: 'no_show' }), 'Move 1 booking to no show?');
+  assert.equal(
+    adminBulkConfirmation({ count: 3, recordLabel: 'booking', status: 'cancelled', warning: 'Credit policy applies.' }),
+    'Move 3 bookings to cancelled?\n\nCredit policy applies.',
+  );
+  assert.throws(() => adminBulkConfirmation({ count: 0, recordLabel: 'request', status: 'approved' }), /Select at least one record/);
 });

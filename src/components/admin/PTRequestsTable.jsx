@@ -6,7 +6,7 @@ import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
 import { bulkPTRequestStatusOptions, isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows, selectedPTRequestIds } from '@/lib/ptRequestAnalytics';
 import { collectAdminPages } from '@/lib/adminPagination';
-import { settleAdminMutations } from '@/lib/adminBulk';
+import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
@@ -149,6 +149,12 @@ export default function PTRequestsTable() {
 
   const handleBulkUpdate = async () => {
     if (!bulkStatus || selectedRequests.length === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
+    if (!window.confirm(adminBulkConfirmation({
+      count: selectedRequests.length,
+      recordLabel: 'PT request',
+      status: bulkStatus,
+      warning: 'This updates every selected member request.',
+    }))) return;
     setBulkSaving(true);
     const results = await settleAdminMutations(selectedRequests, request => updatePTRequestStatus(request.id, bulkStatus));
     const failedIds = new Set();

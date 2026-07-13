@@ -26,3 +26,15 @@ export async function settleAdminMutations(items, mutate, concurrency = 4) {
   ));
   return results;
 }
+
+export function adminBulkConfirmation({ count, recordLabel, status, warning = '' }) {
+  const normalizedCount = Number(count);
+  const normalizedLabel = String(recordLabel || '').trim();
+  const normalizedStatus = String(status || '').trim().replace(/_/g, ' ');
+  if (!Number.isInteger(normalizedCount) || normalizedCount < 1) throw new Error('Select at least one record.');
+  if (!normalizedLabel) throw new Error('A bulk record label is required.');
+  if (!normalizedStatus) throw new Error('A bulk target status is required.');
+  const noun = normalizedCount === 1 ? normalizedLabel : `${normalizedLabel}s`;
+  const detail = String(warning || '').trim();
+  return `Move ${normalizedCount} ${noun} to ${normalizedStatus}?${detail ? `\n\n${detail}` : ''}`;
+}
