@@ -23,6 +23,22 @@ export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '') {
   return url.origin;
 }
 
+export function resolveCheckoutReturnURLs(origin, returnTarget = 'web') {
+  if (returnTarget === 'ios') {
+    return {
+      success: `${origin}/checkout-return?status=success`,
+      cancel: `${origin}/checkout-return?status=cancelled`,
+    };
+  }
+  if (returnTarget === 'web') {
+    return {
+      success: `${origin}/account?purchase=success`,
+      cancel: `${origin}/booking?purchase=cancelled`,
+    };
+  }
+  throw new Error('Unsupported checkout return target.');
+}
+
 function isPositiveInteger(value) {
   return Number.isSafeInteger(value) && value > 0;
 }
@@ -88,8 +104,17 @@ export default async function handler(request) {
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: 'Invalid or expired session.' }, 401);
 
-    const { product_slug } = await request.json();
+    const { product_slug, return_target = 'web' } = await request.json();
     if (!product_slug) return json({ error: 'Missing product.' }, 400);
+    let returnURLs;
+    try {
+      returnURLs = resolveCheckoutReturnURLs(
+        resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || ''),
+        return_target
+      );
+    } catch (error) {
+      return json({ error: error.message }, 400);
+    }
 
     // Price comes from the DB (authoritative) — never trust a client-supplied amount.
     const { data: product, error: prodErr } = await admin
@@ -120,21 +145,20 @@ export default async function handler(request) {
       };
     }
 
-    const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '');
-
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [lineItem],
       customer_email: user.email,
       client_reference_id: user.id,
-      success_url: `${origin}/account?purchase=success`,
-      cancel_url: `${origin}/booking?purchase=cancelled`,
+      success_url: returnURLs.success,
+      cancel_url: returnURLs.cancel,
       metadata: {
         user_id: user.id,
         product_id: product.id,
         product_slug: product.slug,
         sessions_count: String(product.sessions_count),
         validity_days: String(product.validity_days),
+        return_target,
       },
     });
 

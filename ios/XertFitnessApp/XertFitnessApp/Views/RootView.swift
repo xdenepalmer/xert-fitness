@@ -4,6 +4,7 @@ struct RootView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
+    @State private var checkoutReturnStatus: CheckoutReturnStatus?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -45,6 +46,19 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             guard phase == .active, store.hasBootstrapped, !store.isLoading else { return }
             Task { await store.refresh() }
+        }
+        .onOpenURL { url in
+            guard let status = CheckoutDeepLink.status(from: url) else { return }
+            checkoutReturnStatus = status
+            selectedTab = 1
+            Task { await store.refresh() }
+        }
+        .alert(item: $checkoutReturnStatus) { status in
+            Alert(
+                title: Text(status.title),
+                message: Text(status.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 }

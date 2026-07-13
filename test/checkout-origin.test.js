@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveCheckoutOrigin } from '../api/checkout.js';
+import { resolveCheckoutOrigin, resolveCheckoutReturnURLs } from '../api/checkout.js';
 
 test('uses the configured canonical origin for Stripe return URLs', () => {
   assert.equal(
@@ -20,5 +20,20 @@ test('rejects non-web checkout return URLs', () => {
   assert.throws(
     () => resolveCheckoutOrigin('javascript:alert(1)'),
     /HTTP or HTTPS/
+  );
+});
+
+test('uses a public app-return page for native checkout without changing web returns', () => {
+  assert.deepEqual(resolveCheckoutReturnURLs('https://xertfitness.app', 'ios'), {
+    success: 'https://xertfitness.app/checkout-return?status=success',
+    cancel: 'https://xertfitness.app/checkout-return?status=cancelled',
+  });
+  assert.deepEqual(resolveCheckoutReturnURLs('https://xertfitness.app'), {
+    success: 'https://xertfitness.app/account?purchase=success',
+    cancel: 'https://xertfitness.app/booking?purchase=cancelled',
+  });
+  assert.throws(
+    () => resolveCheckoutReturnURLs('https://xertfitness.app', 'javascript:alert(1)'),
+    /unsupported checkout return target/i
   );
 });
