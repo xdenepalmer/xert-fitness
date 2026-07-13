@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AccountView: View {
     @EnvironmentObject private var store: XertStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var email = ""
     @State private var password = ""
     @State private var passwordConfirmation = ""
@@ -110,29 +111,18 @@ struct AccountView: View {
 
     private var membershipSection: some View {
         Section {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Credits")
-                        .xertEyebrow()
-                    Text("\(store.creditTotal)")
-                        .xertDisplay(34)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 12) {
+                        creditSummary
+                        signedInSummary
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        creditSummary
+                        signedInSummary
+                    }
                 }
-                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-                .padding(14)
-                .xertCardStyle()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Signed in")
-                        .xertEyebrow()
-                    Text(store.authSession?.user?.email ?? "Member")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.xertPale)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                }
-                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-                .padding(14)
-                .xertCardStyle()
             }
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -140,6 +130,32 @@ struct AccountView: View {
         } header: {
             Text("Membership").xertEyebrow()
         }
+    }
+
+    private var creditSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Credits")
+                .xertEyebrow()
+            Text("\(store.creditTotal)")
+                .xertDisplay(34)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+        .padding(14)
+        .xertCardStyle()
+    }
+
+    private var signedInSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Signed in")
+                .xertEyebrow()
+            Text(store.authSession?.user?.email ?? "Member")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.xertPale)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+        .padding(14)
+        .xertCardStyle()
     }
 
     private var reminderSettingsSection: some View {
@@ -248,25 +264,26 @@ struct AccountView: View {
             } else {
                 ForEach(store.orders) { order in
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(order.products?.name ?? "Session pack")
-                                .font(.headline)
-                                .foregroundStyle(Color.xertOffWhite)
-                            Spacer()
-                            Text(order.displayAmount)
-                                .font(.headline.monospacedDigit())
-                                .foregroundStyle(.xertSteel)
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: 6) {
+                                purchaseName(order)
+                                purchaseAmount(order)
+                                purchaseDate(order)
+                                purchaseStatus(order)
+                            }
+                        } else {
+                            HStack(alignment: .firstTextBaseline) {
+                                purchaseName(order)
+                                Spacer()
+                                purchaseAmount(order)
+                            }
+                            HStack {
+                                purchaseDate(order)
+                                Spacer()
+                                purchaseStatus(order)
+                            }
+                            .font(.subheadline)
                         }
-                        HStack {
-                            Text(order.activityDate.formatted(date: .abbreviated, time: .omitted))
-                                .foregroundStyle(Color.xertPale)
-                            Spacer()
-                            Text(order.displayStatus.uppercased())
-                                .font(.caption2.weight(.bold))
-                                .tracking(1.2)
-                                .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.xertMuted)
-                        }
-                        .font(.subheadline)
                     }
                     .padding(.vertical, 4)
                 }
@@ -275,6 +292,32 @@ struct AccountView: View {
             Text("Purchase History").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    private func purchaseName(_ order: OrderItem) -> some View {
+        Text(order.products?.name ?? "Session pack")
+            .font(.headline)
+            .foregroundStyle(Color.xertOffWhite)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func purchaseAmount(_ order: OrderItem) -> some View {
+        Text(order.displayAmount)
+            .font(.headline.monospacedDigit())
+            .foregroundStyle(.xertSteel)
+    }
+
+    private func purchaseDate(_ order: OrderItem) -> some View {
+        Text(order.activityDate.formatted(date: .abbreviated, time: .omitted))
+            .font(.subheadline)
+            .foregroundStyle(Color.xertPale)
+    }
+
+    private func purchaseStatus(_ order: OrderItem) -> some View {
+        Text(order.displayStatus.uppercased())
+            .font(.caption2.weight(.bold))
+            .tracking(1.2)
+            .foregroundStyle(order.status == "paid" ? Color.xertSteel : Color.xertMuted)
     }
 
     @ViewBuilder
