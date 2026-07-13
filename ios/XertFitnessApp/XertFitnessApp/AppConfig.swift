@@ -1,6 +1,8 @@
 import Foundation
 
 enum AppConfig {
+    static let apiRequestTimeout: TimeInterval = 20
+
     static var supabaseURL: URL {
         guard
             let raw = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,

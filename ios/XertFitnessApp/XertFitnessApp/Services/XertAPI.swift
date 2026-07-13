@@ -15,6 +15,28 @@ struct APIError: LocalizedError {
     }
 }
 
+enum NetworkFailureMessage {
+    static func display(for code: URLError.Code) -> String {
+        switch code {
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+            return "XERT is offline. Check your connection and try again."
+        case .timedOut:
+            return "XERT took too long to respond. Please try again."
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+            return "XERT services could not be reached. Please try again shortly."
+        case .secureConnectionFailed, .serverCertificateHasBadDate,
+             .serverCertificateUntrusted, .serverCertificateHasUnknownRoot,
+             .serverCertificateNotYetValid, .clientCertificateRejected,
+             .clientCertificateRequired:
+            return "XERT could not establish a secure connection."
+        case .cancelled:
+            return "The request was cancelled."
+        default:
+            return "The network request could not be completed. Please try again."
+        }
+    }
+}
+
 private struct SupabaseErrorResponse: Decodable {
     let message: String?
     let error: String?
@@ -398,7 +420,7 @@ final class XertAPI {
         guard let url = components.url else {
             throw APIError(message: "Invalid API URL.")
         }
-        return URLRequest(url: url)
+        return URLRequest(url: url, timeoutInterval: AppConfig.apiRequestTimeout)
     }
 
     private func perform(_ request: URLRequest) async throws {
@@ -410,7 +432,17 @@ final class XertAPI {
     }
 
     private func responseData(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw APIError(message: NetworkFailureMessage.display(for: error.code))
+        } catch is CancellationError {
+            throw APIError(message: NetworkFailureMessage.display(for: .cancelled))
+        } catch {
+            throw APIError(message: "The network request could not be completed. Please try again.")
+        }
         guard let http = response as? HTTPURLResponse else {
             throw APIError(message: "Invalid network response.")
         }

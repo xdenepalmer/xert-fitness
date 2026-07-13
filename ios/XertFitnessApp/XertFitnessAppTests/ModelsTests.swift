@@ -293,6 +293,15 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(BookingErrorMessage.display(for: ""), "Could not complete the booking.")
     }
 
+    func testNativeRequestsUseBoundedTimeoutsAndMemberFacingNetworkErrors() {
+        XCTAssertEqual(AppConfig.apiRequestTimeout, 20)
+        XCTAssertTrue(NetworkFailureMessage.display(for: .notConnectedToInternet).contains("offline"))
+        XCTAssertTrue(NetworkFailureMessage.display(for: .timedOut).contains("too long"))
+        XCTAssertTrue(NetworkFailureMessage.display(for: .cannotFindHost).contains("could not be reached"))
+        XCTAssertTrue(NetworkFailureMessage.display(for: .serverCertificateUntrusted).contains("secure connection"))
+        XCTAssertTrue(NetworkFailureMessage.display(for: .unknown).contains("try again"))
+    }
+
     func testWebBaseURLAcceptsAHostnameAndRejectsUnsafeSchemes() {
         XCTAssertEqual(
             AppConfig.normalizedWebBaseURL("xert-fitness.vercel.app")?.absoluteString,
