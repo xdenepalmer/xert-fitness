@@ -246,6 +246,7 @@ workflows:
               "member_announcements",
               "announcement_receipts",
               "announcement_actions",
+              "announcement_archival",
               "booking_time_conflict_guard",
               "admin_member_notes",
               "schedule_blackout_guard",

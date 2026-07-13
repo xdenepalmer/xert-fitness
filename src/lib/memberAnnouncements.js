@@ -1,6 +1,7 @@
 export const ANNOUNCEMENT_TONES = Object.freeze(['info', 'action', 'urgent']);
 
 export function announcementState(announcement, now = new Date()) {
+  if (announcement?.archived_at) return 'archived';
   const publishedAt = announcement?.published_at ? new Date(announcement.published_at) : null;
   const expiresAt = announcement?.expires_at ? new Date(announcement.expires_at) : null;
   if (!publishedAt || Number.isNaN(publishedAt.getTime())) return 'draft';

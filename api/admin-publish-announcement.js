@@ -65,13 +65,14 @@ export default async function handler(request, response) {
 
     let existing = null;
     if (publish.id) {
-      const result = await admin.from('member_announcements').select('id,published_at').eq('id', publish.id).maybeSingle();
+      const result = await admin.from('member_announcements').select('id,published_at,archived_at').eq('id', publish.id).maybeSingle();
       if (result.error) throw result.error;
       if (!result.data) return json({ error: 'Announcement not found.' }, 404);
       existing = result.data;
     }
+    if (existing?.archived_at) return json({ error: 'Restore this announcement before publishing it.' }, 409);
     const publishedAt = existing?.published_at || new Date().toISOString();
-    const mutation = { ...publish.announcement, published_at: publishedAt };
+    const mutation = { ...publish.announcement, published_at: publishedAt, last_changed_by: user.id };
     const result = publish.id
       ? await admin.from('member_announcements').update(mutation).eq('id', publish.id).select('*').single()
       : await admin.from('member_announcements').insert({ ...mutation, created_by: user.id }).select('*').single();

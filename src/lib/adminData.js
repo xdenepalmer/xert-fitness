@@ -551,7 +551,18 @@ export async function updateMemberAnnouncement(id, updates) {
 
 export async function deleteMemberAnnouncement(id) {
   const result = await supabase.from('member_announcements').delete().eq('id', id).select('id');
+  if (/ANNOUNCEMENT_ARCHIVE_REQUIRED/i.test(result.error?.message || '')) {
+    throw new Error('Published notices must be archived so their member and delivery history stays intact.');
+  }
   assertAdminMutation(result, 'Announcement deletion');
+}
+
+export async function setMemberAnnouncementArchived(id, archived) {
+  const { error } = await supabase.rpc('admin_archive_member_announcement', {
+    p_announcement_id: id,
+    p_archived: Boolean(archived),
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function seedXertEventCalendar() {
@@ -792,6 +803,7 @@ export async function getAdminAuditRecords() {
     loadTable('admin_role_changes', 'id, target_user_id, changed_by, previous_role, new_role, created_at'),
     loadTable('admin_credit_grants', 'id, user_id, granted_by, sessions, validity_days, note, created_at'),
     loadTable('admin_request_status_changes', 'id, request_type, request_id, changed_by, previous_status, new_status, previous_admin_notes, new_admin_notes, subject_label, subject_email, created_at'),
+    loadTable('member_announcement_admin_events', 'id, announcement_id, announcement_title, action, actor_id, previous_published_at, new_published_at, previous_archived_at, new_archived_at, created_at'),
   ]);
   const warnings = [];
   const sourceValue = (index, label) => {
@@ -802,6 +814,7 @@ export async function getAdminAuditRecords() {
   const roleChanges = sourceValue(0, 'Role changes');
   const creditGrants = sourceValue(1, 'Credit grants');
   const requestChanges = sourceValue(2, 'Request changes');
+  const announcementEvents = sourceValue(3, 'Announcement changes');
   if (sources.every(result => result.status === 'rejected')) {
     throw new Error(warnings.join(' | '));
   }
@@ -810,6 +823,7 @@ export async function getAdminAuditRecords() {
     ...roleChanges.flatMap(row => [row.target_user_id, row.changed_by]),
     ...creditGrants.flatMap(row => [row.user_id, row.granted_by]),
     ...requestChanges.map(row => row.changed_by),
+    ...announcementEvents.map(row => row.actor_id),
   ];
   let profiles = [];
   try {
@@ -817,7 +831,7 @@ export async function getAdminAuditRecords() {
   } catch (error) {
     warnings.push(`User identities: ${error.message || 'unavailable'}`);
   }
-  return { roleChanges, creditGrants, requestChanges, profiles, warnings };
+  return { roleChanges, creditGrants, requestChanges, announcementEvents, profiles, warnings };
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────

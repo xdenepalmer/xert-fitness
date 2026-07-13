@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
       'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
@@ -21,6 +21,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
       'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
       'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',
+      'Apply supabase/migrations/20260714010000_announcement_archival.sql in Supabase.',
       'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
       'Apply supabase/migrations/20260714003000_admin_member_notes.sql in Supabase.',
       'Apply supabase/migrations/20260714004000_schedule_blackout_guard.sql in Supabase.',
@@ -43,6 +44,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'member_announcements' },
     { capability: 'announcement_receipts' },
     { capability: 'announcement_actions' },
+    { capability: 'announcement_archival' },
     { capability: 'booking_time_conflict_guard' },
     { capability: 'admin_member_notes' },
     { capability: 'schedule_blackout_guard' },
@@ -89,6 +91,9 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260713050000_announcement_receipts.sql', 'announcement_receipts'],
     ['../src/supabase/booking_schema.sql', 'announcement_actions'],
     ['../supabase/migrations/20260714000000_announcement_actions.sql', 'announcement_actions'],
+    ['../src/supabase/booking_schema.sql', 'announcement_archival'],
+    ['../src/supabase/announcement_archival_upgrade.sql', 'announcement_archival'],
+    ['../supabase/migrations/20260714010000_announcement_archival.sql', 'announcement_archival'],
     ['../src/supabase/booking_schema.sql', 'booking_time_conflict_guard'],
     ['../supabase/migrations/20260714002000_booking_time_conflicts.sql', 'booking_time_conflict_guard'],
     ['../src/supabase/admin_cms_schema.sql', 'admin_member_notes'],
@@ -134,6 +139,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /member_announcements/);
   assert.match(yaml, /announcement_receipts/);
   assert.match(yaml, /announcement_actions/);
+  assert.match(yaml, /announcement_archival/);
   assert.match(yaml, /booking_time_conflict_guard/);
   assert.match(yaml, /admin_member_notes/);
   assert.match(yaml, /schedule_blackout_guard/);
@@ -172,6 +178,7 @@ test('read-only production check reports every release capability and migration'
     'member_announcements',
     'announcement_receipts',
     'announcement_actions',
+    'announcement_archival',
     'booking_time_conflict_guard',
     'admin_member_notes',
     'schedule_blackout_guard',

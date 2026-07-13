@@ -10,6 +10,7 @@ test('announcement lifecycle distinguishes draft, scheduled, live and expired no
   assert.equal(announcementState({ published_at: '2026-07-14T04:00:00Z' }, now), 'scheduled');
   assert.equal(announcementState({ published_at: '2026-07-12T04:00:00Z' }, now), 'live');
   assert.equal(announcementState({ published_at: '2026-07-12T04:00:00Z', expires_at: '2026-07-13T03:59:59Z' }, now), 'expired');
+  assert.equal(announcementState({ archived_at: '2026-07-13T01:00:00Z', published_at: null }, now), 'archived');
 });
 
 test('announcement input is trimmed, bounded and emits an ISO expiry', () => {

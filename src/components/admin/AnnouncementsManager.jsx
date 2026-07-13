@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, CalendarClock, Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BellRing, CalendarClock, Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
   createMemberAnnouncement,
   deleteMemberAnnouncement,
   getAllMemberAnnouncements,
   publishMemberAnnouncement,
+  setMemberAnnouncementArchived,
   updateMemberAnnouncement,
 } from '@/lib/adminData';
 import { announcementState, ANNOUNCEMENT_TONES, normalizeAnnouncementInput } from '@/lib/memberAnnouncements';
@@ -17,6 +18,7 @@ const STATE_STYLES = {
   scheduled: 'border-xert-steel/50 text-xert-steel',
   draft: 'border-xert-pale/25 text-xert-pale/60',
   expired: 'border-xert-pale/15 text-xert-pale/35',
+  archived: 'border-amber-500/30 text-amber-300/70',
 };
 const inputClass = 'w-full min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-steel disabled:opacity-50';
 
@@ -44,6 +46,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmArchive, setConfirmArchive] = useState(null);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     quiet ? setRefreshing(true) : setLoading(true);
@@ -168,6 +171,25 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
     }
   };
 
+  const setArchived = async (item, archived) => {
+    setSaving(true);
+    try {
+      await setMemberAnnouncementArchived(item.id, archived);
+      setConfirmArchive(null);
+      toast({
+        title: archived ? 'Announcement archived' : 'Announcement restored as draft',
+        description: archived
+          ? 'Member visibility is off and the delivery history remains available.'
+          : 'Review the notice before publishing it again.',
+      });
+      await load({ quiet: true });
+    } catch (archiveError) {
+      toast({ title: 'Archive status not changed', description: archiveError.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -190,8 +212,8 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
         </div>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Announcement totals">
-        {['live', 'draft', 'scheduled', 'expired'].map(state => (
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3" aria-label="Announcement totals">
+        {['live', 'draft', 'scheduled', 'expired', 'archived'].map(state => (
           <div key={state} className="border border-xert-steel/20 bg-xert-ink p-4">
             <p className="font-display text-2xl text-xert-offwhite tabular-nums">{counts[state] || 0}</p>
             <p className="mt-1 font-body text-xs uppercase text-xert-pale/45">{state}</p>
@@ -225,6 +247,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
                     <p className="mt-2 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{item.body}</p>
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-body text-xs text-xert-pale/40">
                       {item.published_at && <span>Published {formatDateTime(item.published_at)}</span>}
+                      {item.archived_at && <span>Archived {formatDateTime(item.archived_at)}</span>}
                       {item.expires_at && <span className="inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" /> Expires {formatDateTime(item.expires_at)}</span>}
                       {item.published_at && <span>Seen by {item.read_count || 0} member{item.read_count === 1 ? '' : 's'} · {item.dismissed_count || 0} dismissed</span>}
                       {item.push_last_attempted_at && <span>Push: {item.push_delivered_count || 0} delivered · {item.push_failed_count || 0} failed</span>}
@@ -232,13 +255,23 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    <button type="button" onClick={() => openEdit(item)} disabled={saving} title="Edit announcement" aria-label={`Edit ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><Pencil className="w-4 h-4" /></button>
-                    {state === 'live' || state === 'scheduled' ? (
-                      <button type="button" onClick={() => void setPublished(item, false)} disabled={saving} title="Unpublish announcement" aria-label={`Unpublish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-pale disabled:opacity-40"><EyeOff className="w-4 h-4" /></button>
+                    {state === 'archived' ? (
+                      <button type="button" onClick={() => void setArchived(item, false)} disabled={saving} title="Restore announcement as draft" aria-label={`Restore ${item.title} as draft`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-amber-500/30 text-amber-300 disabled:opacity-40"><ArchiveRestore className="w-4 h-4" /></button>
                     ) : (
-                      <button type="button" onClick={() => void setPublished(item, true)} disabled={saving} title="Publish announcement" aria-label={`Publish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-green-500/40 text-green-300 disabled:opacity-40"><Eye className="w-4 h-4" /></button>
+                      <>
+                        <button type="button" onClick={() => openEdit(item)} disabled={saving} title="Edit announcement" aria-label={`Edit ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><Pencil className="w-4 h-4" /></button>
+                        {state === 'live' || state === 'scheduled' ? (
+                          <button type="button" onClick={() => void setPublished(item, false)} disabled={saving} title="Unpublish announcement" aria-label={`Unpublish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-pale disabled:opacity-40"><EyeOff className="w-4 h-4" /></button>
+                        ) : (
+                          <button type="button" onClick={() => void setPublished(item, true)} disabled={saving} title="Publish announcement" aria-label={`Publish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-green-500/40 text-green-300 disabled:opacity-40"><Eye className="w-4 h-4" /></button>
+                        )}
+                        {item.first_published_at ? (
+                          <button type="button" onClick={() => setConfirmArchive(item)} disabled={saving} title="Archive announcement" aria-label={`Archive ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-amber-500/30 text-amber-300 disabled:opacity-40"><Archive className="w-4 h-4" /></button>
+                        ) : (
+                          <button type="button" onClick={() => setConfirmDelete(item)} disabled={saving} title="Delete draft" aria-label={`Delete draft ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-red/30 text-xert-red disabled:opacity-40"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </>
                     )}
-                    <button type="button" onClick={() => setConfirmDelete(item)} disabled={saving} title="Delete announcement" aria-label={`Delete ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-red/30 text-xert-red disabled:opacity-40"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </article>
@@ -279,6 +312,16 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
             <h3 id="delete-announcement-title" className="font-display text-xl uppercase text-xert-offwhite">Delete this notice?</h3>
             <p className="mt-3 font-body text-sm text-xert-pale/65">“{confirmDelete.title}” will be permanently removed.</p>
             <div className="mt-6 flex gap-3"><button type="button" onClick={() => setConfirmDelete(null)} disabled={saving} className="min-h-11 flex-1 border border-xert-steel/30 font-display text-sm uppercase text-xert-pale/70">Cancel</button><button type="button" onClick={() => void remove(confirmDelete)} disabled={saving} className="min-h-11 flex-1 bg-xert-red font-display text-sm uppercase text-white disabled:opacity-40">{saving ? 'Deleting...' : 'Delete'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {confirmArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="archive-announcement-title" className="w-full max-w-md border border-amber-500/35 bg-xert-ink p-6">
+            <h3 id="archive-announcement-title" className="font-display text-xl uppercase text-xert-offwhite">Archive this notice?</h3>
+            <p className="mt-3 font-body text-sm text-xert-pale/65">“{confirmArchive.title}” will disappear from member accounts. Read, dismissal and push history will be preserved.</p>
+            <div className="mt-6 flex gap-3"><button type="button" onClick={() => setConfirmArchive(null)} disabled={saving} className="min-h-11 flex-1 border border-xert-steel/30 font-display text-sm uppercase text-xert-pale/70">Cancel</button><button type="button" onClick={() => void setArchived(confirmArchive, true)} disabled={saving} className="min-h-11 flex-1 bg-amber-600 font-display text-sm uppercase text-white disabled:opacity-40">{saving ? 'Archiving...' : 'Archive'}</button></div>
           </div>
         </div>
       )}

@@ -16,6 +16,7 @@ with required (capability, migration) as (
     ('member_announcements', 'supabase/migrations/20260713040000_member_announcements.sql'),
     ('announcement_receipts', 'supabase/migrations/20260713050000_announcement_receipts.sql'),
     ('announcement_actions', 'supabase/migrations/20260714000000_announcement_actions.sql'),
+    ('announcement_archival', 'supabase/migrations/20260714010000_announcement_archival.sql'),
     ('booking_time_conflict_guard', 'supabase/migrations/20260714002000_booking_time_conflicts.sql'),
     ('admin_member_notes', 'supabase/migrations/20260714003000_admin_member_notes.sql'),
     ('schedule_blackout_guard', 'supabase/migrations/20260714004000_schedule_blackout_guard.sql'),

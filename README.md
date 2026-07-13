@@ -113,6 +113,8 @@ The Supabase schema is defined in:
   status/notes changes atomic and records immutable administrator history
 - `src/supabase/member_push_notifications_upgrade.sql` — stores protected iOS
   device subscriptions and APNs delivery history for published member notices
+- `src/supabase/announcement_archival_upgrade.sql` — preserves published notice
+  history through archive/restore and records immutable administrator actions
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -124,7 +126,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `rls_policies.sql`, `rls_hardening.sql`, and finally
 `member_pt_request_tracking.sql`, `public_form_integrity_upgrade.sql`, and
 `admin_request_status_audit_upgrade.sql`, then
-`member_push_notifications_upgrade.sql`. This
+`member_push_notifications_upgrade.sql`, then
+`announcement_archival_upgrade.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -143,7 +146,8 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 those prerequisites, followed by `member_pt_request_tracking.sql` and
 `public_form_integrity_upgrade.sql`, then
 `admin_request_status_audit_upgrade.sql` and
-`member_push_notifications_upgrade.sql`. The scripts are idempotent;
+`member_push_notifications_upgrade.sql`, then
+`announcement_archival_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

@@ -12,6 +12,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   announcement_receipts: 'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
   announcement_actions: 'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',
+  announcement_archival: 'Apply supabase/migrations/20260714010000_announcement_archival.sql in Supabase.',
   booking_time_conflict_guard: 'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
   admin_member_notes: 'Apply supabase/migrations/20260714003000_admin_member_notes.sql in Supabase.',
   schedule_blackout_guard: 'Apply supabase/migrations/20260714004000_schedule_blackout_guard.sql in Supabase.',
