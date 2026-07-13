@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventsView: View {
     @EnvironmentObject private var store: XertStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showCompleted = false
     @State private var addingToCalendarID: String?
     @State private var calendarNotice: CalendarNotice?
@@ -111,38 +112,59 @@ struct EventsView: View {
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
+    @ViewBuilder
     private func eventHeader(_ event: EventItem) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            dateBlock(for: event)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(event.category ?? "event")
-                    .xertEyebrow()
-                Text(event.name)
-                    .xertDisplay(20)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    if let date = event.event_date {
-                        Text(dateLabel(start: date, end: event.end_date))
-                    } else {
-                        Text(EventLifecycle.dateTBC.label)
+        if dynamicTypeSize.isAccessibilitySize {
+            eventDetails(event)
+        } else {
+            HStack(alignment: .top, spacing: 14) {
+                dateBlock(for: event)
+                eventDetails(event)
+            }
+        }
+    }
+
+    private func eventDetails(_ event: EventItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(event.category ?? "event")
+                .xertEyebrow()
+            Text(event.name)
+                .xertDisplay(20)
+                .fixedSize(horizontal: false, vertical: true)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 6) {
+                        eventDateLabel(event)
+                        if event.lifecycle() == .happeningNow { happeningNowChip }
                     }
-                    if event.lifecycle() == .happeningNow {
-                        happeningNowChip
+                } else {
+                    HStack(spacing: 8) {
+                        eventDateLabel(event)
+                        if event.lifecycle() == .happeningNow { happeningNowChip }
                     }
-                }
-                .font(.caption)
-                .foregroundStyle(Color.xertPale)
-                if let location = event.location {
-                    Label {
-                        Text(location)
-                            .foregroundStyle(Color.xertMuted)
-                    } icon: {
-                        Image(systemName: "mappin")
-                            .foregroundStyle(Color.xertSteel)
-                    }
-                    .font(.caption)
                 }
             }
+            .font(.caption)
+            .foregroundStyle(Color.xertPale)
+            if let location = event.location {
+                Label {
+                    Text(location)
+                        .foregroundStyle(Color.xertMuted)
+                } icon: {
+                    Image(systemName: "mappin")
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eventDateLabel(_ event: EventItem) -> some View {
+        if let date = event.event_date {
+            Text(dateLabel(start: date, end: event.end_date))
+        } else {
+            Text(EventLifecycle.dateTBC.label)
         }
     }
 
