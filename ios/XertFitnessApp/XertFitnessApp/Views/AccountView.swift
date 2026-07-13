@@ -70,7 +70,7 @@ struct AccountView: View {
                     Task { _ = await store.deleteAccount() }
                 }
             } message: {
-                Text("Your member profile, credits, bookings and training goals will be removed. Purchase records are anonymized.")
+                Text("Your member profile, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized.")
             }
             .alert(item: $bookingCalendarNotice) { notice in
                 Alert(

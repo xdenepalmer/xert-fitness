@@ -14,12 +14,30 @@ export function hasDeleteAccountConfirmation(body) {
   return body?.confirmation === 'DELETE';
 }
 
+export function isMissingPTTrackingColumn(error) {
+  return error?.code === '42703' || (
+    error?.code === 'PGRST204' && /user_id/i.test(error?.message || '')
+  );
+}
+
 export async function deleteMemberAccount(admin, userId) {
   const { error: orderError } = await admin
     .from('orders')
     .update({ email: null })
     .eq('user_id', userId);
   if (orderError) throw orderError;
+
+  // Authenticated PT requests contain contact and coaching notes. They are
+  // account data, not financial records, so remove them before deleting Auth.
+  // During migration rollout, older databases may not have user_id yet; in
+  // that state no request can be linked to this account, so deletion proceeds.
+  const { error: ptRequestError } = await admin
+    .from('private_session_requests')
+    .delete()
+    .eq('user_id', userId);
+  if (ptRequestError && !isMissingPTTrackingColumn(ptRequestError)) {
+    throw ptRequestError;
+  }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) throw deleteError;
