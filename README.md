@@ -84,6 +84,8 @@ The Supabase schema is defined in:
   grants retry-safe and records who granted them and why
 - `src/supabase/admin_role_safety_upgrade.sql` — prevents the final admin from
   being demoted and records every privilege change
+- `src/supabase/admin_member_search_upgrade.sql` — adds bounded server-side
+  member search for the admin command palette
 - `src/supabase/business_metrics_upgrade.sql` — indexes exact paged revenue and
   active-credit dashboard scans as order volume grows
 - `src/supabase/attendance_roll_call_upgrade.sql` — adds atomic class roll call,
@@ -113,7 +115,8 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
 `rls_hardening.sql`, `product_validation_upgrade.sql`, and
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
-`admin_role_safety_upgrade.sql`, `business_metrics_upgrade.sql`, and
+`admin_role_safety_upgrade.sql`, `admin_member_search_upgrade.sql`,
+`business_metrics_upgrade.sql`, and
 `attendance_roll_call_upgrade.sql`, and `member_waitlist_upgrade.sql` after
 those prerequisites, followed by `member_pt_request_tracking.sql` and
 `public_form_integrity_upgrade.sql`. The scripts are idempotent;

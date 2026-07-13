@@ -8,7 +8,7 @@ import {
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from '@/components/ui/command';
-import { adminListMembers } from '@/lib/adminData';
+import { adminSearchMembers } from '@/lib/adminData';
 
 const NAV_COMMANDS = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -43,14 +43,48 @@ const QUICK_COMMANDS = [
  * or find a member by name/email.
  */
 export default function CommandPalette({ open, onOpenChange, onNavigate }) {
-  const [members, setMembers] = useState(null);
+  const [query, setQuery] = useState('');
+  const [members, setMembers] = useState([]);
+  const [memberSearchLoading, setMemberSearchLoading] = useState(false);
+  const [memberSearchError, setMemberSearchError] = useState('');
 
-  // Lazy-load the member list the first time the palette opens.
   useEffect(() => {
-    if (open && members === null) {
-      adminListMembers().then(setMembers).catch(() => setMembers([]));
+    if (!open) {
+      setQuery('');
+      setMembers([]);
+      setMemberSearchLoading(false);
+      setMemberSearchError('');
+      return undefined;
     }
-  }, [open, members]);
+
+    const memberQuery = query.replace(/^member\s+/i, '').trim();
+    if (memberQuery.length < 2) {
+      setMembers([]);
+      setMemberSearchLoading(false);
+      setMemberSearchError('');
+      return undefined;
+    }
+
+    let active = true;
+    setMembers([]);
+    setMemberSearchLoading(true);
+    setMemberSearchError('');
+    const timeoutId = window.setTimeout(() => {
+      adminSearchMembers(memberQuery, 12)
+        .then(results => { if (active) setMembers(results); })
+        .catch(error => {
+          if (!active) return;
+          setMembers([]);
+          setMemberSearchError(error.message || 'Member search is unavailable.');
+        })
+        .finally(() => { if (active) setMemberSearchLoading(false); });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, query]);
 
   const run = (sectionKey, params) => {
     onNavigate(sectionKey, params);
@@ -59,9 +93,13 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Jump to a section, action or member…" />
+      <CommandInput value={query} onValueChange={setQuery} placeholder="Jump to a section, action or member…" />
       <CommandList>
-        <CommandEmpty>Nothing found.</CommandEmpty>
+        <CommandEmpty>
+          {memberSearchLoading
+            ? 'Searching members...'
+            : memberSearchError || (query.trim().length >= 2 ? 'No matching command or member.' : 'Nothing found.')}
+        </CommandEmpty>
 
         <CommandGroup heading="Quick actions">
           {QUICK_COMMANDS.map(c => {
@@ -91,14 +129,15 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
           })}
         </CommandGroup>
 
-        {members?.length > 0 && (
+        {members.length > 0 && (
           <CommandGroup heading="Members">
-            {members.slice(0, 50).map(m => (
-              <CommandItem key={m.id} value={`member ${m.full_name || ''} ${m.email || ''}`}
+            {members.map(m => (
+              <CommandItem key={m.id} value={`member ${m.full_name || ''} ${m.email || ''} ${m.phone || ''}`}
+                className="group data-[selected=true]:bg-xert-steel data-[selected=true]:text-xert-ink"
                 onSelect={() => run('gym-members', { member: m.id })}>
-                <User className="text-xert-steel" />
+                <User className="text-xert-steel group-data-[selected=true]:text-xert-ink" />
                 <span>{m.full_name || m.email}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
+                <span className="ml-auto text-xs text-muted-foreground group-data-[selected=true]:text-xert-ink/70">
                   {m.credits_remaining} credit{Number(m.credits_remaining) === 1 ? '' : 's'}
                 </span>
               </CommandItem>

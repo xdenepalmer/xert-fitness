@@ -480,6 +480,32 @@ export async function adminListMembers() {
   });
 }
 
+export async function adminSearchMembers(search, limit = 12) {
+  const normalizedSearch = normalizeLeadSearch(search);
+  if (normalizedSearch.length < 2) return [];
+  const normalizedLimit = Math.max(1, Math.min(20, Number.parseInt(String(limit), 10) || 12));
+
+  const primary = await supabase.rpc('admin_search_members', {
+    p_search: normalizedSearch,
+    p_limit: normalizedLimit
+  });
+  if (!primary.error) return primary.data || [];
+
+  const functionUnavailable = ['42883', 'PGRST202'].includes(primary.error.code)
+    || /admin_search_members.*(?:not found|schema cache|does not exist)/i.test(primary.error.message || '');
+  if (!functionUnavailable) throw new Error(primary.error.message);
+
+  const term = `%${normalizedSearch}%`;
+  const { data, error } = await supabase
+    .rpc('admin_list_members')
+    .or(['full_name', 'email', 'phone'].map(column => `${column}.ilike.${term}`).join(','))
+    .order('joined_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(normalizedLimit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 export async function adminRecentMembers(limit = 6) {
   const safeLimit = Math.max(1, Math.min(20, Number.parseInt(String(limit), 10) || 6));
   const { data, error } = await supabase
