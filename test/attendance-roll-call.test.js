@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import {
+  blankAttendanceDraft,
+  createAttendanceDraft,
+  markAllAttendance,
+  summarizeAttendanceDraft,
+} from '../src/lib/attendanceDraft.js';
 
 const freshSchema = await readFile(new URL('../src/supabase/admin_cms_schema.sql', import.meta.url), 'utf8');
 const upgradeSchema = await readFile(new URL('../src/supabase/attendance_roll_call_upgrade.sql', import.meta.url), 'utf8');
@@ -35,5 +41,52 @@ test('admin roll call sends one bounded RPC and exposes complete attendance cont
   assert.match(classCalendar, /Take attendance/);
   assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[member\.booking_id\] === 'attended'\}/);
   assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[member\.booking_id\] === 'no_show'\}/);
+  assert.match(classCalendar, /Mark all present/);
+  assert.match(classCalendar, /Clear marks/);
+  assert.match(classCalendar, /disabled=\{isSavingAttendance \|\| !attendanceSummary\.complete\}/);
   assert.match(classCalendar, /'Save attendance'/);
+});
+
+test('new roll calls preserve recorded marks but leave confirmed members explicit', () => {
+  const roster = [
+    { booking_id: 'confirmed', status: 'confirmed' },
+    { booking_id: 'present', status: 'attended' },
+    { booking_id: 'absent', status: 'no_show' },
+    { booking_id: 'waiting', status: 'waitlisted' },
+    { booking_id: 'confirmed', status: 'confirmed' },
+  ];
+
+  assert.deepEqual(createAttendanceDraft(roster), {
+    confirmed: '',
+    present: 'attended',
+    absent: 'no_show',
+  });
+  assert.deepEqual(blankAttendanceDraft(roster), { confirmed: '', present: '', absent: '' });
+  assert.deepEqual(markAllAttendance(roster), {
+    confirmed: 'attended',
+    present: 'attended',
+    absent: 'attended',
+  });
+});
+
+test('attendance progress is incomplete until every eligible booking is explicitly marked', () => {
+  const roster = [
+    { booking_id: 'one', status: 'confirmed' },
+    { booking_id: 'two', status: 'confirmed' },
+  ];
+  assert.deepEqual(summarizeAttendanceDraft(roster, { one: 'attended' }), {
+    members: roster,
+    entries: [
+      { bookingId: 'one', status: 'attended' },
+      { bookingId: 'two', status: '' },
+    ],
+    total: 2,
+    attended: 1,
+    noShow: 0,
+    marked: 1,
+    unmarked: 1,
+    complete: false,
+  });
+  assert.equal(summarizeAttendanceDraft(roster, markAllAttendance(roster)).complete, true);
+  assert.throws(() => markAllAttendance(roster, 'confirmed'), /attended or no show/);
 });
