@@ -85,3 +85,29 @@ export function ptRequestCsvRows(requests) {
 export function isPendingPTRequest(status) {
   return status === 'requested' || status === 'reschedule_requested';
 }
+
+export function ptRequestSelectionId(request) {
+  const id = String(request?.id || '').trim();
+  if (!id) throw new Error('A PT request ID is required for selection.');
+  return id;
+}
+
+export function selectedPTRequestIds(current, requests, selected) {
+  const next = new Set(current || []);
+  for (const request of requests || []) {
+    const id = ptRequestSelectionId(request);
+    if (selected) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+}
+
+export function bulkPTRequestStatusOptions(requests) {
+  const statuses = new Set((requests || []).map(request => request.status));
+  if (statuses.size !== 1) return [];
+  const [status] = statuses;
+  if (status === 'requested') return ['approved', 'reschedule_requested', 'declined'];
+  if (status === 'reschedule_requested') return ['approved', 'declined'];
+  if (status === 'approved') return ['completed', 'cancelled'];
+  return [];
+}

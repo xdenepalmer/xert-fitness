@@ -4,7 +4,7 @@ import { toast } from '@/components/ui/use-toast';
 import { getPTRequests, updatePTRequestStatus } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
-import { isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows } from '@/lib/ptRequestAnalytics';
+import { bulkPTRequestStatusOptions, isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows, selectedPTRequestIds } from '@/lib/ptRequestAnalytics';
 import { collectAdminPages } from '@/lib/adminPagination';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
@@ -35,6 +35,9 @@ export default function PTRequestsTable() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
   const requestIdRef = useRef(0);
 
   const load = useCallback(async (targetPage = 1) => {
@@ -78,9 +81,21 @@ export default function PTRequestsTable() {
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastResult = Math.min(page * PAGE_SIZE, total);
+  const allVisibleSelected = requests.length > 0 && requests.every(request => selectedIds.has(request.id));
+  const selectedRequests = useMemo(() => requests.filter(request => selectedIds.has(request.id)), [requests, selectedIds]);
+  const bulkStatusOptions = useMemo(() => bulkPTRequestStatusOptions(selectedRequests), [selectedRequests]);
+
+  useEffect(() => {
+    if (bulkStatus && !bulkStatusOptions.includes(bulkStatus)) setBulkStatus('');
+  }, [bulkStatus, bulkStatusOptions]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [daysFilter, debouncedSearch, sessionTypeFilter, statusFilter]);
 
   const goToPage = targetPage => {
     setNotesModal(null);
+    setSelectedIds(new Set());
     void load(targetPage);
   };
 
@@ -129,6 +144,28 @@ export default function PTRequestsTable() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkStatus || selectedRequests.length === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
+    setBulkSaving(true);
+    const results = await Promise.allSettled(selectedRequests.map(request => updatePTRequestStatus(request.id, bulkStatus)));
+    const failedIds = new Set();
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') failedIds.add(selectedRequests[index].id);
+    });
+    const updatedCount = selectedRequests.length - failedIds.size;
+    if (updatedCount > 0) {
+      toast({ title: 'PT requests updated', description: `${updatedCount} request${updatedCount === 1 ? '' : 's'} moved to ${bulkStatus.replace(/_/g, ' ')}.` });
+      await load(page);
+    }
+    setSelectedIds(failedIds);
+    if (failedIds.size > 0) {
+      toast({ title: 'Some updates failed', description: `${failedIds.size} request${failedIds.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
+    } else {
+      setBulkStatus('');
+    }
+    setBulkSaving(false);
   };
 
   return (
@@ -180,6 +217,24 @@ export default function PTRequestsTable() {
         ))}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3 border border-xert-steel/20 bg-xert-ink p-3">
+        <label className="inline-flex min-h-11 items-center gap-2 font-body text-xs text-xert-concrete/60">
+          <input type="checkbox" checked={allVisibleSelected} onChange={event => setSelectedIds(current => selectedPTRequestIds(current, requests, event.target.checked))} disabled={requests.length === 0 || bulkSaving} className="accent-xert-red" />
+          Select this page
+        </label>
+        <span className="font-body text-xs text-xert-concrete/40">{selectedIds.size} selected</span>
+        <select value={bulkStatus} onChange={event => setBulkStatus(event.target.value)} disabled={selectedIds.size === 0 || bulkSaving} aria-label="New status for selected PT requests" className="sm:ml-auto min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-xs text-xert-offwhite disabled:opacity-40">
+          <option value="">Move selected to...</option>
+          {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+        </select>
+        <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+          {bulkSaving ? 'Updating...' : 'Apply'}
+        </button>
+      </div>
+      {selectedIds.size > 0 && bulkStatusOptions.length === 0 && (
+        <p className="-mt-2 mb-4 font-body text-xs text-xert-concrete/50">Select requests with the same actionable status to use bulk updates.</p>
+      )}
+
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
@@ -194,6 +249,7 @@ export default function PTRequestsTable() {
           {requests.map(r => (
             <div key={r.id} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
+                <input type="checkbox" checked={selectedIds.has(r.id)} onChange={event => setSelectedIds(current => selectedPTRequestIds(current, [r], event.target.checked))} disabled={bulkSaving} aria-label={`Select PT request for ${r.full_name || r.email}`} className="mt-1 accent-xert-red" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-body text-base text-xert-offwhite">{r.full_name}</span>

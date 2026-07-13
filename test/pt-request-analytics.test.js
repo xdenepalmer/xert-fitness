@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  bulkPTRequestStatusOptions,
   filterPTRequests,
   isPendingPTRequest,
   normalizePTRequestFilters,
+  ptRequestSelectionId,
   ptRequestCsvRows,
+  selectedPTRequestIds,
   summarizePTRequests,
 } from '../src/lib/ptRequestAnalytics.js';
 
@@ -58,4 +61,21 @@ test('keeps reschedule requests actionable after staff follow-up', () => {
   assert.equal(isPendingPTRequest('requested'), true);
   assert.equal(isPendingPTRequest('reschedule_requested'), true);
   assert.equal(isPendingPTRequest('approved'), false);
+});
+
+test('selects PT requests without mutating the current selection', () => {
+  const current = new Set(['a']);
+  assert.deepEqual([...selectedPTRequestIds(current, [{ id: 'b' }, { id: 'c' }], true)], ['a', 'b', 'c']);
+  assert.deepEqual([...selectedPTRequestIds(current, [{ id: 'a' }], false)], []);
+  assert.deepEqual([...current], ['a']);
+  assert.equal(ptRequestSelectionId({ id: ' request-a ' }), 'request-a');
+  assert.throws(() => ptRequestSelectionId({}), /PT request ID is required/);
+});
+
+test('offers only valid bulk transitions for one PT request state', () => {
+  assert.deepEqual(bulkPTRequestStatusOptions([{ status: 'requested' }]), ['approved', 'reschedule_requested', 'declined']);
+  assert.deepEqual(bulkPTRequestStatusOptions([{ status: 'reschedule_requested' }]), ['approved', 'declined']);
+  assert.deepEqual(bulkPTRequestStatusOptions([{ status: 'approved' }]), ['completed', 'cancelled']);
+  assert.deepEqual(bulkPTRequestStatusOptions([{ status: 'requested' }, { status: 'approved' }]), []);
+  assert.deepEqual(bulkPTRequestStatusOptions([{ status: 'completed' }]), []);
 });
