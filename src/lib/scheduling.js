@@ -175,10 +175,21 @@ export function classSessionUpdateRpcError(message) {
   if (/SESSION_TIME_CONFLICTS_WITH_MEMBER_BOOKING/i.test(value)) {
     return 'This new time overlaps another active booking held by one or more members. Resolve those bookings before rescheduling the class.';
   }
+  if (/SESSION_OVERLAPS_BLACKOUT/i.test(value)) {
+    return 'This class overlaps an active blackout. Change the class time or remove the blackout first.';
+  }
   if (/TERMINAL_SESSION_IMMUTABLE/i.test(value)) {
     return 'Cancelled and completed classes cannot be reopened. Create a new class instead.';
   }
   if (/SESSION_NOT_FOUND/i.test(value)) return 'This class no longer exists. Refresh the calendar.';
+  return value;
+}
+
+export function blackoutPeriodMutationError(message) {
+  const value = String(message || 'Blackout update failed.');
+  if (/BLACKOUT_OVERLAPS_PUBLISHED_CLASS/i.test(value)) {
+    return 'This blackout overlaps one or more published classes. Cancel or reschedule those classes before saving the blackout.';
+  }
   return value;
 }
 

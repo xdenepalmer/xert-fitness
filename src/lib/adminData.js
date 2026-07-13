@@ -7,7 +7,7 @@ import {
   normalizeMemberNoteArchive, normalizeRoleChange
 } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
-import { classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
+import { blackoutPeriodMutationError, classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
 import {
   normalizeBookingStatusMutation,
   normalizeLegacyBookingNotes,
@@ -99,7 +99,7 @@ export async function getClassSessions(publicOnly = false) {
 export async function createClassSession(sessionData) {
   const payload = normalizeClassSession(sessionData);
   const { data, error } = await supabase.from('class_sessions').insert([payload]).select().single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(classSessionUpdateRpcError(error.message));
   return data;
 }
 
@@ -107,7 +107,7 @@ export async function createClassSessions(sessionData) {
   if (!Array.isArray(sessionData) || sessionData.length === 0) throw new Error('Create at least one class session.');
   const payload = sessionData.map(item => normalizeClassSession(item));
   const { data, error } = await supabase.from('class_sessions').insert(payload).select();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(classSessionUpdateRpcError(error.message));
   return data || [];
 }
 
@@ -318,11 +318,12 @@ export async function getBlackoutPeriods() {
 
 export async function createBlackoutPeriod(periodData) {
   const { error } = await supabase.from('blackout_periods').insert([periodData]);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(blackoutPeriodMutationError(error.message));
 }
 
 export async function updateBlackoutPeriod(id, periodData) {
   const result = await supabase.from('blackout_periods').update(periodData).eq('id', id).select('id');
+  if (result.error) throw new Error(blackoutPeriodMutationError(result.error.message));
   assertAdminMutation(result, 'Blackout update');
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutsOverlappingSession, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
+import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutPeriodMutationError, blackoutsOverlappingSession, classSessionUpdateRpcError, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
 
 test('normalizes explicit availability and blackout payloads', () => {
   const block = normalizeAvailabilityBlock({
@@ -44,6 +44,17 @@ test('detects only blackouts that affect an overlapping group class', () => {
   assert.deepEqual(
     blackoutsOverlappingSession(session, blackouts).map(blackout => blackout.id),
     ['facility', 'group']
+  );
+});
+
+test('translates database schedule conflicts into actionable admin errors', () => {
+  assert.equal(
+    classSessionUpdateRpcError('SESSION_OVERLAPS_BLACKOUT'),
+    'This class overlaps an active blackout. Change the class time or remove the blackout first.'
+  );
+  assert.equal(
+    blackoutPeriodMutationError('BLACKOUT_OVERLAPS_PUBLISHED_CLASS'),
+    'This blackout overlaps one or more published classes. Cancel or reschedule those classes before saving the blackout.'
   );
 });
 

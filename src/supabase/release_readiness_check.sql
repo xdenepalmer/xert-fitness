@@ -6,7 +6,7 @@ with required (capability, migration) as (
     ('admin_role_safety', 'src/supabase/admin_role_safety_upgrade.sql'),
     ('booking_waitlist_withdrawal', 'src/supabase/booking_modes_upgrade.sql'),
     ('member_waitlist_join', 'src/supabase/member_waitlist_upgrade.sql'),
-    ('waitlist_fifo_promotion', 'src/supabase/waitlist_fifo_promotion_upgrade.sql'),
+    ('waitlist_fifo_promotion', 'supabase/migrations/20260714004100_waitlist_fifo_promotion.sql'),
     ('attendance_roll_call', 'src/supabase/attendance_roll_call_upgrade.sql'),
     ('class_session_update_guard', 'supabase/migrations/20260713000000_class_session_update_guard.sql'),
     ('product_update_guard', 'supabase/migrations/20260713010000_product_update_guard.sql'),
@@ -17,9 +17,10 @@ with required (capability, migration) as (
     ('announcement_actions', 'supabase/migrations/20260714000000_announcement_actions.sql'),
     ('booking_time_conflict_guard', 'supabase/migrations/20260714002000_booking_time_conflicts.sql'),
     ('admin_member_notes', 'supabase/migrations/20260714003000_admin_member_notes.sql'),
+    ('schedule_blackout_guard', 'supabase/migrations/20260714004000_schedule_blackout_guard.sql'),
     ('credit_expiry_follow_up', 'supabase/migrations/20260713060000_credit_expiry_follow_up.sql'),
-    ('member_pt_request_tracking', 'src/supabase/member_pt_request_tracking.sql'),
-    ('public_form_integrity', 'src/supabase/public_form_integrity_upgrade.sql')
+    ('member_pt_request_tracking', 'supabase/migrations/20260714004200_member_pt_request_tracking.sql'),
+    ('public_form_integrity', 'supabase/migrations/20260714004300_public_form_integrity.sql')
 ), readiness as (
   select
     required.capability,
