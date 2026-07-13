@@ -23,4 +23,14 @@ test('native brand typography scales with Dynamic Type', async () => {
   assert.equal((home.match(/dynamicTypeSize\.isAccessibilitySize/g) || []).length, 2);
   assert.match(home, /if dynamicTypeSize\.isAccessibilitySize \{[\s\S]*VStack\(spacing: 12\)/);
   assert.match(home, /if dynamicTypeSize\.isAccessibilitySize \{[\s\S]*VStack\(spacing: 14\)/);
+
+  const booking = await readFile(
+    new URL('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift', import.meta.url),
+    'utf8',
+  );
+  assert.match(booking, /@Environment\(\\\.dynamicTypeSize\) private var dynamicTypeSize/);
+  assert.equal((booking.match(/dynamicTypeSize\.isAccessibilitySize/g) || []).length, 3);
+  assert.match(booking, /private func productSummary/);
+  assert.match(booking, /private func sessionHeader/);
+  assert.match(booking, /private func sessionMetadata/);
 });

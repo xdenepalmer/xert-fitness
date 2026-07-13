@@ -3,6 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var activeSheet: BookingSheet?
     @State private var expandedSessionIDs: Set<UUID> = []
     let onNavigate: (Int) -> Void
@@ -108,19 +109,7 @@ struct BookingView: View {
                         }
                     }
                 } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(product.name)
-                                .foregroundStyle(Color.xertOffWhite)
-                            Text("\(product.sessionsCount) sessions")
-                                .font(.caption)
-                                .foregroundStyle(Color.xertMuted)
-                        }
-                        Spacer()
-                        Text(product.displayPrice)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.xertSteel)
-                    }
+                    productSummary(product)
                 }
             }
         } header: {
@@ -168,25 +157,8 @@ struct BookingView: View {
     private func sessionCard(for session: ClassSession) -> some View {
         let booking = activeBookings[session.id]
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(session.title)
-                        .xertDisplay(20)
-                    Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.xertPale)
-                }
-                Spacer()
-                if let spots = session.spots_left {
-                    spotsChip(spots)
-                }
-            }
-
-            HStack {
-                Label(session.coach_name ?? "Coach TBC", systemImage: "person")
-                Spacer()
-                Label(session.location_zone ?? "XERT", systemImage: "mappin")
-            }
+            sessionHeader(session)
+            sessionMetadata(session)
             .font(.caption)
             .foregroundStyle(Color.xertPale)
 
@@ -207,6 +179,78 @@ struct BookingView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+    }
+
+    @ViewBuilder
+    private func productSummary(_ product: Product) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                productDetails(product)
+                Text(product.displayPrice)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.xertSteel)
+            }
+        } else {
+            HStack {
+                productDetails(product)
+                Spacer()
+                Text(product.displayPrice)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.xertSteel)
+            }
+        }
+    }
+
+    private func productDetails(_ product: Product) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(product.name)
+                .foregroundStyle(Color.xertOffWhite)
+            Text("\(product.sessionsCount) sessions")
+                .font(.caption)
+                .foregroundStyle(Color.xertMuted)
+        }
+    }
+
+    @ViewBuilder
+    private func sessionHeader(_ session: ClassSession) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                sessionTitle(session)
+                if let spots = session.spots_left { spotsChip(spots) }
+            }
+        } else {
+            HStack(alignment: .top) {
+                sessionTitle(session)
+                Spacer()
+                if let spots = session.spots_left { spotsChip(spots) }
+            }
+        }
+    }
+
+    private func sessionTitle(_ session: ClassSession) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(session.title)
+                .xertDisplay(20)
+            Text(session.start_time.formatted(date: .abbreviated, time: .shortened))
+                .font(.subheadline)
+                .foregroundStyle(Color.xertPale)
+        }
+    }
+
+    @ViewBuilder
+    private func sessionMetadata(_ session: ClassSession) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(session.coach_name ?? "Coach TBC", systemImage: "person")
+                Label(session.location_zone ?? "XERT", systemImage: "mappin")
+            }
+        } else {
+            HStack {
+                Label(session.coach_name ?? "Coach TBC", systemImage: "person")
+                Spacer()
+                Label(session.location_zone ?? "XERT", systemImage: "mappin")
+            }
+        }
     }
 
     private func expansionBinding(for sessionID: UUID) -> Binding<Bool> {
