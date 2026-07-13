@@ -331,11 +331,7 @@ struct BookingView: View {
     }
 
     private var activeBookings: [UUID: BookingItem] {
-        Dictionary(
-            uniqueKeysWithValues: store.bookings
-                .filter(\.isActiveClassPlace)
-                .map { ($0.session_id, $0) }
-        )
+        BookingItem.activeBySession(store.bookings)
     }
 
     private var initialName: String { store.profile?.full_name ?? "" }

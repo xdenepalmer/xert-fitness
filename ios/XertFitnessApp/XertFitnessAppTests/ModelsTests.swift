@@ -440,13 +440,56 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(timeline.pending.count + timeline.upcoming.count + timeline.history.count, bookings.count)
     }
 
-    private func booking(status: String, startTime: Date, endTime: Date? = nil) -> BookingItem {
+    func testActiveBookingIndexSurvivesDuplicateSessionRows() {
+        let sessionID = UUID()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let oldRequest = booking(
+            status: "requested",
+            startTime: now.addingTimeInterval(60),
+            sessionID: sessionID,
+            bookedAt: now.addingTimeInterval(-120)
+        )
+        let confirmed = booking(
+            status: "confirmed",
+            startTime: now.addingTimeInterval(60),
+            sessionID: sessionID,
+            bookedAt: now.addingTimeInterval(-180)
+        )
+        let cancelled = booking(
+            status: "cancelled",
+            startTime: now.addingTimeInterval(60),
+            sessionID: sessionID,
+            bookedAt: now
+        )
+
+        let index = BookingItem.activeBySession([oldRequest, confirmed, cancelled])
+
+        XCTAssertEqual(index.count, 1)
+        XCTAssertEqual(index[sessionID]?.booking_id, confirmed.booking_id)
+    }
+
+    func testActiveBookingIndexKeepsNewestRowWithinTheSameState() {
+        let sessionID = UUID()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let older = booking(status: "waitlisted", startTime: now, sessionID: sessionID, bookedAt: now.addingTimeInterval(-60))
+        let newer = booking(status: "waitlisted", startTime: now, sessionID: sessionID, bookedAt: now)
+
+        XCTAssertEqual(BookingItem.activeBySession([newer, older])[sessionID]?.booking_id, newer.booking_id)
+    }
+
+    private func booking(
+        status: String,
+        startTime: Date,
+        endTime: Date? = nil,
+        sessionID: UUID = UUID(),
+        bookedAt: Date? = nil
+    ) -> BookingItem {
         BookingItem(
             booking_id: UUID(),
             status: status,
-            booked_at: nil,
+            booked_at: bookedAt,
             cancelled_at: nil,
-            session_id: UUID(),
+            session_id: sessionID,
             title: "Strength",
             class_type: "Strength",
             coach_name: "Coach",

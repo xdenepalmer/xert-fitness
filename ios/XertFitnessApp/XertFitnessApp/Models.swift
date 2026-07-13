@@ -221,6 +221,32 @@ struct BookingItem: Identifiable, Codable, Hashable {
         default: return .history
         }
     }
+
+    static func activeBySession(_ bookings: [BookingItem]) -> [UUID: BookingItem] {
+        bookings.filter(\.isActiveClassPlace).reduce(into: [:]) { index, candidate in
+            guard let current = index[candidate.session_id] else {
+                index[candidate.session_id] = candidate
+                return
+            }
+
+            let currentPriority = activeStatusPriority(current.status)
+            let candidatePriority = activeStatusPriority(candidate.status)
+            if candidatePriority > currentPriority
+                || (candidatePriority == currentPriority
+                    && (candidate.booked_at ?? .distantPast) > (current.booked_at ?? .distantPast)) {
+                index[candidate.session_id] = candidate
+            }
+        }
+    }
+
+    private static func activeStatusPriority(_ status: String) -> Int {
+        switch status {
+        case "confirmed": return 3
+        case "requested": return 2
+        case "waitlisted": return 1
+        default: return 0
+        }
+    }
 }
 
 enum BookingTimelineSection: Equatable {
