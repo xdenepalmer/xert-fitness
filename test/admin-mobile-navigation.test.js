@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const adminLayout = readFileSync(new URL('../src/components/admin/AdminLayout.jsx', import.meta.url), 'utf8');
 const commandPalette = readFileSync(new URL('../src/components/admin/CommandPalette.jsx', import.meta.url), 'utf8');
+const commandCentre = readFileSync(new URL('../src/pages/AdminCommandCentre.jsx', import.meta.url), 'utf8');
 const nativeHome = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift', import.meta.url), 'utf8');
 
 test('mobile admin navigation is hidden from focus until opened', () => {
@@ -30,6 +31,12 @@ test('admin navigation stays open when unsaved changes cancel a section change',
   assert.match(adminLayout, /if \(navigated !== false\) setSidebarOpen\(false\)/);
   assert.match(commandPalette, /const navigated = onNavigate\(sectionKey, params\)/);
   assert.match(commandPalette, /if \(navigated !== false\) onOpenChange\(false\)/);
+  assert.match(adminLayout, /setSidebarOpen\(false\);[\s\S]*setPaletteOpen\(false\);[\s\S]*\}, \[activeSection\]\)/);
+  assert.match(commandCentre, /setPendingNavigation\(\{[\s\S]*kind: 'section'/);
+  assert.match(commandCentre, /cancelLabel="Keep editing"/);
+  assert.match(commandCentre, /confirmLabel="Discard changes"/);
+  assert.match(commandCentre, /pending\.action\?\.\(\)/);
+  assert.doesNotMatch(commandCentre, /window\.confirm/);
 });
 
 test('native home supports the pull-to-retry interaction it advertises', () => {

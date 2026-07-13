@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
 import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 
@@ -38,25 +39,23 @@ export default function AdminCommandCentre() {
   const routeSection = getAdminSectionFromPath(location.pathname);
   const [section, setActiveSection] = useState(routeSection);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const canonicalPath = getAdminSectionPath(section);
   const intent = new URLSearchParams(location.search);
-
-  const confirmDiscard = useCallback(() => (
-    !hasUnsavedChanges || window.confirm(UNSAVED_ADMIN_CHANGES_MESSAGE)
-  ), [hasUnsavedChanges]);
 
   useEffect(() => {
     if (routeSection === section) {
       if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
       return;
     }
-    if (!confirmDiscard()) {
+    if (hasUnsavedChanges) {
+      const requestedPath = `${location.pathname}${location.search}`;
+      setPendingNavigation(current => current || { kind: 'section', section: routeSection, path: requestedPath });
       navigate(canonicalPath, { replace: true });
       return;
     }
-    setHasUnsavedChanges(false);
     setActiveSection(routeSection);
-  }, [canonicalPath, confirmDiscard, location.pathname, navigate, routeSection, section]);
+  }, [canonicalPath, hasUnsavedChanges, location.pathname, location.search, navigate, routeSection, section]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return undefined;
@@ -73,18 +72,38 @@ export default function AdminCommandCentre() {
       navigate(getAdminSectionPath(nextSection, params));
       return true;
     }
-    if (!confirmDiscard()) return false;
+    if (hasUnsavedChanges) {
+      setPendingNavigation({
+        kind: 'section',
+        section: nextSection,
+        path: getAdminSectionPath(nextSection, params),
+      });
+      return false;
+    }
     setHasUnsavedChanges(false);
     setActiveSection(nextSection);
     navigate(getAdminSectionPath(nextSection, params));
     return true;
-  }, [confirmDiscard, navigate, section]);
+  }, [hasUnsavedChanges, navigate, section]);
 
-  const confirmLeaveAdmin = useCallback(() => {
-    if (!confirmDiscard()) return false;
+  const confirmLeaveAdmin = useCallback(action => {
+    if (!hasUnsavedChanges) return true;
+    setPendingNavigation({ kind: 'leave', action });
+    return false;
+  }, [hasUnsavedChanges]);
+
+  const discardAndContinue = useCallback(() => {
+    const pending = pendingNavigation;
+    setPendingNavigation(null);
     setHasUnsavedChanges(false);
+    if (pending?.kind === 'section') {
+      setActiveSection(pending.section);
+      navigate(pending.path);
+    } else if (pending?.kind === 'leave') {
+      pending.action?.();
+    }
     return true;
-  }, [confirmDiscard]);
+  }, [navigate, pendingNavigation]);
 
   const consumeIntent = useCallback(() => {
     navigate(canonicalPath, { replace: true });
@@ -117,10 +136,22 @@ export default function AdminCommandCentre() {
   };
 
   return (
-    <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
-      <Suspense fallback={<SectionLoader />}>
-        {renderSection()}
-      </Suspense>
-    </AdminLayout>
+    <>
+      <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
+        <Suspense fallback={<SectionLoader />}>
+          {renderSection()}
+        </Suspense>
+      </AdminLayout>
+      <AdminConfirmDialog
+        open={Boolean(pendingNavigation)}
+        onOpenChange={open => !open && setPendingNavigation(null)}
+        title="Discard unsaved changes?"
+        description={UNSAVED_ADMIN_CHANGES_MESSAGE}
+        warning="Edits made since the last save will be permanently discarded."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={discardAndContinue}
+      />
+    </>
   );
 }

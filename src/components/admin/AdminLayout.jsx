@@ -69,7 +69,7 @@ const GRID_BG = {
   backgroundSize: '32px 32px',
 };
 
-export default function AdminLayout({ activeSection, onSectionChange, hasUnsavedChanges = false, onConfirmLeave = () => true, children }) {
+export default function AdminLayout({ activeSection, onSectionChange, hasUnsavedChanges = false, onConfirmLeave = _action => true, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopNavigation, setDesktopNavigation] = useState(
     () => window.matchMedia('(min-width: 1024px)').matches,
@@ -94,6 +94,11 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     query.addEventListener('change', sync);
     return () => query.removeEventListener('change', sync);
   }, []);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+    setPaletteOpen(false);
+  }, [activeSection]);
 
   useEffect(() => {
     const sidebar = sidebarRef.current;
@@ -295,14 +300,14 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Link to="/" onClick={event => { if (!onConfirmLeave()) event.preventDefault(); }}
+            <Link to="/" onClick={event => { if (!onConfirmLeave(() => window.location.assign('/'))) event.preventDefault(); }}
               className="flex min-h-11 items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
               <ExternalLink className="w-3 h-3" /> Site
             </Link>
-            <button type="button" onClick={() => { if (onConfirmLeave()) void signOut(); }}
+            <button type="button" onClick={() => { if (onConfirmLeave(() => void signOut())) void signOut(); }}
               className="flex min-h-11 items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}

@@ -17,6 +17,7 @@ export default function AdminConfirmDialog({
   title,
   description,
   warning,
+  cancelLabel = 'Keep unchanged',
   confirmLabel = 'Confirm',
   onConfirm,
   busy = false,
@@ -42,7 +43,7 @@ export default function AdminConfirmDialog({
             disabled={busy}
             className="mt-0 min-h-11 rounded-none border-xert-steel/40 bg-transparent font-display text-sm uppercase text-xert-pale hover:bg-xert-charcoal hover:text-xert-offwhite"
           >
-            Keep unchanged
+            {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction
             disabled={busy}
