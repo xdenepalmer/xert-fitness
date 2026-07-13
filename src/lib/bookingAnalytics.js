@@ -35,6 +35,33 @@ export function summarizeAdminBookings(bookings) {
   };
 }
 
+export function bookingSelectionKey(booking) {
+  const source = booking?.source === 'member' ? 'member' : 'enquiry';
+  const id = String(booking?.id || '').trim();
+  if (!id) throw new Error('A booking ID is required for selection.');
+  return `${source}:${id}`;
+}
+
+export function selectedBookingKeys(current, bookings, selected) {
+  const next = new Set(current || []);
+  for (const booking of bookings || []) {
+    const key = bookingSelectionKey(booking);
+    if (selected) next.add(key);
+    else next.delete(key);
+  }
+  return next;
+}
+
+export function bulkBookingStatusOptions(bookings) {
+  const statuses = new Set((bookings || []).map(booking => booking.status));
+  if (statuses.size !== 1) return [];
+  const [status] = statuses;
+  if (status === 'requested') return ['confirmed', 'waitlisted', 'declined'];
+  if (status === 'waitlisted') return ['confirmed', 'cancelled'];
+  if (status === 'confirmed') return ['attended', 'no_show', 'cancelled'];
+  return [];
+}
+
 export function bookingCsvRows(bookings) {
   return (bookings || []).map(booking => ({
     created_at: booking.createdAt || booking.created_at || '',

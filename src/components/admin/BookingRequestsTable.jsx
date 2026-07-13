@@ -7,7 +7,7 @@ import {
 } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { downloadCsv } from '@/lib/csv';
-import { bookingCsvRows, filterAdminBookings, summarizeAdminBookings } from '@/lib/bookingAnalytics';
+import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -33,6 +33,9 @@ export default function BookingRequestsTable() {
   const [notes, setNotes] = useState('');
   const [updatingKey, setUpdatingKey] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set());
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -81,10 +84,18 @@ export default function BookingRequestsTable() {
   const visibleBookings = useMemo(() => filteredBookings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredBookings, page]);
   const firstResult = filteredBookings.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastResult = Math.min(page * PAGE_SIZE, filteredBookings.length);
+  const allVisibleSelected = visibleBookings.length > 0 && visibleBookings.every(booking => selectedKeys.has(bookingSelectionKey(booking)));
+  const selectedBookings = useMemo(() => bookings.filter(booking => selectedKeys.has(bookingSelectionKey(booking))), [bookings, selectedKeys]);
+  const bulkStatusOptions = useMemo(() => bulkBookingStatusOptions(selectedBookings), [selectedBookings]);
+
+  useEffect(() => {
+    if (bulkStatus && !bulkStatusOptions.includes(bulkStatus)) setBulkStatus('');
+  }, [bulkStatus, bulkStatusOptions]);
 
   useEffect(() => {
     setPage(1);
     setSelectedBooking(null);
+    setSelectedKeys(new Set());
   }, [daysFilter, search, sourceFilter, statusFilter]);
 
   const handleStatusUpdate = async (booking, status) => {
@@ -120,6 +131,34 @@ export default function BookingRequestsTable() {
     } finally {
       setSavingNotes(false);
     }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkStatus || selectedKeys.size === 0) return;
+    const selected = selectedBookings;
+    setBulkSaving(true);
+    const results = await Promise.allSettled(selected.map(booking => (
+      booking.source === 'member'
+        ? updateMemberBookingStatus(booking.id, bulkStatus)
+        : updateBookingStatus(booking.id, bulkStatus)
+    )));
+    const failedKeys = new Set();
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') failedKeys.add(bookingSelectionKey(selected[index]));
+    });
+    const updatedCount = selected.length - failedKeys.size;
+    if (updatedCount > 0) {
+      toast({ title: 'Bookings updated', description: `${updatedCount} booking${updatedCount === 1 ? '' : 's'} moved to ${bulkStatus.replace(/_/g, ' ')}.` });
+      await load();
+      setPage(1);
+    }
+    setSelectedKeys(failedKeys);
+    if (failedKeys.size > 0) {
+      toast({ title: 'Some updates failed', description: `${failedKeys.size} booking${failedKeys.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
+    } else {
+      setBulkStatus('');
+    }
+    setBulkSaving(false);
   };
 
   return (
@@ -179,6 +218,24 @@ export default function BookingRequestsTable() {
         ))}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3 border border-xert-steel/20 bg-xert-ink p-3">
+        <label className="inline-flex min-h-11 items-center gap-2 font-body text-xs text-xert-concrete/60">
+          <input type="checkbox" checked={allVisibleSelected} onChange={event => setSelectedKeys(current => selectedBookingKeys(current, visibleBookings, event.target.checked))} disabled={visibleBookings.length === 0 || bulkSaving} className="accent-xert-red" />
+          Select this page
+        </label>
+        <span className="font-body text-xs text-xert-concrete/40">{selectedKeys.size} selected</span>
+        <select value={bulkStatus} onChange={event => setBulkStatus(event.target.value)} disabled={selectedKeys.size === 0 || bulkSaving} aria-label="New status for selected bookings" className="sm:ml-auto min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-xs text-xert-offwhite disabled:opacity-40">
+          <option value="">Move selected to...</option>
+          {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+        </select>
+        <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedKeys.size === 0 || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+          {bulkSaving ? 'Updating...' : 'Apply'}
+        </button>
+      </div>
+      {selectedKeys.size > 0 && bulkStatusOptions.length === 0 && (
+        <p className="-mt-2 mb-4 font-body text-xs text-xert-concrete/50">Select bookings with the same actionable status to use bulk updates.</p>
+      )}
+
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-xert-ink animate-pulse" />)}</div>
       ) : loadError ? (
@@ -193,6 +250,7 @@ export default function BookingRequestsTable() {
           {visibleBookings.map(b => (
             <div key={`${b.source}-${b.id}`} className="bg-xert-ink border border-xert-steel/20 p-4">
               <div className="flex items-start justify-between gap-4">
+                <input type="checkbox" checked={selectedKeys.has(bookingSelectionKey(b))} onChange={event => setSelectedKeys(current => selectedBookingKeys(current, [b], event.target.checked))} disabled={bulkSaving} aria-label={`Select booking for ${b.full_name || b.email}`} className="mt-1 accent-xert-red" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-body text-base text-xert-offwhite">{b.full_name}</span>

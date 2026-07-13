@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  bulkBookingStatusOptions,
+  bookingSelectionKey,
   bookingCsvRows,
   filterAdminBookings,
+  selectedBookingKeys,
   summarizeAdminBookings,
 } from '../src/lib/bookingAnalytics.js';
 
@@ -39,4 +42,23 @@ test('exports booking identity, class, source, and credit reservation fields', (
   assert.equal(row.class, 'Engine Room');
   assert.equal(row.credit_reserved, 'Yes');
   assert.equal(row.email, 'alex@example.com');
+});
+
+test('selects booking rows with collision-safe source keys', () => {
+  const sameId = [
+    { id: 'shared-id', source: 'member' },
+    { id: 'shared-id', source: 'enquiry' },
+  ];
+  assert.equal(bookingSelectionKey(sameId[0]), 'member:shared-id');
+  assert.deepEqual([...selectedBookingKeys(new Set(), sameId, true)], ['member:shared-id', 'enquiry:shared-id']);
+  assert.deepEqual([...selectedBookingKeys(new Set(['member:shared-id', 'enquiry:shared-id']), [sameId[0]], false)], ['enquiry:shared-id']);
+  assert.throws(() => bookingSelectionKey({ source: 'member' }), /booking ID is required/);
+});
+
+test('offers only valid bulk transitions for a consistent booking state', () => {
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'requested' }, { status: 'requested' }]), ['confirmed', 'waitlisted', 'declined']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'confirmed' }]), ['attended', 'no_show', 'cancelled']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'waitlisted' }]), ['confirmed', 'cancelled']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'requested' }, { status: 'confirmed' }]), []);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'attended' }]), []);
 });
