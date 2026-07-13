@@ -66,7 +66,7 @@ const GRID_BG = {
   backgroundSize: '32px 32px',
 };
 
-export default function AdminLayout({ activeSection, onSectionChange, children }) {
+export default function AdminLayout({ activeSection, onSectionChange, hasUnsavedChanges = false, onConfirmLeave = () => true, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [badges, setBadges] = useState({});
@@ -218,14 +218,14 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Link to="/"
+            <Link to="/" onClick={event => { if (!onConfirmLeave()) event.preventDefault(); }}
               className="flex items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
               <ExternalLink className="w-3 h-3" /> Site
             </Link>
-            <button type="button" onClick={signOut}
+            <button type="button" onClick={() => { if (onConfirmLeave()) void signOut(); }}
               className="flex items-center justify-center gap-1.5 py-2 font-body text-[10px] uppercase tracking-wider transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.2)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.5)'; e.currentTarget.style.color = '#F1F3F4'; }}
@@ -262,6 +262,11 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {hasUnsavedChanges && (
+              <span className="hidden sm:inline font-body text-[10px] uppercase tracking-wider" style={{ color: '#e0b36a' }} role="status">
+                Unsaved CMS changes
+              </span>
+            )}
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search admin tools" title="Search admin tools"
               className="flex items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.25)', color: 'rgba(209,221,230,0.5)' }}

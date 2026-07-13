@@ -1,7 +1,8 @@
-import React, { lazy, Suspense, useCallback, useEffect } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
+import { UNSAVED_SITE_CONTENT_MESSAGE } from '@/lib/siteContentDraft';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
@@ -32,17 +33,56 @@ function SectionLoader() {
 export default function AdminCommandCentre() {
   const location = useLocation();
   const navigate = useNavigate();
-  const section = getAdminSectionFromPath(location.pathname);
+  const routeSection = getAdminSectionFromPath(location.pathname);
+  const [section, setActiveSection] = useState(routeSection);
+  const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const canonicalPath = getAdminSectionPath(section);
   const intent = new URLSearchParams(location.search);
 
+  const confirmDiscard = useCallback(() => (
+    !hasUnsavedContent || window.confirm(UNSAVED_SITE_CONTENT_MESSAGE)
+  ), [hasUnsavedContent]);
+
   useEffect(() => {
-    if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
-  }, [canonicalPath, location.pathname, navigate]);
+    if (routeSection === section) {
+      if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
+      return;
+    }
+    if (!confirmDiscard()) {
+      navigate(canonicalPath, { replace: true });
+      return;
+    }
+    setHasUnsavedContent(false);
+    setActiveSection(routeSection);
+  }, [canonicalPath, confirmDiscard, location.pathname, navigate, routeSection, section]);
+
+  useEffect(() => {
+    if (!hasUnsavedContent) return undefined;
+    const warnBeforeUnload = event => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedContent]);
 
   const setSection = useCallback((nextSection, params) => {
+    if (nextSection === section) {
+      navigate(getAdminSectionPath(nextSection, params));
+      return true;
+    }
+    if (!confirmDiscard()) return false;
+    setHasUnsavedContent(false);
+    setActiveSection(nextSection);
     navigate(getAdminSectionPath(nextSection, params));
-  }, [navigate]);
+    return true;
+  }, [confirmDiscard, navigate, section]);
+
+  const confirmLeaveAdmin = useCallback(() => {
+    if (!confirmDiscard()) return false;
+    setHasUnsavedContent(false);
+    return true;
+  }, [confirmDiscard]);
 
   const consumeIntent = useCallback(() => {
     navigate(canonicalPath, { replace: true });
@@ -61,7 +101,7 @@ export default function AdminCommandCentre() {
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
       case 'orders': return <OrdersManager />;
       case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
-      case 'content': return <ContentManager />;
+      case 'content': return <ContentManager onDirtyChange={setHasUnsavedContent} />;
       case 'bookings': return <BookingRequestsTable />;
       case 'pt-requests': return <PTRequestsTable />;
       case 'availability': return <AvailabilityManager />;
@@ -72,7 +112,7 @@ export default function AdminCommandCentre() {
   };
 
   return (
-    <AdminLayout activeSection={section} onSectionChange={setSection}>
+    <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedContent} onConfirmLeave={confirmLeaveAdmin}>
       <Suspense fallback={<SectionLoader />}>
         {renderSection()}
       </Suspense>

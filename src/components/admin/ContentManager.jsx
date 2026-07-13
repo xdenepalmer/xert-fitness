@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { normalizeSiteContent } from '@/lib/siteContentAdmin';
+import { clearSiteContentDraft, readSiteContentDraft, writeSiteContentDraft } from '@/lib/siteContentDraft';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
@@ -75,6 +76,8 @@ const SECTIONS = [
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+/** @param {boolean} _dirty */
+const NOOP = _dirty => {};
 
 function QaListEditor({ value, onChange, idPrefix }) {
   const items = Array.isArray(value) ? value : [];
@@ -186,20 +189,38 @@ function ImageListEditor({ value, onChange, folder }) {
   );
 }
 
-function SectionEditor({ section, initial, onSaved }) {
+function SectionEditor({ section, initial, onSaved, onDirtyChange }) {
   // Prefill with the live defaults so the editor always shows what the site
   // is currently displaying — saved CMS values overlay the defaults.
   const defaults = CONTENT_DEFAULTS[section.key] || {};
-  const [data, setData] = useState({ ...defaults, ...(initial || {}) });
-  const [dirty, setDirty] = useState(false);
+  const baseline = { ...defaults, ...(initial || {}) };
+  const [recoveredDraft] = useState(() => readSiteContentDraft(window.localStorage, section.key));
+  const [data, setData] = useState(() => ({ ...baseline, ...(recoveredDraft?.data || {}) }));
+  const [dirty, setDirty] = useState(Boolean(recoveredDraft));
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
   const set = (k, v) => { setData(p => ({ ...p, [k]: v })); setDirty(true); };
   const Icon = section.icon;
 
+  useEffect(() => {
+    onDirtyChange(section.key, dirty);
+  }, [dirty, onDirtyChange, section.key]);
+
+  useEffect(() => () => onDirtyChange(section.key, false), [onDirtyChange, section.key]);
+
+  useEffect(() => {
+    if (dirty) writeSiteContentDraft(window.localStorage, section.key, data);
+  }, [data, dirty, section.key]);
+
   const handleRestore = () => {
     setData({ ...defaults });
     setDirty(true);
+  };
+
+  const handleDiscard = () => {
+    setData(baseline);
+    setDirty(false);
+    clearSiteContentDraft(window.localStorage, section.key);
   };
 
   const handleSave = async () => {
@@ -210,6 +231,7 @@ function SectionEditor({ section, initial, onSaved }) {
       clearSiteContentCache();
       setSavedAt(new Date());
       setDirty(false);
+      clearSiteContentDraft(window.localStorage, section.key);
       onSaved();
       toast({ title: `${section.title} saved`, description: 'Changes are live on the site.' });
     } catch (e) {
@@ -275,6 +297,12 @@ function SectionEditor({ section, initial, onSaved }) {
           className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-xert-steel/30 font-body text-[10px] uppercase tracking-wider text-xert-concrete/50 hover:border-xert-steel hover:text-xert-offwhite transition-colors">
           <RotateCcw className="w-3 h-3" /> Restore original copy
         </button>
+        {dirty && (
+          <button type="button" onClick={handleDiscard}
+            className="px-3 py-2.5 border border-xert-red/30 font-body text-[10px] uppercase tracking-wider text-xert-red/70 hover:border-xert-red hover:text-xert-red transition-colors">
+            Discard changes
+          </button>
+        )}
         {dirty && <span className="font-body text-xs ml-auto" style={{ color: '#7BA7BC' }}>Unsaved changes</span>}
         {!dirty && savedAt && <span className="font-body text-xs text-green-400 ml-auto">Live ✓</span>}
       </div>
@@ -282,9 +310,26 @@ function SectionEditor({ section, initial, onSaved }) {
   );
 }
 
-export default function ContentManager() {
+export default function ContentManager({ onDirtyChange = NOOP }) {
   const [content, setContent] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [dirtySections, setDirtySections] = useState(() => new Set());
+
+  const handleDirtyChange = React.useCallback((sectionKey, dirty) => {
+    setDirtySections(current => {
+      const next = new Set(current);
+      if (dirty) next.add(sectionKey);
+      else next.delete(sectionKey);
+      if (next.size === current.size && [...next].every(key => current.has(key))) return current;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    onDirtyChange(dirtySections.size > 0);
+  }, [dirtySections, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const load = async () => {
     setLoadError('');
@@ -313,9 +358,14 @@ export default function ContentManager() {
         Edit the words and photos on the public site. Empty fields fall back to the built-in copy, so you can&rsquo;t
         break anything. Changes go live as soon as visitors refresh.
       </p>
+      {dirtySections.size > 0 && (
+        <div className="mb-6 px-4 py-3 border border-xert-steel/40 bg-xert-steel/10 font-body text-xs text-xert-pale" role="status">
+          {dirtySections.size} section{dirtySections.size === 1 ? '' : 's'} with unsaved changes. Drafts are kept on this device until saved or discarded.
+        </div>
+      )}
       <div className="space-y-6">
         {SECTIONS.map(s => (
-          <SectionEditor key={s.key} section={s} initial={content[s.key]} onSaved={load} />
+          <SectionEditor key={s.key} section={s} initial={content[s.key]} onSaved={load} onDirtyChange={handleDirtyChange} />
         ))}
       </div>
     </div>
