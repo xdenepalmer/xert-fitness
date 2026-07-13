@@ -21,3 +21,12 @@ export function assertAdminMutation(response, label, expectedRows = 1) {
   }
   return rows;
 }
+
+export function assertAdminMutationVersion(response, label) {
+  if (!response?.error && Array.isArray(response?.data) && response.data.length === 0) {
+    throw new Error(
+      `${label} was not applied because this record changed since you opened it. Refresh the admin view and review the latest version.`
+    );
+  }
+  return assertAdminMutation(response, label);
+}

@@ -171,3 +171,7 @@ create policy "admins_manage_blackout_periods" on public.blackout_periods
 insert into public.xert_schema_capabilities (capability)
 values ('schedule_blackout_guard')
 on conflict (capability) do nothing;
+
+insert into public.xert_schema_capabilities (capability)
+values ('schedule_optimistic_locking')
+on conflict (capability) do nothing;

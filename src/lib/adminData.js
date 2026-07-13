@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
-import { assertAdminMutation, assertSupabaseResponses } from './supabaseResults';
+import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponses } from './supabaseResults';
 import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
@@ -354,14 +354,18 @@ export async function createAvailabilityBlock(blockData) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateAvailabilityBlock(id, blockData) {
-  const result = await supabase.from('availability_blocks').update(blockData).eq('id', id).select('id');
-  assertAdminMutation(result, 'Availability update');
+export async function updateAvailabilityBlock(id, blockData, expectedUpdatedAt) {
+  let query = supabase.from('availability_blocks').update(blockData).eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('id');
+  assertAdminMutationVersion(result, 'Availability update');
 }
 
-export async function deleteAvailabilityBlock(id) {
-  const result = await supabase.from('availability_blocks').delete().eq('id', id).select('id');
-  assertAdminMutation(result, 'Availability deletion');
+export async function deleteAvailabilityBlock(id, expectedUpdatedAt) {
+  let query = supabase.from('availability_blocks').delete().eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('id');
+  assertAdminMutationVersion(result, 'Availability deletion');
 }
 
 export async function getBlackoutPeriods() {
@@ -375,15 +379,19 @@ export async function createBlackoutPeriod(periodData) {
   if (error) throw new Error(blackoutPeriodMutationError(error.message));
 }
 
-export async function updateBlackoutPeriod(id, periodData) {
-  const result = await supabase.from('blackout_periods').update(periodData).eq('id', id).select('id');
+export async function updateBlackoutPeriod(id, periodData, expectedUpdatedAt) {
+  let query = supabase.from('blackout_periods').update(periodData).eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('id');
   if (result.error) throw new Error(blackoutPeriodMutationError(result.error.message));
-  assertAdminMutation(result, 'Blackout update');
+  assertAdminMutationVersion(result, 'Blackout update');
 }
 
-export async function deleteBlackoutPeriod(id) {
-  const result = await supabase.from('blackout_periods').delete().eq('id', id).select('id');
-  assertAdminMutation(result, 'Blackout deletion');
+export async function deleteBlackoutPeriod(id, expectedUpdatedAt) {
+  let query = supabase.from('blackout_periods').delete().eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('id');
+  assertAdminMutationVersion(result, 'Blackout deletion');
 }
 
 // ─── Admin Settings ───────────────────────────────────────────────────────────

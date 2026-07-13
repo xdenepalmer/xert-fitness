@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const dataSource = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
+const managerSource = readFileSync(new URL('../src/components/admin/AvailabilityManager.jsx', import.meta.url), 'utf8');
+
+function functionBody(name) {
+  const start = dataSource.indexOf(`export async function ${name}`);
+  assert.notEqual(start, -1, `${name} must exist`);
+  const next = dataSource.indexOf('\nexport async function ', start + 1);
+  return dataSource.slice(start, next === -1 ? dataSource.length : next);
+}
+
+test('schedule mutations compare the server version before changing a row', () => {
+  for (const name of [
+    'updateAvailabilityBlock',
+    'deleteAvailabilityBlock',
+    'updateBlackoutPeriod',
+    'deleteBlackoutPeriod',
+  ]) {
+    const body = functionBody(name);
+    assert.match(body, /expectedUpdatedAt/);
+    assert.match(body, /\.eq\('updated_at', expectedUpdatedAt\)/);
+    assert.match(body, /assertAdminMutationVersion\(/);
+  }
+});
+
+test('availability admin passes the version loaded into every edit and delete', () => {
+  assert.match(managerSource, /updateAvailabilityBlock\(editingBlock\.id, payload, editingBlock\.updated_at\)/);
+  assert.match(managerSource, /updateBlackoutPeriod\(editingBlackout\.id, payload, editingBlackout\.updated_at\)/);
+  assert.match(managerSource, /deleteAvailabilityBlock\(block\.id, block\.updated_at\)/);
+  assert.match(managerSource, /deleteBlackoutPeriod\(blackout\.id, blackout\.updated_at\)/);
+});

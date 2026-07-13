@@ -62,7 +62,7 @@ export default function AvailabilityManager() {
     setSaving(true);
     try {
       const payload = normalizeAvailabilityBlock(blockForm);
-      if (editingBlock) await updateAvailabilityBlock(editingBlock.id, payload);
+      if (editingBlock) await updateAvailabilityBlock(editingBlock.id, payload, editingBlock.updated_at);
       else await createAvailabilityBlock(payload);
       setBlockForm(emptyBlock());
       setEditingBlock(null);
@@ -80,7 +80,7 @@ export default function AvailabilityManager() {
     setSaving(true);
     try {
       const payload = normalizeBlackoutPeriod(blackoutForm);
-      if (editingBlackout) await updateBlackoutPeriod(editingBlackout.id, payload);
+      if (editingBlackout) await updateBlackoutPeriod(editingBlackout.id, payload, editingBlackout.updated_at);
       else await createBlackoutPeriod(payload);
       setBlackoutForm(emptyBlackout());
       setEditingBlackout(null);
@@ -97,7 +97,7 @@ export default function AvailabilityManager() {
   const deleteBlock = async block => {
     setRemovingId(block.id);
     try {
-      await deleteAvailabilityBlock(block.id);
+      await deleteAvailabilityBlock(block.id, block.updated_at);
       await load();
       toast({ title: 'Availability block removed' });
     } catch (e) {
@@ -110,7 +110,7 @@ export default function AvailabilityManager() {
   const deleteBlackout = async blackout => {
     setRemovingId(blackout.id);
     try {
-      await deleteBlackoutPeriod(blackout.id);
+      await deleteBlackoutPeriod(blackout.id, blackout.updated_at);
       await load();
       toast({ title: 'Blackout period removed' });
     } catch (e) {

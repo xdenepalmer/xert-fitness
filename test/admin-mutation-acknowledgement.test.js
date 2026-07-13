@@ -29,7 +29,7 @@ test('direct admin updates and deletes verify that the expected record still exi
   for (const name of mutations) {
     const body = functionBody(name);
     assert.match(body, /\.select\('id'\)/, `${name} must request affected IDs`);
-    assert.match(body, /assertAdminMutation\(/, `${name} must verify affected rows`);
+    assert.match(body, /assertAdminMutation(?:Version)?\(/, `${name} must verify affected rows`);
   }
 });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertAdminMutation, assertSupabaseResponses } from '../src/lib/supabaseResults.js';
+import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponses } from '../src/lib/supabaseResults.js';
 
 test('returns successful Supabase responses unchanged', () => {
   const responses = [{ data: [], error: null }, { count: 3, error: null }];
@@ -34,5 +34,20 @@ test('admin mutations require the exact expected affected row count', () => {
   assert.throws(
     () => assertAdminMutation({ data: null, error: { message: 'permission denied' } }, 'Member update'),
     /permission denied/i
+  );
+});
+
+test('versioned admin mutations distinguish a stale record from a general failure', () => {
+  assert.throws(
+    () => assertAdminMutationVersion({ data: [], error: null }, 'Availability update'),
+    /changed since you opened it.*Refresh the admin view/s,
+  );
+  assert.deepEqual(
+    assertAdminMutationVersion({ data: [{ id: 'current' }], error: null }, 'Availability update'),
+    [{ id: 'current' }],
+  );
+  assert.throws(
+    () => assertAdminMutationVersion({ data: null, error: { message: 'permission denied' } }, 'Availability update'),
+    /permission denied/,
   );
 });
