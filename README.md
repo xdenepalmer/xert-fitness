@@ -130,7 +130,7 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `business_metrics_upgrade.sql`, and
 `admin_member_directory_upgrade.sql`, `admin_member_notes_upgrade.sql`,
 `admin_member_follow_up_upgrade.sql`,
-`attendance_roll_call_upgrade.sql`, the class-session and product update guard migrations, and
+`attendance_roll_call_upgrade.sql`, the class-session, product, and Stripe refund reconciliation migrations, and
 `member_waitlist_upgrade.sql`, `waitlist_fifo_promotion_upgrade.sql` after
 those prerequisites, followed by `member_pt_request_tracking.sql` and
 `public_form_integrity_upgrade.sql`. The scripts are idempotent;
@@ -141,9 +141,10 @@ Operations Health and the TestFlight release workflow verify the
 `admin_role_safety`, `booking_waitlist_withdrawal`, `member_waitlist_join`,
 `waitlist_fifo_promotion`,
 `attendance_roll_call`, `class_session_update_guard`, `product_update_guard`,
+`stripe_refund_reconciliation`,
 `member_pt_request_tracking`, and
 `public_form_integrity` capability markers. A release intentionally stops until
-all nine current upgrade scripts have been run. Run
+all ten current upgrade scripts have been run. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.
 

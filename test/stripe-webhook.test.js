@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   checkoutFulfillmentForEvent,
   persistCheckoutFulfillment,
+  persistStripeRefund,
+  stripeRefundForEvent,
 } from '../api/stripe-webhook.js';
 
 const NOW = new Date('2026-07-12T00:00:00.000Z');
@@ -98,4 +100,34 @@ test('persists the order first and makes the credit grant idempotent', async () 
   assert.equal(calls[1].record.order_id, 'order-xert');
   assert.equal(calls[1].options.onConflict, 'order_id');
   assert.equal(calls[1].options.ignoreDuplicates, true);
+});
+
+test('accepts only a complete full charge refund for reconciliation', () => {
+  const event = {
+    id: 'evt_refund_xert',
+    type: 'charge.refunded',
+    created: 1783814400,
+    data: { object: {
+      id: 'ch_xert', payment_intent: 'pi_test_xert', amount: 4800,
+      amount_refunded: 4800, currency: 'aud', refunded: true,
+      refunds: { data: [{ id: 're_xert', status: 'succeeded', created: 1783814400 }] },
+    } },
+  };
+  const refund = stripeRefundForEvent(event, NOW);
+  assert.equal(refund.p_refund_id, 're_xert');
+  assert.equal(refund.p_amount_cents, 4800);
+  assert.equal(refund.p_payment_intent_id, 'pi_test_xert');
+  assert.equal(stripeRefundForEvent({ ...event, type: 'charge.updated' }, NOW), null);
+  assert.equal(stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, amount_refunded: 2400, refunded: false } },
+  }, NOW), null);
+});
+
+test('persists refund recovery through the service-role reconciliation RPC', async () => {
+  const calls = [];
+  const admin = { async rpc(name, payload) { calls.push({ name, payload }); return { error: null }; } };
+  const payload = { p_refund_id: 're_xert' };
+  await persistStripeRefund(admin, payload);
+  assert.deepEqual(calls, [{ name: 'reconcile_stripe_order_refund', payload }]);
 });

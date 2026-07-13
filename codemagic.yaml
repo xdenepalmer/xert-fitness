@@ -149,6 +149,25 @@ workflows:
           fi
           rm -f "$API_BODY"
 
+          REFUND_BODY="$(mktemp)"
+          REFUND_CODE="$(curl --silent --show-error --max-time 20 \
+            -o "$REFUND_BODY" -w '%{http_code}' \
+            "$VERCEL_BASE_URL/api/admin-refund-order" \
+            -H 'Content-Type: application/json' \
+            --data '{}')" || REFUND_CODE=000
+          if [ "$REFUND_CODE" != "401" ]; then
+            echo "::error:: Production refund preflight expected HTTP 401 but received $REFUND_CODE. Response body:"
+            head -c 300 "$REFUND_BODY"; echo
+            case "$REFUND_CODE" in
+              500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
+              404) echo "The /api/admin-refund-order Vercel Function was not deployed." ;;
+              000) echo "The refund function timed out or could not be reached." ;;
+            esac
+            rm -f "$REFUND_BODY"
+            exit 1
+          fi
+          rm -f "$REFUND_BODY"
+
           WEBHOOK_BODY="$(mktemp)"
           WEBHOOK_CODE="$(curl --silent --show-error --max-time 20 \
             -o "$WEBHOOK_BODY" -w '%{http_code}' \
@@ -202,6 +221,7 @@ workflows:
               "attendance_roll_call",
               "class_session_update_guard",
               "product_update_guard",
+              "stripe_refund_reconciliation",
               "member_pt_request_tracking",
               "public_form_integrity",
             ];

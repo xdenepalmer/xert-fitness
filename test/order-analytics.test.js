@@ -31,6 +31,17 @@ test('exports human currency amounts and Stripe reconciliation identifiers', () 
   assert.equal(row.checkout_session, 'cs_alex');
 });
 
+test('exports the durable refund and credit reconciliation ledger', () => {
+  const [row] = orderCsvRows([{
+    ...orders[2], refunded_amount_cents: 2000, refunded_at: '2026-07-11T00:00:00Z',
+    stripe_refunds: { credits_revoked: 2, credits_consumed: 1, bookings_cancelled: 1 },
+  }]);
+  assert.equal(row.refunded_amount, '20.00');
+  assert.equal(row.credits_revoked, 2);
+  assert.equal(row.credits_consumed_before_refund, 1);
+  assert.equal(row.bookings_cancelled, 1);
+});
+
 test('builds a bounded daily paid-revenue series without counting refunds', () => {
   const series = buildDailyRevenue(orders, new Date(2026, 6, 12, 12), 3);
   assert.equal(series.length, 3);

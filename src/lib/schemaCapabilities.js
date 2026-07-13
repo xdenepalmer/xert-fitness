@@ -6,6 +6,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   attendance_roll_call: 'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
   class_session_update_guard: 'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
   product_update_guard: 'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
+  stripe_refund_reconciliation: 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
   member_pt_request_tracking: 'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
 });

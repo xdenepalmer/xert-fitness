@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, X } from 'lucide-react';
-import { getAllOrders } from '@/lib/adminData';
+import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { getAllOrders, refundOrder } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
@@ -25,6 +25,9 @@ export default function OrdersManager() {
   const [daysFilter, setDaysFilter] = useState('30');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [page, setPage] = useState(1);
+  const [refundReason, setRefundReason] = useState('requested_by_customer');
+  const [refundConfirmation, setRefundConfirmation] = useState('');
+  const [refunding, setRefunding] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -69,6 +72,32 @@ export default function OrdersManager() {
     }
   };
 
+  const closeOrder = () => {
+    if (refunding) return;
+    setSelectedOrder(null);
+    setRefundReason('requested_by_customer');
+    setRefundConfirmation('');
+  };
+
+  const submitRefund = async () => {
+    if (!selectedOrder) return;
+    setRefunding(true);
+    try {
+      const result = await refundOrder(selectedOrder.id, refundReason, refundConfirmation);
+      const count = Number(result.credits_revoked) || 0;
+      const bookings = Number(result.bookings_cancelled) || 0;
+      toast({ title: 'Refund completed', description: `${count} credit${count === 1 ? '' : 's'} revoked; ${bookings} booking${bookings === 1 ? '' : 's'} cancelled.` });
+      setSelectedOrder(null);
+      setRefundReason('requested_by_customer');
+      setRefundConfirmation('');
+      await load();
+    } catch (error) {
+      toast({ title: 'Refund failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setRefunding(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -81,6 +110,10 @@ export default function OrdersManager() {
               { key: 'amount', label: 'Amount' }, { key: 'currency', label: 'Currency' },
               { key: 'status', label: 'Status' }, { key: 'checkout_session', label: 'Stripe Checkout Session' },
               { key: 'payment_intent', label: 'Stripe Payment Intent' },
+              { key: 'refunded_at', label: 'Refunded' }, { key: 'refunded_amount', label: 'Refund amount' },
+              { key: 'credits_revoked', label: 'Unused credits revoked' },
+              { key: 'credits_consumed_before_refund', label: 'Credits used before refund' },
+              { key: 'bookings_cancelled', label: 'Future bookings cancelled' },
             ])}
           disabled={filteredOrders.length === 0}
           className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
@@ -198,10 +231,10 @@ export default function OrdersManager() {
 
       {selectedOrder && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
-          <div className="w-full max-w-lg bg-xert-ink border border-xert-steel/30 p-6">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-xert-ink border border-xert-steel/30 p-6">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div><p className="font-body text-xs uppercase tracking-wider text-xert-steel">Order detail</p><h3 id="order-detail-title" className="font-display text-2xl uppercase text-xert-offwhite mt-1">{selectedOrder.products?.name || 'Session pack'}</h3></div>
-              <button type="button" onClick={() => setSelectedOrder(null)} title="Close order detail" aria-label="Close order detail" className="p-1.5 text-xert-concrete/50"><X className="w-5 h-5" /></button>
+              <button type="button" onClick={closeOrder} disabled={refunding} title="Close order detail" aria-label="Close order detail" className="p-1.5 text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
             </div>
             <dl className="space-y-4 font-body text-sm">
               <div><dt className="text-xs uppercase text-xert-concrete/40">Buyer</dt><dd className="text-xert-offwhite mt-1">{selectedOrder.email ? <a href={`mailto:${selectedOrder.email}`} className="hover:text-xert-steel">{selectedOrder.email}</a> : 'Anonymized buyer'}</dd></div>
@@ -210,6 +243,34 @@ export default function OrdersManager() {
               <Identifier label="Stripe payment intent" value={selectedOrder.stripe_payment_intent_id} onCopy={copyIdentifier} />
               <Identifier label="XERT order ID" value={selectedOrder.id} onCopy={copyIdentifier} />
             </dl>
+            {selectedOrder.status === 'refunded' && (() => {
+              const refund = Array.isArray(selectedOrder.stripe_refunds) ? selectedOrder.stripe_refunds[0] : selectedOrder.stripe_refunds;
+              return (
+                <div className="mt-6 border-t border-xert-steel/20 pt-5">
+                  <p className="font-display text-sm uppercase text-xert-offwhite">Refund reconciliation</p>
+                  <p className="mt-2 font-body text-sm text-xert-concrete/70">
+                    {formatPackPrice(selectedOrder.refunded_amount_cents || refund?.amount_cents, selectedOrder.currency)} refunded. {refund?.credits_revoked || 0} credits revoked; {refund?.bookings_cancelled || 0} future bookings cancelled; {refund?.credits_consumed || 0} sessions already used.
+                  </p>
+                  <dl className="mt-4 font-body text-sm"><Identifier label="Stripe refund" value={refund?.refund_id} onCopy={copyIdentifier} /></dl>
+                </div>
+              );
+            })()}
+            {selectedOrder.status === 'paid' && selectedOrder.stripe_payment_intent_id && (
+              <div className="mt-6 border-t border-xert-red/30 pt-5 space-y-4">
+                <div className="flex items-center gap-2 text-xert-red"><RotateCcw className="w-4 h-4" /><h4 className="font-display text-sm uppercase">Full refund</h4></div>
+                <select value={refundReason} onChange={event => setRefundReason(event.target.value)} disabled={refunding} aria-label="Refund reason" className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite">
+                  <option value="requested_by_customer">Requested by customer</option>
+                  <option value="duplicate">Duplicate payment</option>
+                </select>
+                <div>
+                  <label htmlFor="refund-confirmation" className="block font-body text-xs uppercase text-xert-concrete/50 mb-1">Type REFUND to confirm</label>
+                  <input id="refund-confirmation" value={refundConfirmation} onChange={event => setRefundConfirmation(event.target.value)} disabled={refunding} autoComplete="off" className="w-full bg-xert-charcoal border border-xert-red/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+                </div>
+                <button type="button" onClick={() => void submitRefund()} disabled={refunding || refundConfirmation !== 'REFUND'} className="w-full min-h-11 inline-flex items-center justify-center gap-2 bg-xert-red px-4 font-display text-sm uppercase text-white disabled:opacity-40">
+                  <RotateCcw className={`w-4 h-4 ${refunding ? 'animate-spin' : ''}`} /> {refunding ? 'Refunding...' : `Refund ${formatPackPrice(selectedOrder.amount_cents, selectedOrder.currency)}`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

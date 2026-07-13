@@ -67,15 +67,23 @@ export function buildDailyRevenue(orders, now = new Date(), dayCount = 30) {
 }
 
 export function orderCsvRows(orders) {
-  return (orders || []).map(order => ({
-    created_at: order.created_at,
-    paid_at: order.paid_at,
-    product: order.products?.name || 'Session pack',
-    email: order.email || '',
-    amount: ((Number(order.amount_cents) || 0) / 100).toFixed(2),
-    currency: String(order.currency || 'aud').toUpperCase(),
-    status: order.status,
-    checkout_session: order.stripe_checkout_session_id || '',
-    payment_intent: order.stripe_payment_intent_id || '',
-  }));
+  return (orders || []).map(order => {
+    const refund = Array.isArray(order.stripe_refunds) ? order.stripe_refunds[0] : order.stripe_refunds;
+    return {
+      created_at: order.created_at,
+      paid_at: order.paid_at,
+      product: order.products?.name || 'Session pack',
+      email: order.email || '',
+      amount: ((Number(order.amount_cents) || 0) / 100).toFixed(2),
+      currency: String(order.currency || 'aud').toUpperCase(),
+      status: order.status,
+      checkout_session: order.stripe_checkout_session_id || '',
+      payment_intent: order.stripe_payment_intent_id || '',
+      refunded_at: order.refunded_at || refund?.refunded_at || '',
+      refunded_amount: ((Number(order.refunded_amount_cents ?? refund?.amount_cents) || 0) / 100).toFixed(2),
+      credits_revoked: Number(refund?.credits_revoked) || 0,
+      credits_consumed_before_refund: Number(refund?.credits_consumed) || 0,
+      bookings_cancelled: Number(refund?.bookings_cancelled) || 0,
+    };
+  });
 }

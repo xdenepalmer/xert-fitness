@@ -4,6 +4,7 @@ import checkoutHandler from '../api/checkout.js';
 import deleteAccountHandler from '../api/delete-account.js';
 import commerceHealthHandler from '../api/admin-commerce-health.js';
 import stripeWebhookHandler from '../api/stripe-webhook.js';
+import adminRefundHandler from '../api/admin-refund-order.js';
 
 function createVercelResponse() {
   return {
@@ -35,6 +36,7 @@ for (const [name, handler, method] of [
   ['delete account', deleteAccountHandler, 'GET'],
   ['commerce health', commerceHealthHandler, 'POST'],
   ['Stripe webhook', stripeWebhookHandler, 'GET'],
+  ['admin refund', adminRefundHandler, 'GET'],
 ]) {
   test(`${name} completes the Vercel Node response for an unsupported method`, async () => {
     const response = createVercelResponse();

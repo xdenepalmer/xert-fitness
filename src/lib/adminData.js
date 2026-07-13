@@ -798,7 +798,7 @@ export async function getAllOrders() {
     const from = (page - 1) * pageSize;
     const { data, count, error } = await supabase
       .from('orders')
-      .select('*, products(name)', { count: 'exact' })
+      .select('*, products(name), stripe_refunds(refund_id, amount_cents, credits_revoked, credits_consumed, bookings_cancelled, refunded_at)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(from, from + pageSize - 1);
@@ -812,6 +812,22 @@ export async function getRecentOrders(limit = 6) {
   const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false }).limit(safeLimit);
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+export async function refundOrder(orderId, reason, confirmation) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-refund-order', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ order_id: orderId, reason, confirmation }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Refund could not be completed.');
+  return body;
 }
 
 // ─── Products (admin) ────────────────────────────────────────────────────────
@@ -1015,7 +1031,7 @@ export async function getOperationsHealth() {
           .filter(slug => slug && slug !== 'server'))];
         const problems = [
           missing.length > 0 ? `Missing server settings: ${missing.join(', ')}.` : '',
-          affected.length > 0 ? `Product configuration needs attention for: ${affected.join(', ')}.` : '',
+          affected.length > 0 ? `Checkout configuration needs attention for: ${affected.join(', ')}.` : '',
         ].filter(Boolean);
         return {
           status: 'attention',

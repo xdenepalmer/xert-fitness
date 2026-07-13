@@ -5,6 +5,11 @@ import { requestHeader, sendJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const REQUIRED_WEBHOOK_EVENTS = [
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+  'charge.refunded',
+];
 
 export function inspectCommerceEnvironment(environment = {}) {
   const missing = [];
@@ -71,6 +76,29 @@ export async function inspectCommerceProducts(products, retrieveStripePrice) {
   };
 }
 
+export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
+  let expectedUrl;
+  try {
+    expectedUrl = new URL('/api/stripe-webhook', appBaseUrl).toString();
+  } catch {
+    return { ready: false, missing_events: REQUIRED_WEBHOOK_EVENTS, issue: 'APP_BASE_URL cannot identify the Stripe webhook.' };
+  }
+  const endpoint = (endpoints || []).find(item => item?.url === expectedUrl);
+  if (!endpoint) {
+    return { ready: false, missing_events: REQUIRED_WEBHOOK_EVENTS, issue: 'The production Stripe webhook endpoint is not registered.' };
+  }
+  const enabled = new Set(endpoint.enabled_events || []);
+  const missingEvents = enabled.has('*') ? [] : REQUIRED_WEBHOOK_EVENTS.filter(event => !enabled.has(event));
+  if (endpoint.status !== 'enabled') {
+    return { ready: false, missing_events: missingEvents, issue: 'The production Stripe webhook endpoint is disabled.' };
+  }
+  return {
+    ready: missingEvents.length === 0,
+    missing_events: missingEvents,
+    issue: missingEvents.length ? `Stripe webhook is missing: ${missingEvents.join(', ')}.` : null,
+  };
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -113,14 +141,21 @@ export default async function handler(request, response) {
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const productHealth = await inspectCommerceProducts(
-    activeProducts,
-    priceId => stripe.prices.retrieve(priceId)
-  );
+  const [productHealth, webhookHealth] = await Promise.all([
+    inspectCommerceProducts(activeProducts, priceId => stripe.prices.retrieve(priceId)),
+    stripe.webhookEndpoints.list({ limit: 100 })
+      .then(result => inspectStripeWebhookEndpoints(result.data, process.env.APP_BASE_URL || ''))
+      .catch(() => ({ ready: false, missing_events: REQUIRED_WEBHOOK_EVENTS, issue: 'Stripe webhook settings could not be verified.' })),
+  ]);
   return json({
     ...productHealth,
-    ready: productHealth.ready && environment.ready,
-    issues: [...productHealth.issues, ...environmentIssues(environment)],
+    ready: productHealth.ready && webhookHealth.ready && environment.ready,
+    issues: [
+      ...productHealth.issues,
+      ...(webhookHealth.issue ? [{ slug: 'webhook', reason: webhookHealth.issue }] : []),
+      ...environmentIssues(environment),
+    ],
     environment,
+    webhook: webhookHealth,
   });
 }

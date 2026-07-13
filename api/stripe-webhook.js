@@ -79,6 +79,39 @@ export function checkoutFulfillmentForEvent(event, now = new Date()) {
   };
 }
 
+export function stripeRefundForEvent(event, now = new Date()) {
+  if (event?.type !== 'charge.refunded') return null;
+  const charge = event.data?.object;
+  const paymentIntentId = typeof charge?.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge?.payment_intent?.id;
+  const refunds = charge?.refunds?.data || [];
+  const refund = refunds.find(item => item?.status === 'succeeded') || refunds[0];
+  if (charge?.refunded !== true || charge?.amount_refunded !== charge?.amount) return null;
+  if (
+    !event.id || !charge?.id
+    || !Number.isSafeInteger(charge.amount) || charge.amount <= 0
+    || !paymentIntentId || !refund?.id
+    || !/^[a-z]{3}$/i.test(String(charge.currency || ''))
+  ) {
+    throw new Error('Full refund data is incomplete or invalid.');
+  }
+  return {
+    p_refund_id: refund.id,
+    p_event_id: event.id,
+    p_payment_intent_id: paymentIntentId,
+    p_charge_id: charge.id,
+    p_amount_cents: charge.amount_refunded,
+    p_currency: charge.currency,
+    p_refunded_at: new Date((refund.created || event.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString(),
+  };
+}
+
+export async function persistStripeRefund(admin, refund) {
+  const { error } = await admin.rpc('reconcile_stripe_order_refund', refund);
+  if (error) throw error;
+}
+
 /**
  * Both tables are keyed by Stripe/session order IDs. Retried or concurrent
  * webhook deliveries can safely resume a failed grant without duplicating it.
@@ -130,6 +163,8 @@ export default async function handler(request, response) {
   try {
     const fulfillment = checkoutFulfillmentForEvent(event);
     if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
+    const refund = stripeRefundForEvent(event);
+    if (refund) await persistStripeRefund(admin, refund);
   } catch (e) {
       // 500 makes Stripe retry delivery.
       return text(`Handler error: ${e.message}`, 500);

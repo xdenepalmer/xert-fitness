@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { inspectCommerceEnvironment, inspectCommerceProducts } from '../api/admin-commerce-health.js';
+import { inspectCommerceEnvironment, inspectCommerceProducts, inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
 
 const validProduct = {
   slug: 'starter-4',
@@ -75,6 +75,25 @@ test('commerce health names invalid database values and Stripe mismatches', asyn
     { slug: 'bad-stripe', reason: 'Stripe amount, currency, type, or active state does not match.' },
     { slug: 'missing-stripe', reason: 'Stripe Price ID could not be loaded.' },
   ]);
+});
+
+test('commerce health requires checkout and refund events on the canonical Stripe webhook', () => {
+  const url = 'https://xert-fitness.vercel.app/api/stripe-webhook';
+  assert.deepEqual(inspectStripeWebhookEndpoints([{
+    url, status: 'enabled', enabled_events: [
+      'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'charge.refunded',
+    ],
+  }], 'https://xert-fitness.vercel.app'), { ready: true, missing_events: [], issue: null });
+
+  const incomplete = inspectStripeWebhookEndpoints([{
+    url, status: 'enabled', enabled_events: ['checkout.session.completed'],
+  }], 'https://xert-fitness.vercel.app');
+  assert.equal(incomplete.ready, false);
+  assert.deepEqual(incomplete.missing_events, ['checkout.session.async_payment_succeeded', 'charge.refunded']);
+  assert.match(incomplete.issue, /charge\.refunded/);
+
+  assert.equal(inspectStripeWebhookEndpoints([], 'https://xert-fitness.vercel.app').ready, false);
+  assert.equal(inspectStripeWebhookEndpoints([{ url, status: 'disabled', enabled_events: ['*'] }], 'https://xert-fitness.vercel.app').ready, false);
 });
 
 test('admin operations health calls the authenticated commerce endpoint', async () => {
