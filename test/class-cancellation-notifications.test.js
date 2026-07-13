@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { summarizePreviousClassAlertPushes } from '../api/admin-publish-announcement.js';
+import adminPublishAnnouncementHandler, { summarizePreviousClassAlertPushes } from '../api/admin-publish-announcement.js';
 import { loadSubscriptions } from '../api/apns.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -73,6 +73,16 @@ test('delivery retries do not send a second push after an audited attempt', () =
     failed: 2,
   });
   assert.match(endpoint, /if \(\(previous \|\| \[\]\)\.length > 0\)/);
+});
+
+test('class notice endpoint authenticates before revealing server configuration', async () => {
+  const response = await adminPublishAnnouncementHandler({
+    method: 'POST',
+    headers: {},
+    body: { action: 'notify_class_cancellation' },
+  });
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: 'Not authenticated.' });
 });
 
 test('targeted subscription loading chunks every recipient without truncation', async () => {
