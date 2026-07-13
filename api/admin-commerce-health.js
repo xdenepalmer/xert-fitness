@@ -6,6 +6,28 @@ import { requestHeader, sendJson } from './http.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+export function inspectCommerceEnvironment(environment = {}) {
+  const missing = [];
+  if (!String(environment.STRIPE_SECRET_KEY || '').trim()) missing.push('STRIPE_SECRET_KEY');
+  if (!String(environment.STRIPE_WEBHOOK_SECRET || '').trim()) missing.push('STRIPE_WEBHOOK_SECRET');
+
+  try {
+    const appBaseUrl = new URL(String(environment.APP_BASE_URL || '').trim());
+    if (appBaseUrl.protocol !== 'https:' || !appBaseUrl.hostname) missing.push('APP_BASE_URL');
+  } catch {
+    missing.push('APP_BASE_URL');
+  }
+
+  return { ready: missing.length === 0, missing };
+}
+
+function environmentIssues(environmentHealth) {
+  return environmentHealth.missing.map(name => ({
+    slug: 'server',
+    reason: `Missing or invalid server setting: ${name}.`,
+  }));
+}
+
 export async function inspectCommerceProducts(products, retrieveStripePrice) {
   const issues = [];
   let stripePriceCount = 0;
@@ -69,15 +91,6 @@ export default async function handler(request, response) {
     .maybeSingle();
   if (profileError) return json({ error: 'Could not verify admin access.' }, 500);
   if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
-  if (!process.env.STRIPE_SECRET_KEY) {
-    return json({
-      ready: false,
-      active_product_count: 0,
-      stripe_price_count: 0,
-      dynamic_price_count: 0,
-      issues: [{ slug: 'server', reason: 'Stripe secret is not configured.' }],
-    });
-  }
 
   const { data: products, error: productError } = await admin
     .from('products')
@@ -86,10 +99,28 @@ export default async function handler(request, response) {
     .order('sort_order');
   if (productError) return json({ error: 'Could not load active products.' }, 500);
 
+  const activeProducts = products || [];
+  const environment = inspectCommerceEnvironment(process.env);
+  if (environment.missing.includes('STRIPE_SECRET_KEY')) {
+    return json({
+      ready: false,
+      active_product_count: activeProducts.length,
+      stripe_price_count: activeProducts.filter(product => product.stripe_price_id).length,
+      dynamic_price_count: activeProducts.filter(product => !product.stripe_price_id).length,
+      issues: environmentIssues(environment),
+      environment,
+    });
+  }
+
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const result = await inspectCommerceProducts(
-    products || [],
+  const productHealth = await inspectCommerceProducts(
+    activeProducts,
     priceId => stripe.prices.retrieve(priceId)
   );
-  return json(result);
+  return json({
+    ...productHealth,
+    ready: productHealth.ready && environment.ready,
+    issues: [...productHealth.issues, ...environmentIssues(environment)],
+    environment,
+  });
 }

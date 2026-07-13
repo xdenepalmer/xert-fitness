@@ -39,6 +39,7 @@ const ROUTES = {
   cms: 'content',
   orders: 'orders',
   admins: 'gym-members',
+  'commerce-config': 'products',
 };
 
 export default function OperationsHealth({ onNavigate }) {

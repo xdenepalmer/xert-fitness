@@ -805,14 +805,21 @@ export async function getOperationsHealth() {
     healthCheck('commerce-config', 'Stripe checkout', async () => {
       const result = await getCommerceConfigurationHealth();
       if (!result.ready) {
-        const affected = (result.issues || []).map(issue => issue.slug).join(', ');
+        const missing = result.environment?.missing || [];
+        const affected = [...new Set((result.issues || [])
+          .map(issue => issue.slug)
+          .filter(slug => slug && slug !== 'server'))];
+        const problems = [
+          missing.length > 0 ? `Missing server settings: ${missing.join(', ')}.` : '',
+          affected.length > 0 ? `Product configuration needs attention for: ${affected.join(', ')}.` : '',
+        ].filter(Boolean);
         return {
           status: 'attention',
           count: result.active_product_count,
-          detail: affected
-            ? `Checkout configuration needs attention for: ${affected}.`
-            : 'No active checkout products are configured.',
-          action: 'Review Session Packs and the Stripe configuration in Vercel.'
+          detail: problems.join(' ') || 'No active checkout products are configured.',
+          action: missing.length > 0
+            ? 'Set the missing values in Vercel, redeploy, then refresh this check.'
+            : 'Review the affected records in Session Packs and Stripe.'
         };
       }
       return {
