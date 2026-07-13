@@ -35,6 +35,12 @@ final class XertStore: ObservableObject {
 
     private let api = XertAPI()
     private var sessionRefreshTask: Task<AuthSession, Error>?
+    private var dataRefreshTask: Task<Void, Never>?
+    private var dataRefreshVersion = MemberStateVersion()
+    private var memberStateVersion = MemberStateVersion()
+    private static let memberDataSources: Set<XertDataSource> = [
+        .credits, .bookings, .orders, .profile, .eventGoals, .privateSessions,
+    ]
 
     var isSignedIn: Bool {
         authSession != nil
@@ -58,10 +64,33 @@ final class XertStore: ObservableObject {
     }
 
     func refresh() async {
+        if let dataRefreshTask {
+            await dataRefreshTask.value
+            return
+        }
+
+        dataRefreshVersion.invalidate()
+        let refreshVersion = dataRefreshVersion.snapshot
+        let memberVersion = memberStateVersion.snapshot
+        let task = Task {
+            await performRefresh(refreshVersion: refreshVersion, memberVersion: memberVersion)
+        }
+        dataRefreshTask = task
+        await task.value
+        if dataRefreshVersion.isCurrent(refreshVersion) {
+            dataRefreshTask = nil
+        }
+    }
+
+    private func performRefresh(refreshVersion: Int, memberVersion: Int) async {
         isLoading = true
         errorMessage = nil
         unavailableDataSources = []
-        defer { isLoading = false }
+        defer {
+            if dataRefreshVersion.isCurrent(refreshVersion) {
+                isLoading = false
+            }
+        }
 
         async let productRequest = api.products()
         async let sessionRequest = api.sessions()
@@ -72,24 +101,32 @@ final class XertStore: ObservableObject {
         var eventsLoaded = false
 
         do {
-            products = try await productRequest
+            let loadedProducts = try await productRequest
+            guard canApplyRefresh(refreshVersion) else { return }
+            products = loadedProducts
             productsLoaded = true
         } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
             unavailableDataSources.insert(.products)
         }
 
         do {
-            sessions = try await sessionRequest
+            let loadedSessions = try await sessionRequest
+            guard canApplyRefresh(refreshVersion) else { return }
+            sessions = loadedSessions
             sessionsLoaded = true
         } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
             unavailableDataSources.insert(.sessions)
         }
 
         do {
             let loadedEvents = try await eventRequest
+            guard canApplyRefresh(refreshVersion) else { return }
             events = loadedEvents.isEmpty ? XertEventCalendar.fallback : loadedEvents
             eventsLoaded = true
         } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
             unavailableDataSources.insert(.events)
             // The app still carries the published 2026 training calendar when
             // the events table has not been seeded yet.
@@ -113,12 +150,20 @@ final class XertStore: ObservableObject {
         if authSession != nil {
             do {
                 memberSession = try await validAuthSession()
+                guard canApplyMemberState(memberVersion, session: memberSession) && canApplyRefresh(refreshVersion) else { return }
             } catch {
+                guard memberStateVersion.isCurrent(memberVersion) && canApplyRefresh(refreshVersion) else { return }
                 if (error as? APIError)?.invalidatesSession == true {
-                    self.authSession = nil
+                    replaceAuthSession(with: nil)
                     KeychainStore.clearSession()
+                    isLoading = false
+                    await ClassReminderScheduler.shared.clearAll()
+                } else {
+                    unavailableDataSources.formUnion(Self.memberDataSources)
+                    isUsingStaleMemberData = memberDataUpdatedAt != nil
                 }
                 present(error)
+                return
             }
         }
 
@@ -134,46 +179,64 @@ final class XertStore: ObservableObject {
             var ordersLoaded = false
             var profileLoaded = false
             do {
-                credits = try await creditRequest
+                let loadedCredits = try await creditRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                credits = loadedCredits
                 creditsLoaded = true
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.credits)
             }
             do {
-                bookings = try await bookingRequest
+                let loadedBookings = try await bookingRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                bookings = loadedBookings
                 if classRemindersEnabled {
-                    await ClassReminderScheduler.shared.sync(bookings: bookings)
+                    await ClassReminderScheduler.shared.sync(bookings: loadedBookings)
                 } else {
                     await ClassReminderScheduler.shared.clearAll()
                 }
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 bookingsLoaded = true
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.bookings)
             }
             do {
-                orders = try await orderRequest
+                let loadedOrders = try await orderRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                orders = loadedOrders
                 ordersLoaded = true
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.orders)
             }
             do {
-                profile = try await profileRequest
+                let loadedProfile = try await profileRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                profile = loadedProfile
                 profileLoaded = true
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.profile)
             }
             do {
                 let loadedEventGoals = try await eventGoalRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 eventGoalIDs = Set(loadedEventGoals.map(\.event_id))
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.eventGoals)
                 // Event goals are optional until the companion Supabase upgrade
                 // is applied; keep the rest of the member account available.
             }
 
             do {
-                privateSessionRequests = try await privateSessionRequest
+                let loadedRequests = try await privateSessionRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                privateSessionRequests = loadedRequests
             } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.privateSessions)
                 // Tracking is optional until the additive ownership migration
                 // reaches an existing Supabase project.
@@ -186,14 +249,8 @@ final class XertStore: ObservableObject {
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
         } else {
-            credits = []
-            bookings = []
-            orders = []
-            profile = nil
-            eventGoalIDs = []
-            privateSessionRequests = []
-            memberDataUpdatedAt = nil
-            isUsingStaleMemberData = false
+            guard memberStateVersion.isCurrent(memberVersion) && canApplyRefresh(refreshVersion) else { return }
+            clearMemberData()
             await ClassReminderScheduler.shared.clearAll()
         }
     }
@@ -229,7 +286,7 @@ final class XertStore: ObservableObject {
                 errorMessage = "Check your email to confirm your XERT account, then sign in."
                 return
             }
-            authSession = session
+            replaceAuthSession(with: session)
             try KeychainStore.saveSession(session)
             await refresh()
         } catch {
@@ -258,18 +315,7 @@ final class XertStore: ObservableObject {
 
     func signOut() {
         let currentSession = authSession
-        sessionRefreshTask?.cancel()
-        sessionRefreshTask = nil
-        authSession = nil
-        credits = []
-        bookings = []
-        orders = []
-        profile = nil
-        eventGoalIDs = []
-        privateSessionRequests = []
-        memberDataUpdatedAt = nil
-        isUsingStaleMemberData = false
-        unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
+        replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -287,16 +333,7 @@ final class XertStore: ObservableObject {
         do {
             let authSession = try await validAuthSession()
             try await api.deleteAccount(session: authSession)
-            self.authSession = nil
-            credits = []
-            bookings = []
-            orders = []
-            profile = nil
-            eventGoalIDs = []
-            privateSessionRequests = []
-            memberDataUpdatedAt = nil
-            isUsingStaleMemberData = false
-            unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
+            replaceAuthSession(with: nil)
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
             return true
@@ -307,37 +344,52 @@ final class XertStore: ObservableObject {
     }
 
     func book(_ session: ClassSession) async {
+        let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
-        defer { bookingSessionID = nil }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { bookingSessionID = nil }
+        }
         do {
             let authSession = try await validAuthSession()
             try await api.book(session: authSession, classSessionID: session.id)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return }
             await refresh()
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
 
     func joinWaitlist(_ session: ClassSession) async {
+        let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
-        defer { bookingSessionID = nil }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { bookingSessionID = nil }
+        }
         do {
             let authSession = try await validAuthSession()
             try await api.joinWaitlist(session: authSession, classSessionID: session.id)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return }
             await refresh()
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
 
     func cancel(_ booking: BookingItem) async {
+        let memberVersion = memberStateVersion.snapshot
         cancellingBookingID = booking.id
-        defer { cancellingBookingID = nil }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { cancellingBookingID = nil }
+        }
         do {
             let authSession = try await validAuthSession()
             try await api.cancelBooking(session: authSession, bookingID: booking.id)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return }
             await refresh()
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
         }
     }
@@ -370,27 +422,37 @@ final class XertStore: ObservableObject {
             return
         }
 
+        let memberVersion = memberStateVersion.snapshot
         updatingEventGoalID = eventID
-        defer { updatingEventGoalID = nil }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { updatingEventGoalID = nil }
+        }
         do {
             let authSession = try await validAuthSession()
             if eventGoalIDs.contains(eventID) {
                 try await api.removeEventGoal(session: authSession, eventID: eventID)
+                guard canApplyMemberState(memberVersion, session: authSession) else { return }
                 eventGoalIDs.remove(eventID)
             } else {
                 try await api.addEventGoal(session: authSession, eventID: eventID)
+                guard canApplyMemberState(memberVersion, session: authSession) else { return }
                 eventGoalIDs.insert(eventID)
             }
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
             present(error)
         }
     }
 
     func checkoutURL(for product: Product) async -> URL? {
+        let memberVersion = memberStateVersion.snapshot
         do {
             let authSession = try await validAuthSession()
-            return try await api.checkout(session: authSession, productSlug: product.slug)
+            let url = try await api.checkout(session: authSession, productSlug: product.slug)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
+            return url
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return nil }
             errorMessage = error.localizedDescription
             return nil
         }
@@ -398,10 +460,15 @@ final class XertStore: ObservableObject {
 
     func reconcileCheckout() async {
         guard authSession != nil, !isReconcilingCheckout else { return }
+        let memberVersion = memberStateVersion.snapshot
         let baselineCreditTotal = creditTotal
         let baselineOrderIDs = Set(orders.map(\.id))
         isReconcilingCheckout = true
-        defer { isReconcilingCheckout = false }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) {
+                isReconcilingCheckout = false
+            }
+        }
 
         for delay in CheckoutReconciliation.retryDelaysNanoseconds {
             if delay > 0 {
@@ -418,6 +485,7 @@ final class XertStore: ObservableObject {
                 async let creditRequest = api.credits(session: memberSession)
                 async let orderRequest = api.orders(session: memberSession)
                 let (loadedCredits, loadedOrders) = try await (creditRequest, orderRequest)
+                guard canApplyMemberState(memberVersion, session: memberSession) else { return }
                 credits = loadedCredits
                 orders = loadedOrders
                 unavailableDataSources.subtract([.credits, .orders])
@@ -432,6 +500,7 @@ final class XertStore: ObservableObject {
                     return
                 }
             } catch {
+                guard memberStateVersion.isCurrent(memberVersion) else { return }
                 unavailableDataSources.formUnion([.credits, .orders])
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
@@ -440,6 +509,7 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func requestPrivateSession(_ request: PrivateSessionRequest) async -> Bool {
+        let memberVersion = memberStateVersion.snapshot
         isRequestingPrivateSession = true
         errorMessage = nil
         defer { isRequestingPrivateSession = false }
@@ -447,11 +517,14 @@ final class XertStore: ObservableObject {
             let memberSession = authSession == nil ? nil : try await validAuthSession()
             try await api.requestPrivateSession(request, auth: memberSession)
             if let memberSession {
-                privateSessionRequests = try await api.privateSessionRequests(session: memberSession)
+                let loadedRequests = try await api.privateSessionRequests(session: memberSession)
+                guard canApplyMemberState(memberVersion, session: memberSession) else { return true }
+                privateSessionRequests = loadedRequests
                 unavailableDataSources.remove(.privateSessions)
             }
             return true
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return false }
             present(error)
             return false
         }
@@ -473,21 +546,27 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func updateProfile(fullName: String, phone: String) async -> Bool {
+        let memberVersion = memberStateVersion.snapshot
         isSavingProfile = true
-        defer { isSavingProfile = false }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isSavingProfile = false }
+        }
         do {
             let authSession = try await validAuthSession()
             guard let profileID = profile?.id ?? authSession.user?.id else {
                 throw APIError(message: "Your profile is still being prepared. Please refresh and try again.")
             }
-            profile = try await api.updateProfile(
+            let loadedProfile = try await api.updateProfile(
                 session: authSession,
                 profileID: profileID,
                 fullName: fullName,
                 phone: phone
             )
+            guard canApplyMemberState(memberVersion, session: authSession) else { return false }
+            profile = loadedProfile
             return true
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return false }
             present(error)
             return false
         }
@@ -500,7 +579,7 @@ final class XertStore: ObservableObject {
 
         do {
             let session = try await action()
-            authSession = session
+            replaceAuthSession(with: session)
             try KeychainStore.saveSession(session)
             await refresh()
         } catch {
@@ -509,6 +588,7 @@ final class XertStore: ObservableObject {
     }
 
     private func validAuthSession() async throws -> AuthSession {
+        let memberVersion = memberStateVersion.snapshot
         guard let current = authSession else {
             throw APIError(message: "Sign in to continue.")
         }
@@ -518,16 +598,69 @@ final class XertStore: ObservableObject {
         }
 
         if let sessionRefreshTask {
-            return try await sessionRefreshTask.value
+            let refreshed = try await sessionRefreshTask.value
+            guard canApplyMemberState(memberVersion, session: refreshed) else {
+                throw CancellationError()
+            }
+            return refreshed
         }
 
-        let refreshTask = Task { try await api.refresh(session: current) }
+        let refreshTask = Task { () throws -> AuthSession in
+            let refreshed = try await api.refresh(session: current)
+            guard memberStateVersion.isCurrent(memberVersion),
+                  authSession?.access_token == current.access_token else {
+                throw CancellationError()
+            }
+            authSession = refreshed
+            try KeychainStore.saveSession(refreshed)
+            return refreshed
+        }
         sessionRefreshTask = refreshTask
-        defer { sessionRefreshTask = nil }
-        let refreshed = try await refreshTask.value
-        authSession = refreshed
-        try KeychainStore.saveSession(refreshed)
-        return refreshed
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) {
+                sessionRefreshTask = nil
+            }
+        }
+        return try await refreshTask.value
+    }
+
+    private func canApplyRefresh(_ version: Int) -> Bool {
+        dataRefreshVersion.isCurrent(version) && !Task.isCancelled
+    }
+
+    private func canApplyMemberState(_ version: Int, session: AuthSession?) -> Bool {
+        guard memberStateVersion.isCurrent(version), !Task.isCancelled, let session else { return false }
+        return authSession?.access_token == session.access_token
+    }
+
+    private func replaceAuthSession(with session: AuthSession?) {
+        memberStateVersion.invalidate()
+        dataRefreshVersion.invalidate()
+        dataRefreshTask?.cancel()
+        dataRefreshTask = nil
+        sessionRefreshTask?.cancel()
+        sessionRefreshTask = nil
+        authSession = session
+        clearMemberData()
+        isLoading = false
+        isReconcilingCheckout = false
+        bookingSessionID = nil
+        cancellingBookingID = nil
+        updatingEventGoalID = nil
+        isSavingProfile = false
+        errorMessage = nil
+    }
+
+    private func clearMemberData() {
+        credits = []
+        bookings = []
+        orders = []
+        profile = nil
+        eventGoalIDs = []
+        privateSessionRequests = []
+        memberDataUpdatedAt = nil
+        isUsingStaleMemberData = false
+        unavailableDataSources.subtract(Self.memberDataSources)
     }
 
     private func present(_ error: Error) {

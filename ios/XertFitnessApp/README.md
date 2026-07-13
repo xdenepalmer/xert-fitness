@@ -33,6 +33,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Product, class session, booking, credit, and event loading.
 - Searchable class discovery with Queensland-aware today/7-day windows, open-spot and beginner-friendly filters.
 - Source-level offline and partial-refresh notices, with cached public data kept usable when individual services fail.
+- Coalesced, generation-guarded refreshes that cannot restore private member data after sign-out or an account change.
 - Bounded API timeouts with clear offline, timeout, service reachability and secure-connection errors.
 - Upcoming-event filtering in the XERT/Queensland calendar, plus event detail links when an admin supplies one.
 - Booking RPC support through `book_session`.

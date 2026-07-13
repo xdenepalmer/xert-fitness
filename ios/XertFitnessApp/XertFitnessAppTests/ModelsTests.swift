@@ -277,6 +277,20 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(unknown.needsRefresh(now: now))
     }
 
+    func testMemberStateVersionsRejectWorkFromAnEarlierAccountGeneration() {
+        var version = MemberStateVersion()
+        let firstSession = version.snapshot
+
+        XCTAssertTrue(version.isCurrent(firstSession))
+        version.invalidate()
+        XCTAssertFalse(version.isCurrent(firstSession))
+
+        let secondSession = version.snapshot
+        XCTAssertTrue(version.isCurrent(secondSession))
+        version.invalidate()
+        XCTAssertFalse(version.isCurrent(secondSession))
+    }
+
     func testOnlyAuthenticationResponsesInvalidateTheSavedSession() {
         XCTAssertTrue(APIError(message: "invalid refresh token", statusCode: 400).invalidatesSession)
         XCTAssertTrue(APIError(message: "unauthorized", statusCode: 401).invalidatesSession)
