@@ -354,8 +354,8 @@ export async function getDashboardStats() {
     supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', {
       count: 'exact'
     }).range(0, 999),
-    supabase.from('trainer_interest').select('id', { count: 'exact', head: true }),
-    supabase.from('partner_interest').select('id', { count: 'exact', head: true }),
+    supabase.from('trainer_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    supabase.from('partner_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('interested_in_pt', true),
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('interested_in_event_prep', true),
@@ -363,7 +363,7 @@ export async function getDashboardStats() {
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
-    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'attended').gte('attendance_marked_at', monthAgoIso),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'no_show').gte('attendance_marked_at', monthAgoIso)
   ]);

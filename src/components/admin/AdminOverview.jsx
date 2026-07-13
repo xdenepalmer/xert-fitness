@@ -13,6 +13,7 @@ import {
 import { getAvailableSessions } from '@/lib/bookingData';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { activityFromSettled, readinessFromSettled } from '@/lib/adminOverview';
+import { buildAdminActionQueue } from '@/lib/adminActionQueue';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -37,6 +38,20 @@ const QUICK_ACTIONS = [
   { key: 'events', label: 'Add Event', icon: Trophy, hint: 'SE QLD calendar' },
   { key: 'content', label: 'Edit Site Copy', icon: PenSquare, hint: 'Hero, contact, FAQ' },
 ];
+
+const ACTION_ICONS = {
+  'pending-bookings': Inbox,
+  'pt-requests': ClipboardList,
+  waitlists: Users,
+  'trainer-applicants': UserSquare2,
+  'partner-enquiries': UserPlus,
+};
+
+const ACTION_TONES = {
+  urgent: { color: '#f0a1a1', border: 'rgba(201,78,68,0.32)', background: 'rgba(201,78,68,0.08)' },
+  attention: { color: '#e0b36a', border: 'rgba(224,179,106,0.3)', background: 'rgba(224,179,106,0.08)' },
+  standard: { color: '#7BA7BC', border: 'rgba(123,167,188,0.22)', background: 'rgba(16,24,32,0.6)' },
+};
 
 export default function AdminOverview({ onNavigate }) {
   const [stats, setStats] = useState(null);
@@ -143,6 +158,7 @@ export default function AdminOverview({ onNavigate }) {
   }, [load]);
 
   const countdown = getCountdown(settings.target_launch_date);
+  const actionQueue = buildAdminActionQueue(stats);
 
   return (
     <div className="p-6 space-y-8">
@@ -208,6 +224,58 @@ export default function AdminOverview({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* ── Daily action queue ── */}
+      {!loading && stats && (
+        <section aria-labelledby="admin-action-queue-heading">
+          <div className="flex items-end justify-between gap-4 mb-4">
+            <div>
+              <h2 id="admin-action-queue-heading" className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                Needs Your Attention
+              </h2>
+              <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.42)' }}>
+                {actionQueue.length > 0 ? `${actionQueue.length} active work queue${actionQueue.length === 1 ? '' : 's'}` : 'No outstanding member or applicant work'}
+              </p>
+            </div>
+          </div>
+
+          {actionQueue.length === 0 ? (
+            <div className="flex items-center gap-3 p-4" style={{ backgroundColor: 'rgba(126,201,143,0.08)', border: '1px solid rgba(126,201,143,0.22)' }}>
+              <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#7ec98f' }} />
+              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.72)' }}>All operational queues are caught up.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {actionQueue.map(action => {
+                const Icon = ACTION_ICONS[action.key] || Inbox;
+                const tone = ACTION_TONES[action.tone] || ACTION_TONES.standard;
+                return (
+                  <button
+                    type="button"
+                    key={action.key}
+                    onClick={() => onNavigate?.(action.target)}
+                    className="min-h-28 p-4 text-left flex items-start gap-4 transition-colors group"
+                    style={{ backgroundColor: tone.background, border: `1px solid ${tone.border}` }}
+                    aria-label={`${action.title}: ${action.detail}`}
+                  >
+                    <div className="w-10 h-10 shrink-0 flex items-center justify-center" style={{ backgroundColor: 'rgba(11,18,24,0.52)' }}>
+                      <Icon className="w-5 h-5" style={{ color: tone.color }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-display text-lg uppercase leading-tight" style={{ color: '#F1F3F4' }}>{action.title}</p>
+                        <span className="font-display text-2xl tabular-nums leading-none" style={{ color: tone.color }}>{action.count}</span>
+                      </div>
+                      <p className="font-body text-xs leading-relaxed mt-2" style={{ color: 'rgba(209,221,230,0.52)' }}>{action.detail}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 self-center shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: tone.color }} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Launch checklist + class fill rate ── */}
       {launch && (
