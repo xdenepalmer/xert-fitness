@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Archive, ArchiveRestore, CalendarDays, ChevronLeft, ChevronRight, Download, Loader2, MessageSquarePlus, Receipt, RefreshCw, Ticket, X } from 'lucide-react';
-import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMembersPage, adminMemberDetail, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { Archive, ArchiveRestore, CalendarDays, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Ticket, UserRoundSearch, X } from 'lucide-react';
+import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberFollowUps, adminListMembersPage, adminMemberDetail, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
@@ -26,7 +26,7 @@ const BOOKING_BADGE = {
 };
 const PAGE_SIZE = 50;
 
-function MemberDrawer({ member, onClose, onGrant }) {
+function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
   const [noteCategory, setNoteCategory] = useState('general');
@@ -53,6 +53,7 @@ function MemberDrawer({ member, onClose, onGrant }) {
       await adminAddMemberNote(member.id, noteCategory, noteBody);
       setNoteBody('');
       toast({ title: 'Staff note added' });
+      onNotesChanged?.();
       loadDetail();
     } catch (error) {
       setNoteError(error.message || 'Could not add the staff note.');
@@ -286,6 +287,63 @@ function MemberDrawer({ member, onClose, onGrant }) {
 
 const inputCls = 'bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 
+const FOLLOW_UP_LABELS = {
+  no_first_booking: 'No first booking',
+  idle_credits: 'Credits inactive',
+  renewal_due: 'Renewal due'
+};
+
+function FollowUpQueue({ rows, available, error, loading, onRetry, onView }) {
+  return (
+    <section aria-labelledby="member-follow-up-title" className="mb-6 border-y border-xert-steel/20 py-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 id="member-follow-up-title" className="flex items-center gap-2 font-display text-sm text-xert-offwhite uppercase">
+          <UserRoundSearch className="w-4 h-4 text-xert-steel" /> Follow-up queue
+          {!loading && available && <span className="font-body text-xs text-xert-concrete/40">({rows.length})</span>}
+        </h3>
+      </div>
+      {loading ? (
+        <div className="h-12 bg-xert-ink animate-pulse" />
+      ) : error ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p role="alert" className="font-body text-xs text-xert-red">{error}</p>
+          <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
+        </div>
+      ) : !available ? (
+        <p className="font-body text-xs" style={{ color: '#e0b36a' }}>Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
+      ) : rows.length === 0 ? (
+        <p className="font-body text-sm text-xert-concrete/40">No follow-ups due.</p>
+      ) : (
+        <div className="divide-y divide-xert-steel/10 border-t border-xert-steel/10">
+          {rows.map(member => (
+            <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
+              <div className="min-w-[12rem] flex-1">
+                <p className="font-display text-sm text-xert-offwhite uppercase">{member.full_name || member.email}</p>
+                <p className="font-body text-[11px] text-xert-concrete/45">
+                  {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {member.reason === 'no_first_booking'
+                    ? `Joined ${fmtDate(member.joined_at)}`
+                    : `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a href={`mailto:${member.email}`} title={`Email ${member.full_name || member.email}`} aria-label={`Email ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                  <Mail className="w-4 h-4" />
+                </a>
+                {member.phone && (
+                  <a href={`tel:${member.phone}`} title={`Call ${member.full_name || member.email}`} aria-label={`Call ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                    <Phone className="w-4 h-4" />
+                  </a>
+                )}
+                <button type="button" onClick={() => onView(member)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function GrantCreditsModal({ member, onDone, onCancel }) {
   const [sessions, setSessions] = useState(1);
   const [validityDays, setValidityDays] = useState(28);
@@ -369,6 +427,10 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [page, setPage] = useState(1);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [followUps, setFollowUps] = useState([]);
+  const [followUpsAvailable, setFollowUpsAvailable] = useState(true);
+  const [followUpsLoading, setFollowUpsLoading] = useState(true);
+  const [followUpsError, setFollowUpsError] = useState('');
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -399,6 +461,25 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     });
     return () => { active = false; };
   }, [creditFilter, debouncedSearch, page, refreshVersion, roleFilter]);
+
+  useEffect(() => {
+    let active = true;
+    setFollowUpsLoading(true);
+    setFollowUpsError('');
+    adminListMemberFollowUps(20)
+      .then(result => {
+        if (!active) return;
+        setFollowUps(result.rows);
+        setFollowUpsAvailable(result.available);
+      })
+      .catch(error => {
+        if (!active) return;
+        setFollowUps([]);
+        setFollowUpsError(error.message || 'Check the follow-up queue permissions.');
+      })
+      .finally(() => { if (active) setFollowUpsLoading(false); });
+    return () => { active = false; };
+  }, [refreshVersion]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -480,6 +561,8 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
           </button>
         </div>
       </div>
+
+      <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} />
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
@@ -573,6 +656,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
           member={viewing}
           onClose={() => setViewing(null)}
           onGrant={() => setGranting(viewing)}
+          onNotesChanged={refresh}
         />
       )}
 

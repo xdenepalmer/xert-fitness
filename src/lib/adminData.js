@@ -634,6 +634,16 @@ export async function adminSetMemberNoteArchived(noteId, archived) {
   if (error) throw new Error(error.message);
 }
 
+export async function adminListMemberFollowUps(limit = 20) {
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 20));
+  const { data, error } = await supabase.rpc('admin_member_follow_up_queue', { p_limit: safeLimit });
+  if (!error) return { rows: data || [], available: true };
+  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_member_follow_up_queue.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (functionUnavailable) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
 async function getAuditProfiles(ids) {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   const profiles = [];
