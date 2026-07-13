@@ -198,6 +198,7 @@ workflows:
               "admin_role_safety",
               "booking_waitlist_withdrawal",
               "member_waitlist_join",
+              "waitlist_fifo_promotion",
               "attendance_roll_call",
               "member_pt_request_tracking",
               "public_form_integrity",

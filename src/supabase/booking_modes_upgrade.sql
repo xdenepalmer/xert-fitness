@@ -63,6 +63,33 @@ drop index if exists public.session_bookings_unique_active;
 create unique index session_bookings_unique_active
   on public.session_bookings(user_id, class_session_id)
   where status in ('requested', 'confirmed');
+create index if not exists session_bookings_waitlist_order_idx
+  on public.session_bookings(class_session_id, created_at, id)
+  where status = 'waitlisted';
+
+create or replace function public.enforce_session_waitlist_fifo()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_first_waitlisted uuid;
+begin
+  if new.status not in ('requested', 'confirmed') then return new; end if;
+  if tg_op = 'UPDATE' then
+    if old.status in ('requested', 'confirmed') then return new; end if;
+  end if;
+  select id into v_first_waitlisted from public.session_bookings
+    where class_session_id = new.class_session_id and status = 'waitlisted'
+    order by created_at, id limit 1;
+  if v_first_waitlisted is null then return new; end if;
+  if tg_op = 'UPDATE' then
+    if old.status = 'waitlisted' and new.id = v_first_waitlisted then return new; end if;
+  end if;
+  raise exception 'WAITLIST_PRIORITY';
+end; $$;
+revoke execute on function public.enforce_session_waitlist_fifo() from public, anon, authenticated;
+drop trigger if exists session_bookings_waitlist_fifo_guard on public.session_bookings;
+create trigger session_bookings_waitlist_fifo_guard
+  before insert or update of status on public.session_bookings
+  for each row execute function public.enforce_session_waitlist_fifo();
 
 create or replace function public.book_session(p_session_id uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -162,7 +189,10 @@ begin
   if v_capacity is null then raise exception 'SESSION_HAS_CAPACITY'; end if;
   select count(*) into v_booked from public.session_bookings
     where class_session_id = p_session_id and status in ('requested', 'confirmed');
-  if v_booked < v_capacity then raise exception 'SESSION_HAS_CAPACITY'; end if;
+  if v_booked < v_capacity and not exists (
+    select 1 from public.session_bookings
+    where class_session_id = p_session_id and status = 'waitlisted'
+  ) then raise exception 'SESSION_HAS_CAPACITY'; end if;
 
   insert into public.session_bookings (
     user_id, class_session_id, credit_batch_id, status
@@ -213,7 +243,11 @@ returns table (
          s.start_time, s.end_time, s.duration_minutes, s.capacity, s.location_zone,
          s.beginner_friendly, s.intensity_level, s.booking_mode,
          count(b.id) filter (where b.status in ('requested', 'confirmed')) as booked_count,
-         case when s.capacity is null then null
+         case when exists (
+                select 1 from public.session_bookings waiting
+                where waiting.class_session_id = s.id and waiting.status = 'waitlisted'
+              ) then 0
+              when s.capacity is null then null
               else greatest(s.capacity - count(b.id) filter (where b.status in ('requested', 'confirmed')), 0)::int
          end as spots_left
   from public.class_sessions s
@@ -235,6 +269,7 @@ declare
   v_session_status text;
   v_active_count integer;
   v_new_batch uuid;
+  v_first_waitlisted uuid;
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_status not in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show') then
@@ -250,6 +285,18 @@ begin
   if p_status = v_current then return; end if;
   if p_status in ('attended', 'no_show') and v_current <> 'confirmed' then
     raise exception 'STATUS_TRANSITION_NOT_ALLOWED';
+  end if;
+
+  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+    select id into v_first_waitlisted
+      from public.session_bookings
+      where class_session_id = v_session and status = 'waitlisted'
+      order by created_at, id
+      limit 1;
+    if v_first_waitlisted is not null
+      and (v_current <> 'waitlisted' or v_first_waitlisted is distinct from p_booking_id) then
+      raise exception 'WAITLIST_ORDER_REQUIRED';
+    end if;
   end if;
 
   if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
@@ -292,6 +339,25 @@ begin
     and v_current in ('requested', 'confirmed') and v_batch is not null then
     update public.credit_batches set remaining = remaining + 1 where id = v_batch;
   end if;
+end; $$;
+
+create or replace function public.admin_promote_next_waitlisted(p_session_id uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_booking_id uuid;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  select id into v_booking_id from public.session_bookings
+    where class_session_id = p_session_id and status = 'waitlisted'
+    order by created_at, id limit 1 for update;
+  if v_booking_id is null then raise exception 'WAITLIST_EMPTY'; end if;
+  begin
+    perform public.admin_set_booking_status(v_booking_id, 'confirmed');
+  exception when others then
+    if sqlerrm like '%NO_CREDITS%' then raise exception 'WAITLIST_MEMBER_NO_CREDITS'; end if;
+    raise;
+  end;
+  return v_booking_id;
 end; $$;
 
 -- When XERT cancels a class, outstanding member bookings are invalidated and
@@ -360,12 +426,14 @@ revoke execute on function public.join_session_waitlist(uuid) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.my_bookings() from public, anon;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
+revoke execute on function public.admin_promote_next_waitlisted(uuid) from public, anon;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
 grant execute on function public.book_session(uuid) to authenticated;
 grant execute on function public.join_session_waitlist(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.my_bookings() to authenticated;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;
+grant execute on function public.admin_promote_next_waitlisted(uuid) to authenticated;
 
 -- Register this contract only after all function replacements succeed.
 create table if not exists public.xert_schema_capabilities (
@@ -380,6 +448,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('booking_waitlist_withdrawal') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('member_waitlist_join') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('waitlist_fifo_promotion') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

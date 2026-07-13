@@ -28,7 +28,10 @@ begin
   if v_capacity is null then raise exception 'SESSION_HAS_CAPACITY'; end if;
   select count(*) into v_booked from public.session_bookings
     where class_session_id = p_session_id and status in ('requested', 'confirmed');
-  if v_booked < v_capacity then raise exception 'SESSION_HAS_CAPACITY'; end if;
+  if v_booked < v_capacity and not exists (
+    select 1 from public.session_bookings
+    where class_session_id = p_session_id and status = 'waitlisted'
+  ) then raise exception 'SESSION_HAS_CAPACITY'; end if;
   insert into public.session_bookings (user_id, class_session_id, credit_batch_id, status)
   values (v_user, p_session_id, null, 'waitlisted') returning id into v_booking;
   return v_booking;

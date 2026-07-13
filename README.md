@@ -98,6 +98,8 @@ The Supabase schema is defined in:
   attendance audit metadata, and automatic class completion
 - `src/supabase/member_waitlist_upgrade.sql` — lets signed-in members join a
   full class waitlist without consuming a credit
+- `src/supabase/waitlist_fifo_promotion_upgrade.sql` — displays member queue
+  positions and atomically promotes only the next waitlisted member
 - `src/supabase/member_pt_request_tracking.sql` — links PT requests to signed-in
   members and enforces a trusted initial request status, consent and ownership
 - `src/supabase/public_form_integrity_upgrade.sql` — prevents direct clients
@@ -126,7 +128,7 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `admin_member_directory_upgrade.sql`, `admin_member_notes_upgrade.sql`,
 `admin_member_follow_up_upgrade.sql`,
 `attendance_roll_call_upgrade.sql`, and
-`member_waitlist_upgrade.sql` after
+`member_waitlist_upgrade.sql`, `waitlist_fifo_promotion_upgrade.sql` after
 those prerequisites, followed by `member_pt_request_tracking.sql` and
 `public_form_integrity_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
@@ -134,9 +136,10 @@ connection).
 
 Operations Health and the TestFlight release workflow verify the
 `admin_role_safety`, `booking_waitlist_withdrawal`, `member_waitlist_join`,
+`waitlist_fifo_promotion`,
 `attendance_roll_call`, `member_pt_request_tracking`, and
 `public_form_integrity` capability markers. A release intentionally stops until
-all six current upgrade scripts have been run. Run
+all seven current upgrade scripts have been run. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.
 

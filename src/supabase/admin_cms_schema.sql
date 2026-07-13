@@ -407,6 +407,7 @@ declare
   v_session_status text;
   v_active_count integer;
   v_new_batch uuid;
+  v_first_waitlisted uuid;
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_status not in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show') then
@@ -421,6 +422,18 @@ begin
 
   if p_status in ('attended', 'no_show') and v_current <> 'confirmed' then
     raise exception 'STATUS_TRANSITION_NOT_ALLOWED';
+  end if;
+
+  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+    select id into v_first_waitlisted
+      from session_bookings
+      where class_session_id = v_session and status = 'waitlisted'
+      order by created_at, id
+      limit 1;
+    if v_first_waitlisted is not null
+      and (v_current <> 'waitlisted' or v_first_waitlisted is distinct from p_booking_id) then
+      raise exception 'WAITLIST_ORDER_REQUIRED';
+    end if;
   end if;
 
   -- A status becoming requested/confirmed must reserve a space and credit.
@@ -462,6 +475,34 @@ begin
     and v_current in ('requested', 'confirmed') and v_batch is not null then
     update credit_batches set remaining = remaining + 1 where id = v_batch;
   end if;
+end; $$;
+
+create index if not exists session_bookings_waitlist_order_idx
+  on public.session_bookings (class_session_id, created_at, id)
+  where status = 'waitlisted';
+
+create or replace function public.admin_promote_next_waitlisted(p_session_id uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_booking_id uuid;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+
+  select id into v_booking_id
+    from public.session_bookings
+    where class_session_id = p_session_id and status = 'waitlisted'
+    order by created_at, id
+    limit 1
+    for update;
+  if v_booking_id is null then raise exception 'WAITLIST_EMPTY'; end if;
+
+  begin
+    perform public.admin_set_booking_status(v_booking_id, 'confirmed');
+  exception when others then
+    if sqlerrm like '%NO_CREDITS%' then raise exception 'WAITLIST_MEMBER_NO_CREDITS'; end if;
+    raise;
+  end;
+  return v_booking_id;
 end; $$;
 
 -- Members training toward a specific calendar event, including the contact
@@ -607,6 +648,7 @@ revoke execute on function public.admin_grant_credits(uuid, integer, integer) fr
 revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 revoke execute on function public.admin_session_roster(uuid) from public, anon;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
+revoke execute on function public.admin_promote_next_waitlisted(uuid) from public, anon;
 revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
 revoke execute on function public.admin_event_goal_members(uuid) from public, anon;
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
@@ -621,6 +663,7 @@ grant execute on function public.admin_grant_credits(uuid, integer, integer) to 
 grant execute on function public.admin_set_role(uuid, text)              to authenticated;
 grant execute on function public.admin_session_roster(uuid)              to authenticated;
 grant execute on function public.admin_set_booking_status(uuid, text)    to authenticated;
+grant execute on function public.admin_promote_next_waitlisted(uuid)     to authenticated;
 grant execute on function public.admin_cancel_class_session(uuid)         to authenticated;
 grant execute on function public.admin_event_goal_members(uuid)            to authenticated;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
@@ -638,6 +681,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('admin_role_safety') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('attendance_roll_call') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('waitlist_fifo_promotion') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

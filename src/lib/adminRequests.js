@@ -40,6 +40,10 @@ export function normalizeSessionAttendanceMutation(sessionId, attendance) {
   return { sessionId: normalizedSessionId, attendedIds, noShowIds };
 }
 
+export function normalizeSessionPromotion(sessionId) {
+  return { sessionId: recordId(sessionId) };
+}
+
 export function normalizeLegacyBookingNotes(id, notes) {
   return { id: recordId(id), admin_notes: normalizeAdminNotes(notes) };
 }

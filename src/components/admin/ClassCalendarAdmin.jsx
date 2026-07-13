@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ClipboardCheck, Download, X } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Download, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 
@@ -11,10 +11,12 @@ const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 
-function rosterStatusOptions(status, sessionStatus) {
+function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
   if (sessionStatus !== 'published') return [status];
   if (status === 'requested') return ['requested', 'confirmed', 'waitlisted', 'declined', 'cancelled'];
-  if (['waitlisted', 'declined', 'cancelled'].includes(status)) {
+  if (status === 'waitlisted') return ['waitlisted', 'cancelled'];
+  if (['declined', 'cancelled'].includes(status)) {
+    if (hasWaitlist) return [status];
     return [status, 'requested', 'confirmed'];
   }
   return ['confirmed', 'attended', 'no_show', 'cancelled'];
@@ -286,6 +288,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
+  const [promotingSessionId, setPromotingSessionId] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
   const [attendanceSession, setAttendanceSession] = useState(null);
@@ -360,6 +363,20 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingBookingId(null);
+    }
+  };
+
+  const handlePromoteNext = async session => {
+    if (promotingSessionId) return;
+    setPromotingSessionId(session.id);
+    try {
+      await adminPromoteNextWaitlisted(session.id);
+      await refreshBookings(session.id);
+      toast({ title: 'Next member promoted', description: 'Their earliest-expiring available credit is now reserved.' });
+    } catch (error) {
+      toast({ title: 'Promotion paused', description: error.message, variant: 'destructive' });
+    } finally {
+      setPromotingSessionId(null);
     }
   };
 
@@ -520,6 +537,9 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
         <div className="space-y-2">
           {filtered.map(s => {
             const sessionBlackouts = blackoutsOverlappingSession(s, blackouts);
+            const activeRosterCount = roster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
+            const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
+            const hasOpenPlace = s.capacity == null || activeRosterCount < s.capacity;
             return (
             <div key={s.id} className="bg-xert-ink border border-xert-steel/20">
               <div className="p-4">
@@ -576,9 +596,16 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
                   {/* Credit-based member roster */}
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h4 className="font-display text-sm text-xert-concrete/60 uppercase">
-                      Class roster ({roster.filter(r => ['requested', 'confirmed'].includes(r.status)).length}{s.capacity ? `/${s.capacity}` : ''})
+                      Class roster ({activeRosterCount}{s.capacity ? `/${s.capacity}` : ''})
                     </h4>
                     <div className="flex flex-wrap gap-2">
+                      {s.status === 'published' && new Date(s.start_time).getTime() > now && hasOpenPlace && waitlistedRoster.length > 0 && (
+                        <button type="button" onClick={() => handlePromoteNext(s)} disabled={Boolean(promotingSessionId)}
+                          className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-[11px] uppercase tracking-wider text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+                          <UserCheck className="w-3.5 h-3.5" />
+                          {promotingSessionId === s.id ? 'Promoting...' : `Promote next (${waitlistedRoster.length})`}
+                        </button>
+                      )}
                       {s.start_time && new Date(s.start_time).getTime() <= now
                         && ['published', 'full', 'completed'].includes(s.status)
                         && roster.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status)) && (
@@ -599,18 +626,24 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
                     <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
                   ) : (
                     <div className="space-y-2 mb-5">
-                      {roster.map(r => (
+                      {roster.map(r => {
+                        const waitlistPosition = r.status === 'waitlisted'
+                          ? waitlistedRoster.findIndex(member => member.booking_id === r.booking_id) + 1
+                          : null;
+                        return (
                         <div key={r.booking_id} className="flex items-center justify-between gap-4 bg-xert-ink p-3">
                           <div>
                             <p className="font-body text-sm text-xert-offwhite">{r.full_name || r.email || 'Member'}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
+                            {waitlistPosition && <p className="font-body text-[11px] text-xert-steel mt-1">Waitlist position {waitlistPosition}</p>}
                           </div>
                           <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || s.status !== 'published'}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
-                            {rosterStatusOptions(r.status, s.status).map(st => <option key={st} value={st}>{st}</option>)}
+                            {rosterStatusOptions(r.status, s.status, waitlistedRoster.length > 0).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
                         </div>
-                      ))}
+                        );
+                      })}
                       <p className="font-body text-xs text-xert-concrete/40">Waitlisting, declining, or cancelling a request returns its reserved credit.</p>
                     </div>
                   )}

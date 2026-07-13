@@ -152,6 +152,9 @@ create unique index if not exists session_bookings_unique_active
 -- Capacity counts look bookings up by session.
 create index if not exists session_bookings_session_idx
   on public.session_bookings(class_session_id);
+create index if not exists session_bookings_waitlist_order_idx
+  on public.session_bookings(class_session_id, created_at, id)
+  where status = 'waitlisted';
 
 -- Booking modes live on class_sessions because staff choose the policy per
 -- class. Keep the value constrained even on databases that predate this field.
@@ -197,6 +200,31 @@ alter table public.session_bookings
 alter table public.session_bookings
   add constraint session_bookings_status_check
   check (status in ('requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'));
+
+create or replace function public.enforce_session_waitlist_fifo()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_first_waitlisted uuid;
+begin
+  if new.status not in ('requested', 'confirmed') then return new; end if;
+  if tg_op = 'UPDATE' then
+    if old.status in ('requested', 'confirmed') then return new; end if;
+  end if;
+
+  select id into v_first_waitlisted from public.session_bookings
+    where class_session_id = new.class_session_id and status = 'waitlisted'
+    order by created_at, id limit 1;
+  if v_first_waitlisted is null then return new; end if;
+  if tg_op = 'UPDATE' then
+    if old.status = 'waitlisted' and new.id = v_first_waitlisted then return new; end if;
+  end if;
+  raise exception 'WAITLIST_PRIORITY';
+end; $$;
+revoke execute on function public.enforce_session_waitlist_fifo() from public, anon, authenticated;
+drop trigger if exists session_bookings_waitlist_fifo_guard on public.session_bookings;
+create trigger session_bookings_waitlist_fifo_guard
+  before insert or update of status on public.session_bookings
+  for each row execute function public.enforce_session_waitlist_fifo();
 
 
 -- ── coaches (Coaches page) ──────────────────────────────────────────────────
@@ -344,7 +372,10 @@ begin
   if v_capacity is null then raise exception 'SESSION_HAS_CAPACITY'; end if;
   select count(*) into v_booked from public.session_bookings
     where class_session_id = p_session_id and status in ('requested', 'confirmed');
-  if v_booked < v_capacity then raise exception 'SESSION_HAS_CAPACITY'; end if;
+  if v_booked < v_capacity and not exists (
+    select 1 from public.session_bookings
+    where class_session_id = p_session_id and status = 'waitlisted'
+  ) then raise exception 'SESSION_HAS_CAPACITY'; end if;
 
   insert into public.session_bookings (
     user_id, class_session_id, credit_batch_id, status
@@ -398,7 +429,11 @@ returns table (
          count(b.id) filter (where b.status in ('requested', 'confirmed')) as booked_count,
          -- null capacity = unlimited => null spots_left (mirrors book_session).
          -- Pending requests reserve their place until staff acts on them.
-         case when s.capacity is null then null
+         case when exists (
+                select 1 from session_bookings waiting
+                where waiting.class_session_id = s.id and waiting.status = 'waitlisted'
+              ) then 0
+              when s.capacity is null then null
               else greatest(s.capacity - count(b.id) filter (where b.status in ('requested', 'confirmed')), 0)::int
          end as spots_left
   from class_sessions s
@@ -414,11 +449,19 @@ create or replace function public.my_bookings()
 returns table (
   booking_id uuid, status text, booked_at timestamptz, cancelled_at timestamptz,
   session_id uuid, title text, class_type text, coach_name text,
-  start_time timestamptz, end_time timestamptz, location_zone text, intensity_level text
+  start_time timestamptz, end_time timestamptz, location_zone text, intensity_level text,
+  waitlist_position bigint
 ) language sql security definer stable set search_path = public as $$
   select b.id, b.status, b.created_at, b.cancelled_at,
          s.id, s.title, s.class_type, s.coach_name,
-         s.start_time, s.end_time, s.location_zone, s.intensity_level
+         s.start_time, s.end_time, s.location_zone, s.intensity_level,
+         case when b.status = 'waitlisted' then (
+           select count(*) + 1
+           from public.session_bookings earlier
+           where earlier.class_session_id = b.class_session_id
+             and earlier.status = 'waitlisted'
+             and (earlier.created_at, earlier.id) < (b.created_at, b.id)
+         ) end as waitlist_position
   from session_bookings b
   join class_sessions s on s.id = b.class_session_id
   where b.user_id = auth.uid()

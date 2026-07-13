@@ -58,7 +58,7 @@ test('selects booking rows with collision-safe source keys', () => {
 test('offers only valid bulk transitions for a consistent booking state', () => {
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'requested' }, { status: 'requested' }]), ['confirmed', 'waitlisted', 'declined']);
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'confirmed' }]), ['attended', 'no_show', 'cancelled']);
-  assert.deepEqual(bulkBookingStatusOptions([{ status: 'waitlisted' }]), ['confirmed', 'cancelled']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'waitlisted' }]), ['cancelled']);
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'requested' }, { status: 'confirmed' }]), []);
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'attended' }]), []);
 });

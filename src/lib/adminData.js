@@ -13,6 +13,7 @@ import {
   normalizeLegacyBookingNotes,
   normalizePTRequestMutation,
   normalizeSessionAttendanceMutation,
+  normalizeSessionPromotion,
 } from './adminRequests';
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
@@ -716,7 +717,27 @@ export async function adminSetBookingStatus(bookingId, status) {
     p_booking_id: mutation.id,
     p_status: mutation.status
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(error.message || '')) {
+      throw new Error('Promote the next waitlisted member before reopening another booking.');
+    }
+    throw new Error(error.message);
+  }
+}
+
+export async function adminPromoteNextWaitlisted(sessionId) {
+  const mutation = normalizeSessionPromotion(sessionId);
+  const { data, error } = await supabase.rpc('admin_promote_next_waitlisted', {
+    p_session_id: mutation.sessionId
+  });
+  if (!error) return data;
+  const message = error.message || '';
+  if (/WAITLIST_EMPTY/i.test(message)) throw new Error('No members are waiting for this class.');
+  if (/WAITLIST_MEMBER_NO_CREDITS|NO_CREDITS/i.test(message)) {
+    throw new Error('The next member has no available class credit. Contact them before changing the queue.');
+  }
+  if (/SESSION_FULL/i.test(message)) throw new Error('This class is still full. Refresh the roster before promoting anyone.');
+  throw new Error(message);
 }
 
 export async function adminRecordSessionAttendance(sessionId, attendance) {

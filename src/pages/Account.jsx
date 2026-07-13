@@ -541,7 +541,7 @@ export default function Account() {
                     </p>
                     <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.75)' }}>
                       {b.status === 'waitlisted'
-                        ? 'You are on the waitlist. No class credit is currently reserved.'
+                        ? `You are ${b.waitlist_position ? `#${b.waitlist_position} ` : ''}on the waitlist. No class credit is currently reserved.`
                         : 'Your credit is reserved while XERT reviews this request.'}
                     </p>
                   </div>

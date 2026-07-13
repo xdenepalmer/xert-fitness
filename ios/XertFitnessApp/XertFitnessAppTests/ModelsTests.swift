@@ -524,11 +524,12 @@ final class ModelsTests: XCTestCase {
 
     func testWaitlistedBookingRemainsVisibleAndCanBeWithdrawn() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let waitlisted = booking(status: "waitlisted", startTime: now.addingTimeInterval(60 * 60))
+        var waitlisted = booking(status: "waitlisted", startTime: now.addingTimeInterval(60 * 60))
+        waitlisted.waitlist_position = 2
 
         XCTAssertTrue(waitlisted.isActiveClassPlace)
         XCTAssertTrue(waitlisted.isCancellable(now: now))
-        XCTAssertEqual(waitlisted.stateLabel, "Waitlisted")
+        XCTAssertEqual(waitlisted.stateLabel, "Waitlisted · #2")
     }
 
     func testBookingTimelineSectionsAreMutuallyExclusive() {

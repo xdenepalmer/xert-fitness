@@ -57,7 +57,7 @@ export function bulkBookingStatusOptions(bookings) {
   if (statuses.size !== 1) return [];
   const [status] = statuses;
   if (status === 'requested') return ['confirmed', 'waitlisted', 'declined'];
-  if (status === 'waitlisted') return ['confirmed', 'cancelled'];
+  if (status === 'waitlisted') return ['cancelled'];
   if (status === 'confirmed') return ['attended', 'no_show', 'cancelled'];
   return [];
 }

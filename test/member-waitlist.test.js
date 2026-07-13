@@ -17,7 +17,7 @@ test('every database path installs a secure no-credit member waitlist RPC', asyn
     assert.ok(start >= 0 && end > start, `${path} must install join_session_waitlist`);
     assert.match(rpc, /from public\.class_sessions where id = p_session_id for update/i);
     assert.match(rpc, /status in \('requested', 'confirmed', 'waitlisted'\)/i);
-    assert.match(rpc, /if v_booked < v_capacity then raise exception 'SESSION_HAS_CAPACITY'/i);
+    assert.match(rpc, /if v_booked < v_capacity and not exists[\s\S]*status = 'waitlisted'[\s\S]*then raise exception 'SESSION_HAS_CAPACITY'/i);
     assert.match(rpc, /credit_batch_id, status[\s\S]*null, 'waitlisted'/i);
     assert.doesNotMatch(rpc, /update public\.credit_batches/i);
     assert.match(sql, /revoke execute on function public\.join_session_waitlist\(uuid\) from public, anon/i);

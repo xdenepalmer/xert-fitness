@@ -6,6 +6,7 @@ with required (capability, migration) as (
     ('admin_role_safety', 'src/supabase/admin_role_safety_upgrade.sql'),
     ('booking_waitlist_withdrawal', 'src/supabase/booking_modes_upgrade.sql'),
     ('member_waitlist_join', 'src/supabase/member_waitlist_upgrade.sql'),
+    ('waitlist_fifo_promotion', 'src/supabase/waitlist_fifo_promotion_upgrade.sql'),
     ('attendance_roll_call', 'src/supabase/attendance_roll_call_upgrade.sql'),
     ('member_pt_request_tracking', 'src/supabase/member_pt_request_tracking.sql'),
     ('public_form_integrity', 'src/supabase/public_form_integrity_upgrade.sql')

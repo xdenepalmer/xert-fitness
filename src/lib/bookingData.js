@@ -91,6 +91,7 @@ const BOOKING_ERRORS = {
   SESSION_FULL: 'Sorry, this class is now full.',
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
   SESSION_HAS_CAPACITY: 'A place is available now. Book the class instead of joining its waitlist.',
+  WAITLIST_PRIORITY: 'Members already on the waitlist have first claim on this place. Join the queue instead.',
   NO_CREDITS: 'You have no available class credits. Purchase a pack to book.',
   BOOKING_NOT_FOUND: 'That booking could not be found. Refresh your account and try again.',
   NOT_CANCELLABLE: 'That booking can no longer be cancelled.'

@@ -18,6 +18,7 @@ enum BookingErrorMessage {
         ("SESSION_FULL", "That class is now full. Refresh to check whether its waitlist is available."),
         ("SESSION_INTEREST_ONLY", "This class is collecting interest only."),
         ("SESSION_HAS_CAPACITY", "A place is available now. Refresh and book the class instead."),
+        ("WAITLIST_PRIORITY", "Members already on the waitlist have first claim on this place. Refresh and join the queue."),
         ("NO_CREDITS", "You need available credits before booking this class."),
         ("BOOKING_NOT_FOUND", "That booking could not be found. Pull to refresh your account."),
         ("NOT_CANCELLABLE", "This booking can no longer be cancelled.")
