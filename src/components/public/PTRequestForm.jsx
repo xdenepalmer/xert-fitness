@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { requestPrivateSession } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
 import { PT_SESSION_TYPES } from '@/lib/ptRequestAnalytics';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
 const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1pm)', 'Afternoon (1–5pm)', 'After work (5–7pm)', 'Evening (7pm+)', 'Flexible'];
@@ -23,6 +24,7 @@ function Input({ ...props }) {
 }
 
 export default function PTRequestForm({ onSuccess }) {
+  const { user, profile } = useSupabaseAuth();
   const [form, setForm] = useState({
     full_name: '', email: '', phone: '',
     requested_session_type: '', preferred_day: '', preferred_time: '',
@@ -31,6 +33,15 @@ export default function PTRequestForm({ onSuccess }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setForm(current => ({
+      ...current,
+      full_name: current.full_name || profile?.full_name || user?.user_metadata?.full_name || '',
+      email: current.email || user?.email || profile?.email || '',
+      phone: current.phone || profile?.phone || '',
+    }));
+  }, [profile, user]);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
