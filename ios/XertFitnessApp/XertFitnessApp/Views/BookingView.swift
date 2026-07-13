@@ -4,6 +4,7 @@ struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.openURL) private var openURL
     @State private var activeSheet: BookingSheet?
+    @State private var expandedSessionIDs: Set<UUID> = []
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -189,6 +190,16 @@ struct BookingView: View {
             .font(.caption)
             .foregroundStyle(Color.xertPale)
 
+            DisclosureGroup(isExpanded: expansionBinding(for: session.id)) {
+                sessionDetails(for: session)
+                    .padding(.top, 10)
+            } label: {
+                Label("Class details", systemImage: "info.circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.xertSteel)
+            }
+            .tint(.xertSteel)
+
             sessionAction(for: session, booking: booking)
         }
         .padding(14)
@@ -196,6 +207,62 @@ struct BookingView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+    }
+
+    private func expansionBinding(for sessionID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { expandedSessionIDs.contains(sessionID) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedSessionIDs.insert(sessionID)
+                } else {
+                    expandedSessionIDs.remove(sessionID)
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func sessionDetails(for session: ClassSession) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let description = session.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !description.isEmpty {
+                Text(description)
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                if let classType = session.class_type, !classType.isEmpty {
+                    detailRow("Training style", value: classType, icon: "figure.strengthtraining.traditional")
+                }
+                if let intensity = session.intensity_level, !intensity.isEmpty {
+                    detailRow("Intensity", value: intensity, icon: "speedometer")
+                }
+                if let duration = session.duration_minutes {
+                    detailRow("Duration", value: "\(duration) minutes", icon: "clock")
+                }
+                if let endTime = session.end_time {
+                    detailRow("Finishes", value: endTime.formatted(date: .omitted, time: .shortened), icon: "flag.checkered")
+                }
+                if session.beginner_friendly == true {
+                    detailRow("Suitable for", value: "Beginners", icon: "checkmark.seal")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func detailRow(_ label: String, value: String, icon: String) -> some View {
+        Label {
+            Text("\(label): \(value)")
+        } icon: {
+            Image(systemName: icon)
+                .frame(width: 18)
+        }
+        .font(.caption)
+        .foregroundStyle(Color.xertMuted)
     }
 
     @ViewBuilder
