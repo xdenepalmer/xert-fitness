@@ -57,6 +57,18 @@ export async function getMyOrders() {
   return data || [];
 }
 
+export async function getMemberAnnouncements() {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('member_announcements')
+    .select('id,title,body,tone,published_at,expires_at,updated_at')
+    .lte('published_at', nowIso)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .order('published_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 // ─── Sessions & bookings ──────────────────────────────────────────────────────
 
 export async function getAvailableSessions() {

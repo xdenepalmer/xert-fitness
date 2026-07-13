@@ -242,6 +242,7 @@ workflows:
               "product_update_guard",
               "stripe_refund_reconciliation",
               "checkout_reconciliation",
+              "member_announcements",
               "member_pt_request_tracking",
               "public_form_integrity",
             ];

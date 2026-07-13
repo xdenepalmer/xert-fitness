@@ -14,6 +14,7 @@ struct HomeView: View {
                     DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
 
                     heroHeader
+                    announcementsSection
                     quickActions
                     glanceSection
                     nextUpSection
@@ -53,6 +54,21 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
+    }
+
+    // MARK: - Member notices
+
+    @ViewBuilder
+    private var announcementsSection: some View {
+        if store.isSignedIn && !store.announcements.isEmpty {
+            XertSection(title: "Member notices") {
+                VStack(spacing: 12) {
+                    ForEach(store.announcements) { announcement in
+                        MemberAnnouncementRow(announcement: announcement)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Quick actions
@@ -221,6 +237,51 @@ struct HomeView: View {
             .filter { !$0.isComplete }
             .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
             .first
+    }
+}
+
+private struct MemberAnnouncementRow: View {
+    let announcement: MemberAnnouncement
+
+    private var accent: Color {
+        switch announcement.tone {
+        case "urgent": return Color(red: 240 / 255, green: 161 / 255, blue: 161 / 255)
+        case "action": return Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255)
+        default: return .xertSteel
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Rectangle()
+                .fill(accent)
+                .frame(width: 3)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(announcement.priorityLabel)
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(1.2)
+                    .foregroundStyle(accent)
+                Text(announcement.title)
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text(announcement.body)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let expiry = announcement.expires_at {
+                    Text("Available until \(expiry.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertMuted)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .xertCardStyle()
+        .accessibilityElement(children: .combine)
     }
 }
 

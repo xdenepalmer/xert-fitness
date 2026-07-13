@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
+import { BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
-import { getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
+import { getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { useToast } from '@/components/ui/use-toast';
@@ -56,6 +56,7 @@ export default function Account() {
   const [orders, setOrders] = useState([]);
   const [eventGoals, setEventGoals] = useState([]);
   const [privateSessionRequests, setPrivateSessionRequests] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
@@ -69,7 +70,7 @@ export default function Account() {
 
   const refresh = useCallback(async () => {
     try {
-      const [c, b, o, goals, ptRequests] = await Promise.all([
+      const [c, b, o, goals, ptRequests, memberNotices] = await Promise.all([
         getMyCredits(),
         getMyBookings(),
         getMyOrders(),
@@ -78,12 +79,15 @@ export default function Account() {
         getMyEventGoals().catch(() => []),
         // PT tracking is additive for existing Supabase installs.
         getMyPrivateSessionRequests().catch(() => []),
+        // Member notices are additive and must never block account essentials.
+        getMemberAnnouncements().catch(() => []),
       ]);
       setCredits(c);
       setBookings(b);
       setOrders(o);
       setEventGoals(goals);
       setPrivateSessionRequests(ptRequests);
+      setAnnouncements(memberNotices);
     } catch (e) {
       toast({
         title: 'Could not load your account',
@@ -292,6 +296,32 @@ export default function Account() {
             Sign Out
           </button>
         </div>
+
+        {announcements.length > 0 && (
+          <section className="mb-10" aria-labelledby="member-notices-title">
+            <div className="mb-4 flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-xert-steel" aria-hidden="true" />
+              <h2 id="member-notices-title" className="font-display text-2xl uppercase text-xert-offwhite">Member Notices</h2>
+            </div>
+            <div className="space-y-3">
+              {announcements.map(notice => {
+                const tone = notice.tone === 'urgent'
+                  ? { border: 'rgba(201,78,68,0.55)', label: 'Urgent', color: '#f0a1a1' }
+                  : notice.tone === 'action'
+                    ? { border: 'rgba(224,179,106,0.5)', label: 'Action requested', color: '#e0b36a' }
+                    : { border: 'rgba(123,167,188,0.4)', label: 'Update', color: '#7BA7BC' };
+                return (
+                  <article key={notice.id} className="border bg-xert-ink p-5" style={{ borderColor: tone.border }}>
+                    <p className="font-body text-[10px] uppercase tracking-[0.18em]" style={{ color: tone.color }}>{tone.label}</p>
+                    <h3 className="mt-2 font-display text-xl uppercase text-xert-offwhite">{notice.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{notice.body}</p>
+                    {notice.expires_at && <p className="mt-3 font-body text-xs text-xert-pale/40">Available until {formatDateTime(notice.expires_at)}</p>}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Member details */}
         <section className="mb-10">

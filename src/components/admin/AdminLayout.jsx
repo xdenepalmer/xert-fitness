@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
   Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
-  CircleAlert, ShieldCheck, ScrollText,
+  BellRing, CircleAlert, ShieldCheck, ScrollText,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
@@ -42,6 +42,7 @@ const NAV_GROUPS = [
   {
     heading: 'Site Content',
     items: [
+      { key: 'announcements', label: 'Member Notices', icon: BellRing },
       { key: 'content', label: 'Site Content (CMS)', icon: PenSquare },
       { key: 'coaches', label: 'Coaches & Team', icon: UserSquare2 },
       { key: 'events', label: 'Event Calendar', icon: Trophy },

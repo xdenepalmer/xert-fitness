@@ -10,6 +10,7 @@ final class XertStore: ObservableObject {
     @Published var bookings: [BookingItem] = []
     @Published var orders: [OrderItem] = []
     @Published var privateSessionRequests: [PrivateSessionStatusItem] = []
+    @Published var announcements: [MemberAnnouncement] = []
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
@@ -42,7 +43,7 @@ final class XertStore: ObservableObject {
     private var dataRefreshVersion = MemberStateVersion()
     private var memberStateVersion = MemberStateVersion()
     private static let memberDataSources: Set<XertDataSource> = [
-        .credits, .bookings, .orders, .profile, .eventGoals, .privateSessions,
+        .credits, .bookings, .orders, .profile, .eventGoals, .privateSessions, .announcements,
     ]
 
     var isSignedIn: Bool {
@@ -178,6 +179,7 @@ final class XertStore: ObservableObject {
             async let profileRequest = api.profile(session: authSession)
             async let eventGoalRequest = api.eventGoals(session: authSession)
             async let privateSessionRequest = api.privateSessionRequests(session: authSession)
+            async let announcementRequest = api.announcements(session: authSession)
             var creditsLoaded = false
             var bookingsLoaded = false
             var ordersLoaded = false
@@ -247,6 +249,16 @@ final class XertStore: ObservableObject {
                 unavailableDataSources.insert(.privateSessions)
                 // Tracking is optional until the additive ownership migration
                 // reaches an existing Supabase project.
+            }
+
+            do {
+                let loadedAnnouncements = try await announcementRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                announcements = loadedAnnouncements
+            } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                unavailableDataSources.insert(.announcements)
+                // Announcements are additive and cannot make bookings or credits unavailable.
             }
 
             if creditsLoaded && bookingsLoaded && ordersLoaded && profileLoaded {
@@ -742,6 +754,7 @@ final class XertStore: ObservableObject {
         profile = nil
         eventGoalIDs = []
         privateSessionRequests = []
+        announcements = []
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
         unavailableDataSources.subtract(Self.memberDataSources)

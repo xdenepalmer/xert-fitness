@@ -1,7 +1,7 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, credits, bookings, orders, profile, eventGoals, privateSessions
+    case products, sessions, events, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
 
     var displayName: String {
         switch self {
@@ -14,6 +14,25 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .profile: return "member profile"
         case .eventGoals: return "training goals"
         case .privateSessions: return "PT requests"
+        case .announcements: return "member notices"
+        }
+    }
+}
+
+struct MemberAnnouncement: Identifiable, Codable, Hashable {
+    let id: UUID
+    let title: String
+    let body: String
+    let tone: String
+    let published_at: Date
+    let expires_at: Date?
+    let updated_at: Date
+
+    var priorityLabel: String {
+        switch tone {
+        case "urgent": return "Urgent"
+        case "action": return "Action requested"
+        default: return "Member update"
         }
     }
 }

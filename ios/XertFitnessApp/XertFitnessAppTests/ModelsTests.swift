@@ -108,10 +108,32 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 8)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 10)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
         XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
+        XCTAssertEqual(XertDataSource.announcements.displayName, "member notices")
+    }
+
+    func testMemberAnnouncementDecodesPriorityAndExpiry() throws {
+        let data = Data("""
+        {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "title": "Class location update",
+          "body": "Saturday training has moved indoors.",
+          "tone": "action",
+          "published_at": "2026-07-13T04:00:00Z",
+          "expires_at": "2026-07-14T04:00:00Z",
+          "updated_at": "2026-07-13T04:00:00Z"
+        }
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let announcement = try decoder.decode(MemberAnnouncement.self, from: data)
+
+        XCTAssertEqual(announcement.priorityLabel, "Action requested")
+        XCTAssertNotNil(announcement.expires_at)
     }
 
     func testPrivateSessionRequestNormalizesRequiredAndOptionalFields() throws {

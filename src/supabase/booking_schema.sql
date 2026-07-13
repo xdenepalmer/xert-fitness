@@ -180,6 +180,23 @@ create table if not exists public.orders (
 create index if not exists orders_status_created_idx on public.orders(status, created_at desc, id desc);
 create index if not exists orders_unresolved_checkout_idx on public.orders(created_at desc, id desc) where status in ('pending', 'failed');
 
+-- ── member announcements ────────────────────────────────────────────────────
+-- Admin-authored operational notices shared by the web account and iOS app.
+create table if not exists public.member_announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(btrim(title)) between 1 and 120),
+  body text not null check (char_length(btrim(body)) between 1 and 2000),
+  tone text not null default 'info' check (tone in ('info', 'action', 'urgent')),
+  published_at timestamptz,
+  expires_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (expires_at is null or published_at is null or expires_at > published_at)
+);
+create index if not exists member_announcements_live_idx
+  on public.member_announcements(published_at desc, id desc) where published_at is not null;
+
 
 -- ── credit_batches (session credits with expiry) ────────────────────────────
 create table if not exists public.credit_batches (
@@ -651,6 +668,38 @@ drop policy if exists "orders_select_own_or_admin" on public.orders;
 create policy "orders_select_own_or_admin" on public.orders
   for select to authenticated using (user_id = auth.uid() or public.is_admin());
 
+-- member_announcements: signed-in members see only live notices; admins manage
+-- drafts, publishing and expiry through the command centre.
+create or replace function public.touch_member_announcement_updated_at()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists member_announcements_touch_updated_at on public.member_announcements;
+create trigger member_announcements_touch_updated_at
+  before update on public.member_announcements
+  for each row execute function public.touch_member_announcement_updated_at();
+alter table public.member_announcements enable row level security;
+drop policy if exists "member_announcements_select_live_or_admin" on public.member_announcements;
+drop policy if exists "member_announcements_admin_insert" on public.member_announcements;
+drop policy if exists "member_announcements_admin_update" on public.member_announcements;
+drop policy if exists "member_announcements_admin_delete" on public.member_announcements;
+create policy "member_announcements_select_live_or_admin" on public.member_announcements
+  for select to authenticated using (
+    public.is_admin() or (
+      published_at is not null and published_at <= now()
+      and (expires_at is null or expires_at > now())
+    )
+  );
+create policy "member_announcements_admin_insert" on public.member_announcements
+  for insert to authenticated with check (public.is_admin());
+create policy "member_announcements_admin_update" on public.member_announcements
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "member_announcements_admin_delete" on public.member_announcements
+  for delete to authenticated using (public.is_admin());
+
 -- credit_batches: a user reads own credits; admins read all. Writes via
 -- SECURITY DEFINER functions / service role only.
 alter table public.credit_batches enable row level security;
@@ -705,6 +754,8 @@ create policy "member_event_goals_delete_own_or_admin" on public.member_event_go
 -- ── Function grants ─────────────────────────────────────────────────────────
 -- SECURITY DEFINER functions are executable by PUBLIC unless explicitly
 -- revoked. Keep public timetable reads open, but limit member/admin actions.
+revoke all on table public.member_announcements from public, anon;
+grant select, insert, update, delete on table public.member_announcements to authenticated;
 revoke execute on function public.sessions_with_availability() from public;
 revoke execute on function public.book_session(uuid) from public, anon;
 revoke execute on function public.join_session_waitlist(uuid) from public, anon;
@@ -733,6 +784,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('member_waitlist_join') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('checkout_reconciliation') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('member_announcements') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

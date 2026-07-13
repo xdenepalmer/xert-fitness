@@ -8,6 +8,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   product_update_guard: 'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
   stripe_refund_reconciliation: 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
   checkout_reconciliation: 'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
+  member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   member_pt_request_tracking: 'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
 });

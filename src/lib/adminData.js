@@ -467,6 +467,45 @@ export async function deleteEvent(id) {
   assertAdminMutation(result, 'Event deletion');
 }
 
+// ─── Member announcements ───────────────────────────────────────────────────
+
+export async function getAllMemberAnnouncements() {
+  const { data, error } = await supabase
+    .from('member_announcements')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function createMemberAnnouncement(announcement) {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error('Your admin session has expired. Sign in again.');
+  const { data, error } = await supabase
+    .from('member_announcements')
+    .insert({ ...announcement, created_by: user.id })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateMemberAnnouncement(id, updates) {
+  const { data, error } = await supabase
+    .from('member_announcements')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function deleteMemberAnnouncement(id) {
+  const result = await supabase.from('member_announcements').delete().eq('id', id).select('id');
+  assertAdminMutation(result, 'Announcement deletion');
+}
+
 export async function seedXertEventCalendar() {
   const { data: existing, error: existingError } = await supabase.from('events').select('name,event_date');
   if (existingError) throw new Error(existingError.message);
