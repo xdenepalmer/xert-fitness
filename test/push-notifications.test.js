@@ -76,6 +76,16 @@ test('admin publishing rejects unsafe actions and expired notices', () => {
     expires_at: '2026-07-15T00:00:00Z',
   } }, now);
   assert.equal(valid.announcement.tone, 'action');
+  const versioned = normalizeAnnouncementPublish({
+    id: '9e604cf4-64c2-4a82-9ff0-ecf5bb8db629',
+    expected_updated_at: '2026-07-14T01:00:00Z',
+    announcement: { title: 'Updated', body: 'Review this notice.' },
+  }, now);
+  assert.equal(versioned.expectedUpdatedAt, '2026-07-14T01:00:00Z');
+  assert.throws(() => normalizeAnnouncementPublish({
+    id: '9e604cf4-64c2-4a82-9ff0-ecf5bb8db629',
+    announcement: { title: 'Updated', body: 'Missing its version.' },
+  }, now), /ANNOUNCEMENT_VERSION_INVALID/);
   assert.throws(() => normalizeAnnouncementPublish({ announcement: {
     title: 'Unsafe', body: 'Nope', cta_label: 'Open', cta_url: 'javascript:alert(1)',
   } }, now), /ANNOUNCEMENT_ACTION_INVALID/);

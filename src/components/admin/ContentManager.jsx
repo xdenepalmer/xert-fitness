@@ -189,7 +189,7 @@ function ImageListEditor({ value, onChange, folder }) {
   );
 }
 
-function SectionEditor({ section, initial, onSaved, onDirtyChange }) {
+function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyChange }) {
   // Prefill with the live defaults so the editor always shows what the site
   // is currently displaying — saved CMS values overlay the defaults.
   const defaults = CONTENT_DEFAULTS[section.key] || {};
@@ -227,12 +227,12 @@ function SectionEditor({ section, initial, onSaved, onDirtyChange }) {
     setSaving(true);
     try {
       const clean = normalizeSiteContent(section.key, data);
-      await saveSiteContent(section.key, clean);
+      await saveSiteContent(section.key, clean, expectedUpdatedAt);
       clearSiteContentCache();
       setSavedAt(new Date());
       setDirty(false);
       clearSiteContentDraft(window.localStorage, section.key);
-      onSaved();
+      await onSaved();
       toast({ title: `${section.title} saved`, description: 'Changes are live on the site.' });
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
@@ -335,7 +335,7 @@ export default function ContentManager({ onDirtyChange = NOOP }) {
     setLoadError('');
     try {
       const rows = await getAllSiteContent();
-      setContent(Object.fromEntries(rows.map(r => [r.key, r.data])));
+      setContent(Object.fromEntries(rows.map(r => [r.key, r])));
     } catch (error) {
       setLoadError(error.message);
       toast({ title: 'Could not load content', description: error.message, variant: 'destructive' });
@@ -365,7 +365,14 @@ export default function ContentManager({ onDirtyChange = NOOP }) {
       )}
       <div className="space-y-6">
         {SECTIONS.map(s => (
-          <SectionEditor key={s.key} section={s} initial={content[s.key]} onSaved={load} onDirtyChange={handleDirtyChange} />
+          <SectionEditor
+            key={s.key}
+            section={s}
+            initial={content[s.key]?.data}
+            expectedUpdatedAt={content[s.key]?.updated_at}
+            onSaved={load}
+            onDirtyChange={handleDirtyChange}
+          />
         ))}
       </div>
     </div>

@@ -295,6 +295,7 @@ workflows:
               "class_cancellation_notifications",
               "admin_daily_operations",
               "schedule_optimistic_locking",
+              "shared_admin_optimistic_locking",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

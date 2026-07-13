@@ -108,9 +108,9 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
       }
       let publishResult = null;
       if (publish) {
-        publishResult = await publishMemberAnnouncement(editing?.id, payload);
+        publishResult = await publishMemberAnnouncement(editing?.id, payload, editing?.updated_at);
       } else if (editing?.id) {
-        await updateMemberAnnouncement(editing.id, payload);
+        await updateMemberAnnouncement(editing.id, payload, editing.updated_at);
       } else {
         await createMemberAnnouncement(payload);
       }
@@ -140,8 +140,8 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
         throw new Error('Edit this notice and choose a future expiry before publishing it again.');
       }
       const result = publish
-        ? await publishMemberAnnouncement(item.id, item)
-        : await updateMemberAnnouncement(item.id, { published_at: null });
+        ? await publishMemberAnnouncement(item.id, item, item.updated_at)
+        : await updateMemberAnnouncement(item.id, { published_at: null }, item.updated_at);
       const push = result?.push;
       toast({
         title: publish ? 'Announcement published' : 'Announcement unpublished',
@@ -160,7 +160,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
   const remove = async item => {
     setSaving(true);
     try {
-      await deleteMemberAnnouncement(item.id);
+      await deleteMemberAnnouncement(item.id, item.updated_at);
       setConfirmDelete(null);
       toast({ title: 'Announcement deleted' });
       await load({ quiet: true });
@@ -174,7 +174,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
   const setArchived = async (item, archived) => {
     setSaving(true);
     try {
-      await setMemberAnnouncementArchived(item.id, archived);
+      await setMemberAnnouncementArchived(item.id, archived, item.updated_at);
       setConfirmArchive(null);
       toast({
         title: archived ? 'Announcement archived' : 'Announcement restored as draft',

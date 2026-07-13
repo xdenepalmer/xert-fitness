@@ -421,19 +421,28 @@ export function getDefaultSettings() {
   };
 }
 
-export async function updateSoftLaunchSettings(updates) {
-  const current = await getSoftLaunchSettings();
-  if (current?.id) {
-    const result = await supabase
+export async function updateSoftLaunchSettings(updates, baseline) {
+  if (baseline?.id) {
+    let query = supabase
       .from('admin_settings')
       .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', current.id)
-      .select('id');
-    assertAdminMutation(result, 'Launch settings update');
-  } else {
-    const { error } = await supabase.from('admin_settings').insert([{ ...getDefaultSettings(), ...updates }]);
-    if (error) throw new Error(error.message);
+      .eq('id', baseline.id);
+    if (baseline.updated_at) query = query.eq('updated_at', baseline.updated_at);
+    const result = await query.select('*');
+    return assertAdminMutationVersion(result, 'Launch settings update')[0];
   }
+
+  const current = await getSoftLaunchSettings();
+  if (current?.id) {
+    throw new Error('Launch settings changed since you opened them. Refresh the admin view and review the latest version.');
+  }
+  const { data, error } = await supabase
+    .from('admin_settings')
+    .insert([{ ...getDefaultSettings(), ...updates }])
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
@@ -553,7 +562,7 @@ export async function getAllMemberAnnouncements() {
   }));
 }
 
-export async function publishMemberAnnouncement(id, announcement) {
+export async function publishMemberAnnouncement(id, announcement, expectedUpdatedAt) {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
   const response = await fetch('/api/admin-publish-announcement', {
@@ -562,7 +571,7 @@ export async function publishMemberAnnouncement(id, announcement) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ id: id || null, announcement }),
+    body: JSON.stringify({ id: id || null, announcement, expected_updated_at: expectedUpdatedAt || null }),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Announcement could not be published.');
@@ -581,30 +590,35 @@ export async function createMemberAnnouncement(announcement) {
   return data;
 }
 
-export async function updateMemberAnnouncement(id, updates) {
-  const { data, error } = await supabase
+export async function updateMemberAnnouncement(id, updates, expectedUpdatedAt) {
+  let query = supabase
     .from('member_announcements')
     .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single();
-  if (error) throw new Error(error.message);
-  return data;
+    .eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('*');
+  return assertAdminMutationVersion(result, 'Announcement update')[0];
 }
 
-export async function deleteMemberAnnouncement(id) {
-  const result = await supabase.from('member_announcements').delete().eq('id', id).select('id');
+export async function deleteMemberAnnouncement(id, expectedUpdatedAt) {
+  let query = supabase.from('member_announcements').delete().eq('id', id);
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt);
+  const result = await query.select('id');
   if (/ANNOUNCEMENT_ARCHIVE_REQUIRED/i.test(result.error?.message || '')) {
     throw new Error('Published notices must be archived so their member and delivery history stays intact.');
   }
-  assertAdminMutation(result, 'Announcement deletion');
+  assertAdminMutationVersion(result, 'Announcement deletion');
 }
 
-export async function setMemberAnnouncementArchived(id, archived) {
+export async function setMemberAnnouncementArchived(id, archived, expectedUpdatedAt) {
   const { error } = await supabase.rpc('admin_archive_member_announcement', {
     p_announcement_id: id,
     p_archived: Boolean(archived),
+    p_expected_updated_at: expectedUpdatedAt,
   });
+  if (/ANNOUNCEMENT_STALE/i.test(error?.message || '')) {
+    throw new Error('Announcement archive was not applied because this notice changed since you opened it. Refresh the admin view and review the latest version.');
+  }
   if (error) throw new Error(error.message);
 }
 
@@ -1427,7 +1441,26 @@ export async function getAllSiteContent() {
   return data || [];
 }
 
-export async function saveSiteContent(key, contentData) {
-  const { error } = await supabase.from('site_content').upsert({ key, data: contentData, updated_at: new Date().toISOString() });
+export async function saveSiteContent(key, contentData, expectedUpdatedAt) {
+  const mutation = { data: contentData, updated_at: new Date().toISOString() };
+  if (expectedUpdatedAt) {
+    const result = await supabase
+      .from('site_content')
+      .update(mutation)
+      .eq('key', key)
+      .eq('updated_at', expectedUpdatedAt)
+      .select('*');
+    return assertAdminMutationVersion(result, 'Site content update')[0];
+  }
+
+  const { data, error } = await supabase
+    .from('site_content')
+    .insert({ key, ...mutation })
+    .select('*')
+    .single();
+  if (error?.code === '23505') {
+    throw new Error('Site content changed since you opened it. Refresh the admin view and review the latest version.');
+  }
   if (error) throw new Error(error.message);
+  return data;
 }

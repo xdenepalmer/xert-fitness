@@ -127,6 +127,8 @@ The Supabase schema is defined in:
   durable member notices and targeted Apple push delivery when staff cancel a class
 - `src/supabase/admin_daily_operations_upgrade.sql` — powers an admin-only,
   Brisbane-local daily class desk with bounded roster, queue and attendance counts
+- `src/supabase/shared_admin_optimistic_locking_upgrade.sql` — prevents stale CMS,
+  launch-setting and announcement actions from overwriting another administrator's work
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -145,7 +147,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `content_change_audit_upgrade.sql`, then
 `booking_lifecycle_audit_upgrade.sql`, then
 `class_cancellation_notifications_upgrade.sql`, then
-`admin_daily_operations_upgrade.sql`. This sequence produces the
+`admin_daily_operations_upgrade.sql`, then
+`shared_admin_optimistic_locking_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -170,7 +173,8 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `content_change_audit_upgrade.sql`, then
 `booking_lifecycle_audit_upgrade.sql`, then
 `class_cancellation_notifications_upgrade.sql`, then
-`admin_daily_operations_upgrade.sql`. The scripts are idempotent;
+`admin_daily_operations_upgrade.sql`, then
+`shared_admin_optimistic_locking_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

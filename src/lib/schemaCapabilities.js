@@ -30,6 +30,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   class_cancellation_notifications: 'Apply supabase/migrations/20260714015000_class_cancellation_notifications.sql in Supabase.',
   admin_daily_operations: 'Apply supabase/migrations/20260714016000_admin_daily_operations.sql in Supabase.',
   schedule_optimistic_locking: 'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
+  shared_admin_optimistic_locking: 'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

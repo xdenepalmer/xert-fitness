@@ -53,9 +53,9 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     setSaving(true);
     try {
       const normalized = normalizeLaunchSettings(settings);
-      await updateSoftLaunchSettings(normalized);
-      setSettings(current => ({ ...current, ...normalized }));
-      setSavedSettings(current => ({ ...current, ...normalized }));
+      const updated = await updateSoftLaunchSettings(normalized, savedSettings);
+      setSettings(updated);
+      setSavedSettings(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
