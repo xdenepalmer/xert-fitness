@@ -535,6 +535,53 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(BookingItem.activeBySession([newer, older])[sessionID]?.booking_id, newer.booking_id)
     }
 
+    func testClassDiscoverySearchesMemberFacingSessionDetails() {
+        let sessions = [
+            classSession(spotsLeft: 4, title: "Engine Room", classType: "Conditioning", coachName: "Morgan", location: "Outdoor zone"),
+            classSession(spotsLeft: 3, title: "Barbell Club", classType: "Strength", coachName: "Taylor", location: "Main floor"),
+        ]
+
+        XCTAssertEqual(ClassSessionDiscovery.sessions(from: sessions, search: "morgan").map(\.title), ["Engine Room"])
+        XCTAssertEqual(ClassSessionDiscovery.sessions(from: sessions, search: "STRENGTH").map(\.title), ["Barbell Club"])
+        XCTAssertEqual(ClassSessionDiscovery.sessions(from: sessions, search: "outdoor").map(\.title), ["Engine Room"])
+    }
+
+    func testClassDiscoveryUsesQueenslandTodayAndSevenDayWindows() {
+        let now = queenslandDate(2026, 7, 13, 10, 0)
+        let sessions = [
+            classSession(spotsLeft: 4, title: "Today", startTime: queenslandDate(2026, 7, 13, 18, 0)),
+            classSession(spotsLeft: 4, title: "This Week", startTime: queenslandDate(2026, 7, 19, 8, 0)),
+            classSession(spotsLeft: 4, title: "Outside Window", startTime: queenslandDate(2026, 7, 20, 0, 0)),
+        ]
+
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, dateWindow: .today, now: now).map(\.title),
+            ["Today"]
+        )
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, dateWindow: .sevenDays, now: now).map(\.title),
+            ["Today", "This Week"]
+        )
+    }
+
+    func testClassDiscoveryFiltersFitAndSortsDeterministically() {
+        let start = queenslandDate(2026, 7, 14, 6, 0)
+        let sessions = [
+            classSession(spotsLeft: 0, title: "Full", startTime: start, beginnerFriendly: true),
+            classSession(spotsLeft: 2, title: "Zulu", startTime: start, beginnerFriendly: false),
+            classSession(spotsLeft: nil, title: "Alpha", startTime: start, beginnerFriendly: true),
+        ]
+
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, fit: .spotsAvailable).map(\.title),
+            ["Alpha", "Zulu"]
+        )
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, fit: .beginnerFriendly).map(\.title),
+            ["Alpha", "Full"]
+        )
+    }
+
     private func booking(
         status: String,
         startTime: Date,
@@ -558,19 +605,27 @@ final class ModelsTests: XCTestCase {
         )
     }
 
-    private func classSession(spotsLeft: Int?) -> ClassSession {
+    private func classSession(
+        spotsLeft: Int?,
+        title: String = "XERT Strength",
+        classType: String = "Strength",
+        coachName: String = "Coach",
+        location: String? = "Main floor",
+        startTime: Date = Date().addingTimeInterval(3_600),
+        beginnerFriendly: Bool = true
+    ) -> ClassSession {
         ClassSession(
             id: UUID(),
-            class_type: "Strength",
-            title: "XERT Strength",
+            class_type: classType,
+            title: title,
             description: nil,
-            coach_name: "Coach",
-            start_time: Date().addingTimeInterval(3_600),
+            coach_name: coachName,
+            start_time: startTime,
             end_time: nil,
             duration_minutes: 60,
             capacity: 8,
-            location_zone: "Main floor",
-            beginner_friendly: true,
+            location_zone: location,
+            beginner_friendly: beginnerFriendly,
             intensity_level: "Moderate",
             booking_mode: "instant_book",
             booked_count: spotsLeft.map { 8 - $0 },

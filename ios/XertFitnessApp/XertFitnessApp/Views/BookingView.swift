@@ -6,6 +6,9 @@ struct BookingView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var activeSheet: BookingSheet?
     @State private var expandedSessionIDs: Set<UUID> = []
+    @State private var classSearch = ""
+    @State private var classDateWindow: ClassSessionDateWindow = .all
+    @State private var classFit: ClassSessionFit = .all
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -14,6 +17,7 @@ struct BookingView: View {
                 noticeSections
                 creditsSection
                 packsSection
+                classDiscoverySection
                 classesSection
                 personalTrainingSection
             }
@@ -21,6 +25,11 @@ struct BookingView: View {
             .xertListBackground()
             .navigationTitle("Book")
             .navigationBarTitleDisplayMode(.large)
+            .searchable(
+                text: $classSearch,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Class, coach or location"
+            )
             .refreshable {
                 await store.refresh()
             }
@@ -135,14 +144,57 @@ struct BookingView: View {
                 Text("No published classes yet.")
                     .foregroundStyle(Color.xertMuted)
                     .listRowBackground(Color.xertInk)
+            } else if visibleSessions.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("No classes match those filters.")
+                        .foregroundStyle(Color.xertPale)
+                    Button("Clear class filters", action: resetClassDiscovery)
+                        .buttonStyle(.xertGhost)
+                }
+                .padding(.vertical, 4)
             } else {
-                ForEach(store.sessions) { session in
+                ForEach(visibleSessions) { session in
                     sessionCard(for: session)
                 }
             }
         } header: {
-            Text("Upcoming Classes").xertEyebrow()
+            Text("Upcoming Classes (\(visibleSessions.count))").xertEyebrow()
         }
+    }
+
+    private var classDiscoverySection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("When").font(.caption).foregroundStyle(Color.xertMuted)
+                Picker("When", selection: $classDateWindow) {
+                    ForEach(ClassSessionDateWindow.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Training fit").font(.caption).foregroundStyle(Color.xertMuted)
+                Picker("Training fit", selection: $classFit) {
+                    ForEach(ClassSessionFit.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if hasActiveClassDiscovery {
+                Button(action: resetClassDiscovery) {
+                    Label("Clear class filters", systemImage: "xmark.circle")
+                }
+                .foregroundStyle(.xertSteel)
+            }
+        } header: {
+            Text("Find a Class").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
     }
 
     private var personalTrainingSection: some View {
@@ -386,6 +438,27 @@ struct BookingView: View {
 
     private var activeBookings: [UUID: BookingItem] {
         BookingItem.activeBySession(store.bookings)
+    }
+
+    private var visibleSessions: [ClassSession] {
+        ClassSessionDiscovery.sessions(
+            from: store.sessions,
+            search: classSearch,
+            dateWindow: classDateWindow,
+            fit: classFit
+        )
+    }
+
+    private var hasActiveClassDiscovery: Bool {
+        !classSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || classDateWindow != .all
+            || classFit != .all
+    }
+
+    private func resetClassDiscovery() {
+        classSearch = ""
+        classDateWindow = .all
+        classFit = .all
     }
 
     private var initialName: String { store.profile?.full_name ?? "" }
