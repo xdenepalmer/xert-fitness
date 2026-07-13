@@ -29,6 +29,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
+- Optional Face ID, Touch ID, or device-passcode privacy lock that hides all signed-in tabs whenever the app leaves the foreground.
 - Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
 - Searchable class discovery with Queensland-aware today/7-day windows, open-spot and beginner-friendly filters.
@@ -43,6 +44,8 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Interest-only class handoff to the live XERT timetable/registration form.
 - Vercel checkout launch through `/api/checkout`.
 - Refresh-token renewal on launch and focused decoding tests for the Supabase data contract.
+
+Members can enable the privacy lock under **Account → Account Security**. The preference stays on the device; biometric and passcode results are evaluated by iOS and are never sent to XERT or Supabase.
 
 The app expects the same Supabase schema used by the web app in `src/supabase/booking_schema.sql`. Apply
 `src/supabase/booking_modes_upgrade.sql` to the deployed project before using request-to-book classes in either app.

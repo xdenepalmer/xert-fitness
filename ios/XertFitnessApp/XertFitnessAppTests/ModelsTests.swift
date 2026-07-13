@@ -2,6 +2,31 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testPrivacyLockPreferenceRoundTripsAndOnlyLocksSignedInMembers() throws {
+        let suiteName = "AppPrivacyLockTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(AppPrivacyLock.isEnabled(defaults: defaults))
+        AppPrivacyLock.setEnabled(true, defaults: defaults)
+        XCTAssertTrue(AppPrivacyLock.isEnabled(defaults: defaults))
+        XCTAssertTrue(AppPrivacyLock.requiresUnlock(
+            isSignedIn: true,
+            isEnabled: true,
+            isUnlocked: false
+        ))
+        XCTAssertFalse(AppPrivacyLock.requiresUnlock(
+            isSignedIn: false,
+            isEnabled: true,
+            isUnlocked: false
+        ))
+        XCTAssertFalse(AppPrivacyLock.requiresUnlock(
+            isSignedIn: true,
+            isEnabled: true,
+            isUnlocked: true
+        ))
+    }
+
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
         let request = try MemberSignUpRequest(
             fullName: "  Alex Runner  ",

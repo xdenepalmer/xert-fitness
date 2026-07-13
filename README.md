@@ -138,7 +138,8 @@ any missing XERT calendar events for an authenticated admin.
 
 A SwiftUI companion app lives in `ios/XertFitnessApp`. It includes
 native Home, Book, Events and Account tabs, Supabase auth, Keychain token
-storage, class booking RPC support, confirmed-class device reminders and Vercel checkout launch. See
+storage, an optional Face ID/Touch ID privacy lock, class booking RPC support,
+confirmed-class device reminders and Vercel checkout launch. See
 `ios/XertFitnessApp/README.md` for Xcode setup.
 
 ## Run Locally

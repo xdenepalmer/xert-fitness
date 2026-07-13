@@ -3,10 +3,52 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @State private var selectedTab = 0
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
+    @State private var isPrivacyUnlocked = false
+    @State private var isUnlocking = false
+    @State private var privacyLockError: String?
 
     var body: some View {
+        Group {
+            if isPrivacyLocked {
+                PrivacyLockView(
+                    isUnlocking: isUnlocking,
+                    errorMessage: privacyLockError,
+                    onUnlock: { Task { await unlockApp() } },
+                    onSignOut: signOutFromLock
+                )
+            } else {
+                memberTabs
+            }
+        }
+        .onChange(of: scenePhase, perform: handleScenePhase)
+        .onChange(of: store.isSignedIn) { isSignedIn in
+            guard isSignedIn, privacyLockEnabled else {
+                isPrivacyUnlocked = true
+                privacyLockError = nil
+                return
+            }
+            lockAndAuthenticate()
+        }
+        .onChange(of: store.hasBootstrapped) { hasBootstrapped in
+            if hasBootstrapped, isPrivacyLocked, privacyLockError == nil {
+                Task { await unlockApp() }
+            }
+        }
+        .onChange(of: privacyLockEnabled) { isEnabled in
+            guard isEnabled, store.isSignedIn else {
+                isPrivacyUnlocked = true
+                privacyLockError = nil
+                return
+            }
+            lockAndAuthenticate()
+        }
+        .onOpenURL(perform: handleOpenURL)
+    }
+
+    private var memberTabs: some View {
         TabView(selection: $selectedTab) {
             HomeView(onNavigate: { selectedTab = $0 })
                 .tabItem {
@@ -43,22 +85,6 @@ struct RootView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
-        .onChange(of: scenePhase) { phase in
-            guard phase == .active, store.hasBootstrapped, !store.isLoading else { return }
-            Task { await store.refresh() }
-        }
-        .onOpenURL { url in
-            guard let status = CheckoutDeepLink.status(from: url) else { return }
-            checkoutReturnStatus = status
-            selectedTab = 1
-            Task {
-                if status == .success {
-                    await store.reconcileCheckout()
-                } else {
-                    await store.refresh()
-                }
-            }
-        }
         .alert(item: $checkoutReturnStatus) { status in
             Alert(
                 title: Text(status.title),
@@ -66,6 +92,133 @@ struct RootView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+
+    private var isPrivacyLocked: Bool {
+        AppPrivacyLock.requiresUnlock(
+            isSignedIn: store.isSignedIn,
+            isEnabled: privacyLockEnabled,
+            isUnlocked: isPrivacyUnlocked
+        )
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        guard phase == .active else {
+            if store.isSignedIn, privacyLockEnabled {
+                isPrivacyUnlocked = false
+            }
+            return
+        }
+
+        if isPrivacyLocked {
+            Task { await unlockApp() }
+        } else if store.hasBootstrapped, !store.isLoading {
+            Task { await store.refresh() }
+        }
+    }
+
+    private func lockAndAuthenticate() {
+        isPrivacyUnlocked = false
+        privacyLockError = nil
+        Task { await unlockApp() }
+    }
+
+    @MainActor
+    private func unlockApp() async {
+        guard isPrivacyLocked, !isUnlocking, scenePhase == .active else { return }
+        isUnlocking = true
+        privacyLockError = nil
+        defer { isUnlocking = false }
+
+        do {
+            try await DeviceAuthenticator.authenticate(
+                reason: "Unlock your XERT member account, bookings and purchase history."
+            )
+            guard scenePhase == .active, store.isSignedIn, privacyLockEnabled else { return }
+            isPrivacyUnlocked = true
+            if store.hasBootstrapped, !store.isLoading {
+                await store.refresh()
+            }
+        } catch {
+            privacyLockError = error.localizedDescription
+        }
+    }
+
+    private func signOutFromLock() {
+        store.signOut()
+        isPrivacyUnlocked = true
+        privacyLockError = nil
+    }
+
+    private func handleOpenURL(_ url: URL) {
+        guard let status = CheckoutDeepLink.status(from: url) else { return }
+        checkoutReturnStatus = status
+        selectedTab = 1
+        Task {
+            if status == .success {
+                await store.reconcileCheckout()
+            } else {
+                await store.refresh()
+            }
+        }
+    }
+}
+
+private struct PrivacyLockView: View {
+    let isUnlocking: Bool
+    let errorMessage: String?
+    let onUnlock: () -> Void
+    let onSignOut: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            XertLogoHeader(height: 42)
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 42, weight: .semibold))
+                .foregroundStyle(Color.xertSteel)
+                .accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text("XERT Locked")
+                    .xertDisplay(34)
+                Text("Authenticate to view your member account.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.xertPale)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.orange)
+                    .padding(.horizontal)
+                    .accessibilityLabel("Unlock error: \(errorMessage)")
+            }
+
+            VStack(spacing: 12) {
+                Button(action: onUnlock) {
+                    HStack {
+                        if isUnlocking {
+                            ProgressView()
+                                .tint(Color.xertNavy)
+                        }
+                        Text(isUnlocking ? "Authenticating..." : "Unlock XERT")
+                    }
+                }
+                .buttonStyle(.xertPrimary)
+                .disabled(isUnlocking)
+
+                Button("Sign Out", role: .destructive, action: onSignOut)
+                    .buttonStyle(.xertGhost)
+                    .disabled(isUnlocking)
+            }
+            .frame(maxWidth: 360)
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.xertNavy.ignoresSafeArea())
     }
 }
 

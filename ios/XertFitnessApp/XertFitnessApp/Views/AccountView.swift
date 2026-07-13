@@ -3,6 +3,7 @@ import SwiftUI
 struct AccountView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @State private var email = ""
     @State private var password = ""
     @State private var passwordConfirmation = ""
@@ -19,6 +20,7 @@ struct AccountView: View {
     @State private var addingBookingToCalendarID: UUID?
     @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
+    @State private var authenticationSupport = DeviceAuthenticator.support()
     @FocusState private var focusedProfileField: ProfileField?
 
     private enum ProfileField {
@@ -42,6 +44,9 @@ struct AccountView: View {
                 await store.refresh()
             }
             .onAppear(perform: syncProfileForm)
+            .onAppear {
+                authenticationSupport = DeviceAuthenticator.support()
+            }
             .onChange(of: store.profile) { _ in
                 syncProfileForm()
             }
@@ -284,6 +289,20 @@ struct AccountView: View {
                     .font(.footnote)
                     .foregroundStyle(.xertSteel)
             }
+
+            Toggle(
+                "Require \(authenticationSupport.methodName)",
+                isOn: $privacyLockEnabled
+            )
+            .tint(.xertSteel)
+            .disabled(!authenticationSupport.isAvailable)
+
+            Text(
+                authenticationSupport.unavailableMessage
+                    ?? "Lock XERT whenever the app leaves the foreground. Your device passcode remains available as a fallback."
+            )
+            .font(.footnote)
+            .foregroundStyle(authenticationSupport.isAvailable ? Color.xertMuted : Color.orange)
         } header: {
             Text("Account Security").xertEyebrow()
         }

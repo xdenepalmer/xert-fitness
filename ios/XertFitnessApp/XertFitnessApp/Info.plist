@@ -43,6 +43,8 @@
     <string>XERT adds the fitness events you choose to your calendar.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>XERT adds the fitness events you choose to your calendar.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>XERT uses Face ID to protect your member account, bookings and purchase history.</string>
     <key>UIUserInterfaceStyle</key>
     <string>Dark</string>
     <key>UIAppFonts</key>
