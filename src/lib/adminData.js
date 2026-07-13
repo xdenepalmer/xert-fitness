@@ -818,7 +818,7 @@ export async function getOperationsHealth() {
       return summary.ready
         ? {
             count: summary.installed.length,
-            detail: 'Required booking and admin safety migrations are installed.'
+            detail: 'Required booking, waitlist, attendance, and admin safety migrations are installed.'
           }
         : {
             status: 'attention',

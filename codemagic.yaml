@@ -141,7 +141,7 @@ workflows:
             echo "::error:: Capability RPC failed with HTTP $HTTP_CODE. Response body:"
             head -c 300 "$CAP_BODY"; echo
             case "$HTTP_CODE" in
-              404) echo "xert_public_capabilities is missing - run admin_role_safety_upgrade.sql and booking_modes_upgrade.sql in the Supabase SQL editor." ;;
+              404) echo "xert_public_capabilities is missing - run the required upgrade SQL files listed in src/lib/schemaCapabilities.js." ;;
               401|403) echo "The anon key was rejected - re-check SUPABASE_ANON_KEY in the xert_env group." ;;
               400) echo "Malformed request - SUPABASE_URL or SUPABASE_ANON_KEY contains stray characters." ;;
               000) echo "No HTTP response - SUPABASE_URL may be unreachable." ;;
@@ -154,7 +154,12 @@ workflows:
           node -e '
             const rows = JSON.parse(process.argv[1]);
             const installed = new Set(rows.map(row => row.capability));
-            const required = ["admin_role_safety", "booking_waitlist_withdrawal"];
+            const required = [
+              "admin_role_safety",
+              "booking_waitlist_withdrawal",
+              "member_waitlist_join",
+              "attendance_roll_call",
+            ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {
               console.error(`::error:: Missing production database capabilities: ${missing.join(", ")}`);

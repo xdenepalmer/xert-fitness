@@ -6,12 +6,19 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal'],
+    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'attendance_roll_call'],
     ready: false,
-    actions: ['Reapply src/supabase/booking_modes_upgrade.sql in Supabase.'],
+    actions: [
+      'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
+      'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
+      'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
+    ],
   });
   assert.equal(summarizeSchemaCapabilities([
-    { capability: 'booking_waitlist_withdrawal' }, { capability: 'admin_role_safety' },
+    { capability: 'attendance_roll_call' },
+    { capability: 'booking_waitlist_withdrawal' },
+    { capability: 'member_waitlist_join' },
+    { capability: 'admin_role_safety' },
   ]).ready, true);
 });
 
@@ -19,19 +26,28 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
   const pairs = [
     ['../src/supabase/booking_schema.sql', 'booking_waitlist_withdrawal'],
     ['../src/supabase/booking_modes_upgrade.sql', 'booking_waitlist_withdrawal'],
+    ['../src/supabase/booking_schema.sql', 'member_waitlist_join'],
+    ['../src/supabase/member_waitlist_upgrade.sql', 'member_waitlist_join'],
     ['../src/supabase/admin_cms_schema.sql', 'admin_role_safety'],
     ['../src/supabase/admin_role_safety_upgrade.sql', 'admin_role_safety'],
+    ['../src/supabase/admin_cms_schema.sql', 'attendance_roll_call'],
+    ['../src/supabase/attendance_roll_call_upgrade.sql', 'attendance_roll_call'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
     assert.match(sql, new RegExp(`values \\('${capability}'\\)`, 'i'));
-    assert.match(sql, /xert_public_capabilities/i);
+  }
+
+  for (const path of ['../src/supabase/booking_schema.sql', '../src/supabase/admin_cms_schema.sql']) {
+    assert.match(readFileSync(new URL(path, import.meta.url), 'utf8'), /xert_public_capabilities/i);
   }
 });
 
-test('Codemagic TestFlight preflight enforces both production capabilities', () => {
+test('Codemagic TestFlight preflight enforces every production capability', () => {
   const yaml = readFileSync(new URL('../codemagic.yaml', import.meta.url), 'utf8');
   assert.match(yaml, /Verify production service contract/);
   assert.match(yaml, /admin_role_safety/);
   assert.match(yaml, /booking_waitlist_withdrawal/);
+  assert.match(yaml, /member_waitlist_join/);
+  assert.match(yaml, /attendance_roll_call/);
 });
