@@ -8,10 +8,16 @@ import { buildClassCancellationMailto, buildClassCancellationMessage, collectCla
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
-const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
+
+function classEditorStatuses(session) {
+  if (!session?.id) return ['draft', 'published'];
+  if (session.status === 'full') return ['full', 'published'];
+  if (['cancelled', 'completed'].includes(session.status)) return [session.status];
+  return ['draft', 'published'];
+}
 
 function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
   if (sessionStatus !== 'published') return [status];
@@ -245,8 +251,13 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
               <label htmlFor="class-status" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Status</label>
               <select id="class-status" value={form.status} onChange={e => set('status', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                {classEditorStatuses(session).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+              {session?.id && ['cancelled', 'completed'].includes(session.status) && (
+                <p className="mt-1 font-body text-[11px] leading-relaxed text-xert-concrete/45">
+                  Terminal class status is locked. Create a new class rather than reopening it.
+                </p>
+              )}
             </div>
           </div>
           <div>

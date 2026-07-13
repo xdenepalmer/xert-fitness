@@ -7,7 +7,7 @@ import {
   normalizeMemberNoteArchive, normalizeRoleChange
 } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
-import { normalizeClassSession } from './scheduling';
+import { classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
 import {
   normalizeBookingStatusMutation,
   normalizeLegacyBookingNotes,
@@ -112,6 +112,34 @@ export async function createClassSessions(sessionData) {
 
 export async function updateClassSession(id, updates) {
   const payload = normalizeClassSession(updates);
+  const guarded = await supabase.rpc('admin_update_class_session', {
+    p_session_id: id,
+    p_session: payload,
+  });
+  if (!guarded.error) return guarded.data;
+
+  const guardUnavailable = ['42883', 'PGRST202'].includes(guarded.error.code)
+    || /admin_update_class_session.*(?:not found|schema cache|does not exist)/i.test(guarded.error.message || '');
+  if (!guardUnavailable) throw new Error(classSessionUpdateRpcError(guarded.error.message));
+
+  // Compatibility path for projects awaiting the class session guard migration.
+  // The migration makes this check transactional; the preflight still blocks
+  // unsafe edits immediately on older installations.
+  const [current, active] = await Promise.all([
+    supabase.from('class_sessions').select('status').eq('id', id).single(),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true })
+      .eq('class_session_id', id).in('status', ['requested', 'confirmed']),
+  ]);
+  if (current.error) throw new Error(current.error.message);
+  if (active.error) throw new Error(active.error.message);
+  const integrityError = classSessionUpdateGuardError({
+    currentStatus: current.data?.status,
+    nextStatus: payload.status,
+    capacity: payload.capacity,
+    activeBookings: active.count || 0,
+  });
+  if (integrityError) throw new Error(integrityError);
+
   const result = await supabase
     .from('class_sessions')
     .update({ ...payload, updated_at: new Date().toISOString() })

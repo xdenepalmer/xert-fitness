@@ -4,6 +4,7 @@ const BLACKOUT_AFFECTS = new Set(['all', 'group_classes', 'pt_only', 'facility_o
 const BLACKOUT_REASONS = new Set(['full day unavailable', 'partial day unavailable', 'recurring unavailable', 'personal work', 'facility maintenance', 'equipment install', 'private event', 'soft launch restricted']);
 const CLASS_TYPES = new Set(['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team']);
 const CLASS_STATUSES = new Set(['draft', 'published', 'full', 'cancelled', 'completed']);
+const TERMINAL_CLASS_STATUSES = new Set(['cancelled', 'completed']);
 const BOOKING_MODES = new Set(['interest_only', 'request_to_book', 'instant_book']);
 const INTENSITY_LEVELS = new Set(['Low', 'Moderate', 'High', 'Very high']);
 
@@ -134,6 +135,48 @@ export function classSessionValidationError(session, options) {
   } catch (error) {
     return error.message;
   }
+}
+
+export function classSessionUpdateGuardError({
+  currentStatus = '', nextStatus = '', capacity = 0, activeBookings = 0,
+} = {}) {
+  const current = String(currentStatus || '').trim();
+  const next = String(nextStatus || '').trim();
+  if (TERMINAL_CLASS_STATUSES.has(current) && next !== current) {
+    return 'Cancelled and completed classes cannot be reopened. Create a new class instead.';
+  }
+  if (next === 'cancelled' && current !== 'cancelled') {
+    return 'Use Cancel class so active bookings are cancelled and credits are returned safely.';
+  }
+  if (next === 'completed' && current !== 'completed') {
+    return 'Use Take attendance to complete the class with a full roll call.';
+  }
+  const active = Number(activeBookings);
+  const nextCapacity = Number(capacity);
+  if (Number.isInteger(active) && active > 0 && Number.isInteger(nextCapacity) && nextCapacity < active) {
+    return `Capacity cannot be lower than the ${active} active ${active === 1 ? 'booking' : 'bookings'}.`;
+  }
+  return null;
+}
+
+export function classSessionUpdateRpcError(message) {
+  const value = String(message || 'Class session update failed.');
+  const capacityMatch = value.match(/CAPACITY_BELOW_ACTIVE:(\d+)/i);
+  if (capacityMatch) {
+    const active = Number(capacityMatch[1]);
+    return `Capacity cannot be lower than the ${active} active ${active === 1 ? 'booking' : 'bookings'}.`;
+  }
+  if (/USE_CANCELLATION_WORKFLOW/i.test(value)) {
+    return 'Use Cancel class so active bookings are cancelled and credits are returned safely.';
+  }
+  if (/USE_ATTENDANCE_WORKFLOW/i.test(value)) {
+    return 'Use Take attendance to complete the class with a full roll call.';
+  }
+  if (/TERMINAL_SESSION_IMMUTABLE/i.test(value)) {
+    return 'Cancelled and completed classes cannot be reopened. Create a new class instead.';
+  }
+  if (/SESSION_NOT_FOUND/i.test(value)) return 'This class no longer exists. Refresh the calendar.';
+  return value;
 }
 
 export function sessionEndTime(session) {
