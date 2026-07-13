@@ -77,6 +77,16 @@ struct BookingView: View {
                         .foregroundStyle(.xertSteel)
                         .fontWeight(.bold)
                 }
+                if store.isReconcilingCheckout {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.xertSteel)
+                        Text("Confirming purchase...")
+                            .foregroundStyle(Color.xertPale)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Confirming your session pack purchase")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Sign in to book classes and buy packs.")

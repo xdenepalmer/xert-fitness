@@ -176,6 +176,39 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(batch.remaining, 7)
     }
 
+    func testCheckoutReconciliationRequiresBothPaidOrderAndGrantedCredits() {
+        let baselineOrderID = UUID()
+        let newOrderID = UUID()
+        let baselineOrderIDs: Set<UUID> = [baselineOrderID]
+        let grantedCredits = [creditBatch(remaining: 4)]
+        let paidOrder = order(id: newOrderID, status: "paid")
+
+        XCTAssertFalse(CheckoutReconciliation.hasSettled(
+            baselineCreditTotal: 0,
+            baselineOrderIDs: baselineOrderIDs,
+            credits: [],
+            orders: [paidOrder]
+        ))
+        XCTAssertFalse(CheckoutReconciliation.hasSettled(
+            baselineCreditTotal: 0,
+            baselineOrderIDs: baselineOrderIDs,
+            credits: grantedCredits,
+            orders: [order(id: newOrderID, status: "pending")]
+        ))
+        XCTAssertFalse(CheckoutReconciliation.hasSettled(
+            baselineCreditTotal: 0,
+            baselineOrderIDs: baselineOrderIDs,
+            credits: grantedCredits,
+            orders: [order(id: baselineOrderID, status: "paid")]
+        ))
+        XCTAssertTrue(CheckoutReconciliation.hasSettled(
+            baselineCreditTotal: 0,
+            baselineOrderIDs: baselineOrderIDs,
+            credits: grantedCredits,
+            orders: [paidOrder]
+        ))
+    }
+
     func testOrderDecodesPurchaseHistoryAndFormatsMemberFacingValues() throws {
         let data = """
         {
@@ -533,6 +566,22 @@ final class ModelsTests: XCTestCase {
             booking_mode: "instant_book",
             booked_count: spotsLeft.map { 8 - $0 },
             spots_left: spotsLeft
+        )
+    }
+
+    private func creditBatch(remaining: Int) -> CreditBatch {
+        CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
+    }
+
+    private func order(id: UUID, status: String) -> OrderItem {
+        OrderItem(
+            id: id,
+            status: status,
+            amount_cents: 4800,
+            currency: "aud",
+            created_at: Date(),
+            paid_at: status == "paid" ? Date() : nil,
+            products: nil
         )
     }
 

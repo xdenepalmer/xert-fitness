@@ -33,3 +33,21 @@ enum CheckoutDeepLink {
         return CheckoutReturnStatus(rawValue: value)
     }
 }
+
+enum CheckoutReconciliation {
+    // Immediate check, then 2s, 5s and 10s after returning from Stripe.
+    static let retryDelaysNanoseconds: [UInt64] = [0, 2_000_000_000, 3_000_000_000, 5_000_000_000]
+
+    static func hasSettled(
+        baselineCreditTotal: Int,
+        baselineOrderIDs: Set<UUID>,
+        credits: [CreditBatch],
+        orders: [OrderItem]
+    ) -> Bool {
+        let currentCreditTotal = credits.reduce(0) { $0 + $1.remaining }
+        let hasNewPaidOrder = orders.contains {
+            !baselineOrderIDs.contains($0.id) && $0.status.lowercased() == "paid"
+        }
+        return currentCreditTotal > baselineCreditTotal && hasNewPaidOrder
+    }
+}

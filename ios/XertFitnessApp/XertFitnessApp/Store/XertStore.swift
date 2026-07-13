@@ -25,6 +25,7 @@ final class XertStore: ObservableObject {
     @Published var isRequestingClassInterest = false
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
     @Published private(set) var isUpdatingReminderPreference = false
+    @Published private(set) var isReconcilingCheckout = false
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -392,6 +393,48 @@ final class XertStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    func reconcileCheckout() async {
+        guard authSession != nil, !isReconcilingCheckout else { return }
+        let baselineCreditTotal = creditTotal
+        let baselineOrderIDs = Set(orders.map(\.id))
+        isReconcilingCheckout = true
+        defer { isReconcilingCheckout = false }
+
+        for delay in CheckoutReconciliation.retryDelaysNanoseconds {
+            if delay > 0 {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
+
+            do {
+                let memberSession = try await validAuthSession()
+                async let creditRequest = api.credits(session: memberSession)
+                async let orderRequest = api.orders(session: memberSession)
+                let (loadedCredits, loadedOrders) = try await (creditRequest, orderRequest)
+                credits = loadedCredits
+                orders = loadedOrders
+                unavailableDataSources.subtract([.credits, .orders])
+                memberDataUpdatedAt = Date()
+
+                if CheckoutReconciliation.hasSettled(
+                    baselineCreditTotal: baselineCreditTotal,
+                    baselineOrderIDs: baselineOrderIDs,
+                    credits: loadedCredits,
+                    orders: loadedOrders
+                ) {
+                    return
+                }
+            } catch {
+                unavailableDataSources.formUnion([.credits, .orders])
+                isUsingStaleMemberData = memberDataUpdatedAt != nil
+            }
         }
     }
 

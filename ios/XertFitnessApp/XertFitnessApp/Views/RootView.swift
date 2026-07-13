@@ -51,7 +51,13 @@ struct RootView: View {
             guard let status = CheckoutDeepLink.status(from: url) else { return }
             checkoutReturnStatus = status
             selectedTab = 1
-            Task { await store.refresh() }
+            Task {
+                if status == .success {
+                    await store.reconcileCheckout()
+                } else {
+                    await store.refresh()
+                }
+            }
         }
         .alert(item: $checkoutReturnStatus) { status in
             Alert(
