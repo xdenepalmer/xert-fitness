@@ -329,6 +329,9 @@ export async function getDashboardStats() {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoIso = weekAgo.toISOString();
+  const monthAgo = new Date();
+  monthAgo.setDate(monthAgo.getDate() - 30);
+  const monthAgoIso = monthAgo.toISOString();
 
   const results = await Promise.allSettled([
     supabase.from('member_interest').select('id, status, preferred_training_times, main_training_goals, interested_in_pt, interested_in_event_prep', {
@@ -343,7 +346,9 @@ export async function getDashboardStats() {
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'waitlisted'),
-    supabase.from('private_session_requests').select('id', { count: 'exact', head: true })
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'attended').gte('attendance_marked_at', monthAgoIso),
+    supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'no_show').gte('attendance_marked_at', monthAgoIso)
   ]);
   return dashboardMetricsFromSettled(results);
 }

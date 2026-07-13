@@ -378,6 +378,15 @@ export default function AdminOverview({ onNavigate }) {
             <AdminStatCard icon={UserPlus} label="New this week" value={stats?.newThisWeek} loading={loading} />
             <AdminStatCard icon={CalendarDays} label="Upcoming classes" value={biz?.upcomingClasses} loading={loading} />
             <AdminStatCard icon={Inbox} label="Pending bookings" value={stats?.pendingBookings} loading={loading} />
+            <AdminStatCard icon={CheckCircle2} label="Attended (30 days)" value={stats?.attended30Days} loading={loading} />
+            <AdminStatCard
+              icon={AlertTriangle}
+              label="No-show rate (30 days)"
+              value={stats?.attendanceRate30Days === null || stats?.attendanceRate30Days === undefined
+                ? stats?.attendanceRate30Days
+                : `${100 - stats.attendanceRate30Days}%`}
+              loading={loading}
+            />
           </div>
           <button onClick={() => onNavigate?.('members')}
             className="w-full flex items-center justify-between px-4 py-3 transition-colors"

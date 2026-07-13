@@ -1,6 +1,7 @@
 const METRIC_KEYS = [
   'members', 'trainers', 'partners', 'newMembers', 'ptInterest', 'eventPrepInterest',
-  'pendingLegacy', 'pendingMembers', 'waitlistedLegacy', 'waitlistedMembers', 'ptRequests'
+  'pendingLegacy', 'pendingMembers', 'waitlistedLegacy', 'waitlistedMembers', 'ptRequests',
+  'attended30Days', 'noShows30Days'
 ];
 
 function settledResponse(results, index, errors) {
@@ -44,9 +45,15 @@ export function dashboardMetricsFromSettled(results) {
   const errors = [];
   const responses = METRIC_KEYS.map((_, index) => settledResponse(results, index, errors));
   const [members, trainers, partners, newMembers, ptInterest, eventPrepInterest,
-    pendingLegacy, pendingMembers, waitlistedLegacy, waitlistedMembers, ptRequests] = responses;
+    pendingLegacy, pendingMembers, waitlistedLegacy, waitlistedMembers, ptRequests,
+    attended30Days, noShows30Days] = responses;
   const memberRows = members?.data || [];
   const memberCount = exactCount(members);
+  const attendedCount = exactCount(attended30Days);
+  const noShowCount = exactCount(noShows30Days);
+  const attendanceDecisions = attendedCount === null || noShowCount === null
+    ? null
+    : attendedCount + noShowCount;
 
   return {
     totalMembers: memberCount,
@@ -60,6 +67,11 @@ export function dashboardMetricsFromSettled(results) {
     pendingBookings: sumKnownCounts(pendingLegacy, pendingMembers),
     waitlistedBookings: sumKnownCounts(waitlistedLegacy, waitlistedMembers),
     ptRequests: exactCount(ptRequests),
+    attended30Days: attendedCount,
+    noShows30Days: noShowCount,
+    attendanceRate30Days: attendanceDecisions
+      ? Math.round((attendedCount / attendanceDecisions) * 100)
+      : attendanceDecisions,
     insightsSampled: memberCount !== null && memberRows.length < memberCount,
     insightSampleSize: memberRows.length,
     errors
