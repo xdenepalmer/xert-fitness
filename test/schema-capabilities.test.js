@@ -58,6 +58,12 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /attendance_roll_call/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
+  assert.match(yaml, /\/api\/checkout/);
+  assert.match(yaml, /expected HTTP 401/);
+  assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(yaml, /\/api\/stripe-webhook/);
+  assert.match(yaml, /expected HTTP 400/);
+  assert.match(yaml, /STRIPE_WEBHOOK_SECRET/);
 });
 
 test('read-only production check reports every release capability and migration', () => {

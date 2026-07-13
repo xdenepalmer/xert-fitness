@@ -129,6 +129,46 @@ workflows:
           ws_guard SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
 
           curl --silent --show-error --fail --max-time 20 "$VERCEL_BASE_URL/" >/dev/null
+          API_BODY="$(mktemp)"
+          API_CODE="$(curl --silent --show-error --max-time 20 \
+            -o "$API_BODY" -w '%{http_code}' \
+            "$VERCEL_BASE_URL/api/checkout" \
+            -H 'Authorization: Bearer codemagic-preflight-invalid-token' \
+            -H 'Content-Type: application/json' \
+            --data '{}')" || API_CODE=000
+          if [ "$API_CODE" != "401" ]; then
+            echo "::error:: Production checkout preflight expected HTTP 401 but received $API_CODE. Response body:"
+            head -c 300 "$API_BODY"; echo
+            case "$API_CODE" in
+              500) echo "Add STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to the Vercel Production environment, then redeploy." ;;
+              404) echo "The /api/checkout Vercel Function was not deployed." ;;
+              000) echo "The checkout function timed out or could not be reached." ;;
+            esac
+            rm -f "$API_BODY"
+            exit 1
+          fi
+          rm -f "$API_BODY"
+
+          WEBHOOK_BODY="$(mktemp)"
+          WEBHOOK_CODE="$(curl --silent --show-error --max-time 20 \
+            -o "$WEBHOOK_BODY" -w '%{http_code}' \
+            "$VERCEL_BASE_URL/api/stripe-webhook" \
+            -H 'Stripe-Signature: t=0,v1=codemagic-preflight-invalid-signature' \
+            -H 'Content-Type: application/json' \
+            --data '{}')" || WEBHOOK_CODE=000
+          if [ "$WEBHOOK_CODE" != "400" ]; then
+            echo "::error:: Production Stripe webhook preflight expected HTTP 400 but received $WEBHOOK_CODE. Response body:"
+            head -c 300 "$WEBHOOK_BODY"; echo
+            case "$WEBHOOK_CODE" in
+              500) echo "Add STRIPE_WEBHOOK_SECRET and the other server secrets to the Vercel Production environment, then redeploy." ;;
+              404) echo "The /api/stripe-webhook Vercel Function was not deployed." ;;
+              000) echo "The Stripe webhook function timed out or could not be reached." ;;
+            esac
+            rm -f "$WEBHOOK_BODY"
+            exit 1
+          fi
+          rm -f "$WEBHOOK_BODY"
+
           CAP_BODY="$(mktemp)"
           HTTP_CODE="$(curl --silent --show-error --max-time 20 \
             -o "$CAP_BODY" -w '%{http_code}' \
