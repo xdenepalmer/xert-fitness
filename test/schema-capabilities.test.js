@@ -59,3 +59,21 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
 });
+
+test('read-only production check reports every release capability and migration', () => {
+  const sql = readFileSync(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8');
+  const capabilities = [
+    'admin_role_safety',
+    'booking_waitlist_withdrawal',
+    'member_waitlist_join',
+    'attendance_roll_call',
+    'member_pt_request_tracking',
+    'public_form_integrity',
+  ];
+
+  for (const capability of capabilities) {
+    assert.match(sql, new RegExp(`\\('${capability}', 'src/supabase/.+\\.sql'\\)`));
+  }
+  assert.match(sql, /bool_and\(installed\) over \(\) as release_ready/i);
+  assert.doesNotMatch(sql, /\b(?:insert|update|delete|alter|create|drop|grant|revoke)\b/i);
+});

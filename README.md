@@ -121,8 +121,12 @@ run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
 Operations Health and the TestFlight release workflow verify the
-`admin_role_safety` and `booking_waitlist_withdrawal` capability markers. A
-release intentionally stops until both current upgrade scripts have been run.
+`admin_role_safety`, `booking_waitlist_withdrawal`, `member_waitlist_join`,
+`attendance_roll_call`, `member_pt_request_tracking`, and
+`public_form_integrity` capability markers. A release intentionally stops until
+all six current upgrade scripts have been run. Run
+`src/supabase/release_readiness_check.sql` in the production SQL editor first;
+every row must show `installed = true` and `release_ready = true`.
 
 The admin Event Calendar also has a **Load 2026 Calendar** action that inserts
 any missing XERT calendar events for an authenticated admin.
