@@ -244,6 +244,14 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(unknown.needsRefresh(now: now))
     }
 
+    func testOnlyAuthenticationResponsesInvalidateTheSavedSession() {
+        XCTAssertTrue(APIError(message: "invalid refresh token", statusCode: 400).invalidatesSession)
+        XCTAssertTrue(APIError(message: "unauthorized", statusCode: 401).invalidatesSession)
+        XCTAssertTrue(APIError(message: "forbidden", statusCode: 403).invalidatesSession)
+        XCTAssertFalse(APIError(message: "server unavailable", statusCode: 503).invalidatesSession)
+        XCTAssertFalse(APIError(message: "network offline").invalidatesSession)
+    }
+
     func testWebBaseURLAcceptsAHostnameAndRejectsUnsafeSchemes() {
         XCTAssertEqual(
             AppConfig.normalizedWebBaseURL("xert-fitness.vercel.app")?.absoluteString,

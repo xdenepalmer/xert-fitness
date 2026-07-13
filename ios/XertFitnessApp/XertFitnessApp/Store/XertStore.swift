@@ -51,16 +51,6 @@ final class XertStore: ObservableObject {
             isUsingCachedPublicData = true
         }
         authSession = KeychainStore.loadSession()
-        if let authSession, authSession.refresh_token != nil {
-            do {
-                let refreshed = try await api.refresh(session: authSession)
-                self.authSession = refreshed
-                try KeychainStore.saveSession(refreshed)
-            } catch {
-                self.authSession = nil
-                KeychainStore.clearSession()
-            }
-        }
         await refresh()
         hasBootstrapped = true
     }
@@ -122,8 +112,10 @@ final class XertStore: ObservableObject {
             do {
                 memberSession = try await validAuthSession()
             } catch {
-                self.authSession = nil
-                KeychainStore.clearSession()
+                if (error as? APIError)?.invalidatesSession == true {
+                    self.authSession = nil
+                    KeychainStore.clearSession()
+                }
                 present(error)
             }
         }
@@ -461,7 +453,7 @@ final class XertStore: ObservableObject {
         }
         guard current.needsRefresh() else { return current }
         guard current.refresh_token?.isEmpty == false else {
-            throw APIError(message: "Your XERT session has expired. Please sign in again.")
+            throw APIError(message: "Your XERT session has expired. Please sign in again.", statusCode: 401)
         }
 
         if let sessionRefreshTask {

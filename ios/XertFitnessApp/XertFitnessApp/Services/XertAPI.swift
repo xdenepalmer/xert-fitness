@@ -2,8 +2,17 @@ import Foundation
 
 struct APIError: LocalizedError {
     let message: String
+    let statusCode: Int?
+
+    init(message: String, statusCode: Int? = nil) {
+        self.message = message
+        self.statusCode = statusCode
+    }
 
     var errorDescription: String? { message }
+    var invalidatesSession: Bool {
+        statusCode.map { [400, 401, 403].contains($0) } ?? false
+    }
 }
 
 private struct SupabaseErrorResponse: Decodable {
@@ -395,7 +404,7 @@ final class XertAPI {
             let message = (try? decoder.decode(SupabaseErrorResponse.self, from: data))?.displayMessage
                 ?? String(data: data, encoding: .utf8)
                 ?? "Request failed."
-            throw APIError(message: message)
+            throw APIError(message: message, statusCode: http.statusCode)
         }
         return data
     }
