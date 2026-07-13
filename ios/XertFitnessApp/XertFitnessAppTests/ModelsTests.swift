@@ -2,6 +2,58 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testPendingCheckoutRoundTripsForTheSameUser() throws {
+        let suiteName = "PendingCheckoutTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let orderIDs: Set<UUID> = [UUID(), UUID()]
+        let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let pending = PendingCheckout(
+            userID: userID,
+            baselineCreditTotal: 3,
+            baselineOrderIDs: orderIDs,
+            startedAt: startedAt
+        )
+
+        PendingCheckoutStore.save(pending, defaults: defaults)
+
+        XCTAssertEqual(
+            PendingCheckoutStore.load(
+                for: userID,
+                now: startedAt.addingTimeInterval(60),
+                defaults: defaults
+            ),
+            pending
+        )
+    }
+
+    func testPendingCheckoutRejectsAnotherUserAndExpires() throws {
+        let suiteName = "PendingCheckoutExpiryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let pending = PendingCheckout(
+            userID: userID,
+            baselineCreditTotal: 0,
+            baselineOrderIDs: [],
+            startedAt: startedAt
+        )
+
+        PendingCheckoutStore.save(pending, defaults: defaults)
+        XCTAssertNil(PendingCheckoutStore.load(for: UUID(), now: startedAt, defaults: defaults))
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
+
+        PendingCheckoutStore.save(pending, defaults: defaults)
+        XCTAssertNil(PendingCheckoutStore.load(
+            for: userID,
+            now: startedAt.addingTimeInterval(PendingCheckoutStore.maximumAge + 1),
+            defaults: defaults
+        ))
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
+    }
+
     func testPrivacyLockPreferenceRoundTripsAndOnlyLocksSignedInMembers() throws {
         let suiteName = "AppPrivacyLockTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

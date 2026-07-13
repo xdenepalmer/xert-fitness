@@ -27,6 +27,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
     @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var isReconcilingCheckout = false
+    @Published private(set) var isCheckoutConfirmationPending = false
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -62,6 +63,7 @@ final class XertStore: ObservableObject {
         authSession = KeychainStore.loadSession()
         await refresh()
         hasBootstrapped = true
+        await reconcilePendingCheckout()
     }
 
     func refresh() async {
@@ -290,6 +292,7 @@ final class XertStore: ObservableObject {
             replaceAuthSession(with: session)
             try KeychainStore.saveSession(session)
             await refresh()
+            await reconcilePendingCheckout()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -449,8 +452,19 @@ final class XertStore: ObservableObject {
         let memberVersion = memberStateVersion.snapshot
         do {
             let authSession = try await validAuthSession()
+            guard let userID = authSession.user?.id else {
+                throw APIError(message: "Your XERT session needs you to sign in again.")
+            }
+            let pendingCheckout = PendingCheckout(
+                userID: userID,
+                baselineCreditTotal: creditTotal,
+                baselineOrderIDs: Set(orders.map(\.id)),
+                startedAt: Date()
+            )
             let url = try await api.checkout(session: authSession, productSlug: product.slug)
             guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
+            PendingCheckoutStore.save(pendingCheckout)
+            isCheckoutConfirmationPending = true
             return url
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return nil }
@@ -460,10 +474,15 @@ final class XertStore: ObservableObject {
     }
 
     func reconcileCheckout() async {
-        guard authSession != nil, !isReconcilingCheckout else { return }
+        guard
+            let userID = authSession?.user?.id,
+            !isReconcilingCheckout
+        else { return }
         let memberVersion = memberStateVersion.snapshot
-        let baselineCreditTotal = creditTotal
-        let baselineOrderIDs = Set(orders.map(\.id))
+        let pendingCheckout = PendingCheckoutStore.load(for: userID)
+        let baselineCreditTotal = pendingCheckout?.baselineCreditTotal ?? creditTotal
+        let baselineOrderIDs = pendingCheckout?.baselineOrderIDs ?? Set(orders.map(\.id))
+        isCheckoutConfirmationPending = pendingCheckout != nil
         isReconcilingCheckout = true
         defer {
             if memberStateVersion.isCurrent(memberVersion) {
@@ -498,6 +517,8 @@ final class XertStore: ObservableObject {
                     credits: loadedCredits,
                     orders: loadedOrders
                 ) {
+                    PendingCheckoutStore.clear()
+                    isCheckoutConfirmationPending = false
                     return
                 }
             } catch {
@@ -506,6 +527,23 @@ final class XertStore: ObservableObject {
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
         }
+    }
+
+    func reconcilePendingCheckout() async {
+        guard
+            let userID = authSession?.user?.id,
+            PendingCheckoutStore.load(for: userID) != nil
+        else {
+            isCheckoutConfirmationPending = false
+            return
+        }
+        isCheckoutConfirmationPending = true
+        await reconcileCheckout()
+    }
+
+    func cancelPendingCheckout() {
+        PendingCheckoutStore.clear()
+        isCheckoutConfirmationPending = false
     }
 
     @discardableResult
@@ -605,6 +643,7 @@ final class XertStore: ObservableObject {
             replaceAuthSession(with: session)
             try KeychainStore.saveSession(session)
             await refresh()
+            await reconcilePendingCheckout()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -667,6 +706,7 @@ final class XertStore: ObservableObject {
         clearMemberData()
         isLoading = false
         isReconcilingCheckout = false
+        isCheckoutConfirmationPending = false
         bookingSessionID = nil
         cancellingBookingID = nil
         updatingEventGoalID = nil

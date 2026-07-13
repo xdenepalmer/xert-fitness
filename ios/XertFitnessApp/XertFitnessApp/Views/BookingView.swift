@@ -32,6 +32,7 @@ struct BookingView: View {
             )
             .refreshable {
                 await store.refresh()
+                await store.reconcilePendingCheckout()
             }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
@@ -95,6 +96,16 @@ struct BookingView: View {
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Confirming your session pack purchase")
+                } else if store.isCheckoutConfirmationPending {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Purchase confirmation is taking longer than usual.", systemImage: "clock.arrow.circlepath")
+                            .foregroundStyle(Color.xertPale)
+                        Button("Check purchase again") {
+                            Task { await store.reconcilePendingCheckout() }
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.xertSteel)
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 12) {

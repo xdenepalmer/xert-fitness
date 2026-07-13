@@ -113,7 +113,10 @@ struct RootView: View {
         if isPrivacyLocked {
             Task { await unlockApp() }
         } else if store.hasBootstrapped, !store.isLoading {
-            Task { await store.refresh() }
+            Task {
+                await store.refresh()
+                await store.reconcilePendingCheckout()
+            }
         }
     }
 
@@ -138,6 +141,7 @@ struct RootView: View {
             isPrivacyUnlocked = true
             if store.hasBootstrapped, !store.isLoading {
                 await store.refresh()
+                await store.reconcilePendingCheckout()
             }
         } catch {
             privacyLockError = error.localizedDescription
@@ -158,6 +162,7 @@ struct RootView: View {
             if status == .success {
                 await store.reconcileCheckout()
             } else {
+                store.cancelPendingCheckout()
                 await store.refresh()
             }
         }

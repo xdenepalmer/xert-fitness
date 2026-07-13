@@ -43,7 +43,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Live FIFO waitlist positions with atomic next-member promotion enforced by the shared backend.
 - Member-controlled device reminders two hours before future confirmed classes; permission is requested only when enabled, and reminders are removed when disabled, cancelled, or signed out.
 - Interest-only class handoff to the live XERT timetable/registration form.
-- Vercel checkout launch through `/api/checkout`.
+- Vercel checkout launch through `/api/checkout`, with a user-bound 24-hour
+  pending-purchase baseline so cold launches, sign-in recovery and delayed
+  Stripe webhooks keep reconciling credits and purchase history safely.
 - Refresh-token renewal on launch and focused decoding tests for the Supabase data contract.
 
 Members can enable the privacy lock under **Account → Account Security**. The preference stays on the device; biometric and passcode results are evaluated by iOS and are never sent to XERT or Supabase.
