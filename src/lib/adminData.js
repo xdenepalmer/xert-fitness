@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
-import { assertSupabaseResponses } from './supabaseResults';
+import { assertAdminMutation, assertSupabaseResponses } from './supabaseResults';
 import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import { normalizeRoleChange } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
@@ -42,28 +42,28 @@ export async function getPartnerLeads(filters = {}) {
 
 export async function updateLeadStatus(table, id, status) {
   const mutation = validateLeadMutation(table, status, [id]);
-  const { error } = await supabase.from(mutation.table).update({ status: mutation.status }).eq('id', mutation.ids[0]);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from(mutation.table).update({ status: mutation.status }).eq('id', mutation.ids[0]).select('id');
+  assertAdminMutation(result, 'Lead status update');
 }
 
 export async function updateLead(table, id, updates) {
   const mutation = normalizeLeadUpdate(table, updates);
   const validatedId = validateLeadMutation(table, mutation.updates.status, [id]).ids[0];
-  const { error } = await supabase.from(mutation.table).update(mutation.updates).eq('id', validatedId);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from(mutation.table).update(mutation.updates).eq('id', validatedId).select('id');
+  assertAdminMutation(result, 'Lead update');
 }
 
 export async function updateLeadStatuses(table, ids, status) {
   if (!ids?.length) return;
   const mutation = validateLeadMutation(table, status, ids);
-  const { error } = await supabase.from(mutation.table).update({ status: mutation.status }).in('id', mutation.ids);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from(mutation.table).update({ status: mutation.status }).in('id', mutation.ids).select('id');
+  assertAdminMutation(result, 'Bulk lead status update', mutation.ids.length);
 }
 
 export async function updateLegacyBookingNotes(id, adminNotes) {
   const mutation = normalizeLegacyBookingNotes(id, adminNotes);
-  const { error } = await supabase.from('class_bookings').update({ admin_notes: mutation.admin_notes }).eq('id', mutation.id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('class_bookings').update({ admin_notes: mutation.admin_notes }).eq('id', mutation.id).select('id');
+  assertAdminMutation(result, 'Booking notes update');
 }
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
@@ -93,11 +93,12 @@ export async function createClassSessions(sessionData) {
 
 export async function updateClassSession(id, updates) {
   const payload = normalizeClassSession(updates);
-  const { error } = await supabase
+  const result = await supabase
     .from('class_sessions')
     .update({ ...payload, updated_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) throw new Error(error.message);
+    .eq('id', id)
+    .select('id');
+  assertAdminMutation(result, 'Class session update');
 }
 
 export async function cancelClassSession(id) {
@@ -138,8 +139,8 @@ export async function getClassBookings(filters = {}) {
 
 export async function updateBookingStatus(id, status) {
   const mutation = normalizeBookingStatusMutation(id, status);
-  const { error } = await supabase.from('class_bookings').update({ status: mutation.status }).eq('id', mutation.id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('class_bookings').update({ status: mutation.status }).eq('id', mutation.id).select('id');
+  assertAdminMutation(result, 'Booking status update');
 }
 
 // Authenticated member bookings are a separate, credit-backed workflow from
@@ -234,8 +235,8 @@ export async function getPTRequests(filters = {}) {
 
 export async function updatePTRequestStatus(id, status, admin_notes) {
   const mutation = normalizePTRequestMutation(id, status, admin_notes);
-  const { error } = await supabase.from('private_session_requests').update(mutation.updates).eq('id', mutation.id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('private_session_requests').update(mutation.updates).eq('id', mutation.id).select('id');
+  assertAdminMutation(result, 'PT request update');
 }
 
 // ─── Availability / Blackouts ─────────────────────────────────────────────────
@@ -252,13 +253,13 @@ export async function createAvailabilityBlock(blockData) {
 }
 
 export async function updateAvailabilityBlock(id, blockData) {
-  const { error } = await supabase.from('availability_blocks').update(blockData).eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('availability_blocks').update(blockData).eq('id', id).select('id');
+  assertAdminMutation(result, 'Availability update');
 }
 
 export async function deleteAvailabilityBlock(id) {
-  const { error } = await supabase.from('availability_blocks').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('availability_blocks').delete().eq('id', id).select('id');
+  assertAdminMutation(result, 'Availability deletion');
 }
 
 export async function getBlackoutPeriods() {
@@ -273,13 +274,13 @@ export async function createBlackoutPeriod(periodData) {
 }
 
 export async function updateBlackoutPeriod(id, periodData) {
-  const { error } = await supabase.from('blackout_periods').update(periodData).eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('blackout_periods').update(periodData).eq('id', id).select('id');
+  assertAdminMutation(result, 'Blackout update');
 }
 
 export async function deleteBlackoutPeriod(id) {
-  const { error } = await supabase.from('blackout_periods').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('blackout_periods').delete().eq('id', id).select('id');
+  assertAdminMutation(result, 'Blackout deletion');
 }
 
 // ─── Admin Settings ───────────────────────────────────────────────────────────
@@ -312,11 +313,12 @@ export function getDefaultSettings() {
 export async function updateSoftLaunchSettings(updates) {
   const current = await getSoftLaunchSettings();
   if (current?.id) {
-    const { error } = await supabase
+    const result = await supabase
       .from('admin_settings')
       .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', current.id);
-    if (error) throw new Error(error.message);
+      .eq('id', current.id)
+      .select('id');
+    assertAdminMutation(result, 'Launch settings update');
   } else {
     const { error } = await supabase.from('admin_settings').insert([{ ...getDefaultSettings(), ...updates }]);
     if (error) throw new Error(error.message);
@@ -367,13 +369,13 @@ export async function createCoach(coach) {
 }
 
 export async function updateCoach(id, updates) {
-  const { error } = await supabase.from('coaches').update(updates).eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('coaches').update(updates).eq('id', id).select('id');
+  assertAdminMutation(result, 'Coach update');
 }
 
 export async function deleteCoach(id) {
-  const { error } = await supabase.from('coaches').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('coaches').delete().eq('id', id).select('id');
+  assertAdminMutation(result, 'Coach deletion');
 }
 
 // ─── Events (admin CRUD) ────────────────────────────────────────────────────
@@ -408,13 +410,13 @@ export async function createEvent(event) {
 }
 
 export async function updateEvent(id, updates) {
-  const { error } = await supabase.from('events').update(updates).eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('events').update(updates).eq('id', id).select('id');
+  assertAdminMutation(result, 'Event update');
 }
 
 export async function deleteEvent(id) {
-  const { error } = await supabase.from('events').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('events').delete().eq('id', id).select('id');
+  assertAdminMutation(result, 'Event deletion');
 }
 
 export async function seedXertEventCalendar() {
@@ -572,8 +574,8 @@ export async function createProduct(product) {
 }
 
 export async function updateProduct(id, updates) {
-  const { error } = await supabase.from('products').update(updates).eq('id', id);
-  if (error) throw new Error(error.message);
+  const result = await supabase.from('products').update(updates).eq('id', id).select('id');
+  assertAdminMutation(result, 'Product update');
 }
 
 // ─── Business stats (admin overview) ─────────────────────────────────────────
