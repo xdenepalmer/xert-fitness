@@ -223,16 +223,14 @@ final class XertAPI {
         )
     }
 
-    func announcements(session auth: AuthSession, now: Date = Date()) async throws -> [MemberAnnouncement] {
-        let timestamp = ISO8601DateFormatter.standard.string(from: now)
-        return try await restRequest(
-            path: "/rest/v1/member_announcements",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,title,body,tone,published_at,expires_at,updated_at"),
-                URLQueryItem(name: "published_at", value: "lte.\(timestamp)"),
-                URLQueryItem(name: "or", value: "(expires_at.is.null,expires_at.gt.\(timestamp))"),
-                URLQueryItem(name: "order", value: "published_at.desc")
-            ],
+    func announcements(session auth: AuthSession) async throws -> [MemberAnnouncement] {
+        try await rpc(path: "my_member_announcements", body: EmptyBody(), auth: auth)
+    }
+
+    func dismissAnnouncement(session auth: AuthSession, announcementID: UUID) async throws {
+        let _: EmptyResponse = try await rpc(
+            path: "dismiss_member_announcement",
+            body: ["p_announcement_id": announcementID.uuidString],
             auth: auth
         )
     }

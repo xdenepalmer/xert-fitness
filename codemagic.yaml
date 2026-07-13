@@ -243,6 +243,7 @@ workflows:
               "stripe_refund_reconciliation",
               "checkout_reconciliation",
               "member_announcements",
+              "announcement_receipts",
               "member_pt_request_tracking",
               "public_form_integrity",
             ];

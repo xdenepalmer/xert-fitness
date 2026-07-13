@@ -30,8 +30,9 @@ test('announcement input is trimmed, bounded and emits an ISO expiry', () => {
 });
 
 test('announcement schema and clients enforce member visibility and privacy lifecycle', async () => {
-  const [migration, bookingData, adminData, account, store, api, home] = await Promise.all([
+  const [migration, receiptMigration, bookingData, adminData, account, store, api, home] = await Promise.all([
     readFile(new URL('../supabase/migrations/20260713040000_member_announcements.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/20260713050000_announcement_receipts.sql', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/bookingData.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8'),
@@ -44,10 +45,25 @@ test('announcement schema and clients enforce member visibility and privacy life
   assert.match(migration, /to authenticated[\s\S]*?with check \(public\.is_admin\(\)\)/i);
   assert.match(migration, /revoke all on table public\.member_announcements from public, anon/i);
   assert.doesNotMatch(migration, /for select\s+to anon/i);
-  assert.match(bookingData, /getMemberAnnouncements[\s\S]*?\.lte\('published_at', nowIso\)[\s\S]*?expires_at\.gt/);
+  assert.match(receiptMigration, /function public\.my_member_announcements\(\)/i);
+  assert.match(receiptMigration, /on conflict \(announcement_id, user_id\) do update/i);
+  assert.match(receiptMigration, /receipt\.dismissed_at is null/i);
+  assert.match(receiptMigration, /function public\.dismiss_member_announcement\(p_announcement_id uuid\)/i);
+  assert.match(receiptMigration, /if not public\.is_admin\(\) then raise exception 'ADMIN_REQUIRED'/i);
+  assert.match(receiptMigration, /returns table \(announcement_id uuid, read_count bigint, dismissed_count bigint\)/i);
+  assert.match(receiptMigration, /revoke execute on function public\.my_member_announcements\(\) from public, anon/i);
+  assert.match(receiptMigration, /grant select on table public\.member_announcement_receipts to authenticated/i);
+  assert.doesNotMatch(receiptMigration, /grant (?:insert|update|select, insert)/i);
+  assert.match(bookingData, /getMemberAnnouncements[\s\S]*?rpc\('my_member_announcements'\)/);
+  assert.match(bookingData, /dismissMemberAnnouncement[\s\S]*?rpc\('dismiss_member_announcement'/);
   assert.match(adminData, /createMemberAnnouncement[\s\S]*?created_by: user\.id/);
+  assert.match(adminData, /rpc\('admin_announcement_metrics'\)/);
   assert.match(account, /getMemberAnnouncements\(\)\.catch\(\(\) => \[\]\)/);
+  assert.match(account, /handleDismissAnnouncement[\s\S]*?dismissMemberAnnouncement/);
   assert.match(store, /announcements = \[\][\s\S]*?unavailableDataSources\.subtract/);
-  assert.match(api, /func announcements[\s\S]*?published_at\.desc/);
+  assert.match(store, /func dismissAnnouncement[\s\S]*?canApplyMemberState/);
+  assert.match(api, /func announcements[\s\S]*?my_member_announcements/);
+  assert.match(api, /func dismissAnnouncement[\s\S]*?dismiss_member_announcement/);
   assert.match(home, /Member notices[\s\S]*?MemberAnnouncementRow/);
+  assert.match(home, /accessibilityLabel\("Dismiss/);
 });

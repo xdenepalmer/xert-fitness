@@ -210,6 +210,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled })
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-body text-xs text-xert-pale/40">
                       {item.published_at && <span>Published {formatDateTime(item.published_at)}</span>}
                       {item.expires_at && <span className="inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" /> Expires {formatDateTime(item.expires_at)}</span>}
+                      {item.published_at && <span>Seen by {item.read_count || 0} member{item.read_count === 1 ? '' : 's'} · {item.dismissed_count || 0} dismissed</span>}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">

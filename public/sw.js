@@ -1,5 +1,13 @@
-const CACHE_NAME = 'xert-runtime-v2';
-const APP_SHELL = ['/', '/index.html', '/manifest.json', '/assets/xert-logo-icon.png'];
+const CACHE_NAME = 'xert-runtime-v3';
+const APP_SHELL = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/assets/xert-logo-icon.png',
+  '/assets/xert-logo-horizontal-light.png',
+  '/assets/xert-logo-mark-light.png',
+  '/assets/xert-logo-stacked-light.png',
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(

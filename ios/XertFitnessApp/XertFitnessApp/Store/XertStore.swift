@@ -22,6 +22,7 @@ final class XertStore: ObservableObject {
     @Published var isUpdatingPassword = false
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
+    @Published var dismissingAnnouncementID: UUID?
     @Published var isDeletingAccount = false
     @Published var isRequestingPrivateSession = false
     @Published var isRequestingClassInterest = false
@@ -480,6 +481,26 @@ final class XertStore: ObservableObject {
         }
     }
 
+    func dismissAnnouncement(_ announcement: MemberAnnouncement) async {
+        let memberVersion = memberStateVersion.snapshot
+        dismissingAnnouncementID = announcement.id
+        errorMessage = nil
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) {
+                dismissingAnnouncementID = nil
+            }
+        }
+        do {
+            let memberSession = try await validAuthSession()
+            try await api.dismissAnnouncement(session: memberSession, announcementID: announcement.id)
+            guard canApplyMemberState(memberVersion, session: memberSession) else { return }
+            announcements.removeAll { $0.id == announcement.id }
+        } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            present(error)
+        }
+    }
+
     func checkoutURL(for product: Product) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
         do {
@@ -742,6 +763,7 @@ final class XertStore: ObservableObject {
         bookingSessionID = nil
         cancellingBookingID = nil
         updatingEventGoalID = nil
+        dismissingAnnouncementID = nil
         isSavingProfile = false
         isUpdatingPassword = false
         errorMessage = nil

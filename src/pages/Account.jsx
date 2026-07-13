@@ -4,7 +4,7 @@ import { BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
-import { getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
+import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, updateMyProfile } from '@/lib/bookingData';
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { useToast } from '@/components/ui/use-toast';
@@ -57,6 +57,7 @@ export default function Account() {
   const [eventGoals, setEventGoals] = useState([]);
   const [privateSessionRequests, setPrivateSessionRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [dismissingAnnouncementId, setDismissingAnnouncementId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
@@ -102,6 +103,18 @@ export default function Account() {
   useEffect(() => {
     if (session) refresh();
   }, [session, refresh]);
+
+  const handleDismissAnnouncement = async announcement => {
+    setDismissingAnnouncementId(announcement.id);
+    try {
+      await dismissMemberAnnouncement(announcement.id);
+      setAnnouncements(current => current.filter(item => item.id !== announcement.id));
+    } catch (error) {
+      toast({ title: 'Notice not dismissed', description: error.message, variant: 'destructive' });
+    } finally {
+      setDismissingAnnouncementId(null);
+    }
+  };
 
   useEffect(() => {
     setProfileForm({
@@ -312,7 +325,12 @@ export default function Account() {
                     : { border: 'rgba(123,167,188,0.4)', label: 'Update', color: '#7BA7BC' };
                 return (
                   <article key={notice.id} className="border bg-xert-ink p-5" style={{ borderColor: tone.border }}>
-                    <p className="font-body text-[10px] uppercase tracking-[0.18em]" style={{ color: tone.color }}>{tone.label}</p>
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="font-body text-[10px] uppercase tracking-[0.18em]" style={{ color: tone.color }}>{tone.label}</p>
+                      <button type="button" onClick={() => void handleDismissAnnouncement(notice)} disabled={dismissingAnnouncementId === notice.id} title="Dismiss notice" aria-label={'Dismiss ' + notice.title} className="min-w-11 min-h-11 -mr-2 -mt-2 inline-flex items-center justify-center text-xert-pale/50 hover:text-xert-offwhite disabled:opacity-40">
+                        {dismissingAnnouncementId === notice.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      </button>
+                    </div>
                     <h3 className="mt-2 font-display text-xl uppercase text-xert-offwhite">{notice.title}</h3>
                     <p className="mt-2 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{notice.body}</p>
                     {notice.expires_at && <p className="mt-3 font-body text-xs text-xert-pale/40">Available until {formatDateTime(notice.expires_at)}</p>}

@@ -64,7 +64,11 @@ struct HomeView: View {
             XertSection(title: "Member notices") {
                 VStack(spacing: 12) {
                     ForEach(store.announcements) { announcement in
-                        MemberAnnouncementRow(announcement: announcement)
+                        MemberAnnouncementRow(
+                            announcement: announcement,
+                            isDismissing: store.dismissingAnnouncementID == announcement.id,
+                            onDismiss: { Task { await store.dismissAnnouncement(announcement) } }
+                        )
                     }
                 }
             }
@@ -242,6 +246,8 @@ struct HomeView: View {
 
 private struct MemberAnnouncementRow: View {
     let announcement: MemberAnnouncement
+    let isDismissing: Bool
+    let onDismiss: () -> Void
 
     private var accent: Color {
         switch announcement.tone {
@@ -259,11 +265,26 @@ private struct MemberAnnouncementRow: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 7) {
-                Text(announcement.priorityLabel)
-                    .font(.caption2.weight(.bold))
-                    .textCase(.uppercase)
-                    .tracking(1.2)
-                    .foregroundStyle(accent)
+                HStack(alignment: .top) {
+                    Text(announcement.priorityLabel)
+                        .font(.caption2.weight(.bold))
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                        .foregroundStyle(accent)
+                    Spacer()
+                    Button(action: onDismiss) {
+                        if isDismissing {
+                            ProgressView().tint(.xertSteel)
+                        } else {
+                            Image(systemName: "xmark")
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .disabled(isDismissing)
+                    .foregroundStyle(Color.xertMuted)
+                    .accessibilityLabel("Dismiss \(announcement.title)")
+                }
                 Text(announcement.title)
                     .font(.headline)
                     .foregroundStyle(Color.xertOffWhite)
@@ -281,7 +302,7 @@ private struct MemberAnnouncementRow: View {
         }
         .padding(14)
         .xertCardStyle()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }
 

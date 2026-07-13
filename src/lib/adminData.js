@@ -470,12 +470,18 @@ export async function deleteEvent(id) {
 // ─── Member announcements ───────────────────────────────────────────────────
 
 export async function getAllMemberAnnouncements() {
-  const { data, error } = await supabase
-    .from('member_announcements')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data || [];
+  const [announcementResult, metricResult] = await Promise.all([
+    supabase.from('member_announcements').select('*').order('created_at', { ascending: false }),
+    supabase.rpc('admin_announcement_metrics'),
+  ]);
+  if (announcementResult.error) throw new Error(announcementResult.error.message);
+  if (metricResult.error) throw new Error(metricResult.error.message);
+  const metrics = new Map((metricResult.data || []).map(item => [item.announcement_id, item]));
+  return (announcementResult.data || []).map(item => ({
+    ...item,
+    read_count: Number(metrics.get(item.id)?.read_count) || 0,
+    dismissed_count: Number(metrics.get(item.id)?.dismissed_count) || 0,
+  }));
 }
 
 export async function createMemberAnnouncement(announcement) {
