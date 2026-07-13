@@ -3,6 +3,7 @@ import { Download, Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { normalizeEventInput } from '@/lib/eventAdmin';
 import { downloadCsv } from '@/lib/csv';
 
@@ -242,6 +243,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     if (!rosterEvent) return undefined;
@@ -295,10 +297,10 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
     onIntentHandled?.();
   }, [initialAction, onIntentHandled]);
 
-  const handleDelete = async event => {
-    const goalCount = goalCounts[event.id] || 0;
-    const goalWarning = goalCount ? ` This also removes ${goalCount} member training goal${goalCount === 1 ? '' : 's'}.` : '';
-    if (!confirm(`Delete ${event.name}?${goalWarning} This cannot be undone.`)) return;
+  const handleDelete = async () => {
+    const event = pendingDelete;
+    if (!event) return;
+    setPendingDelete(null);
     setDeletingId(event.id);
     try {
       await deleteEvent(event.id);
@@ -424,7 +426,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
                 >
                   Edit
                 </button>
-                <button onClick={() => handleDelete(ev)} disabled={deletingId !== null} className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
+                <button onClick={() => setPendingDelete(ev)} disabled={deletingId !== null} className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
                   {deletingId === ev.id ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
@@ -453,6 +455,20 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
           onClose={() => setRosterEvent(null)}
         />
       )}
+      <AdminConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={open => !open && setPendingDelete(null)}
+        title="Delete calendar event?"
+        description={pendingDelete ? `Delete ${pendingDelete.name} from the public event calendar?` : ''}
+        warning={pendingDelete
+          ? (goalCounts[pendingDelete.id]
+              ? `${goalCounts[pendingDelete.id]} member training goal${goalCounts[pendingDelete.id] === 1 ? '' : 's'} will also be removed. This cannot be undone.`
+              : 'This cannot be undone.')
+          : ''}
+        confirmLabel="Delete event"
+        onConfirm={() => void handleDelete()}
+        busy={deletingId !== null}
+      />
     </div>
   );
 }

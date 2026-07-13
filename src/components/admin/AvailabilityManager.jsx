@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAvailabilityBlocks, createAvailabilityBlock, updateAvailabilityBlock, deleteAvailabilityBlock, getBlackoutPeriods, createBlackoutPeriod, updateBlackoutPeriod, deleteBlackoutPeriod } from '@/lib/adminData';
 import { availabilityBlockEditorForm, blackoutPeriodEditorForm, normalizeAvailabilityBlock, normalizeBlackoutPeriod } from '@/lib/scheduling';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const BLOCK_TYPES = ['PT available', 'private session available', 'group class available', 'admin only', 'open gym placeholder', 'workshop placeholder'];
 const AFFECTS = ['all', 'group_classes', 'pt_only', 'facility_only', 'coach_only'];
@@ -24,6 +25,7 @@ export default function AvailabilityManager() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [removingId, setRemovingId] = useState(null);
+  const [pendingRemoval, setPendingRemoval] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -93,7 +95,6 @@ export default function AvailabilityManager() {
   };
 
   const deleteBlock = async block => {
-    if (!confirm(`Delete ${block.type} starting ${new Date(block.start_time).toLocaleString('en-AU')}?`)) return;
     setRemovingId(block.id);
     try {
       await deleteAvailabilityBlock(block.id);
@@ -107,7 +108,6 @@ export default function AvailabilityManager() {
   };
 
   const deleteBlackout = async blackout => {
-    if (!confirm(`Delete ${blackout.reason} starting ${new Date(blackout.start_time).toLocaleString('en-AU')}?`)) return;
     setRemovingId(blackout.id);
     try {
       await deleteBlackoutPeriod(blackout.id);
@@ -118,6 +118,13 @@ export default function AvailabilityManager() {
     } finally {
       setRemovingId(null);
     }
+  };
+
+  const confirmRemoval = () => {
+    const pending = pendingRemoval;
+    setPendingRemoval(null);
+    if (pending?.kind === 'availability') void deleteBlock(pending.item);
+    if (pending?.kind === 'blackout') void deleteBlackout(pending.item);
   };
 
   return (
@@ -176,7 +183,7 @@ export default function AvailabilityManager() {
                       setShowBlockForm(true);
                     }} disabled={removingId !== null}
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
-                    <button onClick={() => deleteBlock(b)} disabled={removingId !== null}
+                    <button onClick={() => setPendingRemoval({ kind: 'availability', item: b })} disabled={removingId !== null}
                       className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
                       {removingId === b.id ? 'Removing...' : 'Remove'}
                     </button>
@@ -271,7 +278,7 @@ export default function AvailabilityManager() {
                       setShowBlackoutForm(true);
                     }} disabled={removingId !== null}
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
-                    <button onClick={() => deleteBlackout(b)} disabled={removingId !== null}
+                    <button onClick={() => setPendingRemoval({ kind: 'blackout', item: b })} disabled={removingId !== null}
                       className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
                       {removingId === b.id ? 'Removing...' : 'Remove'}
                     </button>
@@ -329,6 +336,18 @@ export default function AvailabilityManager() {
           )}
         </div>
       )}
+      <AdminConfirmDialog
+        open={Boolean(pendingRemoval)}
+        onOpenChange={open => !open && setPendingRemoval(null)}
+        title={pendingRemoval?.kind === 'blackout' ? 'Remove blackout period?' : 'Remove availability block?'}
+        description={pendingRemoval ? `${pendingRemoval.item.type || pendingRemoval.item.reason} starting ${new Date(pendingRemoval.item.start_time).toLocaleString('en-AU')}` : ''}
+        warning={pendingRemoval?.kind === 'blackout'
+          ? 'Classes and staff planning may immediately become available during this period.'
+          : 'This time will no longer appear as available for scheduling.'}
+        confirmLabel="Remove"
+        onConfirm={confirmRemoval}
+        busy={removingId !== null}
+      />
     </div>
   );
 }

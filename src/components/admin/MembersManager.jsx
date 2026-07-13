@@ -519,6 +519,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [followUpsAvailable, setFollowUpsAvailable] = useState(true);
   const [followUpsLoading, setFollowUpsLoading] = useState(true);
   const [followUpsError, setFollowUpsError] = useState('');
+  const [pendingRoleChange, setPendingRoleChange] = useState(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -616,12 +617,19 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     }
   };
 
-  const handleRole = async (m, role) => {
+  const requestRoleChange = (m, role) => {
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
     const consequence = role === 'admin'
       ? 'This grants access to member data, bookings, sales, content, and staff controls.'
       : 'This removes access to all administrative tools.';
-    if (!confirm(`${verb} ${m.full_name || m.email}?\n\n${consequence}`)) return;
+    setPendingRoleChange({ member: m, role, verb, consequence });
+  };
+
+  const applyRoleChange = async () => {
+    const pending = pendingRoleChange;
+    if (!pending) return;
+    const { member: m, role } = pending;
+    setPendingRoleChange(null);
     setRoleChangingId(m.id);
     try {
       await adminSetRole(m.id, role);
@@ -706,13 +714,13 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
                 </button>
                 {m.role === 'admin' ? (
                   m.id !== user?.id && (
-                    <button disabled={roleChangingId !== null} onClick={() => handleRole(m, 'member')}
+                    <button disabled={roleChangingId !== null} onClick={() => requestRoleChange(m, 'member')}
                       className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
                       Remove admin
                     </button>
                   )
                 ) : (
-                  <button disabled={roleChangingId !== null} onClick={() => handleRole(m, 'admin')}
+                  <button disabled={roleChangingId !== null} onClick={() => requestRoleChange(m, 'admin')}
                     className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                     Make admin
                   </button>
@@ -756,6 +764,16 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       {loggingFollowUp && (
         <FollowUpModal member={loggingFollowUp} onDone={() => { setLoggingFollowUp(null); refresh(); }} onCancel={() => setLoggingFollowUp(null)} />
       )}
+      <AdminConfirmDialog
+        open={Boolean(pendingRoleChange)}
+        onOpenChange={open => !open && setPendingRoleChange(null)}
+        title={pendingRoleChange?.role === 'admin' ? 'Grant administrator access?' : 'Remove administrator access?'}
+        description={pendingRoleChange ? `${pendingRoleChange.verb} ${pendingRoleChange.member.full_name || pendingRoleChange.member.email}?` : ''}
+        warning={pendingRoleChange?.consequence}
+        confirmLabel={pendingRoleChange?.role === 'admin' ? 'Make admin' : 'Remove admin'}
+        onConfirm={() => void applyRoleChange()}
+        busy={roleChangingId !== null}
+      />
     </div>
   );
 }

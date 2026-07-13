@@ -3,6 +3,7 @@ import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
 import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { normalizeCoachInput } from '@/lib/coachAdmin';
 
 const CATEGORIES = [
@@ -117,6 +118,7 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -138,8 +140,10 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
     onIntentHandled?.();
   }, [initialAction, onIntentHandled]);
 
-  const handleDelete = async (coach) => {
-    if (!confirm(`Delete ${coach.name}? This removes them from the public Coaches page.`)) return;
+  const handleDelete = async () => {
+    const coach = pendingDelete;
+    if (!coach) return;
+    setPendingDelete(null);
     setDeletingId(coach.id);
     try {
       await deleteCoach(coach.id);
@@ -199,7 +203,7 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
               <div className="flex gap-2 shrink-0">
                 <button onClick={() => { setEditing(c); setShowEditor(true); }} disabled={deletingId !== null}
                   className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
-                <button onClick={() => handleDelete(c)} disabled={deletingId !== null}
+                <button onClick={() => setPendingDelete(c)} disabled={deletingId !== null}
                   className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">{deletingId === c.id ? 'Deleting...' : 'Delete'}</button>
               </div>
             </div>
@@ -210,6 +214,16 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
       {showEditor && (
         <CoachEditor coach={editing} onSave={() => { setShowEditor(false); load(); }} onCancel={() => setShowEditor(false)} />
       )}
+      <AdminConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={open => !open && setPendingDelete(null)}
+        title="Delete team member?"
+        description={pendingDelete ? `Delete ${pendingDelete.name} from the XERT team directory?` : ''}
+        warning="They will be removed from the public Coaches page. This cannot be undone."
+        confirmLabel="Delete person"
+        onConfirm={() => void handleDelete()}
+        busy={deletingId !== null}
+      />
     </div>
   );
 }
