@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit'],
     ready: false,
     actions: [
       'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
@@ -32,6 +32,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
       'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
       'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',
+      'Apply supabase/migrations/20260714011000_lead_pipeline_audit.sql in Supabase.',
     ],
   });
   assert.equal(summarizeSchemaCapabilities([
@@ -58,6 +59,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'waitlist_fifo_promotion' },
     { capability: 'member_pt_request_tracking' },
     { capability: 'public_form_integrity' },
+    { capability: 'lead_pipeline_audit' },
     { capability: 'admin_role_safety' },
   ]).ready, true);
 });
@@ -112,6 +114,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260714004200_member_pt_request_tracking.sql', 'member_pt_request_tracking'],
     ['../src/supabase/public_form_integrity_upgrade.sql', 'public_form_integrity'],
     ['../supabase/migrations/20260714004300_public_form_integrity.sql', 'public_form_integrity'],
+    ['../src/supabase/lead_pipeline_audit_upgrade.sql', 'lead_pipeline_audit'],
+    ['../supabase/migrations/20260714011000_lead_pipeline_audit.sql', 'lead_pipeline_audit'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -150,6 +154,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /credit_expiry_follow_up/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
+  assert.match(yaml, /lead_pipeline_audit/);
   assert.match(yaml, /\/api\/checkout/);
   assert.match(yaml, /expected HTTP 401/);
   assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
@@ -189,6 +194,7 @@ test('read-only production check reports every release capability and migration'
     'credit_expiry_follow_up',
     'member_pt_request_tracking',
     'public_form_integrity',
+    'lead_pipeline_audit',
   ];
 
   for (const capability of capabilities) {

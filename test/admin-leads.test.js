@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
+import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, selectedLeadIds, validateLeadMutation } from '../src/lib/adminLeads.js';
 import { collectAdminBatches, collectAdminPages } from '../src/lib/adminPagination.js';
 
 test('normalizes lead search text before building a PostgREST or filter', () => {
@@ -75,4 +75,11 @@ test('adds and removes lead selections without mutating the current set', () => 
   assert.deepEqual([...current], ['lead-a']);
   assert.deepEqual([...added], ['lead-a', 'lead-b']);
   assert.deepEqual([...removed], ['lead-b']);
+});
+
+test('turns atomic lead workflow failures into actionable admin messages', () => {
+  assert.match(leadMutationError({ code: 'PGRST202', message: 'admin_update_lead not found' }).message, /migration/);
+  assert.match(leadMutationError({ message: 'LEAD_SELECTION_STALE' }).message, /Refresh/);
+  assert.match(leadMutationError({ message: 'LEAD_NOT_FOUND' }).message, /no longer exists/);
+  assert.match(leadMutationError({ message: 'ADMIN_REQUIRED' }).message, /session has expired/);
 });

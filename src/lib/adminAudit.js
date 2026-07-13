@@ -1,4 +1,4 @@
-const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement']);
+const AUDIT_TYPES = new Set(['role', 'credit', 'request', 'announcement', 'lead']);
 
 function clean(value) {
   return String(value || '').trim();
@@ -10,7 +10,7 @@ function identity(profile, fallbackId) {
   return fallbackId ? `User ${String(fallbackId).slice(0, 8)}` : 'Deleted user';
 }
 
-export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], profiles = [] } = {}) {
+export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], announcementEvents = [], leadChanges = [], profiles = [] } = {}) {
   const profileById = new Map(profiles.map(profile => [profile.id, profile]));
   const roleEvents = roleChanges.map(change => ({
     id: `role:${change.id}`,
@@ -78,8 +78,32 @@ export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], req
         : 'Member announcement lifecycle change',
     sessions: null,
   }));
+  const leadEvents = leadChanges.map(change => {
+    const leadType = clean(change.lead_type) || 'unknown';
+    const leadLabel = `${leadType.charAt(0).toUpperCase()}${leadType.slice(1)} lead`;
+    const statusChanged = clean(change.previous_status) !== clean(change.new_status);
+    const notesChanged = clean(change.previous_admin_notes) !== clean(change.new_admin_notes);
+    return {
+      id: `lead:${change.id}`,
+      sourceId: change.id,
+      type: 'lead',
+      at: change.created_at,
+      actorId: change.changed_by,
+      actor: identity(profileById.get(change.changed_by), change.changed_by),
+      subjectId: change.lead_id,
+      subject: clean(change.subject_label) || clean(change.subject_email) || `${leadLabel} ${clean(change.lead_id).slice(0, 8)}`,
+      summary: statusChanged
+        ? `${leadLabel} changed from ${clean(change.previous_status) || 'unknown'} to ${clean(change.new_status) || 'unknown'}`
+        : `${leadLabel} notes updated`,
+      detail: [
+        clean(change.subject_email),
+        notesChanged ? 'Internal notes updated' : '',
+      ].filter(Boolean).join(' · ') || 'Lead pipeline update',
+      sessions: null,
+    };
+  });
 
-  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents].sort((left, right) => {
+  return [...roleEvents, ...creditEvents, ...requestEvents, ...noticeEvents, ...leadEvents].sort((left, right) => {
     const timeDifference = new Date(right.at).getTime() - new Date(left.at).getTime();
     return timeDifference || right.id.localeCompare(left.id);
   });
@@ -109,6 +133,7 @@ export function summarizeAdminAuditEvents(events) {
     creditGrants: rows.filter(event => event.type === 'credit').length,
     requestChanges: rows.filter(event => event.type === 'request').length,
     announcementChanges: rows.filter(event => event.type === 'announcement').length,
+    leadChanges: rows.filter(event => event.type === 'lead').length,
     creditsGranted: rows.reduce((total, event) => total + (event.type === 'credit' ? event.sessions || 0 : 0), 0),
     activeAdmins: new Set(rows.map(event => event.actorId).filter(Boolean)).size,
   };
@@ -117,7 +142,15 @@ export function summarizeAdminAuditEvents(events) {
 export function adminAuditCsvRows(events) {
   return (Array.isArray(events) ? events : []).map(event => ({
     timestamp: event.at,
-    action: event.type === 'role' ? 'Role change' : event.type === 'credit' ? 'Credit grant' : event.type === 'request' ? 'Request change' : 'Announcement change',
+    action: event.type === 'role'
+      ? 'Role change'
+      : event.type === 'credit'
+        ? 'Credit grant'
+        : event.type === 'request'
+          ? 'Request change'
+          : event.type === 'announcement'
+            ? 'Announcement change'
+            : 'Lead change',
     administrator: event.actor,
     administrator_id: event.actorId || '',
     member: event.subject,

@@ -13,9 +13,6 @@ function functionBody(name) {
 
 test('direct admin updates and deletes verify that the expected record still exists', () => {
   const mutations = [
-    'updateLeadStatus',
-    'updateLead',
-    'updateLeadStatuses',
     'updateClassSession',
     'updateAvailabilityBlock',
     'deleteAvailabilityBlock',
@@ -33,6 +30,15 @@ test('direct admin updates and deletes verify that the expected record still exi
     const body = functionBody(name);
     assert.match(body, /\.select\('id'\)/, `${name} must request affected IDs`);
     assert.match(body, /assertAdminMutation\(/, `${name} must verify affected rows`);
+  }
+});
+
+test('lead operations use audited RPCs and verify exact mutation counts', () => {
+  for (const name of ['updateLeadStatus', 'updateLead', 'updateLeadStatuses']) {
+    const body = functionBody(name);
+    assert.match(body, /\.rpc\('admin_update_lead/, `${name} must use an audited lead RPC`);
+    assert.match(body, /Number\(data\) !==/, `${name} must verify the mutation count`);
+    assert.doesNotMatch(body, /supabase\.from\(mutation\.table\)\.update/, `${name} must not write directly`);
   }
   assert.match(functionBody('updateLeadStatuses'), /mutation\.ids\.length/);
 });

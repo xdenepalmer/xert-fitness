@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertAdminMutation, assertSupabaseResponses } from './supabaseResults';
-import { normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
+import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
   normalizeMemberNoteArchive, normalizeRoleChange
@@ -62,22 +62,40 @@ export async function getCampaignAttributionRows() {
 
 export async function updateLeadStatus(table, id, status) {
   const mutation = validateLeadMutation(table, status, [id]);
-  const result = await supabase.from(mutation.table).update({ status: mutation.status }).eq('id', mutation.ids[0]).select('id');
-  assertAdminMutation(result, 'Lead status update');
+  const { data, error } = await supabase.rpc('admin_update_lead_statuses', {
+    p_lead_type: mutation.table,
+    p_lead_ids: mutation.ids,
+    p_status: mutation.status,
+  });
+  if (error) throw leadMutationError(error, 'Lead status update failed.');
+  if (Number(data) !== 1) throw new Error('Lead status update was not acknowledged. Refresh and try again.');
 }
 
 export async function updateLead(table, id, updates) {
   const mutation = normalizeLeadUpdate(table, updates);
   const validatedId = validateLeadMutation(table, mutation.updates.status, [id]).ids[0];
-  const result = await supabase.from(mutation.table).update(mutation.updates).eq('id', validatedId).select('id');
-  assertAdminMutation(result, 'Lead update');
+  const { data, error } = await supabase.rpc('admin_update_lead', {
+    p_lead_type: mutation.table,
+    p_lead_id: validatedId,
+    p_status: mutation.updates.status,
+    p_admin_notes: mutation.updates.admin_notes,
+  });
+  if (error) throw leadMutationError(error);
+  if (Number(data) !== 1) throw new Error('Lead update was not acknowledged. Refresh and try again.');
 }
 
 export async function updateLeadStatuses(table, ids, status) {
   if (!ids?.length) return;
   const mutation = validateLeadMutation(table, status, ids);
-  const result = await supabase.from(mutation.table).update({ status: mutation.status }).in('id', mutation.ids).select('id');
-  assertAdminMutation(result, 'Bulk lead status update', mutation.ids.length);
+  const { data, error } = await supabase.rpc('admin_update_lead_statuses', {
+    p_lead_type: mutation.table,
+    p_lead_ids: mutation.ids,
+    p_status: mutation.status,
+  });
+  if (error) throw leadMutationError(error, 'Bulk lead status update failed.');
+  if (Number(data) !== mutation.ids.length) {
+    throw new Error('Bulk lead update was not fully acknowledged. Refresh and try again.');
+  }
 }
 
 export async function updateLegacyBookingNotes(id, adminNotes) {
@@ -804,6 +822,7 @@ export async function getAdminAuditRecords() {
     loadTable('admin_credit_grants', 'id, user_id, granted_by, sessions, validity_days, note, created_at'),
     loadTable('admin_request_status_changes', 'id, request_type, request_id, changed_by, previous_status, new_status, previous_admin_notes, new_admin_notes, subject_label, subject_email, created_at'),
     loadTable('member_announcement_admin_events', 'id, announcement_id, announcement_title, action, actor_id, previous_published_at, new_published_at, previous_archived_at, new_archived_at, created_at'),
+    loadTable('admin_lead_changes', 'id, lead_type, lead_id, changed_by, previous_status, new_status, previous_admin_notes, new_admin_notes, subject_label, subject_email, created_at'),
   ]);
   const warnings = [];
   const sourceValue = (index, label) => {
@@ -815,6 +834,7 @@ export async function getAdminAuditRecords() {
   const creditGrants = sourceValue(1, 'Credit grants');
   const requestChanges = sourceValue(2, 'Request changes');
   const announcementEvents = sourceValue(3, 'Announcement changes');
+  const leadChanges = sourceValue(4, 'Lead changes');
   if (sources.every(result => result.status === 'rejected')) {
     throw new Error(warnings.join(' | '));
   }
@@ -824,6 +844,7 @@ export async function getAdminAuditRecords() {
     ...creditGrants.flatMap(row => [row.user_id, row.granted_by]),
     ...requestChanges.map(row => row.changed_by),
     ...announcementEvents.map(row => row.actor_id),
+    ...leadChanges.map(row => row.changed_by),
   ];
   let profiles = [];
   try {
@@ -831,7 +852,7 @@ export async function getAdminAuditRecords() {
   } catch (error) {
     warnings.push(`User identities: ${error.message || 'unavailable'}`);
   }
-  return { roleChanges, creditGrants, requestChanges, announcementEvents, profiles, warnings };
+  return { roleChanges, creditGrants, requestChanges, announcementEvents, leadChanges, profiles, warnings };
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────

@@ -23,6 +23,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   credit_expiry_follow_up: 'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
   member_pt_request_tracking: 'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
   public_form_integrity: 'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',
+  lead_pipeline_audit: 'Apply supabase/migrations/20260714011000_lead_pipeline_audit.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

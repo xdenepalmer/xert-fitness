@@ -54,3 +54,21 @@ export function normalizeLeadUpdate(table, updates) {
     updates: { status: mutation.status, admin_notes: adminNotes || null },
   };
 }
+
+export function leadMutationError(error, fallback = 'Lead update failed.') {
+  const message = String(error?.message || '');
+  if (['42883', 'PGRST202'].includes(error?.code)
+      || /admin_update_lead(?:_statuses)?.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    return new Error('Lead workflow controls are not installed. Apply the lead pipeline audit migration.');
+  }
+  if (/LEAD_SELECTION_STALE/i.test(message)) {
+    return new Error('One or more selected leads changed. Refresh the list and try again.');
+  }
+  if (/LEAD_NOT_FOUND/i.test(message)) {
+    return new Error('This lead no longer exists. Refresh the list.');
+  }
+  if (/ADMIN_REQUIRED/i.test(message)) {
+    return new Error('Your administrator session has expired. Sign in again.');
+  }
+  return new Error(message || fallback);
+}
