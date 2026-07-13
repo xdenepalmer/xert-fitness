@@ -240,6 +240,17 @@ final class XertAPI {
         try await rpc(path: "my_bookings", body: EmptyBody(), auth: auth)
     }
 
+    func privateSessionRequests(session auth: AuthSession) async throws -> [PrivateSessionStatusItem] {
+        try await restRequest(
+            path: "/rest/v1/private_session_requests",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at"),
+                URLQueryItem(name: "order", value: "created_at.desc")
+            ],
+            auth: auth
+        )
+    }
+
     func book(session auth: AuthSession, classSessionID: UUID) async throws {
         let _: UUID = try await rpc(
             path: "book_session",
@@ -273,13 +284,16 @@ final class XertAPI {
         return response.url
     }
 
-    func requestPrivateSession(_ requestBody: PrivateSessionRequest) async throws {
+    func requestPrivateSession(_ requestBody: PrivateSessionRequest, auth: AuthSession? = nil) async throws {
         var request = try request(
             baseURL: AppConfig.supabaseURL,
             path: "/rest/v1/private_session_requests"
         )
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        if let auth {
+            request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(requestBody)

@@ -9,6 +9,7 @@ final class XertStore: ObservableObject {
     @Published var credits: [CreditBatch] = []
     @Published var bookings: [BookingItem] = []
     @Published var orders: [OrderItem] = []
+    @Published var privateSessionRequests: [PrivateSessionStatusItem] = []
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
@@ -126,6 +127,7 @@ final class XertStore: ObservableObject {
             async let orderRequest = api.orders(session: authSession)
             async let profileRequest = api.profile(session: authSession)
             async let eventGoalRequest = api.eventGoals(session: authSession)
+            async let privateSessionRequest = api.privateSessionRequests(session: authSession)
             var creditsLoaded = false
             var bookingsLoaded = false
             var ordersLoaded = false
@@ -168,6 +170,14 @@ final class XertStore: ObservableObject {
                 // is applied; keep the rest of the member account available.
             }
 
+            do {
+                privateSessionRequests = try await privateSessionRequest
+            } catch {
+                unavailableDataSources.insert(.privateSessions)
+                // Tracking is optional until the additive ownership migration
+                // reaches an existing Supabase project.
+            }
+
             if creditsLoaded && bookingsLoaded && ordersLoaded && profileLoaded {
                 memberDataUpdatedAt = Date()
                 isUsingStaleMemberData = false
@@ -180,6 +190,7 @@ final class XertStore: ObservableObject {
             orders = []
             profile = nil
             eventGoalIDs = []
+            privateSessionRequests = []
             memberDataUpdatedAt = nil
             isUsingStaleMemberData = false
             await ClassReminderScheduler.shared.clearAll()
@@ -254,9 +265,10 @@ final class XertStore: ObservableObject {
         orders = []
         profile = nil
         eventGoalIDs = []
+        privateSessionRequests = []
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
-        unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals])
+        unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
         KeychainStore.clearSession()
         Task {
             await ClassReminderScheduler.shared.clearAll()
@@ -280,9 +292,10 @@ final class XertStore: ObservableObject {
             orders = []
             profile = nil
             eventGoalIDs = []
+            privateSessionRequests = []
             memberDataUpdatedAt = nil
             isUsingStaleMemberData = false
-            unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals])
+            unavailableDataSources.subtract([.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
             return true
@@ -388,7 +401,12 @@ final class XertStore: ObservableObject {
         errorMessage = nil
         defer { isRequestingPrivateSession = false }
         do {
-            try await api.requestPrivateSession(request)
+            let memberSession = authSession == nil ? nil : try await validAuthSession()
+            try await api.requestPrivateSession(request, auth: memberSession)
+            if let memberSession {
+                privateSessionRequests = try await api.privateSessionRequests(session: memberSession)
+                unavailableDataSources.remove(.privateSessions)
+            }
             return true
         } catch {
             present(error)

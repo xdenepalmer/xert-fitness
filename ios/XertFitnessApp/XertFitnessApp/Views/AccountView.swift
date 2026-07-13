@@ -92,9 +92,9 @@ struct AccountView: View {
             }
             .listRowBackground(Color.xertInk)
         }
-        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals]) {
+        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions]) {
             Section {
-                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals])
+                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
             }
             .listRowBackground(Color.xertInk)
         }
@@ -106,6 +106,7 @@ struct AccountView: View {
         accountControlSection
         legalSection
         purchaseHistorySection
+        privateSessionHistorySection
         bookingSections(timeline: timeline)
     }
 
@@ -290,6 +291,44 @@ struct AccountView: View {
             }
         } header: {
             Text("Purchase History").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var privateSessionHistorySection: some View {
+        Section {
+            if store.privateSessionRequests.isEmpty {
+                Text("No PT requests yet.")
+                    .foregroundStyle(Color.xertMuted)
+            } else {
+                ForEach(store.privateSessionRequests) { request in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(request.requested_session_type)
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(request.displayStatus.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(.xertSteel)
+                        Text([
+                            request.created_at.formatted(date: .abbreviated, time: .omitted),
+                            request.preferred_day,
+                            request.preferred_time
+                        ].compactMap { $0 }.joined(separator: " · "))
+                            .font(.subheadline)
+                            .foregroundStyle(Color.xertPale)
+                        if let goal = request.training_goal {
+                            Text("Goal: \(goal)")
+                                .font(.footnote)
+                                .foregroundStyle(Color.xertMuted)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        } header: {
+            Text("PT Requests").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
     }

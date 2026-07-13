@@ -1,7 +1,7 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, credits, bookings, orders, profile, eventGoals
+    case products, sessions, events, credits, bookings, orders, profile, eventGoals, privateSessions
 
     var displayName: String {
         switch self {
@@ -13,6 +13,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .orders: return "purchase history"
         case .profile: return "member profile"
         case .eventGoals: return "training goals"
+        case .privateSessions: return "PT requests"
         }
     }
 }
@@ -245,6 +246,28 @@ struct BookingItem: Identifiable, Codable, Hashable {
         case "requested": return 2
         case "waitlisted": return 1
         default: return 0
+        }
+    }
+}
+
+struct PrivateSessionStatusItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    let status: String
+    let requested_session_type: String
+    let preferred_day: String?
+    let preferred_time: String?
+    let training_goal: String?
+    let created_at: Date
+
+    var displayStatus: String {
+        switch status {
+        case "requested": return "Awaiting review"
+        case "approved": return "Approved"
+        case "reschedule_requested": return "Scheduling follow-up"
+        case "declined": return "Declined"
+        case "completed": return "Completed"
+        case "cancelled": return "Cancelled"
+        default: return status.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 }

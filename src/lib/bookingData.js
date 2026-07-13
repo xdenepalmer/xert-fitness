@@ -71,6 +71,17 @@ export async function getMyBookings() {
   return data || [];
 }
 
+export async function getMyPrivateSessionRequests() {
+  const userId = await requireCurrentUserId();
+  const { data, error } = await supabase
+    .from('private_session_requests')
+    .select('id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 const BOOKING_ERRORS = {
   AUTH_REQUIRED: 'Please sign in to book a class.',
   SESSION_NOT_FOUND: 'That class could not be found.',
