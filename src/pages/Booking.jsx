@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import {
-  getProducts, startCheckout, getAvailableSessions, bookSession, getMyBookings, getMyCredits,
+  getProducts, startCheckout, getAvailableSessions, bookSession, joinSessionWaitlist, getMyBookings, getMyCredits,
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
@@ -111,11 +111,15 @@ export default function Booking() {
     }
     setBookingId(s.id);
     try {
-      await bookSession(s.id);
+      const joiningWaitlist = s.spots_left !== null && s.spots_left <= 0;
+      if (joiningWaitlist) await joinSessionWaitlist(s.id);
+      else await bookSession(s.id);
       const requested = s.booking_mode === 'request_to_book';
       toast({
-        title: requested ? 'Booking request sent' : 'Class booked ✔',
-        description: requested
+        title: joiningWaitlist ? 'Waitlist joined' : requested ? 'Booking request sent' : 'Class booked',
+        description: joiningWaitlist
+          ? `You are on the waitlist for ${s.title || s.class_type}. No class credit has been used.`
+          : requested
           ? `${s.title || s.class_type} is awaiting staff confirmation. Your class credit is reserved.`
           : `${s.title || s.class_type} — ${formatDay(s.start_time)} ${formatTime(s.start_time)}`,
       });
@@ -331,7 +335,7 @@ export default function Booking() {
                             ) : (
                               <button
                                 onClick={() => handleBook(s)}
-                                disabled={full || Boolean(existingBooking) || bookingId === s.id}
+                                disabled={Boolean(existingBooking) || bookingId === s.id}
                                 className="px-5 py-2.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 shrink-0"
                                 style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
                                 {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}

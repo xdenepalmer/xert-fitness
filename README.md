@@ -85,6 +85,8 @@ The Supabase schema is defined in:
   active-credit dashboard scans as order volume grows
 - `src/supabase/attendance_roll_call_upgrade.sql` — adds atomic class roll call,
   attendance audit metadata, and automatic class completion
+- `src/supabase/member_waitlist_upgrade.sql` — lets signed-in members join a
+  full class waitlist without consuming a credit
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database, run `rls_policies.sql`, then `booking_schema.sql`, then
@@ -94,7 +96,8 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `rls_hardening.sql`, `product_validation_upgrade.sql`, and
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
 `admin_role_safety_upgrade.sql`, `business_metrics_upgrade.sql`, and
-`attendance_roll_call_upgrade.sql` after those prerequisites. The scripts are idempotent;
+`attendance_roll_call_upgrade.sql`, and `member_waitlist_upgrade.sql` after
+those prerequisites. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

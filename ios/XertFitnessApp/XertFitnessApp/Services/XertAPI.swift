@@ -239,6 +239,14 @@ final class XertAPI {
         )
     }
 
+    func joinWaitlist(session auth: AuthSession, classSessionID: UUID) async throws {
+        let _: UUID = try await rpc(
+            path: "join_session_waitlist",
+            body: ["p_session_id": classSessionID.uuidString],
+            auth: auth
+        )
+    }
+
     func cancelBooking(session auth: AuthSession, bookingID: UUID) async throws {
         let _: EmptyResponse = try await rpc(
             path: "cancel_booking",

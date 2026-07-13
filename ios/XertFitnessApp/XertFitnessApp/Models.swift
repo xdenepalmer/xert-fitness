@@ -54,6 +54,8 @@ struct ClassSession: Identifiable, Codable, Hashable {
     let booking_mode: String?
     let booked_count: Int?
     let spots_left: Int?
+
+    var isFull: Bool { spots_left.map { $0 <= 0 } ?? false }
 }
 
 struct EventItem: Identifiable, Codable, Hashable {

@@ -214,8 +214,19 @@ struct BookingView: View {
                 Label("Register interest", systemImage: "person.2")
             }
             .buttonStyle(.xertGhost)
+        } else if session.isFull {
+            Button {
+                if store.isSignedIn {
+                    Task { await store.joinWaitlist(session) }
+                } else {
+                    onNavigate(3)
+                }
+            } label: {
+                Label(store.isSignedIn ? "Join waitlist" : "Sign in to join waitlist", systemImage: "person.2.badge.plus")
+            }
+            .buttonStyle(.xertPrimary)
+            .disabled(store.bookingSessionID == session.id)
         } else {
-            let isBookingDisabled = (session.spots_left ?? 1) == 0 || store.bookingSessionID == session.id
             Button {
                 if store.isSignedIn {
                     Task { await store.book(session) }
@@ -231,8 +242,7 @@ struct BookingView: View {
                 )
             }
             .buttonStyle(.xertPrimary)
-            .disabled(isBookingDisabled)
-            .opacity(isBookingDisabled ? 0.5 : 1)
+            .disabled(store.bookingSessionID == session.id)
         }
     }
 

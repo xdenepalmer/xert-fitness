@@ -14,6 +14,6 @@ export function classActionLabel({ booking, full, bookingMode }) {
   if (booking?.status === 'requested') return 'Requested';
   if (booking?.status === 'waitlisted') return 'Waitlisted';
   if (booking?.status === 'confirmed') return 'Booked';
-  if (full) return 'Full';
+  if (full) return 'Join waitlist';
   return bookingMode === 'request_to_book' ? 'Request spot' : 'Book';
 }

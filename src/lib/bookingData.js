@@ -79,6 +79,7 @@ const BOOKING_ERRORS = {
   ALREADY_BOOKED: "You've already booked this class.",
   SESSION_FULL: 'Sorry, this class is now full.',
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
+  SESSION_HAS_CAPACITY: 'A place is available now. Book the class instead of joining its waitlist.',
   NO_CREDITS: 'You have no available class credits. Purchase a pack to book.'
 };
 
@@ -95,6 +96,14 @@ export async function bookSession(sessionId) {
   });
   if (error) throw new Error(friendlyBookingError(error.message));
   return data; // booking id
+}
+
+export async function joinSessionWaitlist(sessionId) {
+  const { data, error } = await supabase.rpc('join_session_waitlist', {
+    p_session_id: sessionId
+  });
+  if (error) throw new Error(friendlyBookingError(error.message));
+  return data;
 }
 
 export async function cancelBooking(bookingId) {

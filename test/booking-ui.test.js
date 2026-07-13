@@ -14,6 +14,6 @@ test('treats requested, confirmed, and waitlisted class places as active', () =>
 
 test('describes the actual class action state before availability fallbacks', () => {
   assert.equal(classActionLabel({ booking: { status: 'waitlisted' }, full: false }), 'Waitlisted');
-  assert.equal(classActionLabel({ booking: null, full: true }), 'Full');
+  assert.equal(classActionLabel({ booking: null, full: true }), 'Join waitlist');
   assert.equal(classActionLabel({ booking: null, full: false, bookingMode: 'request_to_book' }), 'Request spot');
 });

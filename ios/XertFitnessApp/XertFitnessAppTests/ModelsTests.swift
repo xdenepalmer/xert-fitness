@@ -153,6 +153,13 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(product.price_cents, 4800)
     }
 
+    func testClassSessionOnlyReportsFullAtZeroOrNegativeAvailability() {
+        XCTAssertTrue(classSession(spotsLeft: 0).isFull)
+        XCTAssertTrue(classSession(spotsLeft: -1).isFull)
+        XCTAssertFalse(classSession(spotsLeft: 1).isFull)
+        XCTAssertFalse(classSession(spotsLeft: nil).isFull)
+    }
+
     func testCreditBatchDecodesTheDatabaseTotalColumn() throws {
         let data = """
         {
@@ -417,6 +424,26 @@ final class ModelsTests: XCTestCase {
             end_time: nil,
             location_zone: nil,
             intensity_level: nil
+        )
+    }
+
+    private func classSession(spotsLeft: Int?) -> ClassSession {
+        ClassSession(
+            id: UUID(),
+            class_type: "Strength",
+            title: "XERT Strength",
+            description: nil,
+            coach_name: "Coach",
+            start_time: Date().addingTimeInterval(3_600),
+            end_time: nil,
+            duration_minutes: 60,
+            capacity: 8,
+            location_zone: "Main floor",
+            beginner_friendly: true,
+            intensity_level: "Moderate",
+            booking_mode: "instant_book",
+            booked_count: spotsLeft.map { 8 - $0 },
+            spots_left: spotsLeft
         )
     }
 

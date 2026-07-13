@@ -306,6 +306,18 @@ final class XertStore: ObservableObject {
         }
     }
 
+    func joinWaitlist(_ session: ClassSession) async {
+        bookingSessionID = session.id
+        defer { bookingSessionID = nil }
+        do {
+            let authSession = try await validAuthSession()
+            try await api.joinWaitlist(session: authSession, classSessionID: session.id)
+            await refresh()
+        } catch {
+            errorMessage = friendlyBookingError(error.localizedDescription)
+        }
+    }
+
     func cancel(_ booking: BookingItem) async {
         cancellingBookingID = booking.id
         defer { cancellingBookingID = nil }
@@ -452,6 +464,9 @@ final class XertStore: ObservableObject {
         }
         if message.contains("SESSION_INTEREST_ONLY") {
             return "This class is collecting interest only."
+        }
+        if message.contains("SESSION_HAS_CAPACITY") {
+            return "A place is available now. Refresh and book the class instead."
         }
         if message.contains("NOT_CANCELLABLE") {
             return "This booking can no longer be cancelled."

@@ -35,6 +35,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Upcoming-event filtering in the XERT/Queensland calendar, plus event detail links when an admin supplies one.
 - Booking RPC support through `book_session`.
 - Instant booking, staff-confirmed booking requests, waitlist visibility, and member cancellation or waitlist withdrawal.
+- Self-service joining for full-class waitlists without consuming a class credit.
 - Device-local reminders two hours before future confirmed classes; reminders are removed when a booking is cancelled or the member signs out.
 - Interest-only class handoff to the live XERT timetable/registration form.
 - Vercel checkout launch through `/api/checkout`.
