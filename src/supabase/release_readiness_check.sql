@@ -9,6 +9,7 @@ with required (capability, migration) as (
     ('waitlist_fifo_promotion', 'src/supabase/waitlist_fifo_promotion_upgrade.sql'),
     ('attendance_roll_call', 'src/supabase/attendance_roll_call_upgrade.sql'),
     ('class_session_update_guard', 'supabase/migrations/20260713000000_class_session_update_guard.sql'),
+    ('product_update_guard', 'supabase/migrations/20260713010000_product_update_guard.sql'),
     ('member_pt_request_tracking', 'src/supabase/member_pt_request_tracking.sql'),
     ('public_form_integrity', 'src/supabase/public_form_integrity_upgrade.sql')
 ), readiness as (

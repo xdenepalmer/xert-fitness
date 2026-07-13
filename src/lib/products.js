@@ -83,3 +83,16 @@ export function normalizeProductCreateInput(form) {
   }
   return { slug, ...normalizeProductAdminInput(form) };
 }
+
+export function productStripeTransitionError(current, next) {
+  const currentStripePrice = String(current?.stripe_price_id || '').trim();
+  const nextStripePrice = String(next?.stripe_price_id || '').trim();
+  const amountChanged = Number(current?.price_cents) !== Number(next?.price_cents);
+  const currencyChanged = String(current?.currency || '').toLowerCase()
+    !== String(next?.currency || '').toLowerCase();
+
+  if (currentStripePrice && currentStripePrice === nextStripePrice && (amountChanged || currencyChanged)) {
+    return 'Replace or clear the Stripe Price ID before changing this pack\'s price or currency.';
+  }
+  return '';
+}

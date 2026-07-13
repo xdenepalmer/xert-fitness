@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'member_pt_request_tracking', 'public_form_integrity'],
+    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
@@ -14,6 +14,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply src/supabase/waitlist_fifo_promotion_upgrade.sql in Supabase.',
       'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
       'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
+      'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
       'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
       'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
     ],
@@ -21,6 +22,7 @@ test('reports the exact missing production database capabilities', () => {
   assert.equal(summarizeSchemaCapabilities([
     { capability: 'attendance_roll_call' },
     { capability: 'class_session_update_guard' },
+    { capability: 'product_update_guard' },
     { capability: 'booking_waitlist_withdrawal' },
     { capability: 'member_waitlist_join' },
     { capability: 'waitlist_fifo_promotion' },
@@ -44,6 +46,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/attendance_roll_call_upgrade.sql', 'attendance_roll_call'],
     ['../src/supabase/admin_cms_schema.sql', 'class_session_update_guard'],
     ['../supabase/migrations/20260713000000_class_session_update_guard.sql', 'class_session_update_guard'],
+    ['../src/supabase/admin_cms_schema.sql', 'product_update_guard'],
+    ['../supabase/migrations/20260713010000_product_update_guard.sql', 'product_update_guard'],
     ['../src/supabase/member_pt_request_tracking.sql', 'member_pt_request_tracking'],
     ['../src/supabase/public_form_integrity_upgrade.sql', 'public_form_integrity'],
   ];
@@ -66,6 +70,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /waitlist_fifo_promotion/);
   assert.match(yaml, /attendance_roll_call/);
   assert.match(yaml, /class_session_update_guard/);
+  assert.match(yaml, /product_update_guard/);
   assert.match(yaml, /member_pt_request_tracking/);
   assert.match(yaml, /public_form_integrity/);
   assert.match(yaml, /\/api\/checkout/);
@@ -85,6 +90,7 @@ test('read-only production check reports every release capability and migration'
     'waitlist_fifo_promotion',
     'attendance_roll_call',
     'class_session_update_guard',
+    'product_update_guard',
     'member_pt_request_tracking',
     'public_form_integrity',
   ];

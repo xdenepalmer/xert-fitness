@@ -18,6 +18,7 @@ import {
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
+import { productStripeTransitionError } from './products.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -827,6 +828,27 @@ export async function createProduct(product) {
 }
 
 export async function updateProduct(id, updates) {
+  const guarded = await supabase.rpc('admin_update_product', {
+    p_product_id: id,
+    p_product: updates,
+  });
+  if (!guarded.error) return guarded.data;
+
+  const guardUnavailable = ['42883', 'PGRST202'].includes(guarded.error.code)
+    || /admin_update_product.*(?:not found|schema cache|does not exist)/i.test(guarded.error.message || '');
+  if (!guardUnavailable) {
+    if (/STRIPE_PRICE_REFRESH_REQUIRED/i.test(guarded.error.message || '')) {
+      throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price or currency.');
+    }
+    throw new Error(guarded.error.message);
+  }
+
+  // Compatibility path for projects awaiting the product update migration.
+  const current = await supabase.from('products').select('price_cents, currency, stripe_price_id').eq('id', id).single();
+  if (current.error) throw new Error(current.error.message);
+  const integrityError = productStripeTransitionError(current.data, updates);
+  if (integrityError) throw new Error(integrityError);
+
   const result = await supabase.from('products').update(updates).eq('id', id).select('id');
   assertAdminMutation(result, 'Product update');
 }

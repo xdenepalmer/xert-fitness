@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { X } from 'lucide-react';
 import { createProduct, getAllProducts, updateProduct } from '@/lib/adminData';
-import { normalizeProductAdminInput, normalizeProductCreateInput } from '@/lib/products';
+import { normalizeProductAdminInput, normalizeProductCreateInput, productStripeTransitionError } from '@/lib/products';
 import AdminLoadError from './AdminLoadError';
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
@@ -23,6 +23,12 @@ function ProductCard({ product, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  let transitionError = '';
+  try {
+    transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
+  } catch {
+    // Field-level validation is reported when Save is pressed.
+  }
 
   const handleSave = async () => {
     let updates;
@@ -89,6 +95,7 @@ function ProductCard({ product, onSaved }) {
       <div>
         <label htmlFor={`product-${product.id}-stripe`} className={labelCls}>Stripe Price ID (optional - overrides ad-hoc pricing)</label>
         <input id={`product-${product.id}-stripe`} value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} />
+        {transitionError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{transitionError}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-6">
@@ -106,7 +113,7 @@ function ProductCard({ product, onSaved }) {
           </span>
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
         </label>
-        <button onClick={handleSave} disabled={saving}
+        <button onClick={handleSave} disabled={saving || Boolean(transitionError)}
           className="ml-auto px-5 py-2.5 bg-xert-red text-white font-display text-sm uppercase hover:bg-xert-orange transition-colors disabled:opacity-50">
           {saving ? 'Saving…' : 'Save'}
         </button>

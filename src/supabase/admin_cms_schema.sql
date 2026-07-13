@@ -791,6 +791,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('waitlist_fifo_promotion') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('class_session_update_guard') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('product_update_guard') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$

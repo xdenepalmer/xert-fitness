@@ -201,6 +201,7 @@ workflows:
               "waitlist_fifo_promotion",
               "attendance_roll_call",
               "class_session_update_guard",
+              "product_update_guard",
               "member_pt_request_tracking",
               "public_form_integrity",
             ];
