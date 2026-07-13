@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
-const LOGO = '/assets/xert-logo-full.png';
+const LOGO = '/assets/xert-logo-horizontal-light.png';
 
 export default function PublicNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -35,8 +35,7 @@ export default function PublicNav() {
       <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-14">
         {/* Logo */}
         <Link to="/" aria-label="XERT Fitness home" className="flex min-w-11 min-h-11 items-center">
-          <img src={LOGO} alt="XERT Fitness" className="h-7 w-auto object-contain"
-            style={{ filter: 'brightness(0) invert(1)' }} />
+          <img src={LOGO} alt="XERT Fitness" className="h-7 w-auto object-contain" />
         </Link>
 
         {/* Desktop links */}

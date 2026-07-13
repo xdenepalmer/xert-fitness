@@ -11,7 +11,7 @@ import { getAdminBadgeCounts } from '@/lib/adminData';
 import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import CommandPalette from '@/components/admin/CommandPalette';
 
-const LOGO = '/assets/xert-logo-full.png';
+const LOGO = '/assets/xert-logo-horizontal-light.png';
 
 const NAV_GROUPS = [
   {
@@ -143,7 +143,7 @@ export default function AdminLayout({ activeSection, onSectionChange, children }
         <div className="relative p-5 overflow-hidden" style={{ borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
           <div className="absolute inset-0 pointer-events-none" style={GRID_BG} />
           <div className="relative">
-            <img src={LOGO} alt="XERT" className="h-7 w-auto mb-2" style={{ filter: 'brightness(0) invert(1)' }} />
+            <img src={LOGO} alt="XERT" className="h-7 w-auto mb-2" />
             <div className="flex items-center gap-2">
               {badgesUnavailable ? (
                 <CircleAlert className="w-3.5 h-3.5" style={{ color: '#e0b36a' }} />

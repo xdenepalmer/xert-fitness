@@ -5,7 +5,7 @@ import { useSiteContent } from '@/lib/siteContent';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { CONTACT_DEFAULTS } from '@/lib/contentDefaults';
 
-const LOGO = '/assets/xert-logo-full.png';
+const LOGO = '/assets/xert-logo-horizontal-light.png';
 
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
@@ -31,8 +31,7 @@ export default function PublicFooter() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
           {/* Brand */}
           <div>
-            <img src={LOGO} alt="XERT Fitness" className="h-8 w-auto mb-4 opacity-90"
-              style={{ filter: 'brightness(0) invert(1)' }} />
+            <img src={LOGO} alt="XERT Fitness" className="h-8 w-auto mb-4 opacity-90" />
             <p className="font-body text-xs leading-relaxed mb-3" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Semi-private functional fitness coaching in Kingaroy, Queensland. Beat Your Best.
             </p>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSiteContent } from '@/lib/siteContent';
 import { HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
 
-const LOGO_FULL_WHITE = '/assets/xert-logo-full.png';
+const LOGO_FULL_WHITE = '/assets/xert-logo-horizontal-light.png';
 
 const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Quality', 'Longevity', 'Community', 'Preparation'];
 
@@ -104,7 +104,6 @@ export default function Hero() {
                 src={LOGO_FULL_WHITE}
                 alt="XERT Fitness"
                 className="h-16 sm:h-20 w-auto object-contain"
-                style={{ filter: 'brightness(0) invert(1)' }}
               />
             </div>
 

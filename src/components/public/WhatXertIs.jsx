@@ -1,6 +1,6 @@
 import React from 'react';
 
-const LOGO_ICON = '/assets/xert-logo-icon.png';
+const LOGO_ICON = '/assets/xert-logo-mark-light.png';
 
 const trainingSystem = [
   {
@@ -39,8 +39,7 @@ export default function WhatXertIs() {
             {/* Horizontal rule with icon */}
             <div className="flex items-center gap-4 mb-6">
               <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
-              <img src={LOGO_ICON} alt="" className="h-6 w-auto opacity-60"
-                style={{ filter: 'brightness(0) invert(1)' }} />
+              <img src={LOGO_ICON} alt="" className="h-6 w-auto opacity-60" />
               <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
             </div>
           </div>
