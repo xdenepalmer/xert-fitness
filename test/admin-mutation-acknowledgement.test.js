@@ -16,10 +16,7 @@ test('direct admin updates and deletes verify that the expected record still exi
     'updateLeadStatus',
     'updateLead',
     'updateLeadStatuses',
-    'updateLegacyBookingNotes',
     'updateClassSession',
-    'updateBookingStatus',
-    'updatePTRequestStatus',
     'updateAvailabilityBlock',
     'deleteAvailabilityBlock',
     'updateBlackoutPeriod',
@@ -38,4 +35,12 @@ test('direct admin updates and deletes verify that the expected record still exi
     assert.match(body, /assertAdminMutation\(/, `${name} must verify affected rows`);
   }
   assert.match(functionBody('updateLeadStatuses'), /mutation\.ids\.length/);
+});
+
+test('request operations use the atomic audited RPC instead of direct writes', () => {
+  for (const name of ['updateLegacyBookingNotes', 'updateBookingStatus', 'updatePTRequestStatus']) {
+    const body = functionBody(name);
+    assert.match(body, /\.rpc\('admin_update_request'/, `${name} must use the audited RPC`);
+    assert.doesNotMatch(body, /\.from\((?:'class_bookings'|'private_session_requests')\)/, `${name} must not write directly`);
+  }
 });

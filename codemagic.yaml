@@ -251,6 +251,7 @@ workflows:
               "schedule_blackout_guard",
               "database_security_hardening",
               "rls_policy_performance",
+              "request_status_audit",
               "credit_expiry_follow_up",
               "member_pt_request_tracking",
               "public_form_integrity",

@@ -82,8 +82,14 @@ export async function updateLeadStatuses(table, ids, status) {
 
 export async function updateLegacyBookingNotes(id, adminNotes) {
   const mutation = normalizeLegacyBookingNotes(id, adminNotes);
-  const result = await supabase.from('class_bookings').update({ admin_notes: mutation.admin_notes }).eq('id', mutation.id).select('id');
-  assertAdminMutation(result, 'Booking notes update');
+  const { error } = await supabase.rpc('admin_update_request', {
+    p_request_type: 'class_booking',
+    p_request_id: mutation.id,
+    p_status: null,
+    p_admin_notes: mutation.admin_notes,
+    p_update_admin_notes: true,
+  });
+  if (error) throw new Error(error.message);
 }
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
@@ -187,8 +193,14 @@ export async function getClassBookings(filters = {}) {
 
 export async function updateBookingStatus(id, status) {
   const mutation = normalizeBookingStatusMutation(id, status);
-  const result = await supabase.from('class_bookings').update({ status: mutation.status }).eq('id', mutation.id).select('id');
-  assertAdminMutation(result, 'Booking status update');
+  const { error } = await supabase.rpc('admin_update_request', {
+    p_request_type: 'class_booking',
+    p_request_id: mutation.id,
+    p_status: mutation.status,
+    p_admin_notes: null,
+    p_update_admin_notes: false,
+  });
+  if (error) throw new Error(error.message);
 }
 
 // Authenticated member bookings are a separate, credit-backed workflow from
@@ -283,8 +295,15 @@ export async function getPTRequests(filters = {}) {
 
 export async function updatePTRequestStatus(id, status, admin_notes) {
   const mutation = normalizePTRequestMutation(id, status, admin_notes);
-  const result = await supabase.from('private_session_requests').update(mutation.updates).eq('id', mutation.id).select('id');
-  assertAdminMutation(result, 'PT request update');
+  const updatesNotes = Object.hasOwn(mutation.updates, 'admin_notes');
+  const { error } = await supabase.rpc('admin_update_request', {
+    p_request_type: 'private_session',
+    p_request_id: mutation.id,
+    p_status: mutation.updates.status,
+    p_admin_notes: updatesNotes ? mutation.updates.admin_notes : null,
+    p_update_admin_notes: updatesNotes,
+  });
+  if (error) throw new Error(error.message);
 }
 
 // ─── Availability / Blackouts ─────────────────────────────────────────────────
@@ -750,6 +769,7 @@ export async function getAdminAuditRecords() {
   const sources = await Promise.allSettled([
     loadTable('admin_role_changes', 'id, target_user_id, changed_by, previous_role, new_role, created_at'),
     loadTable('admin_credit_grants', 'id, user_id, granted_by, sessions, validity_days, note, created_at'),
+    loadTable('admin_request_status_changes', 'id, request_type, request_id, changed_by, previous_status, new_status, previous_admin_notes, new_admin_notes, subject_label, subject_email, created_at'),
   ]);
   const warnings = [];
   const sourceValue = (index, label) => {
@@ -759,6 +779,7 @@ export async function getAdminAuditRecords() {
   };
   const roleChanges = sourceValue(0, 'Role changes');
   const creditGrants = sourceValue(1, 'Credit grants');
+  const requestChanges = sourceValue(2, 'Request changes');
   if (sources.every(result => result.status === 'rejected')) {
     throw new Error(warnings.join(' | '));
   }
@@ -766,6 +787,7 @@ export async function getAdminAuditRecords() {
   const ids = [
     ...roleChanges.flatMap(row => [row.target_user_id, row.changed_by]),
     ...creditGrants.flatMap(row => [row.user_id, row.granted_by]),
+    ...requestChanges.map(row => row.changed_by),
   ];
   let profiles = [];
   try {
@@ -773,7 +795,7 @@ export async function getAdminAuditRecords() {
   } catch (error) {
     warnings.push(`User identities: ${error.message || 'unavailable'}`);
   }
-  return { roleChanges, creditGrants, profiles, warnings };
+  return { roleChanges, creditGrants, requestChanges, profiles, warnings };
 }
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────

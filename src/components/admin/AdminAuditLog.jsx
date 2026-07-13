@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, RefreshCw, ScrollText, ShieldCheck, Ticket } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardCheck, Download, RefreshCw, ScrollText, ShieldCheck, Ticket } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAdminAuditRecords } from '@/lib/adminData';
 import {
@@ -27,7 +27,7 @@ function formatDateTime(value) {
 }
 
 function ActionMark({ type }) {
-  const Icon = type === 'role' ? ShieldCheck : Ticket;
+  const Icon = type === 'role' ? ShieldCheck : type === 'credit' ? Ticket : ClipboardCheck;
   return (
     <span className="w-9 h-9 shrink-0 inline-flex items-center justify-center bg-xert-steel/10 border border-xert-steel/20" aria-hidden="true">
       <Icon className="w-4 h-4 text-xert-steel" />
@@ -102,7 +102,7 @@ export default function AdminAuditLog() {
             <h2 className="font-display text-lg text-xert-offwhite uppercase">Admin Audit</h2>
           </div>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">
-            Permanent role and manual-credit history
+            Permanent role, credit and operational request history
             {updatedAt ? ` · refreshed ${updatedAt.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}
           </p>
         </div>
@@ -126,10 +126,11 @@ export default function AdminAuditLog() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         {[
           { label: 'Actions', value: summary.total },
           { label: 'Role changes', value: summary.roleChanges },
+          { label: 'Request changes', value: summary.requestChanges },
           { label: 'Credits granted', value: summary.creditsGranted },
           { label: 'Active administrators', value: summary.activeAdmins },
         ].map(metric => (
@@ -152,6 +153,7 @@ export default function AdminAuditLog() {
               <option value="all">All actions</option>
               <option value="role">Role changes</option>
               <option value="credit">Credit grants</option>
+              <option value="request">Booking & PT changes</option>
             </select>
             <select value={days} onChange={event => setDays(event.target.value)} aria-label="Audit reporting range"
               className="min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite">
@@ -175,7 +177,7 @@ export default function AdminAuditLog() {
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <p className="font-body text-sm text-xert-offwhite">{event.summary}</p>
                       <span className="font-body text-[10px] uppercase tracking-wider text-xert-steel">
-                        {event.type === 'role' ? 'Role' : 'Credit'}
+                        {event.type === 'role' ? 'Role' : event.type === 'credit' ? 'Credit' : 'Request'}
                       </span>
                     </div>
                     <p className="font-body text-xs text-xert-concrete/55 mt-1 break-words">{event.detail}</p>

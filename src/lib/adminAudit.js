@@ -1,4 +1,4 @@
-const AUDIT_TYPES = new Set(['role', 'credit']);
+const AUDIT_TYPES = new Set(['role', 'credit', 'request']);
 
 function clean(value) {
   return String(value || '').trim();
@@ -10,7 +10,7 @@ function identity(profile, fallbackId) {
   return fallbackId ? `User ${String(fallbackId).slice(0, 8)}` : 'Deleted user';
 }
 
-export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], profiles = [] } = {}) {
+export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], requestChanges = [], profiles = [] } = {}) {
   const profileById = new Map(profiles.map(profile => [profile.id, profile]));
   const roleEvents = roleChanges.map(change => ({
     id: `role:${change.id}`,
@@ -38,8 +38,31 @@ export function buildAdminAuditEvents({ roleChanges = [], creditGrants = [], pro
     detail: clean(grant.note) || 'No reason recorded',
     sessions: Number(grant.sessions) || 0,
   }));
+  const requestEvents = requestChanges.map(change => {
+    const requestLabel = change.request_type === 'class_booking' ? 'Booking request' : 'PT request';
+    const statusChanged = clean(change.previous_status) !== clean(change.new_status);
+    const notesChanged = clean(change.previous_admin_notes) !== clean(change.new_admin_notes);
+    return {
+      id: `request:${change.id}`,
+      sourceId: change.id,
+      type: 'request',
+      at: change.created_at,
+      actorId: change.changed_by,
+      actor: identity(profileById.get(change.changed_by), change.changed_by),
+      subjectId: change.request_id,
+      subject: clean(change.subject_label) || clean(change.subject_email) || `${requestLabel} ${clean(change.request_id).slice(0, 8)}`,
+      summary: statusChanged
+        ? `${requestLabel} changed from ${clean(change.previous_status) || 'unknown'} to ${clean(change.new_status) || 'unknown'}`
+        : `${requestLabel} notes updated`,
+      detail: [
+        clean(change.subject_email),
+        notesChanged ? 'Admin notes updated' : '',
+      ].filter(Boolean).join(' · ') || 'Operational request update',
+      sessions: null,
+    };
+  });
 
-  return [...roleEvents, ...creditEvents].sort((left, right) => {
+  return [...roleEvents, ...creditEvents, ...requestEvents].sort((left, right) => {
     const timeDifference = new Date(right.at).getTime() - new Date(left.at).getTime();
     return timeDifference || right.id.localeCompare(left.id);
   });
@@ -67,6 +90,7 @@ export function summarizeAdminAuditEvents(events) {
     total: rows.length,
     roleChanges: rows.filter(event => event.type === 'role').length,
     creditGrants: rows.filter(event => event.type === 'credit').length,
+    requestChanges: rows.filter(event => event.type === 'request').length,
     creditsGranted: rows.reduce((total, event) => total + (event.type === 'credit' ? event.sessions || 0 : 0), 0),
     activeAdmins: new Set(rows.map(event => event.actorId).filter(Boolean)).size,
   };
@@ -75,7 +99,7 @@ export function summarizeAdminAuditEvents(events) {
 export function adminAuditCsvRows(events) {
   return (Array.isArray(events) ? events : []).map(event => ({
     timestamp: event.at,
-    action: event.type === 'role' ? 'Role change' : 'Credit grant',
+    action: event.type === 'role' ? 'Role change' : event.type === 'credit' ? 'Credit grant' : 'Request change',
     administrator: event.actor,
     administrator_id: event.actorId || '',
     member: event.subject,

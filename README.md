@@ -109,6 +109,8 @@ The Supabase schema is defined in:
   members and enforces a trusted initial request status, consent and ownership
 - `src/supabase/public_form_integrity_upgrade.sql` — prevents direct clients
   from forging staff-managed lead and booking statuses or bypassing consent
+- `src/supabase/admin_request_status_audit_upgrade.sql` — makes booking and PT
+  status/notes changes atomic and records immutable administrator history
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -118,7 +120,8 @@ originally created through the Supabase dashboard and no checked-in SQL file
 creates them, so `rls_policies.sql` will error if they don't exist yet. Then
 run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `rls_policies.sql`, `rls_hardening.sql`, and finally
-`member_pt_request_tracking.sql` and `public_form_integrity_upgrade.sql`. This
+`member_pt_request_tracking.sql`, `public_form_integrity_upgrade.sql`, and
+`admin_request_status_audit_upgrade.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -135,14 +138,15 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `attendance_roll_call_upgrade.sql`, the class-session, product, and Stripe refund reconciliation migrations, and
 `member_waitlist_upgrade.sql`, `waitlist_fifo_promotion_upgrade.sql` after
 those prerequisites, followed by `member_pt_request_tracking.sql` and
-`public_form_integrity_upgrade.sql`. The scripts are idempotent;
+`public_form_integrity_upgrade.sql`, then
+`admin_request_status_audit_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
 Operations Health and the TestFlight release workflow verify every production
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
-waitlist, attendance, commerce, announcements, admin notes, schedule integrity,
-public-form integrity, and database security hardening. A release intentionally
+waitlist, attendance, commerce, announcements, admin notes, operational request
+audit, schedule integrity, public-form integrity, and database security hardening. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.
