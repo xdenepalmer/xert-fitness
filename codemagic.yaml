@@ -213,7 +213,7 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
-      - name: Verify signed entitlements (release truth)
+      - name: Verify signed release bundle (release truth)
         script: |
           set -e
           cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
@@ -241,7 +241,27 @@ workflows:
             echo "::error:: Missing application-identifier entitlement!"
             exit 1
           }
-          echo "Entitlements verified: aps-environment + application-identifier present."
+
+          PRIVACY_MANIFEST="$APP_PATH/PrivacyInfo.xcprivacy"
+          if [ ! -f "$PRIVACY_MANIFEST" ]; then
+            echo "::error:: PrivacyInfo.xcprivacy is missing from the signed app bundle!"
+            exit 1
+          fi
+          plutil -lint "$PRIVACY_MANIFEST"
+          PRIVACY_XML="$(plutil -convert xml1 -o - "$PRIVACY_MANIFEST")"
+          printf '%s' "$PRIVACY_XML" | grep -q "NSPrivacyAccessedAPICategoryUserDefaults" || {
+            echo "::error:: Privacy manifest does not declare UserDefaults usage!"
+            exit 1
+          }
+          printf '%s' "$PRIVACY_XML" | grep -q "CA92.1" || {
+            echo "::error:: Privacy manifest is missing the app-local UserDefaults reason!"
+            exit 1
+          }
+          printf '%s' "$PRIVACY_XML" | grep -q "NSPrivacyCollectedDataTypeEmailAddress" || {
+            echo "::error:: Privacy manifest is missing XERT account data declarations!"
+            exit 1
+          }
+          echo "Signed bundle verified: entitlements and privacy manifest present."
     artifacts:
       - ios/XertFitnessApp/build/test-results.xcresult
       - ios/XertFitnessApp/build/ios/ipa/*.ipa
