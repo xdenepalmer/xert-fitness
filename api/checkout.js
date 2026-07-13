@@ -45,6 +45,25 @@ export function assertCheckoutProduct(product) {
   }
 }
 
+/**
+ * A stored Stripe Price ID is an optional operational shortcut, not a second
+ * source of truth. Refuse checkout when it would charge a different amount or
+ * currency than the pack the member selected in XERT.
+ */
+export function assertStripePriceMatchesProduct(product, stripePrice) {
+  if (
+    !stripePrice ||
+    stripePrice.deleted === true ||
+    stripePrice.id !== product?.stripe_price_id ||
+    stripePrice.active !== true ||
+    stripePrice.type !== 'one_time' ||
+    stripePrice.unit_amount !== product?.price_cents ||
+    String(stripePrice.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
+  ) {
+    throw new Error('Stripe price does not match the product configuration.');
+  }
+}
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -82,19 +101,24 @@ export default async function handler(request) {
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
     assertCheckoutProduct(product);
 
-    const lineItem = product.stripe_price_id
-      ? { price: product.stripe_price_id, quantity: 1 }
-      : {
-          price_data: {
-            currency: product.currency.toLowerCase(),
-            unit_amount: product.price_cents,
-            product_data: {
-              name: product.name,
-              description: product.description || undefined,
-            },
+    let lineItem;
+    if (product.stripe_price_id) {
+      const stripePrice = await stripe.prices.retrieve(product.stripe_price_id);
+      assertStripePriceMatchesProduct(product, stripePrice);
+      lineItem = { price: stripePrice.id, quantity: 1 };
+    } else {
+      lineItem = {
+        price_data: {
+          currency: product.currency.toLowerCase(),
+          unit_amount: product.price_cents,
+          product_data: {
+            name: product.name,
+            description: product.description || undefined,
           },
-          quantity: 1,
-        };
+        },
+        quantity: 1,
+      };
+    }
 
     const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '');
 
