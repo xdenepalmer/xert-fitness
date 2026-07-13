@@ -67,6 +67,13 @@ workflows:
     name: XERT iOS TestFlight
     max_build_duration: 90
     instance_type: mac_mini_m2
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: ios-testflight-*
+          include: true
+      cancel_previous_builds: false
     integrations:
       # Shared-team App Store Connect API key integration.
       app_store_connect: codemagic
