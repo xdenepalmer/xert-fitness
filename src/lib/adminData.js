@@ -40,6 +40,21 @@ export async function getPartnerLeads(filters = {}) {
   return getLeadPage('partner_interest', filters);
 }
 
+export async function getCampaignAttributionRows() {
+  const pageSize = 500;
+  return collectAdminPages(async page => {
+    const from = (page - 1) * pageSize;
+    const { data, count, error } = await supabase
+      .from('member_interest')
+      .select('id, utm_source, utm_medium, utm_campaign, source, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data || [], total: count || 0 };
+  });
+}
+
 export async function updateLeadStatus(table, id, status) {
   const mutation = validateLeadMutation(table, status, [id]);
   const result = await supabase.from(mutation.table).update({ status: mutation.status }).eq('id', mutation.ids[0]).select('id');
