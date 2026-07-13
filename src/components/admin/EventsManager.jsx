@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Mail, Phone, Target, X } from 'lucide-react';
+import { Download, Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { normalizeEventInput } from '@/lib/eventAdmin';
+import { downloadCsv } from '@/lib/csv';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'fitness', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
 
@@ -134,6 +135,25 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
 
+  const exportRoster = () => {
+    const eventSlug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'event';
+    downloadCsv(
+      `xert-${eventSlug}-training-group.csv`,
+      members.map(member => ({
+        name: member.full_name || '',
+        email: member.email || '',
+        phone: member.phone || '',
+        selected_at: member.selected_at || '',
+      })),
+      [
+        { key: 'name', label: 'Member' },
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'selected_at', label: 'Joined training group' },
+      ],
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/80" onClick={onClose} aria-label="Close training group" />
@@ -143,9 +163,16 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
             <p className="font-body text-[10px] uppercase tracking-wider text-xert-steel">Event training group</p>
             <h3 id="training-roster-title" className="mt-1 font-display text-xl uppercase text-xert-offwhite">{event.name}</h3>
           </div>
-          <button type="button" onClick={onClose} autoFocus aria-label="Close training group" title="Close" className="p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {!loading && !error && members.length > 0 && (
+              <button type="button" onClick={exportRoster} className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase text-xert-steel transition-colors hover:border-xert-steel">
+                <Download className="h-3.5 w-3.5" /> CSV
+              </button>
+            )}
+            <button type="button" onClick={onClose} autoFocus aria-label="Close training group" title="Close" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/40 transition-colors hover:text-xert-offwhite">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </header>
 
         <div className="p-5">
@@ -177,12 +204,12 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {member.email && (
-                        <a href={`mailto:${member.email}`} className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
+                        <a href={`mailto:${member.email}`} className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
                           <Mail className="w-3.5 h-3.5" /> Email
                         </a>
                       )}
                       {member.phone && (
-                        <a href={`tel:${member.phone}`} className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
+                        <a href={`tel:${member.phone}`} className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel transition-colors">
                           <Phone className="w-3.5 h-3.5" /> Call
                         </a>
                       )}
@@ -320,8 +347,8 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">SE QLD Event Calendar</h2>
-        <div className="flex items-center gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search events" placeholder="Search events…" className="w-48 min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search events" placeholder="Search events…" className="col-span-2 min-h-11 w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red sm:col-span-1 sm:w-48" />
           <select value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Filter events by category" className="min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
             {usedCategories.map(c => (
               <option key={c} value={c}>
@@ -363,7 +390,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
       ) : (
         <div className="space-y-2">
           {filtered.map(ev => (
-            <div key={ev.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex items-center justify-between gap-4">
+            <div key={ev.id} className="flex flex-col gap-4 bg-xert-ink border border-xert-steel/20 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/60 px-2 py-0.5 uppercase">{ev.category || 'other'}</span>
@@ -386,7 +413,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
                   {ev.location ? ` · ${ev.location}` : ''}
                 </p>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0">
                 <button
                   onClick={() => {
                     setEditing(ev);

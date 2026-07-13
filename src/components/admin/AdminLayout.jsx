@@ -9,6 +9,7 @@ import {
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
 import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
+import { useAdminDialogLayer } from '@/lib/adminDialogLayer';
 import CommandPalette from '@/components/admin/CommandPalette';
 
 const LOGO = '/assets/xert-logo-horizontal-light.png';
@@ -79,6 +80,9 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   const { user, profile, signOut } = useSupabaseAuth();
   const sidebarRef = useRef(null);
   const menuButtonRef = useRef(null);
+  const workspaceRef = useRef(null);
+
+  useAdminDialogLayer(workspaceRef);
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
@@ -315,7 +319,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       )}
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div ref={workspaceRef} data-admin-workspace className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         <header className="sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between"
           style={{
