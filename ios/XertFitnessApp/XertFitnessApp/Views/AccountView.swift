@@ -12,6 +12,8 @@ struct AccountView: View {
     @State private var didSaveProfile = false
     @State private var passwordResetSent = false
     @State private var bookingToCancel: BookingItem?
+    @State private var addingBookingToCalendarID: UUID?
+    @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
     @FocusState private var focusedProfileField: ProfileField?
 
@@ -68,6 +70,13 @@ struct AccountView: View {
                 }
             } message: {
                 Text("Your member profile, credits, bookings and training goals will be removed. Purchase records are anonymized.")
+            }
+            .alert(item: $bookingCalendarNotice) { notice in
+                Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
         }
     }
@@ -512,6 +521,18 @@ struct AccountView: View {
                     .font(.caption2.weight(.bold))
                     .tracking(1.2)
                     .foregroundStyle(.xertSteel)
+                if booking.status == "confirmed" && booking.start_time > Date() {
+                    Button {
+                        Task { await addBookingToCalendar(booking) }
+                    } label: {
+                        Label(
+                            addingBookingToCalendarID == booking.id ? "Adding to calendar..." : "Add to Calendar",
+                            systemImage: "calendar.badge.plus"
+                        )
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(addingBookingToCalendarID != nil)
+                }
                 if booking.isCancellable() {
                     Button(booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking", role: .destructive) {
                         bookingToCancel = booking
@@ -520,6 +541,23 @@ struct AccountView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    @MainActor
+    private func addBookingToCalendar(_ booking: BookingItem) async {
+        addingBookingToCalendarID = booking.id
+        defer { addingBookingToCalendarID = nil }
+        do {
+            let result = try await EventCalendarWriter.add(booking)
+            bookingCalendarNotice = result == .added
+                ? BookingCalendarNotice(title: "Added to Calendar", message: "\(booking.title) is now in your calendar.")
+                : BookingCalendarNotice(title: "Already in Calendar", message: "\(booking.title) is already saved in your calendar.")
+        } catch {
+            bookingCalendarNotice = BookingCalendarNotice(
+                title: "Could Not Add Class",
+                message: error.localizedDescription
+            )
         }
     }
 
@@ -534,6 +572,12 @@ struct AccountView: View {
         .listRowBackground(Color.xertInk)
         .tint(Color.xertSteel)
     }
+}
+
+private struct BookingCalendarNotice: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 // MARK: - Brand input field

@@ -6,6 +6,17 @@ enum EventCalendarWriteResult: Equatable {
     case alreadyExists
 }
 
+enum BookingCalendarPlanner {
+    static let fallbackDuration: TimeInterval = 60 * 60
+
+    static func endDate(for booking: BookingItem) -> Date {
+        guard let endTime = booking.end_time, endTime > booking.start_time else {
+            return booking.start_time.addingTimeInterval(fallbackDuration)
+        }
+        return endTime
+    }
+}
+
 enum EventCalendarWriterError: LocalizedError {
     case missingDate
     case accessDenied
@@ -64,6 +75,46 @@ enum EventCalendarWriter {
         event.location = item.location ?? item.region
         event.notes = "XERT training target event. Train with purpose. Compete together."
         event.url = item.externalURL
+        try store.save(event, span: .thisEvent, commit: true)
+        return .added
+    }
+
+    static func add(_ booking: BookingItem) async throws -> EventCalendarWriteResult {
+        let store = EKEventStore()
+        guard await requestAccess(using: store) else {
+            throw EventCalendarWriterError.accessDenied
+        }
+        guard let calendar = store.defaultCalendarForNewEvents else {
+            throw EventCalendarWriterError.calendarUnavailable
+        }
+
+        let start = booking.start_time
+        let end = BookingCalendarPlanner.endDate(for: booking)
+        let predicate = store.predicateForEvents(
+            withStart: start.addingTimeInterval(-60),
+            end: end.addingTimeInterval(60),
+            calendars: [calendar]
+        )
+        if store.events(matching: predicate).contains(where: {
+            $0.title == booking.title
+                && !$0.isAllDay
+                && abs($0.startDate.timeIntervalSince(start)) < 1
+                && abs($0.endDate.timeIntervalSince(end)) < 1
+        }) {
+            return .alreadyExists
+        }
+
+        let event = EKEvent(eventStore: store)
+        event.calendar = calendar
+        event.title = booking.title
+        event.startDate = start
+        event.endDate = end
+        event.isAllDay = false
+        event.location = booking.location_zone
+        event.notes = [
+            booking.coach_name.map { "Coach: \($0)" },
+            "Booked with XERT Fitness.",
+        ].compactMap { $0 }.joined(separator: "\n")
         try store.save(event, span: .thisEvent, commit: true)
         return .added
     }

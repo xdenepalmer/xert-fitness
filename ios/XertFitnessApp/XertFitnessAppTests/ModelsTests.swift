@@ -371,6 +371,24 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(ClassReminderPreference.isEnabled(defaults: defaults))
     }
 
+    func testBookingCalendarPlannerUsesValidEndOrOneHourFallback() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let explicitEnd = start.addingTimeInterval(45 * 60)
+
+        XCTAssertEqual(
+            BookingCalendarPlanner.endDate(for: booking(status: "confirmed", startTime: start, endTime: explicitEnd)),
+            explicitEnd
+        )
+        XCTAssertEqual(
+            BookingCalendarPlanner.endDate(for: booking(status: "confirmed", startTime: start)),
+            start.addingTimeInterval(60 * 60)
+        )
+        XCTAssertEqual(
+            BookingCalendarPlanner.endDate(for: booking(status: "confirmed", startTime: start, endTime: start)),
+            start.addingTimeInterval(60 * 60)
+        )
+    }
+
     func testBookingCancellationCreditPolicyMatchesServerRules() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -422,7 +440,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(timeline.pending.count + timeline.upcoming.count + timeline.history.count, bookings.count)
     }
 
-    private func booking(status: String, startTime: Date) -> BookingItem {
+    private func booking(status: String, startTime: Date, endTime: Date? = nil) -> BookingItem {
         BookingItem(
             booking_id: UUID(),
             status: status,
@@ -433,7 +451,7 @@ final class ModelsTests: XCTestCase {
             class_type: "Strength",
             coach_name: "Coach",
             start_time: startTime,
-            end_time: nil,
+            end_time: endTime,
             location_zone: nil,
             intensity_level: nil
         )
