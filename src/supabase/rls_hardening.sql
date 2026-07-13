@@ -4,7 +4,8 @@
 -- The original rls_policies.sql treated ANY authenticated user as an admin
 -- (written before member accounts existed). Now that the public can register,
 -- every "admin_*" policy must check public.is_admin() instead of just
--- `to authenticated`. Public form INSERTs and public reads are unchanged.
+-- `to authenticated`. Public reads are unchanged; public form INSERTs are
+-- constrained to their trusted initial status and required contact consent.
 --
 -- Requires booking_schema.sql (public.is_admin()) to be applied first.
 -- Idempotent — safe to re-run. rls_policies.sql has since been rewritten to
@@ -12,24 +13,40 @@
 -- this file remains the canonical hardening pass (it also covers profiles).
 -- ============================================================================
 
--- ── Lead / request tables: public INSERT stays, admin access now role-gated ──
+-- ── Lead / request tables: guarded public INSERT + role-gated admin access ──
 
 -- member_interest
+drop policy if exists "public_insert_member_interest" on public.member_interest;
+create policy "public_insert_member_interest" on public.member_interest
+  for insert to anon, authenticated
+  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_member_interest" on public.member_interest;
 create policy "admin_all_member_interest" on public.member_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- trainer_interest
+drop policy if exists "public_insert_trainer_interest" on public.trainer_interest;
+create policy "public_insert_trainer_interest" on public.trainer_interest
+  for insert to anon, authenticated
+  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_trainer_interest" on public.trainer_interest;
 create policy "admin_all_trainer_interest" on public.trainer_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- partner_interest
+drop policy if exists "public_insert_partner_interest" on public.partner_interest;
+create policy "public_insert_partner_interest" on public.partner_interest
+  for insert to anon, authenticated
+  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_partner_interest" on public.partner_interest;
 create policy "admin_all_partner_interest" on public.partner_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- class_bookings (legacy request-to-book)
+drop policy if exists "public_insert_class_bookings" on public.class_bookings;
+create policy "public_insert_class_bookings" on public.class_bookings
+  for insert to anon, authenticated
+  with check (status = 'requested' and consent_to_contact is true);
 drop policy if exists "admin_all_class_bookings" on public.class_bookings;
 create policy "admin_all_class_bookings" on public.class_bookings
   for all to authenticated using (public.is_admin()) with check (public.is_admin());

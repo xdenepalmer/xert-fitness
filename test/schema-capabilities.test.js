@@ -6,13 +6,14 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'attendance_roll_call', 'member_pt_request_tracking'],
+    missing: ['booking_waitlist_withdrawal', 'member_waitlist_join', 'attendance_roll_call', 'member_pt_request_tracking', 'public_form_integrity'],
     ready: false,
     actions: [
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
       'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
       'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
       'Apply src/supabase/member_pt_request_tracking.sql in Supabase.',
+      'Apply src/supabase/public_form_integrity_upgrade.sql in Supabase.',
     ],
   });
   assert.equal(summarizeSchemaCapabilities([
@@ -20,6 +21,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'booking_waitlist_withdrawal' },
     { capability: 'member_waitlist_join' },
     { capability: 'member_pt_request_tracking' },
+    { capability: 'public_form_integrity' },
     { capability: 'admin_role_safety' },
   ]).ready, true);
 });
@@ -35,6 +37,7 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/admin_cms_schema.sql', 'attendance_roll_call'],
     ['../src/supabase/attendance_roll_call_upgrade.sql', 'attendance_roll_call'],
     ['../src/supabase/member_pt_request_tracking.sql', 'member_pt_request_tracking'],
+    ['../src/supabase/public_form_integrity_upgrade.sql', 'public_form_integrity'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -54,4 +57,5 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /member_waitlist_join/);
   assert.match(yaml, /attendance_roll_call/);
   assert.match(yaml, /member_pt_request_tracking/);
+  assert.match(yaml, /public_form_integrity/);
 });

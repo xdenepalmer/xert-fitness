@@ -92,6 +92,8 @@ The Supabase schema is defined in:
   full class waitlist without consuming a credit
 - `src/supabase/member_pt_request_tracking.sql` — links PT requests to signed-in
   members and enforces a trusted initial request status, consent and ownership
+- `src/supabase/public_form_integrity_upgrade.sql` — prevents direct clients
+  from forging staff-managed lead and booking statuses or bypassing consent
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -101,7 +103,8 @@ originally created through the Supabase dashboard and no checked-in SQL file
 creates them, so `rls_policies.sql` will error if they don't exist yet. Then
 run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `rls_policies.sql`, `rls_hardening.sql`, and finally
-`member_pt_request_tracking.sql`. This sequence produces the
+`member_pt_request_tracking.sql` and `public_form_integrity_upgrade.sql`. This
+sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -112,7 +115,8 @@ For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
 `admin_role_safety_upgrade.sql`, `business_metrics_upgrade.sql`, and
 `attendance_roll_call_upgrade.sql`, and `member_waitlist_upgrade.sql` after
-those prerequisites, followed by `member_pt_request_tracking.sql`. The scripts are idempotent;
+those prerequisites, followed by `member_pt_request_tracking.sql` and
+`public_form_integrity_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
