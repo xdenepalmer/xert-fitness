@@ -38,7 +38,7 @@ test('admin clients archive published notices and reserve permanent deletion for
   const publisher = read('../api/admin-publish-announcement.js');
   assert.match(data, /setMemberAnnouncementArchived[\s\S]*admin_archive_member_announcement/);
   assert.match(data, /ANNOUNCEMENT_ARCHIVE_REQUIRED/);
-  assert.match(manager, /item\.first_published_at[\s\S]*setConfirmArchive/);
+  assert.match(manager, /item\.first_published_at[\s\S]*setPendingArchive/);
   assert.match(manager, /Restore announcement as draft/);
   assert.match(manager, /delivery history remains available/);
   assert.match(publisher, /archived_at/);
