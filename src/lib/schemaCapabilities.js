@@ -26,6 +26,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   lead_pipeline_audit: 'Apply supabase/migrations/20260714011000_lead_pipeline_audit.sql in Supabase.',
   schedule_change_audit: 'Apply supabase/migrations/20260714012000_schedule_change_audit.sql in Supabase.',
   content_change_audit: 'Apply supabase/migrations/20260714013000_content_change_audit.sql in Supabase.',
+  booking_lifecycle_audit: 'Apply supabase/migrations/20260714014000_booking_lifecycle_audit.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

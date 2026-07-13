@@ -29,7 +29,8 @@ with required (capability, migration) as (
     ('public_form_integrity', 'supabase/migrations/20260714004300_public_form_integrity.sql'),
     ('lead_pipeline_audit', 'supabase/migrations/20260714011000_lead_pipeline_audit.sql'),
     ('schedule_change_audit', 'supabase/migrations/20260714012000_schedule_change_audit.sql'),
-    ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql')
+    ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql'),
+    ('booking_lifecycle_audit', 'supabase/migrations/20260714014000_booking_lifecycle_audit.sql')
 ), readiness as (
   select
     required.capability,

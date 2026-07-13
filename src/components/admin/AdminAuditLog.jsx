@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BellRing, CalendarClock, ChevronLeft, ChevronRight, ClipboardCheck, Download, FileClock, RefreshCw, ScrollText, ShieldCheck, Ticket, UserRoundSearch } from 'lucide-react';
+import { BellRing, CalendarCheck2, CalendarClock, ChevronLeft, ChevronRight, ClipboardCheck, Download, FileClock, RefreshCw, ScrollText, ShieldCheck, Ticket, UserRoundSearch } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAdminAuditRecords } from '@/lib/adminData';
 import {
@@ -24,6 +24,7 @@ const ACTION_ICONS = Object.freeze({
   lead: UserRoundSearch,
   schedule: CalendarClock,
   content: FileClock,
+  booking: CalendarCheck2,
 });
 const ACTION_TAGS = Object.freeze({
   role: 'Role',
@@ -32,6 +33,7 @@ const ACTION_TAGS = Object.freeze({
   lead: 'Lead',
   schedule: 'Schedule',
   content: 'Content',
+  booking: 'Booking',
   request: 'Request',
 });
 
@@ -119,7 +121,7 @@ export default function AdminAuditLog() {
             <h2 className="font-display text-lg text-xert-offwhite uppercase">Admin Audit</h2>
           </div>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">
-            Permanent role, credit, lead, schedule, content, request and member notice history
+            Permanent role, credit, lead, booking, schedule, content, request and member notice history
             {updatedAt ? ` · refreshed ${updatedAt.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}
           </p>
         </div>
@@ -143,11 +145,12 @@ export default function AdminAuditLog() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-10 gap-3">
         {[
           { label: 'Actions', value: summary.total },
           { label: 'Role changes', value: summary.roleChanges },
           { label: 'Lead changes', value: summary.leadChanges },
+          { label: 'Booking changes', value: summary.bookingChanges },
           { label: 'Schedule changes', value: summary.scheduleChanges },
           { label: 'Content changes', value: summary.contentChanges },
           { label: 'Request changes', value: summary.requestChanges },
@@ -175,6 +178,7 @@ export default function AdminAuditLog() {
               <option value="role">Role changes</option>
               <option value="credit">Credit grants</option>
               <option value="lead">Lead pipeline changes</option>
+              <option value="booking">Booking changes</option>
               <option value="schedule">Schedule changes</option>
               <option value="content">Content changes</option>
               <option value="request">Booking & PT changes</option>

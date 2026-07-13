@@ -43,6 +43,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/lead_pipeline_audit_upgrade.sql', '../supabase/migrations/20260714011000_lead_pipeline_audit.sql'],
     ['../src/supabase/schedule_change_audit_upgrade.sql', '../supabase/migrations/20260714012000_schedule_change_audit.sql'],
     ['../src/supabase/content_change_audit_upgrade.sql', '../supabase/migrations/20260714013000_content_change_audit.sql'],
+    ['../src/supabase/booking_lifecycle_audit_upgrade.sql', '../supabase/migrations/20260714014000_booking_lifecycle_audit.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {
     const normalize = (sql) => sql

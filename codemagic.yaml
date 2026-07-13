@@ -260,6 +260,7 @@ workflows:
               "lead_pipeline_audit",
               "schedule_change_audit",
               "content_change_audit",
+              "booking_lifecycle_audit",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {
