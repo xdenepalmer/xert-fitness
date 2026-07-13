@@ -18,6 +18,7 @@ final class XertStore: ObservableObject {
     @Published var bookingSessionID: UUID?
     @Published var cancellingBookingID: UUID?
     @Published var isSavingProfile = false
+    @Published var isUpdatingPassword = false
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
     @Published var isDeletingAccount = false
@@ -572,6 +573,28 @@ final class XertStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func updatePassword(password: String, confirmation: String) async -> Bool {
+        let memberVersion = memberStateVersion.snapshot
+        isUpdatingPassword = true
+        errorMessage = nil
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isUpdatingPassword = false }
+        }
+
+        do {
+            let update = try PasswordUpdateRequest(password: password, confirmation: confirmation)
+            let authSession = try await validAuthSession()
+            try await api.updatePassword(session: authSession, request: update)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return false }
+            return true
+        } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return false }
+            present(error)
+            return false
+        }
+    }
+
     private func authenticate(_ action: () async throws -> AuthSession) async {
         isLoading = true
         errorMessage = nil
@@ -648,6 +671,7 @@ final class XertStore: ObservableObject {
         cancellingBookingID = nil
         updatingEventGoalID = nil
         isSavingProfile = false
+        isUpdatingPassword = false
         errorMessage = nil
     }
 

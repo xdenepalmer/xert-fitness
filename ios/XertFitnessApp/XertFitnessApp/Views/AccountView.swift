@@ -11,6 +11,9 @@ struct AccountView: View {
     @State private var fullName = ""
     @State private var phone = ""
     @State private var didSaveProfile = false
+    @State private var newPassword = ""
+    @State private var newPasswordConfirmation = ""
+    @State private var didUpdatePassword = false
     @State private var passwordResetSent = false
     @State private var bookingToCancel: BookingItem?
     @State private var addingBookingToCalendarID: UUID?
@@ -101,6 +104,7 @@ struct AccountView: View {
 
         membershipSection
         accountDetailsSection
+        accountSecuritySection
         reminderSettingsSection
         signOutSection
         accountControlSection
@@ -226,6 +230,62 @@ struct AccountView: View {
             }
         } header: {
             Text("Account Details").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var accountSecuritySection: some View {
+        Section {
+            SecureField("New password", text: $newPassword)
+                .textContentType(.newPassword)
+                .submitLabel(.next)
+                .foregroundStyle(Color.xertOffWhite)
+                .tint(Color.xertSteel)
+            SecureField("Confirm new password", text: $newPasswordConfirmation)
+                .textContentType(.newPassword)
+                .submitLabel(.done)
+                .foregroundStyle(Color.xertOffWhite)
+                .tint(Color.xertSteel)
+
+            Button {
+                Task {
+                    let updated = await store.updatePassword(
+                        password: newPassword,
+                        confirmation: newPasswordConfirmation
+                    )
+                    didUpdatePassword = updated
+                    if updated {
+                        newPassword = ""
+                        newPasswordConfirmation = ""
+                    }
+                }
+            } label: {
+                HStack {
+                    Text(store.isUpdatingPassword ? "Updating..." : "Update Password")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                    Spacer()
+                    if store.isUpdatingPassword {
+                        ProgressView()
+                            .tint(Color.xertPale)
+                    }
+                }
+            }
+            .disabled(store.isUpdatingPassword || newPassword.isEmpty || newPasswordConfirmation.isEmpty)
+            .onChange(of: newPassword) { value in
+                if !value.isEmpty { didUpdatePassword = false }
+            }
+            .onChange(of: newPasswordConfirmation) { value in
+                if !value.isEmpty { didUpdatePassword = false }
+            }
+
+            if didUpdatePassword {
+                Label("Password updated", systemImage: "checkmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.xertSteel)
+            }
+        } header: {
+            Text("Account Security").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
     }

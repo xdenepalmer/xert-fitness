@@ -117,6 +117,16 @@ final class XertAPI {
         try await perform(request)
     }
 
+    func updatePassword(session auth: AuthSession, request body: PasswordUpdateRequest) async throws {
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/auth/v1/user")
+        request.httpMethod = "PUT"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        try await perform(request)
+    }
+
     func products() async throws -> [Product] {
         try await restRequest(
             path: "/rest/v1/products",

@@ -291,6 +291,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(version.isCurrent(secondSession))
     }
 
+    func testPasswordUpdateRequiresLengthAndMatchingConfirmation() throws {
+        let request = try PasswordUpdateRequest(
+            password: "strong-new-password",
+            confirmation: "strong-new-password"
+        )
+
+        XCTAssertEqual(request.password, "strong-new-password")
+        XCTAssertThrowsError(try PasswordUpdateRequest(password: "short", confirmation: "short"))
+        XCTAssertThrowsError(try PasswordUpdateRequest(password: "strong-password", confirmation: "different-password"))
+    }
+
     func testOnlyAuthenticationResponsesInvalidateTheSavedSession() {
         XCTAssertTrue(APIError(message: "invalid refresh token", statusCode: 400).invalidatesSession)
         XCTAssertTrue(APIError(message: "unauthorized", statusCode: 401).invalidatesSession)

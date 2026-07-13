@@ -389,6 +389,21 @@ struct MemberSignUpRequest: Encodable, Equatable {
     }
 }
 
+struct PasswordUpdateRequest: Encodable, Equatable {
+    let password: String
+
+    init(password: String, confirmation: String) throws {
+        guard password.count >= 8 else {
+            throw APIError(message: "Use at least 8 characters for your new password.")
+        }
+        guard password == confirmation else {
+            throw APIError(message: "New passwords do not match.")
+        }
+
+        self.password = password
+    }
+}
+
 struct CheckoutResponse: Codable {
     let url: URL
 }
