@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, CircleAlert, Database, Loader2,
+  AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Database, Loader2,
   RefreshCw, ShieldCheck,
 } from 'lucide-react';
 import { getOperationsHealth } from '@/lib/adminData';
@@ -40,6 +40,7 @@ const ROUTES = {
   orders: 'orders',
   admins: 'gym-members',
   'commerce-config': 'products',
+  'push-notifications': 'announcements',
 };
 
 export default function OperationsHealth({ onNavigate }) {
@@ -137,7 +138,9 @@ export default function OperationsHealth({ onNavigate }) {
                   <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(16,24,32,0.42)' }}>
                     {check.key === 'supabase'
                       ? <Database className="w-5 h-5" style={{ color: style.color }} />
-                      : <Icon className="w-5 h-5" style={{ color: style.color }} />}
+                      : check.key === 'push-notifications'
+                        ? <BellRing className="w-5 h-5" style={{ color: style.color }} />
+                        : <Icon className="w-5 h-5" style={{ color: style.color }} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-3 mb-1">

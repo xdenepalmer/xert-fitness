@@ -9,6 +9,7 @@ import adminReconcileHandler from '../api/admin-reconcile-order.js';
 import pushSubscriptionHandler from '../api/push-subscription.js';
 import adminPublishAnnouncementHandler from '../api/admin-publish-announcement.js';
 import pushHealthHandler from '../api/push-health.js';
+import adminPushHealthHandler from '../api/admin-push-health.js';
 
 function createVercelResponse() {
   return {
@@ -45,6 +46,7 @@ for (const [name, handler, method] of [
   ['push subscription', pushSubscriptionHandler, 'GET'],
   ['admin announcement publishing', adminPublishAnnouncementHandler, 'GET'],
   ['push health', pushHealthHandler, 'POST'],
+  ['admin push health', adminPushHealthHandler, 'POST'],
 ]) {
   test(`${name} completes the Vercel Node response for an unsupported method`, async () => {
     const response = createVercelResponse();

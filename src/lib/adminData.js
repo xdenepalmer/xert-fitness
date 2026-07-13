@@ -1087,6 +1087,17 @@ async function getCommerceConfigurationHealth() {
   return body;
 }
 
+async function getPushConfigurationHealth() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-push-health', {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Notification health check failed.');
+  return body;
+}
+
 export async function getOperationsHealth() {
   const nowIso = new Date().toISOString();
 
@@ -1157,6 +1168,39 @@ export async function getOperationsHealth() {
       return {
         count: result.active_product_count,
         detail: `${result.stripe_price_count} Stripe-linked and ${result.dynamic_price_count} dynamic-price pack${result.active_product_count === 1 ? '' : 's'} verified.`
+      };
+    }),
+
+    healthCheck('push-notifications', 'Member notifications', async () => {
+      const result = await getPushConfigurationHealth();
+      const productionDevices = Number(result.subscriptions?.production || 0);
+      const sandboxDevices = Number(result.subscriptions?.sandbox || 0);
+      const delivered = Number(result.deliveries_24h?.delivered || 0);
+      const failed = Number(result.deliveries_24h?.failed || 0);
+      const invalid = Number(result.deliveries_24h?.invalid_token || 0);
+      const deliveryProblems = failed + invalid;
+      if (!result.ready) {
+        const missing = result.environment?.missing || [];
+        return {
+          status: 'attention',
+          count: productionDevices,
+          detail: `Production push delivery is not configured${missing.length ? `: ${missing.join(', ')}` : '.'}`,
+          action: 'Set the missing APNs values in the production Vercel project, redeploy, then refresh this check.'
+        };
+      }
+      if (productionDevices === 0) {
+        return {
+          status: 'attention',
+          count: 0,
+          detail: `APNs is configured; ${sandboxDevices} sandbox device${sandboxDevices === 1 ? '' : 's'} and no production devices are registered.`,
+          action: 'Install the TestFlight build and enable Member notice notifications in Account.'
+        };
+      }
+      return {
+        status: deliveryProblems > 0 ? 'attention' : 'ok',
+        count: productionDevices,
+        detail: `${productionDevices} production device${productionDevices === 1 ? '' : 's'} registered; ${delivered} accepted and ${deliveryProblems} failed in the last 24 hours.`,
+        action: deliveryProblems > 0 ? 'Review recent delivery results in Member Notices and refresh after invalid devices are retired.' : null
       };
     }),
 
