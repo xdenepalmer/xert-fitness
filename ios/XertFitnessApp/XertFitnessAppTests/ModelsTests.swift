@@ -505,16 +505,28 @@ final class ModelsTests: XCTestCase {
 
     func testClassReminderPlannerOnlySchedulesFutureConfirmedBookings() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let confirmed = booking(status: "confirmed", startTime: now.addingTimeInterval(4 * 60 * 60))
-        let requested = booking(status: "requested", startTime: now.addingTimeInterval(4 * 60 * 60))
+        let confirmed = booking(status: "confirmed", startTime: now.addingTimeInterval(26 * 60 * 60))
+        let requested = booking(status: "requested", startTime: now.addingTimeInterval(26 * 60 * 60))
         let tooSoon = booking(status: "confirmed", startTime: now.addingTimeInterval(90 * 60))
 
         XCTAssertEqual(
             ClassReminderPlanner.reminderDate(for: confirmed.start_time, now: now),
+            now.addingTimeInterval(24 * 60 * 60)
+        )
+        XCTAssertEqual(
+            ClassReminderPlanner.reminderDate(for: confirmed.start_time, leadTime: .oneDay, now: now),
             now.addingTimeInterval(2 * 60 * 60)
         )
         XCTAssertEqual(
             ClassReminderPlanner.reminderBookings(from: [confirmed, requested, tooSoon], now: now).map(\.booking_id),
+            [confirmed.booking_id]
+        )
+        XCTAssertEqual(
+            ClassReminderPlanner.reminderBookings(
+                from: [confirmed, requested, tooSoon],
+                leadTime: .oneDay,
+                now: now
+            ).map(\.booking_id),
             [confirmed.booking_id]
         )
     }
@@ -529,6 +541,12 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(ClassReminderPreference.isEnabled(defaults: defaults))
         ClassReminderPreference.setEnabled(false, defaults: defaults)
         XCTAssertFalse(ClassReminderPreference.isEnabled(defaults: defaults))
+
+        XCTAssertEqual(ClassReminderPreference.leadTime(defaults: defaults), .twoHours)
+        ClassReminderPreference.setLeadTime(.oneDay, defaults: defaults)
+        XCTAssertEqual(ClassReminderPreference.leadTime(defaults: defaults), .oneDay)
+        defaults.set("unsupported", forKey: ClassReminderPreference.leadTimeKey)
+        XCTAssertEqual(ClassReminderPreference.leadTime(defaults: defaults), .twoHours)
     }
 
     func testBookingCalendarPlannerUsesValidEndOrOneHourFallback() {

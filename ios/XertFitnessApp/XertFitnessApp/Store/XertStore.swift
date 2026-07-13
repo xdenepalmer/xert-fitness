@@ -25,6 +25,7 @@ final class XertStore: ObservableObject {
     @Published var isRequestingPrivateSession = false
     @Published var isRequestingClassInterest = false
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
+    @Published private(set) var classReminderLeadTime = ClassReminderPreference.leadTime()
     @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var isReconcilingCheckout = false
     @Published private(set) var isCheckoutConfirmationPending = false
@@ -195,7 +196,10 @@ final class XertStore: ObservableObject {
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 bookings = loadedBookings
                 if classRemindersEnabled {
-                    await ClassReminderScheduler.shared.sync(bookings: loadedBookings)
+                    await ClassReminderScheduler.shared.sync(
+                        bookings: loadedBookings,
+                        leadTime: classReminderLeadTime
+                    )
                 } else {
                     await ClassReminderScheduler.shared.clearAll()
                 }
@@ -391,6 +395,7 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             try await api.cancelBooking(session: authSession, bookingID: booking.id)
             guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            await ClassReminderScheduler.shared.remove(bookingID: booking.booking_id)
             await refresh()
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
@@ -404,7 +409,10 @@ final class XertStore: ObservableObject {
         defer { isUpdatingReminderPreference = false }
 
         if enabled {
-            let authorized = await ClassReminderScheduler.shared.requestAuthorizationAndSync(bookings: bookings)
+            let authorized = await ClassReminderScheduler.shared.requestAuthorizationAndSync(
+                bookings: bookings,
+                leadTime: classReminderLeadTime
+            )
             guard authorized else {
                 ClassReminderPreference.setEnabled(false)
                 classRemindersEnabled = false
@@ -417,6 +425,18 @@ final class XertStore: ObservableObject {
             ClassReminderPreference.setEnabled(false)
             classRemindersEnabled = false
             await ClassReminderScheduler.shared.clearAll()
+        }
+    }
+
+    func setClassReminderLeadTime(_ leadTime: ClassReminderLeadTime) async {
+        guard leadTime != classReminderLeadTime, !isUpdatingReminderPreference else { return }
+        isUpdatingReminderPreference = true
+        defer { isUpdatingReminderPreference = false }
+
+        ClassReminderPreference.setLeadTime(leadTime)
+        classReminderLeadTime = leadTime
+        if classRemindersEnabled {
+            await ClassReminderScheduler.shared.sync(bookings: bookings, leadTime: leadTime)
         }
     }
 

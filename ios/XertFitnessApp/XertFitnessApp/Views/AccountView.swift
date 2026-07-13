@@ -182,7 +182,25 @@ struct AccountView: View {
             .tint(.xertSteel)
             .disabled(store.isUpdatingReminderPreference)
 
-            Text("Receive a device notification two hours before each confirmed class. You can switch this off at any time.")
+            if store.classRemindersEnabled {
+                Picker(
+                    "Remind me",
+                    selection: Binding(
+                        get: { store.classReminderLeadTime },
+                        set: { leadTime in
+                            Task { await store.setClassReminderLeadTime(leadTime) }
+                        }
+                    )
+                ) {
+                    ForEach(ClassReminderLeadTime.allCases) { leadTime in
+                        Text(leadTime.label).tag(leadTime)
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(store.isUpdatingReminderPreference)
+            }
+
+            Text("Receive a device notification \(store.classReminderLeadTime.label.lowercased()) each confirmed class. You can switch this off at any time.")
                 .font(.footnote)
                 .foregroundStyle(Color.xertMuted)
         } header: {
