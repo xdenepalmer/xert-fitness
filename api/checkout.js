@@ -1,7 +1,8 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { requestHeader, requestJson, sendJson } from './http.js';
 
-// Vercel serverless function (Web Handler signature).
+// Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
 // signed-in member so the webhook can grant their credits after payment.
 
@@ -80,14 +81,8 @@ export function assertStripePriceMatchesProduct(product, stripePrice) {
   }
 }
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-export default async function handler(request) {
+export default async function handler(request, response) {
+  const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   if (!process.env.STRIPE_SECRET_KEY) return json({ error: 'Stripe is not configured.' }, 500);
@@ -97,14 +92,14 @@ export default async function handler(request) {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   try {
-    const authHeader = request.headers.get('authorization') || '';
+    const authHeader = requestHeader(request, 'authorization');
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return json({ error: 'Not authenticated.' }, 401);
 
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: 'Invalid or expired session.' }, 401);
 
-    const { product_slug, return_target = 'web' } = await request.json();
+    const { product_slug, return_target = 'web' } = await requestJson(request);
     if (!product_slug) return json({ error: 'Missing product.' }, 400);
     let returnURLs;
     try {

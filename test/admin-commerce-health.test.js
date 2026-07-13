@@ -66,6 +66,7 @@ test('admin operations health calls the authenticated commerce endpoint', async 
 
 test('commerce health responses are explicitly private and non-cacheable', async () => {
   const source = await readFile(new URL('../api/admin-commerce-health.js', import.meta.url), 'utf8');
-  assert.match(source, /'Cache-Control': 'private, no-store, max-age=0'/);
+  const httpSource = await readFile(new URL('../api/http.js', import.meta.url), 'utf8');
+  assert.match(httpSource, /'Cache-Control', 'private, no-store, max-age=0'/);
   assert.match(source, /profile\?\.role !== 'admin'/);
 });

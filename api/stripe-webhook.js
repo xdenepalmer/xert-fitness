@@ -1,12 +1,11 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { requestHeader, requestText, sendJson, sendText } from './http.js';
 
-// Vercel serverless function (Web Handler signature).
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
-//
-// The Web Handler signature gives us the raw request body via request.text(),
-// which is required for Stripe signature verification.
+
+export const config = { api: { bodyParser: false } };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -103,28 +102,29 @@ export async function persistCheckoutFulfillment(admin, fulfillment) {
   if (creditError) throw creditError;
 }
 
-export default async function handler(request) {
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+export default async function handler(request, response) {
+  const text = (body, status = 200) => sendText(response, body, status);
+  if (request.method !== 'POST') return text('Method not allowed', 405);
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!process.env.STRIPE_SECRET_KEY || !webhookSecret) {
-    return new Response('Stripe is not configured.', { status: 500 });
+    return text('Stripe is not configured.', 500);
   }
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    return new Response('Supabase is not configured.', { status: 500 });
+    return text('Supabase is not configured.', 500);
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-  const signature = request.headers.get('stripe-signature');
-  const rawBody = await request.text();
+  const signature = requestHeader(request, 'stripe-signature');
+  const rawBody = await requestText(request);
 
   let event;
   try {
     event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
   } catch (e) {
-    return new Response(`Webhook signature verification failed: ${e.message}`, { status: 400 });
+    return text(`Webhook signature verification failed: ${e.message}`, 400);
   }
 
   try {
@@ -132,11 +132,8 @@ export default async function handler(request) {
     if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
   } catch (e) {
       // 500 makes Stripe retry delivery.
-      return new Response(`Handler error: ${e.message}`, { status: 500 });
+      return text(`Handler error: ${e.message}`, 500);
   }
 
-  return new Response(JSON.stringify({ received: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return sendJson(response, { received: true });
 }

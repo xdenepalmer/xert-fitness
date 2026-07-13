@@ -1,19 +1,10 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { assertCheckoutProduct, assertStripePriceMatchesProduct } from './checkout.js';
+import { requestHeader, sendJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'private, no-store, max-age=0',
-    },
-  });
-}
 
 export async function inspectCommerceProducts(products, retrieveStripePrice) {
   const issues = [];
@@ -58,11 +49,12 @@ export async function inspectCommerceProducts(products, retrieveStripePrice) {
   };
 }
 
-export default async function handler(request) {
+export default async function handler(request, response) {
+  const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
 
-  const authHeader = request.headers.get('authorization') || '';
+  const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'Not authenticated.' }, 401);
 
