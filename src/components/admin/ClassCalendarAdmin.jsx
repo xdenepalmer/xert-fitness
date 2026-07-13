@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ClipboardCheck, Download, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Copy, Download, Mail, Phone, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
+import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const STATUSES = ['draft', 'published', 'full', 'cancelled', 'completed'];
@@ -98,6 +99,83 @@ function rosterExportFilename(session) {
     .replace(/^-|-$/g, '');
   const date = session.start_time?.slice(0, 10) || 'undated';
   return `xert-roster-${className || 'class'}-${date}.csv`;
+}
+
+function CancellationFollowUpDialog({ followUp, onClose }) {
+  const copyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(followUp.message.body);
+      toast({ title: 'Cancellation message copied' });
+    } catch {
+      toast({ title: 'Could not copy the message', description: 'Select the message text and copy it manually.', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="cancellation-follow-up-title"
+        className="flex max-h-[92vh] w-full max-w-xl flex-col border border-xert-steel/30 bg-xert-ink">
+        <div className="flex items-start justify-between gap-4 border-b border-xert-steel/20 p-5 sm:p-6">
+          <div>
+            <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class cancelled</p>
+            <h3 id="cancellation-follow-up-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">Notify affected members</h3>
+            <p className="mt-2 font-body text-sm text-xert-concrete/65">
+              {followUp.affectedBookings} active {followUp.affectedBookings === 1 ? 'booking was' : 'bookings were'} cancelled and refunded.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close cancellation follow-up" title="Close"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/60 hover:text-xert-offwhite">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5 sm:p-6">
+          {followUp.contactLookupIncomplete && (
+            <p role="alert" className="mb-4 border border-xert-orange/30 bg-xert-orange/10 p-3 font-body text-xs leading-relaxed text-xert-concrete/80">
+              One booking source could not be checked. Review the class bookings queue before considering follow-up complete.
+            </p>
+          )}
+          {followUp.contacts.length === 0 ? (
+            <p className="mb-5 font-body text-sm text-xert-concrete/60">No email address or mobile number was available for the affected bookings.</p>
+          ) : (
+            <div className="mb-5 space-y-2" aria-label="Affected member contacts">
+              {followUp.contacts.map(contact => (
+                <div key={`${contact.email}:${contact.phoneDialable}`} className="flex flex-wrap items-center justify-between gap-3 border border-xert-steel/15 bg-xert-charcoal p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-body text-sm text-xert-offwhite">{contact.name || contact.email || contact.phone}</p>
+                    <p className="truncate font-body text-xs text-xert-concrete/50">{[contact.email, contact.phone].filter(Boolean).join(' · ')}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {contact.email && <a href={`mailto:${contact.email}`} aria-label={`Email ${contact.name || contact.email}`} title="Email member" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-steel"><Mail className="h-4 w-4" /></a>}
+                    {contact.phoneDialable && <a href={`tel:${contact.phoneDialable}`} aria-label={`Call ${contact.name || contact.phone}`} title="Call member" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-steel"><Phone className="h-4 w-4" /></a>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label htmlFor="cancellation-message" className="block font-body text-xs uppercase tracking-wider text-xert-concrete/50">Ready-to-send message</label>
+          <textarea id="cancellation-message" readOnly value={followUp.message.body} rows={9}
+            className="mt-2 w-full resize-y border border-xert-steel/25 bg-xert-charcoal p-3 font-body text-sm leading-relaxed text-xert-offwhite focus:outline-none focus:border-xert-steel" />
+          {followUp.mailto.omittedCount > 0 && (
+            <p className="mt-2 font-body text-xs text-xert-orange">{followUp.mailto.omittedCount} additional email recipients were omitted from the bounded BCC link. Contact them individually.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-xert-steel/20 p-5 sm:flex-row sm:justify-end sm:p-6">
+          <button type="button" onClick={onClose} className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70">Done</button>
+          <button type="button" onClick={copyMessage} className="inline-flex min-h-11 items-center justify-center gap-2 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-steel">
+            <Copy className="h-4 w-4" /> Copy message
+          </button>
+          {followUp.mailto.url && (
+            <a href={followUp.mailto.url} className="inline-flex min-h-11 items-center justify-center gap-2 bg-xert-steel px-5 font-display text-xs uppercase text-xert-navy">
+              <Mail className="h-4 w-4" /> Email {followUp.mailto.recipientCount} via BCC
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const STATUS_COLORS = {
@@ -364,6 +442,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
   const [promotingSessionId, setPromotingSessionId] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
+  const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
   const [attendanceSession, setAttendanceSession] = useState(null);
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
@@ -496,7 +575,26 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
     if (!session) return;
     setIsCancellingSession(true);
     try {
+      const contactResults = await Promise.allSettled([
+        adminSessionRoster(session.id),
+        getClassBookings({ class_session_id: session.id }),
+      ]);
+      const contacts = collectClassCancellationContacts(
+        contactResults[0].status === 'fulfilled' ? contactResults[0].value : [],
+        contactResults[1].status === 'fulfilled' ? contactResults[1].value : []
+      );
+      const message = buildClassCancellationMessage(session);
       const affectedBookings = await cancelClassSession(session.id);
+      if (affectedBookings > 0) {
+        setCancellationFollowUp({
+          session,
+          affectedBookings,
+          contacts,
+          message,
+          mailto: buildClassCancellationMailto(contacts, message.subject, message.body),
+          contactLookupIncomplete: contactResults.some(result => result.status === 'rejected'),
+        });
+      }
       const noun = affectedBookings === 1 ? 'booking' : 'bookings';
       toast({
         title: 'Class cancelled',
@@ -510,7 +608,7 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
         setRoster([]);
       }
       setSessionToCancel(null);
-      load();
+      await load();
     } catch (e) {
       toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -900,6 +998,10 @@ export default function ClassCalendarAdmin({ initialAction, onIntentHandled }) {
             </div>
           </div>
         </div>
+      )}
+
+      {cancellationFollowUp && (
+        <CancellationFollowUpDialog followUp={cancellationFollowUp} onClose={() => setCancellationFollowUp(null)} />
       )}
     </div>
   );
