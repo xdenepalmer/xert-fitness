@@ -189,7 +189,7 @@ struct AdminCommandCentreView: View {
                     AdminCommunicationsView(admin: admin, session: session)
                 }
                 AdminDestinationRow(title: "Finance", detail: "Track pack sales and revenue", icon: "chart.line.uptrend.xyaxis") {
-                    AdminFinanceView(admin: admin)
+                    AdminFinanceView(admin: admin, session: session)
                 }
                 AdminDestinationRow(title: "Session packs", detail: "Edit pricing, credits, validity and sale status", icon: "ticket") {
                     AdminProductsView(admin: admin, session: session)
@@ -1127,6 +1127,22 @@ private struct AdminRetentionView: View {
 
 private struct AdminFinanceView: View {
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var query = ""
+    @State private var status = "all"
+    @State private var selectedOrder: OrderItem?
+
+    private var filteredOrders: [OrderItem] {
+        admin.orders.filter { order in
+            let matchesStatus = status == "all" || order.status == status
+            let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let haystack = [
+                order.id.uuidString, order.email ?? "", order.products?.name ?? "",
+                order.stripe_checkout_session_id ?? "", order.stripe_payment_intent_id ?? ""
+            ].joined(separator: " ").lowercased()
+            return matchesStatus && (needle.isEmpty || haystack.contains(needle))
+        }
+    }
 
     var body: some View {
         List {
@@ -1138,25 +1154,50 @@ private struct AdminFinanceView: View {
                     Spacer()
                     Text(admin.paidOrders.count.formatted()).fontWeight(.bold)
                 }
+                .foregroundStyle(Color.xertOffWhite)
+                .listRowBackground(Color.xertInk)
             }
-            Section("Latest transactions") {
-                if admin.orders.isEmpty { Text("No orders yet.") }
-                ForEach(admin.orders.prefix(50)) { order in
-                    HStack {
+            Section("Order operations") {
+                Picker("Order status", selection: $status) {
+                    Text("All").tag("all")
+                    Text("Paid").tag("paid")
+                    Text("Pending").tag("pending")
+                    Text("Failed").tag("failed")
+                    Text("Refunded").tag("refunded")
+                }
+                .pickerStyle(.menu)
+                .tint(Color.xertSteel)
+                .listRowBackground(Color.xertInk)
+
+                if filteredOrders.isEmpty {
+                    AdminEmptyState(icon: "creditcard", text: admin.orders.isEmpty ? "No orders yet." : "No matching orders.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(filteredOrders) { order in
+                    Button { selectedOrder = order } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: order.isRecoverable ? "exclamationmark.arrow.circlepath" : "creditcard")
+                                .foregroundStyle(order.isRecoverable ? Color.orange : Color.xertSteel)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(order.products?.name ?? "Session pack").font(.headline)
+                            Text((order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
+                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.65))
                             Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text(order.formattedAmount).font(.subheadline.weight(.bold))
+                            Text(order.displayAmount).font(.subheadline.weight(.bold))
                             Text(order.displayStatus.uppercased())
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(order.status == "paid" ? Color.green : Color.orange)
+                                .foregroundStyle(financeStatusColour(order.status))
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
                         }
                     }
                     .foregroundStyle(Color.xertOffWhite)
+                    }
+                    .buttonStyle(.plain)
                     .listRowBackground(Color.xertInk)
                 }
             }
@@ -1164,6 +1205,152 @@ private struct AdminFinanceView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Finance")
+        .searchable(text: $query, prompt: "Email, pack or Stripe ID")
+        .sheet(item: $selectedOrder) { order in
+            NavigationStack {
+                AdminOrderDetailView(admin: admin, session: session, order: order)
+            }
+        }
+    }
+
+    private func financeStatusColour(_ value: String) -> Color {
+        switch value {
+        case "paid": return .green
+        case "refunded": return Color.xertPale.opacity(0.55)
+        case "failed": return .red
+        default: return .orange
+        }
+    }
+}
+
+private struct AdminOrderDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let order: OrderItem
+    @State private var refundReason = "requested_by_customer"
+    @State private var refundConfirmation = ""
+    @State private var confirmingReconciliation = false
+    @State private var resultMessage: String?
+
+    private var isOperating: Bool { admin.operatingOrderID == order.id }
+
+    var body: some View {
+        List {
+            Section("Order") {
+                orderValue("Product", order.products?.name ?? "Session pack")
+                orderValue("Buyer", (order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
+                orderValue("Amount", order.displayAmount)
+                orderValue("Status", order.displayStatus)
+                orderValue("Created", order.created_at.formatted(date: .abbreviated, time: .shortened))
+                if let paidAt = order.paid_at { orderValue("Paid", paidAt.formatted(date: .abbreviated, time: .shortened)) }
+                identifier("XERT order", order.id.uuidString)
+                identifier("Stripe checkout", order.stripe_checkout_session_id)
+                identifier("Payment intent", order.stripe_payment_intent_id)
+                if let reconciledAt = order.reconciled_at {
+                    orderValue("Reconciled", reconciledAt.formatted(date: .abbreviated, time: .shortened))
+                    identifier("Reconciled by", order.reconciled_by?.uuidString)
+                }
+            }
+
+            if order.isRecoverable {
+                Section("Payment recovery") {
+                    Text("Ask Stripe whether this checkout was paid. Credits are granted only when the member, product, amount and currency match this order.")
+                        .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.7))
+                    Button { confirmingReconciliation = true } label: {
+                        Label(isOperating ? "Checking Stripe..." : "Check and reconcile payment", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isOperating)
+                }
+            }
+
+            if order.status == "refunded" {
+                Section("Refund reconciliation") {
+                    orderValue("Refunded", order.refundedAmount ?? order.displayAmount)
+                    if let refund = order.refund {
+                        orderValue("Unused credits revoked", refund.credits_revoked.formatted())
+                        orderValue("Credits already consumed", refund.credits_consumed.formatted())
+                        orderValue("Future bookings cancelled", refund.bookings_cancelled.formatted())
+                        identifier("Stripe refund", refund.refund_id)
+                    }
+                }
+            }
+
+            if order.isRefundable {
+                Section("Full refund") {
+                    Text("This sends the full payment back through Stripe, revokes unused credits, and cancels future bookings funded by this order.")
+                        .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.7))
+                    Picker("Reason", selection: $refundReason) {
+                        Text("Requested by customer").tag("requested_by_customer")
+                        Text("Duplicate payment").tag("duplicate")
+                    }
+                    TextField("Type REFUND to confirm", text: $refundConfirmation)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    Button(role: .destructive) {
+                        Task {
+                            if let result = await admin.refundOrder(
+                                session: session,
+                                order: order,
+                                reason: refundReason,
+                                confirmation: refundConfirmation
+                            ) {
+                                resultMessage = "Refund complete. \(result.credits_revoked) unused credits revoked, \(result.credits_consumed) already consumed, and \(result.bookings_cancelled) future bookings cancelled."
+                            }
+                        }
+                    } label: {
+                        Label(isOperating ? "Refunding..." : "Refund \(order.displayAmount)", systemImage: "arrow.uturn.backward.circle")
+                    }
+                    .disabled(isOperating || refundConfirmation != "REFUND")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Order detail")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isOperating) } }
+        .confirmationDialog("Check this payment with Stripe?", isPresented: $confirmingReconciliation, titleVisibility: .visible) {
+            Button("Check and reconcile") {
+                Task {
+                    if let result = await admin.reconcileOrder(session: session, order: order) {
+                        resultMessage = result.already_paid
+                            ? "Fulfilment verified. \(result.credits_granted) session credits are attached to this order."
+                            : "Payment reconciled. \(result.credits_granted) session credits were granted."
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("No credits are granted unless Stripe and the XERT order match exactly.")
+        }
+        .alert("Order updated", isPresented: Binding(
+            get: { resultMessage != nil },
+            set: { if !$0 { resultMessage = nil; dismiss() } }
+        )) {
+            Button("Done") { resultMessage = nil; dismiss() }
+        } message: { Text(resultMessage ?? "") }
+    }
+
+    @ViewBuilder
+    private func orderValue(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label).foregroundStyle(Color.xertPale.opacity(0.6))
+            Spacer()
+            Text(value).multilineTextAlignment(.trailing).foregroundStyle(Color.xertOffWhite)
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private func identifier(_ label: String, _ value: String?) -> some View {
+        if let value, !value.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label).font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                Text(value).font(.caption.monospaced()).textSelection(.enabled).foregroundStyle(Color.xertOffWhite)
+            }
+            .listRowBackground(Color.xertInk)
+        }
     }
 }
 

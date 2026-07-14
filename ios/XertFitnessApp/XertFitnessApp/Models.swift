@@ -244,16 +244,53 @@ struct OrderProduct: Codable, Hashable {
     let name: String
 }
 
+struct OrderRefund: Codable, Hashable {
+    let refund_id: String
+    let amount_cents: Int
+    let credits_revoked: Int
+    let credits_consumed: Int
+    let bookings_cancelled: Int
+    let refunded_at: Date
+}
+
+struct OrderRefundRelation: Codable, Hashable {
+    let values: [OrderRefund]
+
+    init(_ values: [OrderRefund]) { self.values = values }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let rows = try? container.decode([OrderRefund].self) {
+            values = rows
+        } else {
+            values = [try container.decode(OrderRefund.self)]
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(values)
+    }
+}
+
 struct OrderItem: Identifiable, Codable, Hashable {
     let id: UUID
+    let user_id: UUID?
+    let product_id: UUID?
+    let email: String?
     let status: String
     let amount_cents: Int?
     let currency: String?
+    let stripe_checkout_session_id: String?
+    let stripe_payment_intent_id: String?
     let created_at: Date
     let paid_at: Date?
     let refunded_at: Date?
     let refunded_amount_cents: Int?
+    let reconciled_at: Date?
+    let reconciled_by: UUID?
     let products: OrderProduct?
+    let stripe_refunds: OrderRefundRelation?
 
     var displayAmount: String {
         let normalizedCode = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -273,6 +310,30 @@ struct OrderItem: Identifiable, Codable, Hashable {
     }
 
     var activityDate: Date { refunded_at ?? paid_at ?? created_at }
+    var isRecoverable: Bool {
+        ["pending", "failed"].contains(status) && !(stripe_checkout_session_id?.isEmpty ?? true)
+    }
+    var isRefundable: Bool {
+        status == "paid" && !(stripe_payment_intent_id?.isEmpty ?? true)
+    }
+    var refund: OrderRefund? { stripe_refunds?.values.first }
+}
+
+struct AdminReconciliationResult: Decodable, Hashable {
+    let order_id: UUID
+    let status: String
+    let credits_granted: Int
+    let already_paid: Bool
+}
+
+struct AdminRefundResult: Decodable, Hashable {
+    let refunded: Bool
+    let refund_id: String
+    let refunded_at: Date
+    let order_id: UUID
+    let credits_revoked: Int
+    let credits_consumed: Int
+    let bookings_cancelled: Int
 }
 
 struct MemberProfile: Identifiable, Codable, Hashable {

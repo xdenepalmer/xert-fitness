@@ -464,6 +464,39 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(order.activityDate, try XCTUnwrap(order.refunded_at))
     }
 
+    func testAdminOrderDecodesRecoveryAndRefundControls() throws {
+        let data = """
+        {
+          "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "user_id": "0D07F153-ED81-4B24-BA8D-329F7B7233AE",
+          "product_id": "447CC495-4A9E-4826-BF91-B07C12C94EE1",
+          "email": "member@example.com",
+          "status": "failed",
+          "amount_cents": 4800,
+          "currency": "aud",
+          "stripe_checkout_session_id": "cs_test_recover",
+          "stripe_payment_intent_id": null,
+          "created_at": "2026-07-12T01:00:00Z",
+          "paid_at": null,
+          "refunded_at": null,
+          "refunded_amount_cents": 0,
+          "reconciled_at": null,
+          "reconciled_by": null,
+          "products": { "name": "4 Class Starter Pack" },
+          "stripe_refunds": []
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let order = try decoder.decode(OrderItem.self, from: data)
+
+        XCTAssertTrue(order.isRecoverable)
+        XCTAssertFalse(order.isRefundable)
+        XCTAssertEqual(order.email, "member@example.com")
+        XCTAssertEqual(order.stripe_checkout_session_id, "cs_test_recover")
+    }
+
     func testMemberProfileDecodesTheWebProfileColumns() throws {
         let data = """
         {
@@ -1173,14 +1206,22 @@ final class ModelsTests: XCTestCase {
     private func order(id: UUID, status: String) -> OrderItem {
         OrderItem(
             id: id,
+            user_id: nil,
+            product_id: nil,
+            email: nil,
             status: status,
             amount_cents: 4800,
             currency: "aud",
+            stripe_checkout_session_id: status == "failed" ? "cs_test_recover" : nil,
+            stripe_payment_intent_id: status == "paid" ? "pi_test_paid" : nil,
             created_at: Date(),
             paid_at: status == "paid" ? Date() : nil,
             refunded_at: status == "refunded" ? Date() : nil,
             refunded_amount_cents: status == "refunded" ? 4800 : nil,
-            products: nil
+            reconciled_at: nil,
+            reconciled_by: nil,
+            products: nil,
+            stripe_refunds: nil
         )
     }
 

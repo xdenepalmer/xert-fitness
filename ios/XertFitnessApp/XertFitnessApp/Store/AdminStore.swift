@@ -47,6 +47,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var servicingMemberID: UUID?
+    @Published private(set) var operatingOrderID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -85,7 +86,7 @@ final class AdminStore: ObservableObject {
         async let waitlistRequest = api.adminWaitlist(session: session)
         async let followUpRequest = api.adminFollowUps(session: session)
         async let memberRequest = api.adminMembers(session: session)
-        async let orderRequest = api.orders(session: session)
+        async let orderRequest = api.adminOrders(session: session)
         async let settingsRequest = api.adminPlatformSettings(session: session)
         async let ptRequest = api.adminPTRequests(session: session)
         async let announcementRequest = api.adminAnnouncements(session: session)
@@ -210,6 +211,54 @@ final class AdminStore: ObservableObject {
             members = try await api.adminMembers(session: session)
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func reconcileOrder(session: AuthSession, order: OrderItem) async -> AdminReconciliationResult? {
+        guard operatingOrderID == nil else { return nil }
+        guard order.isRecoverable else {
+            errorMessage = "Only unresolved orders with a Stripe Checkout Session can be reconciled."
+            return nil
+        }
+        operatingOrderID = order.id
+        defer { operatingOrderID = nil }
+        do {
+            let result = try await api.adminReconcileOrder(session: session, orderID: order.id)
+            orders = try await api.adminOrders(session: session)
+            lastUpdatedAt = Date()
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func refundOrder(
+        session: AuthSession,
+        order: OrderItem,
+        reason: String,
+        confirmation: String
+    ) async -> AdminRefundResult? {
+        guard operatingOrderID == nil else { return nil }
+        guard order.isRefundable else {
+            errorMessage = "Only a fully paid, unreimbursed Stripe order can be refunded."
+            return nil
+        }
+        operatingOrderID = order.id
+        defer { operatingOrderID = nil }
+        do {
+            let result = try await api.adminRefundOrder(
+                session: session,
+                orderID: order.id,
+                reason: reason,
+                confirmation: confirmation
+            )
+            orders = try await api.adminOrders(session: session)
+            lastUpdatedAt = Date()
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
     }
 
     func promoteNext(session: AuthSession, classSessionID: UUID) async -> Bool {

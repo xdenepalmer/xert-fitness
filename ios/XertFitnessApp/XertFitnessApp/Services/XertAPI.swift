@@ -218,9 +218,57 @@ final class XertAPI {
         try await restRequest(
             path: "/rest/v1/orders",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,status,amount_cents,currency,created_at,paid_at,refunded_at,refunded_amount_cents,products(name)"),
+                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
                 URLQueryItem(name: "order", value: "created_at.desc")
             ],
+            auth: auth
+        )
+    }
+
+    func adminOrders(session auth: AuthSession) async throws -> [OrderItem] {
+        let pageSize = 500
+        var offset = 0
+        var orders: [OrderItem] = []
+        while true {
+            let page: [OrderItem] = try await restRequest(
+                path: "/rest/v1/orders",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            orders.append(contentsOf: page)
+            if page.count < pageSize { return orders }
+            offset += pageSize
+        }
+    }
+
+    func adminReconcileOrder(session auth: AuthSession, orderID: UUID) async throws -> AdminReconciliationResult {
+        try await vercelRequest(
+            path: "/api/admin-reconcile-order",
+            body: AdminOrderRequest(order_id: orderID),
+            auth: auth
+        )
+    }
+
+    func adminRefundOrder(
+        session auth: AuthSession,
+        orderID: UUID,
+        reason: String,
+        confirmation: String
+    ) async throws -> AdminRefundResult {
+        guard ["requested_by_customer", "duplicate"].contains(reason) else {
+            throw APIError(message: "Choose a valid refund reason.")
+        }
+        guard confirmation == "REFUND" else {
+            throw APIError(message: "Type REFUND exactly to confirm this full refund.")
+        }
+        return try await vercelRequest(
+            path: "/api/admin-refund-order",
+            body: AdminRefundRequest(order_id: orderID, reason: reason, confirmation: confirmation),
             auth: auth
         )
     }
@@ -1344,6 +1392,12 @@ private struct AdminAttendanceRequest: Encodable {
     let p_session_id: UUID
     let p_attended_ids: [UUID]
     let p_no_show_ids: [UUID]
+}
+private struct AdminOrderRequest: Encodable { let order_id: UUID }
+private struct AdminRefundRequest: Encodable {
+    let order_id: UUID
+    let reason: String
+    let confirmation: String
 }
 private struct AdminClassPayload: Encodable {
     let class_type: String

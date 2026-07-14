@@ -107,6 +107,16 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /path: "admin_set_member_note_archived"/);
   assert.match(adminStore, /func grantCredits/);
   assert.match(adminStore, /func setMemberRole/);
+  assert.match(view, /AdminOrderDetailView/);
+  assert.match(view, /Type REFUND to confirm/);
+  assert.match(view, /Check and reconcile payment/);
+  assert.match(api, /func adminOrders/);
+  assert.match(api, /while true[\s\S]*URLQueryItem\(name: "offset", value: String\(offset\)\)[\s\S]*offset \+= pageSize/);
+  assert.match(api, /\/api\/admin-reconcile-order/);
+  assert.match(api, /\/api\/admin-refund-order/);
+  assert.match(api, /confirmation == "REFUND"/);
+  assert.match(adminStore, /func reconcileOrder/);
+  assert.match(adminStore, /func refundOrder/);
   for (const table of [
     'admin_role_changes', 'admin_credit_grants', 'admin_request_status_changes',
     'member_announcement_admin_events', 'admin_lead_changes', 'admin_schedule_changes',

@@ -59,6 +59,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   Native member records expose account value, direct contact, audited idempotent
   credit grants, protected admin-role changes, and an archiveable staff-note
   timeline. Final-admin and self-demotion safeguards remain server enforced.
+  The Finance workspace searches the full native order ledger, exposes Stripe
+  identifiers and reconciliation audit details, safely recovers unresolved paid
+  checkouts, and performs explicitly confirmed full refunds. Refunds use the same
+  server workflow as desktop to revoke unused credits and cancel future bookings.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
