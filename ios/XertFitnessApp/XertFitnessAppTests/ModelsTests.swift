@@ -1227,6 +1227,29 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(AdminLeadPipeline.partners.statuses.contains("approved"))
     }
 
+    func testUnifiedBookingRequestKeepsCreditWorkflowAndAllowedTransitions() {
+        let booking = AdminBookingRequest(
+            source: .member,
+            recordID: UUID().uuidString,
+            memberBookingID: UUID(),
+            fullName: "Alex Runner",
+            email: "alex@example.com",
+            phone: "0400 123 456",
+            status: "confirmed",
+            adminNotes: nil,
+            createdAt: Date(),
+            creditBatchID: UUID(),
+            session: AdminBookingSession(
+                title: "XERT Engine", start_time: Date(), coach_name: "Dene", location_zone: "Main floor"
+            )
+        )
+
+        XCTAssertEqual(booking.source.label, "Member credit")
+        XCTAssertTrue(booking.searchableText.contains("xert engine"))
+        XCTAssertEqual(booking.allowedNextStatuses, ["attended", "no_show", "cancelled"])
+        XCTAssertTrue(booking.id.hasPrefix("member:"))
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

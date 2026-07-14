@@ -717,6 +717,149 @@ final class XertAPI {
         }
     }
 
+    func adminBookingRequests(session auth: AuthSession) async throws -> [AdminBookingRequest] {
+        async let legacyRequest = adminLegacyBookingRequests(session: auth)
+        async let memberRequest = adminMemberBookingRequests(session: auth)
+        let (legacyRows, memberRows) = try await (legacyRequest, memberRequest)
+
+        let memberIDs = Array(Set(memberRows.map(\.user_id)))
+        var profiles: [AdminBookingProfile] = []
+        for start in stride(from: 0, to: memberIDs.count, by: 100) {
+            let end = min(start + 100, memberIDs.count)
+            let ids = memberIDs[start..<end].map(\.uuidString).joined(separator: ",")
+            let page: [AdminBookingProfile] = try await restRequest(
+                path: "/rest/v1/profiles",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,full_name,email,phone"),
+                    URLQueryItem(name: "id", value: "in.(\(ids))")
+                ],
+                auth: auth
+            )
+            profiles.append(contentsOf: page)
+        }
+        let profileByID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
+
+        let legacy = legacyRows.map { row in
+            AdminBookingRequest(
+                source: .enquiry,
+                recordID: row.id.value,
+                memberBookingID: nil,
+                fullName: row.full_name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? row.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? "Booking enquiry",
+                email: row.email,
+                phone: row.phone,
+                status: row.status,
+                adminNotes: row.admin_notes,
+                createdAt: row.created_at,
+                creditBatchID: nil,
+                session: row.class_sessions
+            )
+        }
+        let members = memberRows.map { row in
+            let profile = profileByID[row.user_id]
+            return AdminBookingRequest(
+                source: .member,
+                recordID: row.id.uuidString,
+                memberBookingID: row.id,
+                fullName: profile?.full_name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? profile?.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? "XERT member",
+                email: profile?.email,
+                phone: profile?.phone,
+                status: row.status,
+                adminNotes: nil,
+                createdAt: row.created_at,
+                creditBatchID: row.credit_batch_id,
+                session: row.class_sessions
+            )
+        }
+        return (legacy + members).sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func adminUpdateBookingRequestStatus(
+        session auth: AuthSession,
+        booking: AdminBookingRequest,
+        status: String
+    ) async throws {
+        guard booking.allowedNextStatuses.contains(status) else {
+            throw APIError(message: "This booking cannot move from \(booking.status) to \(status). Refresh and review it.")
+        }
+        if booking.source == .member {
+            guard let bookingID = booking.memberBookingID else { throw APIError(message: "The member booking ID is invalid.") }
+            try await adminSetBookingStatus(session: auth, bookingID: bookingID, status: status)
+        } else {
+            let _: UUID? = try await rpc(
+                path: "admin_update_request",
+                body: AdminRequestUpdate(
+                    p_request_type: "class_booking",
+                    p_request_id: booking.recordID,
+                    p_status: status,
+                    p_admin_notes: nil,
+                    p_update_admin_notes: false
+                ),
+                auth: auth
+            )
+        }
+    }
+
+    func adminUpdateLegacyBookingNotes(
+        session auth: AuthSession,
+        booking: AdminBookingRequest,
+        notes: String
+    ) async throws {
+        guard booking.source == .enquiry else { throw APIError(message: "Staff notes apply only to enquiry-form bookings.") }
+        guard notes.count <= 5_000 else { throw APIError(message: "Admin notes must be 5,000 characters or fewer.") }
+        let _: UUID? = try await rpc(
+            path: "admin_update_request",
+            body: AdminRequestUpdate(
+                p_request_type: "class_booking",
+                p_request_id: booking.recordID,
+                p_status: nil,
+                p_admin_notes: notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                p_update_admin_notes: true
+            ),
+            auth: auth
+        )
+    }
+
+    private func adminLegacyBookingRequests(session auth: AuthSession) async throws -> [AdminLegacyBookingRequest] {
+        try await adminBookingPages(
+            path: "/rest/v1/class_bookings",
+            select: "id,full_name,email,phone,status,admin_notes,created_at,class_sessions(title,start_time,coach_name,location_zone)",
+            auth: auth
+        )
+    }
+
+    private func adminMemberBookingRequests(session auth: AuthSession) async throws -> [AdminMemberBookingRequest] {
+        try await adminBookingPages(
+            path: "/rest/v1/session_bookings",
+            select: "id,user_id,status,created_at,credit_batch_id,class_sessions(title,start_time,coach_name,location_zone)",
+            auth: auth
+        )
+    }
+
+    private func adminBookingPages<T: Decodable>(path: String, select: String, auth: AuthSession) async throws -> [T] {
+        let pageSize = 500
+        var offset = 0
+        var rows: [T] = []
+        while true {
+            let page: [T] = try await restRequest(
+                path: path,
+                queryItems: [
+                    URLQueryItem(name: "select", value: select),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
+    }
+
     func adminAnnouncements(session auth: AuthSession) async throws -> [AdminAnnouncement] {
         try await restRequest(
             path: "/rest/v1/member_announcements",

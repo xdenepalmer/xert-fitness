@@ -173,6 +173,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Classes & waitlists", detail: "Run today's schedule and fill open places", icon: "calendar.badge.clock") {
                     AdminClassesView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Booking requests", detail: "Resolve member-credit and enquiry-form bookings", icon: "tray.full") {
+                    AdminBookingRequestsView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Full timetable", detail: "Create, publish, edit, duplicate and cancel classes", icon: "calendar") {
                     AdminScheduleView(admin: admin, session: session)
                 }
@@ -1353,6 +1356,315 @@ private struct AdminOrderDetailView: View {
                 Text(value).font(.caption.monospaced()).textSelection(.enabled).foregroundStyle(Color.xertOffWhite)
             }
             .listRowBackground(Color.xertInk)
+        }
+    }
+}
+
+private struct AdminBookingRequestsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var query = ""
+    @State private var status = "all"
+    @State private var source = "all"
+    @State private var days = "30"
+    @State private var selectedRequest: AdminBookingRequest?
+    @State private var selectedIDs: Set<String> = []
+    @State private var bulkStatus = ""
+    @State private var confirmingBulk = false
+
+    private let statuses = ["requested", "confirmed", "waitlisted", "cancelled", "declined", "attended", "no_show"]
+
+    private var filteredRequests: [AdminBookingRequest] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cutoff: Date? = days == "all" ? nil : Calendar.current.date(byAdding: .day, value: -(Int(days) ?? 30), to: Date())
+        return admin.bookingRequests.filter { booking in
+            let withinWindow = cutoff.map { booking.createdAt >= $0 } ?? true
+            return (status == "all" || booking.status == status)
+                && (source == "all" || booking.source.rawValue == source)
+                && withinWindow
+                && (needle.isEmpty || booking.searchableText.contains(needle))
+        }
+    }
+
+    private var selectedRequests: [AdminBookingRequest] {
+        admin.bookingRequests.filter { selectedIDs.contains($0.id) }
+    }
+
+    private var bulkOptions: [String] {
+        let selected = selectedRequests
+        guard let first = selected.first, selected.allSatisfy({ $0.status == first.status }) else { return [] }
+        return first.allowedNextStatuses
+    }
+
+    var body: some View {
+        List {
+            Section("Queue filters") {
+                Picker("Status", selection: $status) {
+                    Text("All statuses").tag("all")
+                    ForEach(statuses, id: \.self) { Text(statusLabel($0)).tag($0) }
+                }
+                Picker("Source", selection: $source) {
+                    Text("All sources").tag("all")
+                    Text("Member credit").tag("member")
+                    Text("Enquiry form").tag("enquiry")
+                }
+                .pickerStyle(.segmented)
+                Picker("Age", selection: $days) {
+                    Text("30 days").tag("30")
+                    Text("90 days").tag("90")
+                    Text("All time").tag("all")
+                }
+                .pickerStyle(.segmented)
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Matching workload") {
+                metricRow("Matching", filteredRequests.count)
+                metricRow("Requested", filteredRequests.filter { $0.status == "requested" }.count)
+                metricRow("Confirmed", filteredRequests.filter { $0.status == "confirmed" }.count)
+                metricRow("Attended", filteredRequests.filter { $0.status == "attended" }.count)
+            }
+
+            if !selectedIDs.isEmpty {
+                Section("Bulk update") {
+                    HStack {
+                        Text("\(selectedIDs.count) selected")
+                        Spacer()
+                        Button("Clear") { selectedIDs = []; bulkStatus = "" }
+                    }
+                    if bulkOptions.isEmpty {
+                        Text("Select bookings with the same actionable status to update them together.")
+                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                    } else {
+                        Picker("Move selected to", selection: $bulkStatus) {
+                            Text("Choose status").tag("")
+                            ForEach(bulkOptions, id: \.self) { Text(statusLabel($0)).tag($0) }
+                        }
+                        Button { confirmingBulk = true } label: {
+                            Label(admin.updatingBookingRequestIDs.isEmpty ? "Apply booking update" : "Updating bookings...", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(bulkStatus.isEmpty || !admin.updatingBookingRequestIDs.isEmpty)
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            Section("Booking operations") {
+                if admin.isLoadingBookingRequests && admin.bookingRequests.isEmpty {
+                    HStack { ProgressView(); Text("Loading booking requests...") }
+                        .listRowBackground(Color.xertInk)
+                } else if filteredRequests.isEmpty {
+                    AdminEmptyState(icon: "tray", text: admin.bookingRequests.isEmpty ? "No booking requests yet." : "No matching bookings.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(filteredRequests) { booking in
+                    HStack(spacing: 12) {
+                        Button { toggleSelection(booking.id) } label: {
+                            Image(systemName: selectedIDs.contains(booking.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.title3).foregroundStyle(Color.xertSteel)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedIDs.count >= 50 && !selectedIDs.contains(booking.id))
+                        .accessibilityLabel(selectedIDs.contains(booking.id) ? "Deselect \(booking.fullName)" : "Select \(booking.fullName)")
+
+                        Button { selectedRequest = booking } label: {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(booking.fullName).font(.headline)
+                                    Text(booking.session?.title ?? "Class not linked")
+                                        .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.72))
+                                    if let start = booking.session?.start_time {
+                                        Text(start.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.52))
+                                    }
+                                    Text(booking.source.label.uppercased())
+                                        .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 5) {
+                                    Text(statusLabel(booking.status).uppercased())
+                                        .font(.caption2.weight(.bold)).foregroundStyle(bookingStatusColour(booking.status))
+                                    if booking.creditBatchID != nil {
+                                        Label("Reserved", systemImage: "ticket").font(.caption2).foregroundStyle(Color.xertPale.opacity(0.5))
+                                    }
+                                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.xertSteel)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .padding(.vertical, 5)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Booking Requests")
+        .searchable(text: $query, prompt: "Member, contact, class or coach")
+        .refreshable { await admin.loadBookingRequests(session: session, force: true) }
+        .task { await admin.loadBookingRequests(session: session) }
+        .onChange(of: status) { _ in resetSelection() }
+        .onChange(of: source) { _ in resetSelection() }
+        .onChange(of: days) { _ in resetSelection() }
+        .sheet(item: $selectedRequest) { booking in
+            NavigationStack {
+                AdminBookingRequestDetailView(admin: admin, session: session, booking: booking)
+            }
+        }
+        .confirmationDialog("Update \(selectedRequests.count) bookings?", isPresented: $confirmingBulk, titleVisibility: .visible) {
+            Button("Move to \(statusLabel(bulkStatus))", role: bulkStatus == "cancelled" ? .destructive : nil) {
+                let selected = selectedRequests
+                Task {
+                    selectedIDs = await admin.bulkUpdateBookingRequests(session: session, bookings: selected, status: bulkStatus)
+                    if selectedIDs.isEmpty { bulkStatus = "" }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(bulkStatus == "cancelled" ? "Confirmed member bookings follow the server credit-return policy." : "Every selected enquiry and member booking will be updated.")
+        }
+    }
+
+    private func toggleSelection(_ id: String) {
+        if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) }
+        if selectedIDs.count > 50 { selectedIDs.remove(id) }
+        if !bulkOptions.contains(bulkStatus) { bulkStatus = "" }
+    }
+
+    private func resetSelection() { selectedIDs = []; bulkStatus = ""; selectedRequest = nil }
+
+    private func statusLabel(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func bookingStatusColour(_ value: String) -> Color {
+        switch value {
+        case "confirmed", "attended": return .green
+        case "requested", "waitlisted", "no_show": return .orange
+        case "cancelled", "declined": return Color.xertPale.opacity(0.45)
+        default: return Color.xertSteel
+        }
+    }
+
+    private func metricRow(_ label: String, _ value: Int) -> some View {
+        HStack { Text(label); Spacer(); Text(value.formatted()).fontWeight(.bold) }
+            .foregroundStyle(Color.xertOffWhite).listRowBackground(Color.xertInk)
+    }
+}
+
+private struct AdminBookingRequestDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let booking: AdminBookingRequest
+    @State private var notes: String
+    @State private var pendingStatus: String?
+
+    init(admin: AdminStore, session: AuthSession, booking: AdminBookingRequest) {
+        self.admin = admin
+        self.session = session
+        self.booking = booking
+        _notes = State(initialValue: booking.adminNotes ?? "")
+    }
+
+    private var isUpdating: Bool { admin.updatingBookingRequestIDs.contains(booking.id) }
+
+    var body: some View {
+        List {
+            Section("Booking") {
+                detailRow("Member", booking.fullName)
+                detailRow("Source", booking.source.label)
+                detailRow("Status", statusLabel(booking.status))
+                detailRow("Requested", booking.createdAt.formatted(date: .abbreviated, time: .shortened))
+                if booking.creditBatchID != nil { detailRow("Class credit", "Reserved") }
+                if let email = nonBlank(booking.email), let url = URL(string: "mailto:\(email)") {
+                    Link(destination: url) { Label(email, systemImage: "envelope") }
+                }
+                if let phone = nonBlank(booking.phone), let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                    Link(destination: url) { Label(phone, systemImage: "phone") }
+                }
+            }
+            Section("Class") {
+                detailRow("Class", booking.session?.title ?? "Not linked")
+                if let start = booking.session?.start_time { detailRow("Starts", start.formatted(date: .complete, time: .shortened)) }
+                optionalRow("Coach", booking.session?.coach_name)
+                optionalRow("Location", booking.session?.location_zone)
+            }
+            if !booking.allowedNextStatuses.isEmpty {
+                Section("Decision") {
+                    ForEach(booking.allowedNextStatuses, id: \.self) { next in
+                        Button(role: next == "cancelled" || next == "declined" ? .destructive : nil) {
+                            pendingStatus = next
+                        } label: {
+                            Label(statusLabel(next), systemImage: statusIcon(next))
+                        }
+                        .disabled(isUpdating)
+                    }
+                }
+            }
+            if booking.source == .enquiry {
+                Section("Staff notes") {
+                    TextEditor(text: $notes).frame(minHeight: 120)
+                    Text("\(notes.count)/5,000").font(.caption2)
+                        .foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
+                    Button {
+                        Task {
+                            if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) { dismiss() }
+                        }
+                    } label: { Label(isUpdating ? "Saving..." : "Save notes", systemImage: "note.text") }
+                    .disabled(isUpdating || notes.count > 5_000)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Booking Detail")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isUpdating) } }
+        .confirmationDialog("Move booking to \(statusLabel(pendingStatus ?? ""))?", isPresented: Binding(
+            get: { pendingStatus != nil },
+            set: { if !$0 { pendingStatus = nil } }
+        ), titleVisibility: .visible) {
+            if let pendingStatus {
+                Button(statusLabel(pendingStatus), role: pendingStatus == "cancelled" || pendingStatus == "declined" ? .destructive : nil) {
+                    Task {
+                        if await admin.updateBookingRequest(session: session, booking: booking, status: pendingStatus) { dismiss() }
+                    }
+                }
+            }
+            Button("Keep current status", role: .cancel) { pendingStatus = nil }
+        } message: {
+            Text(pendingStatus == "cancelled" && booking.source == .member
+                ? "The server will return the reserved class credit according to the cancellation policy."
+                : "This change is recorded in the permanent admin request audit.")
+        }
+    }
+
+    private func statusLabel(_ value: String) -> String { value.replacingOccurrences(of: "_", with: " ").capitalized }
+    private func statusIcon(_ value: String) -> String {
+        switch value {
+        case "confirmed": return "checkmark.circle"
+        case "waitlisted": return "clock"
+        case "attended": return "person.badge.checkmark"
+        case "no_show": return "person.badge.minus"
+        default: return "xmark.circle"
+        }
+    }
+    private func nonBlank(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+    @ViewBuilder private func optionalRow(_ label: String, _ value: String?) -> some View {
+        if let value = nonBlank(value) { detailRow(label, value) }
+    }
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label).foregroundStyle(Color.xertPale.opacity(0.55))
+            Spacer()
+            Text(value).multilineTextAlignment(.trailing).foregroundStyle(Color.xertOffWhite)
         }
     }
 }

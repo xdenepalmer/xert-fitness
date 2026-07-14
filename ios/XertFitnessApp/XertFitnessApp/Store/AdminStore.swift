@@ -26,6 +26,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
+    @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -51,6 +52,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
     @Published private(set) var savingLeadIDs: Set<AdminLeadIdentifier> = []
+    @Published private(set) var isLoadingBookingRequests = false
+    @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -325,6 +328,82 @@ final class AdminStore: ObservableObject {
                 status: status
             )
             leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadBookingRequests(session: AuthSession, force: Bool = false) async {
+        guard !isLoadingBookingRequests else { return }
+        if !force, !bookingRequests.isEmpty { return }
+        isLoadingBookingRequests = true
+        defer { isLoadingBookingRequests = false }
+        do {
+            bookingRequests = try await api.adminBookingRequests(session: session)
+            lastUpdatedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func updateBookingRequest(
+        session: AuthSession,
+        booking: AdminBookingRequest,
+        status: String
+    ) async -> Bool {
+        guard updatingBookingRequestIDs.isEmpty else { return false }
+        updatingBookingRequestIDs = [booking.id]
+        defer { updatingBookingRequestIDs = [] }
+        do {
+            try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            bookingRequests = try await api.adminBookingRequests(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func bulkUpdateBookingRequests(
+        session: AuthSession,
+        bookings: [AdminBookingRequest],
+        status: String
+    ) async -> Set<String> {
+        guard updatingBookingRequestIDs.isEmpty else { return Set(bookings.map(\.id)) }
+        updatingBookingRequestIDs = Set(bookings.map(\.id))
+        defer { updatingBookingRequestIDs = [] }
+        var failed: Set<String> = []
+        for booking in bookings {
+            do { try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status) }
+            catch { failed.insert(booking.id) }
+        }
+        do {
+            bookingRequests = try await api.adminBookingRequests(session: session)
+            lastUpdatedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        if !failed.isEmpty {
+            errorMessage = "\(failed.count) booking update\(failed.count == 1 ? "" : "s") failed and remain selected. Review class capacity, credits, or current status."
+        }
+        return failed
+    }
+
+    func saveLegacyBookingNotes(
+        session: AuthSession,
+        booking: AdminBookingRequest,
+        notes: String
+    ) async -> Bool {
+        guard updatingBookingRequestIDs.isEmpty else { return false }
+        updatingBookingRequestIDs = [booking.id]
+        defer { updatingBookingRequestIDs = [] }
+        do {
+            try await api.adminUpdateLegacyBookingNotes(session: session, booking: booking, notes: notes)
+            bookingRequests = try await api.adminBookingRequests(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {

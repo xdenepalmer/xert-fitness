@@ -360,6 +360,75 @@ struct AdminLead: Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminBookingSession: Codable, Hashable {
+    let title: String
+    let start_time: Date?
+    let coach_name: String?
+    let location_zone: String?
+}
+
+struct AdminLegacyBookingRequest: Codable, Hashable {
+    let id: AdminLeadIdentifier
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let status: String
+    let admin_notes: String?
+    let created_at: Date
+    let class_sessions: AdminBookingSession?
+}
+
+struct AdminMemberBookingRequest: Codable, Hashable {
+    let id: UUID
+    let user_id: UUID
+    let status: String
+    let created_at: Date
+    let credit_batch_id: UUID?
+    let class_sessions: AdminBookingSession?
+}
+
+struct AdminBookingProfile: Identifiable, Codable, Hashable {
+    let id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+}
+
+enum AdminBookingRequestSource: String, CaseIterable, Identifiable, Hashable {
+    case member
+    case enquiry
+    var id: String { rawValue }
+    var label: String { self == .member ? "Member credit" : "Enquiry form" }
+}
+
+struct AdminBookingRequest: Identifiable, Hashable {
+    let source: AdminBookingRequestSource
+    let recordID: String
+    let memberBookingID: UUID?
+    let fullName: String
+    let email: String?
+    let phone: String?
+    let status: String
+    let adminNotes: String?
+    let createdAt: Date
+    let creditBatchID: UUID?
+    let session: AdminBookingSession?
+
+    var id: String { "\(source.rawValue):\(recordID)" }
+    var searchableText: String {
+        [fullName, email, phone, session?.title, session?.coach_name, session?.location_zone]
+            .compactMap { $0 }.joined(separator: " ").lowercased()
+    }
+    var allowedNextStatuses: [String] {
+        switch status {
+        case "requested": return ["confirmed", "waitlisted", "declined"]
+        case "waitlisted": return ["cancelled"]
+        case "confirmed": return ["attended", "no_show", "cancelled"]
+        default: return []
+        }
+    }
+}
+
 struct AdminAnnouncement: Identifiable, Codable, Hashable {
     let id: UUID
     let title: String

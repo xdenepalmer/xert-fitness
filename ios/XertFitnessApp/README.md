@@ -67,6 +67,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   with complete paging, search and status filters, direct contact, application
   details, internal notes, and up-to-100-record bulk transitions. Individual and
   bulk changes use the same immutable lead-audit RPCs as the desktop workspace.
+  A unified native booking inbox merges enquiry-form and member-credit requests,
+  with age/source/status filters, direct contact, class context, workload totals,
+  staff notes, guarded decisions, and bulk updates. Credit-backed transitions keep
+  the server's capacity, FIFO waitlist, and credit-return protections intact.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
