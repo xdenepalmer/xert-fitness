@@ -19,6 +19,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var events: [AdminEvent] = []
     @Published private(set) var eventGoalCounts: [UUID: Int] = [:]
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
+    @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -30,6 +31,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var savingEventID: UUID?
     @Published private(set) var deletingEventID: UUID?
     @Published private(set) var loadingEventRosterID: UUID?
+    @Published private(set) var savingCoachID: UUID?
+    @Published private(set) var deletingCoachID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -79,6 +82,7 @@ final class AdminStore: ObservableObject {
         async let productRequest = api.adminProducts(session: session)
         async let eventRequest = api.adminEvents(session: session)
         async let eventGoalsRequest = api.adminEventGoalReferences(session: session)
+        async let coachRequest = api.adminCoaches(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -114,6 +118,8 @@ final class AdminStore: ObservableObject {
             eventGoalCounts = Dictionary(grouping: try await eventGoalsRequest, by: \.event_id).mapValues(\.count)
             loadedSource = true
         } catch { failures.append("event training groups") }
+        do { coaches = try await coachRequest; loadedSource = true }
+        catch { failures.append("team directory") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -292,5 +298,39 @@ final class AdminStore: ObservableObject {
         async let goalsRequest = api.adminEventGoalReferences(session: session)
         events = try await eventRequest
         eventGoalCounts = Dictionary(grouping: try await goalsRequest, by: \.event_id).mapValues(\.count)
+    }
+
+    func saveCoach(session: AuthSession, coach: AdminCoach?, draft: AdminCoachDraft) async -> Bool {
+        guard savingCoachID == nil else { return false }
+        savingCoachID = coach?.id ?? UUID()
+        defer { savingCoachID = nil }
+        do {
+            if let coach {
+                try await api.adminUpdateCoach(session: session, coach: coach, draft: draft)
+            } else {
+                try await api.adminCreateCoach(session: session, draft: draft)
+            }
+            coaches = try await api.adminCoaches(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func deleteCoach(session: AuthSession, coach: AdminCoach) async -> Bool {
+        guard deletingCoachID == nil else { return false }
+        deletingCoachID = coach.id
+        defer { deletingCoachID = nil }
+        do {
+            try await api.adminDeleteCoach(session: session, coach: coach)
+            coaches = try await api.adminCoaches(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 }

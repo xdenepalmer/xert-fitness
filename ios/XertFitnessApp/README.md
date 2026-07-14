@@ -42,6 +42,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
   The event command centre provides native event creation, editing, visibility,
   deletion, Queensland date handling, member training-goal counts, and contactable
   training-group rosters from the same calendar shown on the website and member app.
+  Native team-directory controls create, edit, order, publish, hide, and remove
+  coaches and practitioners, including bios, experience, training goals, imagery,
+  and social links with the same optimistic locking used by the desktop manager.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

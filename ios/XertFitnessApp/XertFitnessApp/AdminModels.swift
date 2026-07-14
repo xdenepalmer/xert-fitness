@@ -346,3 +346,45 @@ struct AdminEventGoalMember: Identifiable, Codable, Hashable {
     var id: UUID { user_id }
     var displayName: String { full_name?.nilIfEmpty ?? email?.nilIfEmpty ?? "XERT member" }
 }
+
+struct AdminCoach: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    let role: String?
+    let bio: String?
+    let experience: String?
+    let currently_training_for: String?
+    let photo_url: String?
+    let social_url: String?
+    let category: String
+    let sort_order: Int
+    let published: Bool
+    let updated_at: String
+}
+
+struct AdminCoachDraft: Equatable {
+    static let categories = ["coach", "nutritionist", "massage", "physio"]
+    var name: String
+    var role: String
+    var bio: String
+    var experience: String
+    var currentlyTrainingFor: String
+    var photoURL: String
+    var socialURL: String
+    var category: String
+    var sortOrder: Int
+    var published: Bool
+
+    init(coach: AdminCoach? = nil) {
+        name = coach?.name ?? ""
+        role = coach?.role ?? ""
+        bio = coach?.bio ?? ""
+        experience = coach?.experience ?? ""
+        currentlyTrainingFor = coach?.currently_training_for ?? ""
+        photoURL = coach?.photo_url ?? ""
+        socialURL = coach?.social_url ?? ""
+        category = coach?.category ?? "coach"
+        sortOrder = coach?.sort_order ?? 0
+        published = coach?.published ?? true
+    }
+}

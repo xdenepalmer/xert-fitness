@@ -1061,6 +1061,31 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(draft.published)
     }
 
+    func testAdminCoachDraftPreservesPublicProfileValues() {
+        let coach = AdminCoach(
+            id: UUID(),
+            name: "Dene Palmer",
+            role: "Owner and Head Coach",
+            bio: "Purposeful coaching.",
+            experience: "10 years",
+            currently_training_for: "XERT Endurance Challenge",
+            photo_url: "https://example.com/dene.jpg",
+            social_url: "https://instagram.com/xert",
+            category: "coach",
+            sort_order: 1,
+            published: true,
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+
+        let draft = AdminCoachDraft(coach: coach)
+
+        XCTAssertEqual(draft.name, "Dene Palmer")
+        XCTAssertEqual(draft.role, "Owner and Head Coach")
+        XCTAssertEqual(draft.currentlyTrainingFor, "XERT Endurance Challenge")
+        XCTAssertEqual(draft.photoURL, "https://example.com/dene.jpg")
+        XCTAssertTrue(draft.published)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

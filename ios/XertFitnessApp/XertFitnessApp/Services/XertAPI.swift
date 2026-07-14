@@ -567,6 +567,105 @@ final class XertAPI {
         )
     }
 
+    func adminCoaches(session auth: AuthSession) async throws -> [AdminCoach] {
+        try await restRequest(
+            path: "/rest/v1/coaches",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminCreateCoach(session auth: AuthSession, draft: AdminCoachDraft) async throws {
+        let payload = try adminCoachPayload(draft)
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/coaches")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        try await perform(request)
+    }
+
+    func adminUpdateCoach(session auth: AuthSession, coach: AdminCoach, draft: AdminCoachDraft) async throws {
+        let payload = try adminCoachPayload(draft)
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/coaches",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(coach.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(coach.updated_at)")
+            ]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let rows: [AdminMutationID] = try await decode(request)
+        guard !rows.isEmpty else {
+            throw APIError(message: "This team profile changed elsewhere. Refresh and review the latest version.")
+        }
+    }
+
+    func adminDeleteCoach(session auth: AuthSession, coach: AdminCoach) async throws {
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/coaches",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(coach.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(coach.updated_at)")
+            ]
+        )
+        request.httpMethod = "DELETE"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        let rows: [AdminMutationID] = try await decode(request)
+        guard !rows.isEmpty else {
+            throw APIError(message: "This team profile changed elsewhere. Refresh before deleting it.")
+        }
+    }
+
+    private func adminCoachPayload(_ draft: AdminCoachDraft) throws -> AdminCoachPayload {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw APIError(message: "A team member name is required.") }
+        guard name.count <= 120 else { throw APIError(message: "Name must be 120 characters or fewer.") }
+        guard AdminCoachDraft.categories.contains(draft.category) else {
+            throw APIError(message: "Choose a valid team category.")
+        }
+        guard draft.sortOrder >= 0 else { throw APIError(message: "Sort order cannot be negative.") }
+        let photo = try validatedWebLink(draft.photoURL, label: "Photo URL", allowsRelative: true)
+        let social = try validatedWebLink(draft.socialURL, label: "Social link")
+        return AdminCoachPayload(
+            name: name,
+            role: draft.role.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            bio: draft.bio.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            experience: draft.experience.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            currently_training_for: draft.currentlyTrainingFor.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            photo_url: photo,
+            social_url: social,
+            category: draft.category,
+            sort_order: draft.sortOrder,
+            published: draft.published
+        )
+    }
+
+    private func validatedWebLink(_ value: String, label: String, allowsRelative: Bool = false) throws -> String? {
+        let link = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !link.isEmpty else { return nil }
+        if allowsRelative && link.hasPrefix("/") { return link }
+        guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
+              ["https", "http"].contains(scheme), url.host != nil else {
+            throw APIError(message: "\(label) must be a complete http:// or https:// address.")
+        }
+        return link
+    }
+
     private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
         try await restRequest(
             path: "/rest/v1/\(table)",
@@ -1058,6 +1157,18 @@ private struct AdminEventPayload: Encodable {
     let sort_order: Int
 }
 private struct AdminMutationID: Decodable { let id: UUID }
+private struct AdminCoachPayload: Encodable {
+    let name: String
+    let role: String?
+    let bio: String?
+    let experience: String?
+    let currently_training_for: String?
+    let photo_url: String?
+    let social_url: String?
+    let category: String
+    let sort_order: Int
+    let published: Bool
+}
 private struct ProfileUpdate: Encodable {
     let full_name: String?
     let phone: String?

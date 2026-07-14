@@ -191,6 +191,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Event calendar", detail: "Publish events and coordinate member training groups", icon: "trophy") {
                     AdminEventsView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Team directory", detail: "Manage coaches and practitioners shown publicly", icon: "person.crop.rectangle.stack") {
+                    AdminCoachesView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Platform controls", detail: "Control bookings, launch and public messaging", icon: "switch.2") {
                     AdminPlatformView(admin: admin, session: session)
                 }
@@ -1194,6 +1197,164 @@ private struct AdminEventRosterView: View {
     private func nonempty(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct AdminCoachesView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var showingCreate = false
+    @State private var pendingDelete: AdminCoach?
+
+    var body: some View {
+        List {
+            if admin.coaches.isEmpty { Text("No team profiles configured.").listRowBackground(Color.xertInk) }
+            ForEach(admin.coaches) { coach in
+                HStack(alignment: .top, spacing: 12) {
+                    AsyncImage(url: URL(string: coach.photo_url ?? "")) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "person.crop.square").foregroundStyle(Color.xertSteel)
+                    }
+                    .frame(width: 52, height: 60)
+                    .background(Color.xertNavy)
+                    .clipped()
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        NavigationLink {
+                            AdminCoachEditor(admin: admin, session: session, coach: coach)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(coach.name).font(.headline)
+                                Text([coach.role, coach.experience].compactMap { $0 }.joined(separator: " · "))
+                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                            }
+                        }
+                        HStack {
+                            Text(coach.category.uppercased()).foregroundStyle(Color.xertSteel)
+                            Text(coach.published ? "LIVE" : "HIDDEN")
+                                .foregroundStyle(coach.published ? Color.green : Color.xertPale.opacity(0.45))
+                            Spacer()
+                            Button(role: .destructive) { pendingDelete = coach } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(admin.deletingCoachID != nil)
+                            .accessibilityLabel("Delete \(coach.name)")
+                        }
+                        .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                }
+                .padding(.vertical, 5)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("XERT Team")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Add team member")
+            }
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack { AdminCoachEditor(admin: admin, session: session, coach: nil) }
+        }
+        .confirmationDialog(
+            "Delete team member?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { coach in
+            Button("Delete \(coach.name)", role: .destructive) {
+                Task {
+                    _ = await admin.deleteCoach(session: session, coach: coach)
+                    pendingDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { coach in
+            Text("\(coach.name) will be removed from the public team page. This cannot be undone.")
+        }
+    }
+}
+
+private struct AdminCoachEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let coach: AdminCoach?
+    private let baseline: AdminCoachDraft
+    @State private var draft: AdminCoachDraft
+
+    init(admin: AdminStore, session: AuthSession, coach: AdminCoach?) {
+        let initialDraft = AdminCoachDraft(coach: coach)
+        self.admin = admin
+        self.session = session
+        self.coach = coach
+        baseline = initialDraft
+        _draft = State(initialValue: initialDraft)
+    }
+
+    var body: some View {
+        Form {
+            Section("Profile") {
+                TextField("Name", text: $draft.name)
+                Picker("Category", selection: $draft.category) {
+                    Text("Coach").tag("coach")
+                    Text("Nutritionist").tag("nutritionist")
+                    Text("Massage therapist").tag("massage")
+                    Text("Physiotherapist").tag("physio")
+                }
+                TextField("Role", text: $draft.role)
+                TextField("Biography", text: $draft.bio, axis: .vertical).lineLimit(3...8)
+                TextField("Experience", text: $draft.experience)
+                TextField("Currently training for", text: $draft.currentlyTrainingFor)
+            }
+            Section("Media") {
+                TextField("Photo URL", text: $draft.photoURL)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                if let url = URL(string: draft.photoURL), !draft.photoURL.isEmpty {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: { ProgressView() }
+                    .frame(height: 180).frame(maxWidth: .infinity).clipped()
+                }
+                TextField("Social link", text: $draft.socialURL)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+            }
+            Section("Publishing") {
+                Toggle("Published on the website", isOn: $draft.published)
+                Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
+            }
+            Section {
+                Button {
+                    Task {
+                        if await admin.saveCoach(session: session, coach: coach, draft: draft) { dismiss() }
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if admin.savingCoachID != nil { ProgressView().tint(Color.xertNavy) }
+                        Text(coach == nil ? "Create profile" : "Save profile").fontWeight(.bold)
+                        Spacer()
+                    }
+                }
+                .disabled(admin.savingCoachID != nil || draft == baseline)
+                .listRowBackground(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(coach == nil ? "New Team Member" : "Edit Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if coach == nil {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
     }
 }
 
