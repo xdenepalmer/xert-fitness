@@ -7,6 +7,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var waitlist: [AdminWaitlistItem] = []
     @Published private(set) var followUps: [AdminFollowUp] = []
     @Published private(set) var members: [AdminMemberSummary] = []
+    @Published private(set) var memberNotes: [AdminMemberNote] = []
     @Published private(set) var orders: [OrderItem] = []
     @Published private(set) var settings: AdminPlatformSettings?
     @Published private(set) var ptRequests: [AdminPTRequest] = []
@@ -44,6 +45,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var cancellingClassID: UUID?
     @Published private(set) var savingScheduleWindowID: UUID?
     @Published private(set) var deletingScheduleWindowID: UUID?
+    @Published private(set) var loadingMemberDetailID: UUID?
+    @Published private(set) var servicingMemberID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -158,6 +161,55 @@ final class AdminStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func loadMemberDetail(session: AuthSession, memberID: UUID) async {
+        guard loadingMemberDetailID == nil else { return }
+        memberNotes = []
+        loadingMemberDetailID = memberID
+        defer { loadingMemberDetailID = nil }
+        do { memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    func addMemberNote(session: AuthSession, memberID: UUID, category: String, body: String) async -> Bool {
+        guard servicingMemberID == nil else { return false }
+        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        do {
+            _ = try await api.adminAddMemberNote(session: session, memberID: memberID, category: category, body: body)
+            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func archiveMemberNote(session: AuthSession, memberID: UUID, note: AdminMemberNote) async -> Bool {
+        guard servicingMemberID == nil else { return false }
+        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        do {
+            try await api.adminArchiveMemberNote(session: session, noteID: note.id, archived: note.archived_at == nil)
+            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func grantCredits(session: AuthSession, memberID: UUID, sessions: Int, validityDays: Int?, requestID: UUID, note: String) async -> Bool {
+        guard servicingMemberID == nil else { return false }
+        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        do {
+            _ = try await api.adminGrantCredits(session: session, memberID: memberID, sessions: sessions, validityDays: validityDays, requestID: requestID, note: note)
+            members = try await api.adminMembers(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func setMemberRole(session: AuthSession, memberID: UUID, role: String) async -> Bool {
+        guard servicingMemberID == nil else { return false }
+        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        do {
+            try await api.adminSetRole(session: session, memberID: memberID, role: role)
+            members = try await api.adminMembers(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
     }
 
     func promoteNext(session: AuthSession, classSessionID: UUID) async -> Bool {

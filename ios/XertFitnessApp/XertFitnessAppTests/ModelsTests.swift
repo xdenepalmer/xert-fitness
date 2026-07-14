@@ -1151,6 +1151,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(blackoutDraft.endTime, end)
     }
 
+    func testAdminMemberNoteRetainsAuditAndArchiveState() {
+        let authorID = UUID()
+        let archivedAt = Date()
+        let note = AdminMemberNote(
+            id: UUID(), user_id: UUID(), author_id: authorID, author_name: "Owner",
+            category: "billing", body: "Cash pack payment confirmed.", created_at: Date(),
+            archived_at: archivedAt, archived_by: authorID
+        )
+
+        XCTAssertEqual(note.category, "billing")
+        XCTAssertEqual(note.author_name, "Owner")
+        XCTAssertEqual(note.archived_at, archivedAt)
+        XCTAssertEqual(note.archived_by, authorID)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

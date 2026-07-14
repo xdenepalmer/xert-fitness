@@ -17,6 +17,18 @@ struct AdminMemberSummary: Identifiable, Codable, Hashable {
     var totalSpent: String { (Double(total_spent_cents) / 100).formatted(.currency(code: "AUD")) }
 }
 
+struct AdminMemberNote: Identifiable, Codable, Hashable {
+    let id: UUID
+    let user_id: UUID
+    let author_id: UUID?
+    let author_name: String?
+    let category: String
+    let body: String
+    let created_at: Date
+    let archived_at: Date?
+    let archived_by: UUID?
+}
+
 struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID

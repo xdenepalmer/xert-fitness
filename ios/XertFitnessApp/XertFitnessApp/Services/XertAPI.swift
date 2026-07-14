@@ -513,6 +513,61 @@ final class XertAPI {
         )
     }
 
+    func adminMemberNotes(session auth: AuthSession, memberID: UUID, includeArchived: Bool = true) async throws -> [AdminMemberNote] {
+        try await rpc(
+            path: "admin_list_member_notes",
+            body: AdminMemberNotesRequest(p_user_id: memberID, p_include_archived: includeArchived),
+            auth: auth
+        )
+    }
+
+    @discardableResult
+    func adminGrantCredits(
+        session auth: AuthSession,
+        memberID: UUID,
+        sessions: Int,
+        validityDays: Int?,
+        requestID: UUID,
+        note: String
+    ) async throws -> UUID {
+        let reason = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...100).contains(sessions) else { throw APIError(message: "Grant between 1 and 100 class credits.") }
+        if let validityDays, !(1...3_650).contains(validityDays) { throw APIError(message: "Validity must be between 1 and 3,650 days.") }
+        guard (3...500).contains(reason.count) else { throw APIError(message: "Add a grant reason between 3 and 500 characters.") }
+        return try await rpc(
+            path: "admin_grant_credits_v2",
+            body: AdminCreditGrantRequest(
+                p_user_id: memberID, p_sessions: sessions, p_validity_days: validityDays,
+                p_request_id: requestID, p_note: reason
+            ), auth: auth
+        )
+    }
+
+    func adminSetRole(session auth: AuthSession, memberID: UUID, role: String) async throws {
+        guard ["member", "admin"].contains(role) else { throw APIError(message: "Choose a valid account role.") }
+        do {
+            let _: EmptyResponse = try await rpc(
+                path: "admin_set_role",
+                body: AdminRoleRequest(p_user_id: memberID, p_role: role), auth: auth
+            )
+        } catch let error as APIError {
+            if error.message.localizedCaseInsensitiveContains("CANNOT_DEMOTE_LAST_ADMIN") {
+                throw APIError(message: "Promote another administrator before removing the final admin.")
+            }
+            if error.message.localizedCaseInsensitiveContains("CANNOT_DEMOTE_SELF") {
+                throw APIError(message: "Another administrator must remove your owner access.")
+            }
+            throw APIError(message: error.message, statusCode: error.statusCode)
+        }
+    }
+
+    func adminArchiveMemberNote(session auth: AuthSession, noteID: UUID, archived: Bool) async throws {
+        let _: EmptyResponse = try await rpc(
+            path: "admin_set_member_note_archived",
+            body: AdminNoteArchiveRequest(p_note_id: noteID, p_archived: archived), auth: auth
+        )
+    }
+
     func adminPlatformSettings(session auth: AuthSession) async throws -> AdminPlatformSettings? {
         let settings: [AdminPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
@@ -1339,6 +1394,19 @@ private struct AdminMemberPageRequest: Encodable {
     let p_offset: Int
     let p_user_id: UUID?
 }
+private struct AdminMemberNotesRequest: Encodable {
+    let p_user_id: UUID
+    let p_include_archived: Bool
+}
+private struct AdminCreditGrantRequest: Encodable {
+    let p_user_id: UUID
+    let p_sessions: Int
+    let p_validity_days: Int?
+    let p_request_id: UUID
+    let p_note: String
+}
+private struct AdminRoleRequest: Encodable { let p_user_id: UUID; let p_role: String }
+private struct AdminNoteArchiveRequest: Encodable { let p_note_id: UUID; let p_archived: Bool }
 private struct AdminMemberNoteRequest: Encodable {
     let p_user_id: UUID
     let p_category: String

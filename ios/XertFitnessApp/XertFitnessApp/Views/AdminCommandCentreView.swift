@@ -226,26 +226,30 @@ private struct AdminMembersView: View {
                     .listRowBackground(Color.xertInk)
             }
             ForEach(admin.members) { member in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(member.displayName).font(.headline).foregroundStyle(Color.xertOffWhite)
-                            Text(member.email ?? member.phone ?? "No contact details")
-                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.58))
+                NavigationLink {
+                    AdminMemberDetailView(admin: admin, session: session, member: member)
+                } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(member.displayName).font(.headline).foregroundStyle(Color.xertOffWhite)
+                                Text(member.email ?? member.phone ?? "No contact details")
+                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.58))
+                            }
+                            Spacer()
+                            Text(member.role.uppercased())
+                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
                         }
-                        Spacer()
-                        Text(member.role.uppercased())
-                            .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                        HStack(spacing: 18) {
+                            Label("\(member.credits_remaining) credits", systemImage: "ticket")
+                            Label("\(member.bookings_count) bookings", systemImage: "calendar")
+                            Text(member.totalSpent)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
                     }
-                    HStack(spacing: 18) {
-                        Label("\(member.credits_remaining) credits", systemImage: "ticket")
-                        Label("\(member.bookings_count) bookings", systemImage: "calendar")
-                        Text(member.totalSpent)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(Color.xertPale.opacity(0.68))
+                    .padding(.vertical, 6)
                 }
-                .padding(.vertical, 6)
                 .listRowBackground(Color.xertInk)
             }
         }
@@ -258,6 +262,159 @@ private struct AdminMembersView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button { query = ""; Task { await admin.searchMembers(session: session, query: "") } } label: {
                     Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+    }
+}
+
+private struct AdminMemberDetailView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let member: AdminMemberSummary
+    @State private var noteCategory = "general"
+    @State private var noteBody = ""
+    @State private var showingGrant = false
+    @State private var pendingRole: String?
+
+    private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(current.displayName).xertDisplay(25).foregroundStyle(Color.xertOffWhite)
+                    if let email = current.email, let url = URL(string: "mailto:\(email)") { Link(email, destination: url) }
+                    if let phone = current.phone,
+                       let encoded = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                       let url = URL(string: "tel:\(encoded)") { Link(phone, destination: url) }
+                    Text("Joined \(current.joined_at.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.5))
+                }
+                .listRowBackground(Color.xertInk)
+            }
+            Section("Account value") {
+                LabeledContent("Available credits", value: current.credits_remaining.formatted())
+                LabeledContent("Bookings", value: current.bookings_count.formatted())
+                LabeledContent("Paid orders", value: current.orders_count.formatted())
+                LabeledContent("Lifetime spend", value: current.totalSpent)
+                Button { showingGrant = true } label: { Label("Grant class credits", systemImage: "ticket") }
+                    .disabled(admin.servicingMemberID != nil)
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Access") {
+                LabeledContent("Current role", value: current.role.capitalized)
+                Button {
+                    pendingRole = current.role == "admin" ? "member" : "admin"
+                } label: {
+                    Label(current.role == "admin" ? "Remove administrator access" : "Promote to administrator",
+                          systemImage: current.role == "admin" ? "person.badge.minus" : "person.badge.key")
+                }
+                .foregroundStyle(current.role == "admin" ? Color.red : Color.xertSteel)
+                .disabled(admin.servicingMemberID != nil)
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Add staff note") {
+                Picker("Category", selection: $noteCategory) {
+                    Text("General").tag("general"); Text("Coaching").tag("coaching")
+                    Text("Follow-up").tag("follow_up"); Text("Billing").tag("billing")
+                }
+                TextField("Operational context", text: $noteBody, axis: .vertical).lineLimit(3...7)
+                Button("Add note") {
+                    Task {
+                        if await admin.addMemberNote(session: session, memberID: current.id, category: noteCategory, body: noteBody) {
+                            noteBody = ""
+                        }
+                    }
+                }
+                .disabled(admin.servicingMemberID != nil || noteBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Staff timeline") {
+                if admin.loadingMemberDetailID == current.id { ProgressView().tint(Color.xertSteel) }
+                if admin.memberNotes.isEmpty && admin.loadingMemberDetailID == nil { Text("No staff notes yet.") }
+                ForEach(admin.memberNotes) { note in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(note.category.replacingOccurrences(of: "_", with: " ").uppercased())
+                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                            Spacer()
+                            Button {
+                                Task { _ = await admin.archiveMemberNote(session: session, memberID: current.id, note: note) }
+                            } label: { Image(systemName: note.archived_at == nil ? "archivebox" : "arrow.uturn.backward.circle") }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(note.archived_at == nil ? "Archive note" : "Restore note")
+                        }
+                        Text(note.body).font(.subheadline)
+                        Text("\(note.author_name ?? "Former admin") · \(note.created_at.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.45))
+                    }
+                    .opacity(note.archived_at == nil ? 1 : 0.5)
+                    .padding(.vertical, 4)
+                }
+            }
+            .listRowBackground(Color.xertInk)
+        }
+        .scrollContentBackground(.hidden).background(Color.xertNavy)
+        .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
+        .task { await admin.loadMemberDetail(session: session, memberID: current.id) }
+        .sheet(isPresented: $showingGrant) {
+            AdminCreditGrantView(admin: admin, session: session, member: current)
+        }
+        .confirmationDialog(
+            pendingRole == "admin" ? "Grant administrator access?" : "Remove administrator access?",
+            isPresented: Binding(get: { pendingRole != nil }, set: { if !$0 { pendingRole = nil } }),
+            presenting: pendingRole
+        ) { role in
+            Button(role == "admin" ? "Promote to administrator" : "Remove administrator", role: role == "member" ? .destructive : nil) {
+                Task { _ = await admin.setMemberRole(session: session, memberID: current.id, role: role); pendingRole = nil }
+            }
+            Button("Cancel", role: .cancel) { pendingRole = nil }
+        } message: { role in
+            Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
+        }
+    }
+}
+
+private struct AdminCreditGrantView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let member: AdminMemberSummary
+    @State private var sessions = 1
+    @State private var validityDays = 28
+    @State private var noExpiry = false
+    @State private var reason = ""
+    @State private var requestID = UUID()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Credit grant") {
+                    Stepper("Credits: \(sessions)", value: $sessions, in: 1...100)
+                    Toggle("No expiry", isOn: $noExpiry)
+                    if !noExpiry { Stepper("Valid for \(validityDays) days", value: $validityDays, in: 1...3_650) }
+                    TextField("Reason", text: $reason, axis: .vertical).lineLimit(3...6)
+                    Text("Manual grants are permanently audited and idempotent.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Grant to \(member.displayName)").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Grant") {
+                        let id = requestID
+                        Task {
+                            if await admin.grantCredits(session: session, memberID: member.id, sessions: sessions,
+                                                        validityDays: noExpiry ? nil : validityDays, requestID: id, note: reason) {
+                                requestID = UUID(); dismiss()
+                            }
+                        }
+                    }
+                    .disabled(admin.servicingMemberID != nil || reason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
                 }
             }
         }

@@ -99,6 +99,14 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /BLACKOUT_OVERLAPS_PUBLISHED_CLASS/);
   assert.match(adminStore, /func saveAvailability/);
   assert.match(adminStore, /func saveBlackout/);
+  assert.match(view, /AdminMemberDetailView/);
+  assert.match(view, /AdminCreditGrantView/);
+  assert.match(api, /path: "admin_grant_credits_v2"/);
+  assert.match(api, /path: "admin_set_role"/);
+  assert.match(api, /path: "admin_list_member_notes"/);
+  assert.match(api, /path: "admin_set_member_note_archived"/);
+  assert.match(adminStore, /func grantCredits/);
+  assert.match(adminStore, /func setMemberRole/);
   for (const table of [
     'admin_role_changes', 'admin_credit_grants', 'admin_request_status_changes',
     'member_announcement_admin_events', 'admin_lead_changes', 'admin_schedule_changes',

@@ -56,6 +56,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
   Native availability and blackout controls create, edit and remove private
   planning windows with optimistic locking. Blackout conflict guards prevent
   owners from silently overlapping published classes, matching desktop safety.
+  Native member records expose account value, direct contact, audited idempotent
+  credit grants, protected admin-role changes, and an archiveable staff-note
+  timeline. Final-admin and self-demotion safeguards remain server enforced.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
