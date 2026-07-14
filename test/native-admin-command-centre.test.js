@@ -55,6 +55,11 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
   assert.match(view, /AdminAuditView/);
+  assert.match(view, /AdminProductsView/);
+  assert.match(view, /AdminProductEditor/);
+  assert.match(api, /path: "admin_update_product"/);
+  assert.match(api, /p_expected_updated_at: product\.updated_at/);
+  assert.match(adminStore, /func saveProduct/);
   for (const table of [
     'admin_role_changes', 'admin_credit_grants', 'admin_request_status_changes',
     'member_announcement_admin_events', 'admin_lead_changes', 'admin_schedule_changes',

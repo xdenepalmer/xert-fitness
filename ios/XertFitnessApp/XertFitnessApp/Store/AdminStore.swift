@@ -15,6 +15,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var commerceHealth: AdminCommerceHealth?
     @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var auditEntries: [AdminAuditEntry] = []
+    @Published private(set) var products: [AdminProduct] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -22,6 +23,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var isPublishingAnnouncement = false
+    @Published private(set) var savingProductID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -68,6 +70,7 @@ final class AdminStore: ObservableObject {
         async let commerceRequest = api.adminCommerceHealth(session: session)
         async let pushRequest = api.adminPushHealth(session: session)
         async let auditRequest = api.adminAudit(session: session)
+        async let productRequest = api.adminProducts(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -95,6 +98,8 @@ final class AdminStore: ObservableObject {
         catch { failures.append("push health") }
         do { auditEntries = try await auditRequest; loadedSource = true }
         catch { failures.append("admin audit") }
+        do { products = try await productRequest; loadedSource = true }
+        catch { failures.append("session packs") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -199,6 +204,21 @@ final class AdminStore: ObservableObject {
         do {
             try await api.adminPublishAnnouncement(session: session, title: title, body: body, tone: tone)
             announcements = try await api.adminAnnouncements(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func saveProduct(session: AuthSession, product: AdminProduct, draft: AdminProductDraft) async -> Bool {
+        guard savingProductID == nil else { return false }
+        savingProductID = product.id
+        defer { savingProductID = nil }
+        do {
+            try await api.adminUpdateProduct(session: session, product: product, draft: draft)
+            products = try await api.adminProducts(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {

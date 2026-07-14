@@ -218,3 +218,47 @@ struct AdminAuditEntry: Identifiable, Hashable {
     let detail: String
     let createdAt: Date
 }
+
+struct AdminProduct: Identifiable, Codable, Hashable {
+    let id: UUID
+    let slug: String
+    let name: String
+    let description: String?
+    let price_cents: Int
+    let currency: String
+    let sessions_count: Int
+    let validity_days: Int
+    let stripe_price_id: String?
+    let featured: Bool
+    let active: Bool
+    let sort_order: Int
+    let updated_at: String
+
+    var displayPrice: String { (Double(price_cents) / 100).formatted(.currency(code: currency.uppercased())) }
+}
+
+struct AdminProductDraft: Equatable {
+    var name: String
+    var description: String
+    var price: String
+    var currency: String
+    var sessions: Int
+    var validityDays: Int
+    var stripePriceID: String
+    var featured: Bool
+    var active: Bool
+    var sortOrder: Int
+
+    init(product: AdminProduct) {
+        name = product.name
+        description = product.description ?? ""
+        price = String(format: "%.2f", Double(product.price_cents) / 100)
+        currency = product.currency.uppercased()
+        sessions = product.sessions_count
+        validityDays = product.validity_days
+        stripePriceID = product.stripe_price_id ?? ""
+        featured = product.featured
+        active = product.active
+        sortOrder = product.sort_order
+    }
+}

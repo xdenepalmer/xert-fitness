@@ -401,6 +401,62 @@ final class XertAPI {
             .map { $0 }
     }
 
+    func adminProducts(session auth: AuthSession) async throws -> [AdminProduct] {
+        try await restRequest(
+            path: "/rest/v1/products",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,slug,name,description,price_cents,currency,sessions_count,validity_days,stripe_price_id,featured,active,sort_order,updated_at"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminUpdateProduct(session auth: AuthSession, product: AdminProduct, draft: AdminProductDraft) async throws {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw APIError(message: "A pack name is required.") }
+        guard let amount = Decimal(string: draft.price), amount > 0 else {
+            throw APIError(message: "Enter a valid positive pack price.")
+        }
+        let cents = NSDecimalNumber(decimal: amount * 100).intValue
+        guard cents > 0, draft.sessions > 0, draft.validityDays > 0, draft.sortOrder >= 0 else {
+            throw APIError(message: "Sessions, validity and display order must be valid whole numbers.")
+        }
+        let currency = draft.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard currency.range(of: #"^[a-z]{3}$"#, options: .regularExpression) != nil else {
+            throw APIError(message: "Currency must be a three-letter code such as AUD.")
+        }
+        let stripeID = draft.stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stripeID.isEmpty, stripeID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) == nil {
+            throw APIError(message: "Stripe Price ID must begin with price_.")
+        }
+        if let currentStripe = product.stripe_price_id, currentStripe == stripeID,
+           (product.price_cents != cents || product.currency.lowercased() != currency) {
+            throw APIError(message: "Replace or clear the Stripe Price ID before changing this pack's price or currency.")
+        }
+
+        let _: UUID = try await rpc(
+            path: "admin_update_product",
+            body: AdminProductUpdateRequest(
+                p_product_id: product.id,
+                p_product: AdminProductPayload(
+                    name: name,
+                    description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                    price_cents: cents,
+                    currency: currency,
+                    sessions_count: draft.sessions,
+                    validity_days: draft.validityDays,
+                    stripe_price_id: stripeID.nilIfEmpty,
+                    featured: draft.featured,
+                    active: draft.active,
+                    sort_order: draft.sortOrder
+                ),
+                p_expected_updated_at: product.updated_at
+            ),
+            auth: auth
+        )
+    }
+
     private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
         try await restRequest(
             path: "/rest/v1/\(table)",
@@ -862,6 +918,23 @@ private struct AdminResourceAuditRow: Decodable {
 private struct AdminBookingAuditRow: Decodable {
     let id: UUID; let action: String; let class_label: String?; let created_at: Date
     var entry: AdminAuditEntry { .init(id: "booking:\(id)", category: "Bookings", title: action.replacingOccurrences(of: "_", with: " ").capitalized, detail: class_label ?? "Class booking", createdAt: created_at) }
+}
+private struct AdminProductPayload: Encodable {
+    let name: String
+    let description: String?
+    let price_cents: Int
+    let currency: String
+    let sessions_count: Int
+    let validity_days: Int
+    let stripe_price_id: String?
+    let featured: Bool
+    let active: Bool
+    let sort_order: Int
+}
+private struct AdminProductUpdateRequest: Encodable {
+    let p_product_id: UUID
+    let p_product: AdminProductPayload
+    let p_expected_updated_at: String
 }
 private struct ProfileUpdate: Encodable {
     let full_name: String?

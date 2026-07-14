@@ -1007,6 +1007,35 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testAdminProductDraftPreservesEditableCatalogueValues() {
+        let product = AdminProduct(
+            id: UUID(),
+            slug: "ten-session-pack",
+            name: "Ten Session Pack",
+            description: "Train with purpose.",
+            price_cents: 29900,
+            currency: "aud",
+            sessions_count: 10,
+            validity_days: 90,
+            stripe_price_id: "price_xert",
+            featured: true,
+            active: true,
+            sort_order: 2,
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+
+        let draft = AdminProductDraft(product: product)
+
+        XCTAssertEqual(draft.name, "Ten Session Pack")
+        XCTAssertEqual(draft.price, "299.00")
+        XCTAssertEqual(draft.currency, "AUD")
+        XCTAssertEqual(draft.sessions, 10)
+        XCTAssertEqual(draft.validityDays, 90)
+        XCTAssertEqual(draft.stripePriceID, "price_xert")
+        XCTAssertTrue(draft.featured)
+        XCTAssertTrue(draft.active)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

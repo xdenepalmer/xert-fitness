@@ -185,6 +185,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Finance", detail: "Track pack sales and revenue", icon: "chart.line.uptrend.xyaxis") {
                     AdminFinanceView(admin: admin)
                 }
+                AdminDestinationRow(title: "Session packs", detail: "Edit pricing, credits, validity and sale status", icon: "ticket") {
+                    AdminProductsView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Platform controls", detail: "Control bookings, launch and public messaging", icon: "switch.2") {
                     AdminPlatformView(admin: admin, session: session)
                 }
@@ -862,6 +865,110 @@ private struct AdminAuditView: View {
         case "Schedule": return "calendar"
         default: return "clock.arrow.circlepath"
         }
+    }
+}
+
+private struct AdminProductsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+
+    var body: some View {
+        List {
+            if admin.products.isEmpty { Text("No session packs configured.").listRowBackground(Color.xertInk) }
+            ForEach(admin.products) { product in
+                NavigationLink {
+                    AdminProductEditor(admin: admin, session: session, product: product)
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(product.name).font(.headline)
+                                if product.featured {
+                                    Text("FEATURED").font(.caption2.weight(.bold)).foregroundStyle(.orange)
+                                }
+                            }
+                            Text("\(product.sessions_count) sessions · \(product.validity_days) days · \(product.displayPrice)")
+                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                        }
+                        Spacer()
+                        Text(product.active ? "LIVE" : "OFF")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(product.active ? Color.green : Color.xertPale.opacity(0.4))
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .padding(.vertical, 6)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Session Packs")
+    }
+}
+
+private struct AdminProductEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let product: AdminProduct
+    @State private var draft: AdminProductDraft
+
+    init(admin: AdminStore, session: AuthSession, product: AdminProduct) {
+        self.admin = admin
+        self.session = session
+        self.product = product
+        _draft = State(initialValue: AdminProductDraft(product: product))
+    }
+
+    var body: some View {
+        Form {
+            Section("Pack details") {
+                TextField("Name", text: $draft.name)
+                TextField("Description", text: $draft.description, axis: .vertical).lineLimit(2...5)
+                TextField("Price", text: $draft.price).keyboardType(.decimalPad)
+                TextField("Currency", text: $draft.currency)
+                    .textInputAutocapitalization(.characters).autocorrectionDisabled()
+            }
+            Section("Credits") {
+                Stepper("Sessions: \(draft.sessions)", value: $draft.sessions, in: 1...1_000)
+                Stepper("Validity: \(draft.validityDays) days", value: $draft.validityDays, in: 1...3_650)
+                Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
+            }
+            Section("Sale state") {
+                Toggle("Active and purchasable", isOn: $draft.active)
+                Toggle("Featured pack", isOn: $draft.featured)
+                TextField("Stripe Price ID (optional)", text: $draft.stripePriceID)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                if product.stripe_price_id != nil {
+                    Text("Replace or clear the Stripe Price ID before changing price or currency.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
+            Section {
+                Button {
+                    Task {
+                        if await admin.saveProduct(session: session, product: product, draft: draft) {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if admin.savingProductID == product.id { ProgressView().tint(Color.xertNavy) }
+                        Text("Save session pack").fontWeight(.bold)
+                        Spacer()
+                    }
+                }
+                .disabled(admin.savingProductID != nil || draft == AdminProductDraft(product: product))
+                .listRowBackground(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(product.slug)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

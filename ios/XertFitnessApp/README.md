@@ -35,6 +35,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   migration contract alongside authenticated Stripe and APNs readiness.
   The native audit ledger merges recent access, credit, request, notice, lead,
   schedule, content, and booking changes into one searchable owner timeline.
+  Owners can also edit live session-pack names, descriptions, prices, credit
+  counts, validity, ordering, sale state, featured state, and Stripe Price IDs.
+  Updates use the same optimistic-locked Supabase RPC and catalogue as the web
+  command centre, so native changes flow directly into member checkout.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
