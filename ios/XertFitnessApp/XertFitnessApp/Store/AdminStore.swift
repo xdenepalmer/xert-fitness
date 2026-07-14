@@ -16,6 +16,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var auditEntries: [AdminAuditEntry] = []
     @Published private(set) var products: [AdminProduct] = []
+    @Published private(set) var events: [AdminEvent] = []
+    @Published private(set) var eventGoalCounts: [UUID: Int] = [:]
+    @Published private(set) var eventRoster: [AdminEventGoalMember] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -24,6 +27,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var isPublishingAnnouncement = false
     @Published private(set) var savingProductID: UUID?
+    @Published private(set) var savingEventID: UUID?
+    @Published private(set) var deletingEventID: UUID?
+    @Published private(set) var loadingEventRosterID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -71,6 +77,8 @@ final class AdminStore: ObservableObject {
         async let pushRequest = api.adminPushHealth(session: session)
         async let auditRequest = api.adminAudit(session: session)
         async let productRequest = api.adminProducts(session: session)
+        async let eventRequest = api.adminEvents(session: session)
+        async let eventGoalsRequest = api.adminEventGoalReferences(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -100,6 +108,12 @@ final class AdminStore: ObservableObject {
         catch { failures.append("admin audit") }
         do { products = try await productRequest; loadedSource = true }
         catch { failures.append("session packs") }
+        do { events = try await eventRequest; loadedSource = true }
+        catch { failures.append("event calendar") }
+        do {
+            eventGoalCounts = Dictionary(grouping: try await eventGoalsRequest, by: \.event_id).mapValues(\.count)
+            loadedSource = true
+        } catch { failures.append("event training groups") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -225,5 +239,58 @@ final class AdminStore: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    func saveEvent(session: AuthSession, event: AdminEvent?, draft: AdminEventDraft) async -> Bool {
+        guard savingEventID == nil else { return false }
+        savingEventID = event?.id ?? UUID()
+        defer { savingEventID = nil }
+        do {
+            if let event {
+                try await api.adminUpdateEvent(session: session, event: event, draft: draft)
+            } else {
+                try await api.adminCreateEvent(session: session, draft: draft)
+            }
+            try await reloadEvents(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func deleteEvent(session: AuthSession, event: AdminEvent) async -> Bool {
+        guard deletingEventID == nil else { return false }
+        deletingEventID = event.id
+        defer { deletingEventID = nil }
+        do {
+            try await api.adminDeleteEvent(session: session, event: event)
+            try await reloadEvents(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadEventRoster(session: AuthSession, eventID: UUID) async {
+        guard loadingEventRosterID == nil else { return }
+        eventRoster = []
+        loadingEventRosterID = eventID
+        defer { loadingEventRosterID = nil }
+        do {
+            eventRoster = try await api.adminEventGoalMembers(session: session, eventID: eventID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reloadEvents(session: AuthSession) async throws {
+        async let eventRequest = api.adminEvents(session: session)
+        async let goalsRequest = api.adminEventGoalReferences(session: session)
+        events = try await eventRequest
+        eventGoalCounts = Dictionary(grouping: try await goalsRequest, by: \.event_id).mapValues(\.count)
     }
 }

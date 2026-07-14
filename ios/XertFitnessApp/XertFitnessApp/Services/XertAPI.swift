@@ -457,6 +457,116 @@ final class XertAPI {
         )
     }
 
+    func adminEvents(session auth: AuthSession) async throws -> [AdminEvent] {
+        try await restRequest(
+            path: "/rest/v1/events",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,name,category,event_date,end_date,location,region,url,published,sort_order,updated_at"),
+                URLQueryItem(name: "order", value: "event_date.asc.nullslast,sort_order.asc")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminEventGoalReferences(session auth: AuthSession) async throws -> [AdminEventGoalReference] {
+        try await restRequest(
+            path: "/rest/v1/member_event_goals",
+            queryItems: [URLQueryItem(name: "select", value: "event_id")],
+            auth: auth
+        )
+    }
+
+    func adminEventGoalMembers(session auth: AuthSession, eventID: UUID) async throws -> [AdminEventGoalMember] {
+        try await rpc(
+            path: "admin_event_goal_members",
+            body: ["p_event_id": eventID.uuidString],
+            auth: auth
+        )
+    }
+
+    func adminCreateEvent(session auth: AuthSession, draft: AdminEventDraft) async throws {
+        let payload = try adminEventPayload(draft)
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/events")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        try await perform(request)
+    }
+
+    func adminUpdateEvent(session auth: AuthSession, event: AdminEvent, draft: AdminEventDraft) async throws {
+        let payload = try adminEventPayload(draft)
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/events",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(event.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(event.updated_at)")
+            ]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let rows: [AdminMutationID] = try await decode(request)
+        guard !rows.isEmpty else {
+            throw APIError(message: "This event changed elsewhere. Refresh the calendar and review the latest version.")
+        }
+    }
+
+    func adminDeleteEvent(session auth: AuthSession, event: AdminEvent) async throws {
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/events",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(event.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(event.updated_at)")
+            ]
+        )
+        request.httpMethod = "DELETE"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        let rows: [AdminMutationID] = try await decode(request)
+        guard !rows.isEmpty else {
+            throw APIError(message: "This event changed elsewhere. Refresh the calendar before deleting it.")
+        }
+    }
+
+    private func adminEventPayload(_ draft: AdminEventDraft) throws -> AdminEventPayload {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw APIError(message: "An event name is required.") }
+        guard draft.sortOrder >= 0 else { throw APIError(message: "Sort order cannot be negative.") }
+        if draft.hasEndDate && !draft.hasStartDate {
+            throw APIError(message: "Add a start date before adding an end date.")
+        }
+        if draft.hasStartDate && draft.hasEndDate && draft.endDate < draft.startDate {
+            throw APIError(message: "The end date cannot be before the start date.")
+        }
+        let link = draft.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !link.isEmpty {
+            guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
+                  ["https", "http"].contains(scheme), url.host != nil else {
+                throw APIError(message: "Enter a complete event website beginning with https://.")
+            }
+        }
+        return AdminEventPayload(
+            name: name,
+            category: draft.category,
+            event_date: draft.startDateValue,
+            end_date: draft.endDateValue,
+            location: draft.location.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            region: draft.region.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            url: link.nilIfEmpty,
+            published: draft.published,
+            sort_order: draft.sortOrder
+        )
+    }
+
     private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
         try await restRequest(
             path: "/rest/v1/\(table)",
@@ -936,6 +1046,18 @@ private struct AdminProductUpdateRequest: Encodable {
     let p_product: AdminProductPayload
     let p_expected_updated_at: String
 }
+private struct AdminEventPayload: Encodable {
+    let name: String
+    let category: String
+    let event_date: String?
+    let end_date: String?
+    let location: String?
+    let region: String?
+    let url: String?
+    let published: Bool
+    let sort_order: Int
+}
+private struct AdminMutationID: Decodable { let id: UUID }
 private struct ProfileUpdate: Encodable {
     let full_name: String?
     let phone: String?

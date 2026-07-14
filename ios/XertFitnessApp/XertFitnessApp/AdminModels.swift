@@ -262,3 +262,87 @@ struct AdminProductDraft: Equatable {
         sortOrder = product.sort_order
     }
 }
+
+struct AdminEvent: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    let category: String?
+    let event_date: String?
+    let end_date: String?
+    let location: String?
+    let region: String?
+    let url: String?
+    let published: Bool
+    let sort_order: Int
+    let updated_at: String
+}
+
+struct AdminEventDraft: Equatable {
+    static let categories = [
+        "run", "marathon", "triathlon", "ironman", "ultra", "trail", "cycling",
+        "fitness", "hyrox", "crossfit", "functional", "swim", "spartan",
+        "adventure", "games", "community", "sport", "xert", "other"
+    ]
+
+    var name: String
+    var category: String
+    var hasStartDate: Bool
+    var startDate: Date
+    var hasEndDate: Bool
+    var endDate: Date
+    var location: String
+    var region: String
+    var url: String
+    var published: Bool
+    var sortOrder: Int
+
+    init(event: AdminEvent? = nil, now: Date = Date()) {
+        let fallback = Self.calendar.startOfDay(for: now)
+        let parsedStart = event?.event_date.flatMap { Self.dateFormatter.date(from: $0) }
+        let parsedEnd = event?.end_date.flatMap { Self.dateFormatter.date(from: $0) }
+        name = event?.name ?? ""
+        category = event?.category ?? "run"
+        hasStartDate = parsedStart != nil
+        startDate = parsedStart ?? fallback
+        hasEndDate = parsedEnd != nil
+        endDate = parsedEnd ?? parsedStart ?? fallback
+        location = event?.location ?? ""
+        region = event?.region ?? "South East Queensland"
+        url = event?.url ?? ""
+        published = event?.published ?? true
+        sortOrder = event?.sort_order ?? 0
+    }
+
+    var startDateValue: String? { hasStartDate ? Self.dateFormatter.string(from: startDate) : nil }
+    var endDateValue: String? { hasEndDate ? Self.dateFormatter.string(from: endDate) : nil }
+
+    private static let calendar: Calendar = {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
+        return value
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
+struct AdminEventGoalReference: Codable {
+    let event_id: UUID
+}
+
+struct AdminEventGoalMember: Identifiable, Codable, Hashable {
+    let user_id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let selected_at: Date
+
+    var id: UUID { user_id }
+    var displayName: String { full_name?.nilIfEmpty ?? email?.nilIfEmpty ?? "XERT member" }
+}

@@ -188,6 +188,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Session packs", detail: "Edit pricing, credits, validity and sale status", icon: "ticket") {
                     AdminProductsView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Event calendar", detail: "Publish events and coordinate member training groups", icon: "trophy") {
+                    AdminEventsView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Platform controls", detail: "Control bookings, launch and public messaging", icon: "switch.2") {
                     AdminPlatformView(admin: admin, session: session)
                 }
@@ -969,6 +972,228 @@ private struct AdminProductEditor: View {
         .background(Color.xertNavy)
         .navigationTitle(product.slug)
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct AdminEventsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var query = ""
+    @State private var showingCreate = false
+    @State private var rosterEvent: AdminEvent?
+    @State private var pendingDelete: AdminEvent?
+
+    private var rows: [AdminEvent] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !term.isEmpty else { return admin.events }
+        return admin.events.filter {
+            "\($0.name) \($0.category ?? "") \($0.location ?? "")".lowercased().contains(term)
+        }
+    }
+
+    var body: some View {
+        List {
+            if rows.isEmpty { Text("No matching calendar events.").listRowBackground(Color.xertInk) }
+            ForEach(rows) { event in
+                VStack(alignment: .leading, spacing: 10) {
+                    NavigationLink {
+                        AdminEventEditor(admin: admin, session: session, event: event)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(event.name).font(.headline)
+                                Spacer()
+                                Text(event.published ? "LIVE" : "HIDDEN")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(event.published ? Color.green : Color.xertPale.opacity(0.45))
+                            }
+                            Text([event.event_date ?? "Date TBC", event.location].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                        }
+                        .foregroundStyle(Color.xertOffWhite)
+                    }
+                    HStack(spacing: 18) {
+                        Button {
+                            rosterEvent = event
+                            Task { await admin.loadEventRoster(session: session, eventID: event.id) }
+                        } label: {
+                            Label("\(admin.eventGoalCounts[event.id, default: 0]) training", systemImage: "person.3")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.xertSteel)
+
+                        Spacer()
+                        Button(role: .destructive) { pendingDelete = event } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(admin.deletingEventID != nil)
+                        .accessibilityLabel("Delete \(event.name)")
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+                .padding(.vertical, 6)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Event Calendar")
+        .searchable(text: $query, prompt: "Search events")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Add event")
+            }
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack {
+                AdminEventEditor(admin: admin, session: session, event: nil)
+            }
+        }
+        .sheet(item: $rosterEvent) { event in
+            AdminEventRosterView(admin: admin, event: event)
+        }
+        .confirmationDialog(
+            "Delete calendar event?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { event in
+            Button("Delete \(event.name)", role: .destructive) {
+                Task {
+                    _ = await admin.deleteEvent(session: session, event: event)
+                    pendingDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { event in
+            let count = admin.eventGoalCounts[event.id, default: 0]
+            Text(count > 0
+                 ? "This also removes \(count) member training goal\(count == 1 ? "" : "s"). This cannot be undone."
+                 : "This removes the event from the shared web and iOS calendar. This cannot be undone.")
+        }
+    }
+}
+
+private struct AdminEventEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let event: AdminEvent?
+    private let baseline: AdminEventDraft
+    @State private var draft: AdminEventDraft
+
+    init(admin: AdminStore, session: AuthSession, event: AdminEvent?) {
+        let initialDraft = AdminEventDraft(event: event)
+        self.admin = admin
+        self.session = session
+        self.event = event
+        baseline = initialDraft
+        _draft = State(initialValue: initialDraft)
+    }
+
+    var body: some View {
+        Form {
+            Section("Event") {
+                TextField("Event name", text: $draft.name)
+                Picker("Category", selection: $draft.category) {
+                    ForEach(AdminEventDraft.categories, id: \.self) { Text($0.capitalized).tag($0) }
+                }
+                Toggle("Start date confirmed", isOn: $draft.hasStartDate)
+                if draft.hasStartDate {
+                    DatePicker("Start date", selection: $draft.startDate, displayedComponents: .date)
+                }
+                Toggle("Multi-day event", isOn: $draft.hasEndDate)
+                    .disabled(!draft.hasStartDate)
+                if draft.hasStartDate && draft.hasEndDate {
+                    DatePicker("End date", selection: $draft.endDate, in: draft.startDate..., displayedComponents: .date)
+                }
+            }
+            Section("Location and link") {
+                TextField("Location", text: $draft.location)
+                TextField("Region", text: $draft.region)
+                TextField("Official website", text: $draft.url)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+            }
+            Section("Publishing") {
+                Toggle("Published on web and iOS", isOn: $draft.published)
+                Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
+            }
+            Section {
+                Button {
+                    Task {
+                        if await admin.saveEvent(session: session, event: event, draft: draft) { dismiss() }
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if admin.savingEventID != nil { ProgressView().tint(Color.xertNavy) }
+                        Text(event == nil ? "Create event" : "Save event").fontWeight(.bold)
+                        Spacer()
+                    }
+                }
+                .disabled(admin.savingEventID != nil || draft == baseline)
+                .listRowBackground(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(event == nil ? "New Event" : "Edit Event")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if event == nil {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+        .onChange(of: draft.hasStartDate) { enabled in
+            if !enabled { draft.hasEndDate = false }
+        }
+    }
+}
+
+private struct AdminEventRosterView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let event: AdminEvent
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if admin.loadingEventRosterID == event.id {
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                } else if admin.eventRoster.isEmpty {
+                    Text("No members are training toward this event yet.")
+                } else {
+                    ForEach(admin.eventRoster) { member in
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(member.displayName).font(.headline)
+                            if let email = nonempty(member.email) {
+                                Link(email, destination: URL(string: "mailto:\(email)")!)
+                            }
+                            if let phone = nonempty(member.phone),
+                               let number = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                               let url = URL(string: "tel:\(number)") {
+                                Link(phone, destination: url)
+                            }
+                            Text("Joined \(member.selected_at.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle(event.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    private func nonempty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

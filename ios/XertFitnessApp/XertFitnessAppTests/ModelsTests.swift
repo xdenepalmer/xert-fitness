@@ -1036,6 +1036,31 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(draft.active)
     }
 
+    func testAdminEventDraftUsesQueenslandCalendarDates() {
+        let event = AdminEvent(
+            id: UUID(),
+            name: "Gold Coast Marathon",
+            category: "marathon",
+            event_date: "2026-07-04",
+            end_date: "2026-07-05",
+            location: "Gold Coast",
+            region: "South East Queensland",
+            url: "https://example.com/event",
+            published: true,
+            sort_order: 1,
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+
+        let draft = AdminEventDraft(event: event)
+
+        XCTAssertTrue(draft.hasStartDate)
+        XCTAssertTrue(draft.hasEndDate)
+        XCTAssertEqual(draft.startDateValue, "2026-07-04")
+        XCTAssertEqual(draft.endDateValue, "2026-07-05")
+        XCTAssertEqual(draft.category, "marathon")
+        XCTAssertTrue(draft.published)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }
