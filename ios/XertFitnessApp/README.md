@@ -29,7 +29,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Admin-only native Command Centre tab with owner business metrics, today's
   class desk, FIFO waitlist promotion, searchable member directory, retention
   follow-up logging, finance visibility, and optimistic-locked live platform
-  controls. Supabase role checks and every admin RPC remain enforced server-side.
+  controls, native PT request management, and immediate member notice publishing
+  to web, in-app inboxes, and APNs. Supabase role checks and every admin RPC
+  remain enforced server-side.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

@@ -91,7 +91,7 @@ struct AdminCommandCentreView: View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Needs attention")
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                AdminMetricTile(title: "Requests", value: admin.requestedPlaces, icon: "tray.full")
+                AdminMetricTile(title: "Requests", value: admin.requestedPlaces + admin.pendingPTRequests, icon: "tray.full")
                 AdminMetricTile(title: "Waitlisted", value: admin.waitingMembers, icon: "person.2.badge.clock")
                 AdminMetricTile(title: "Follow-ups", value: admin.followUps.count, icon: "phone.arrow.up.right")
                 AdminMetricTile(title: "Roll calls", value: admin.attendanceDue, icon: "checklist")
@@ -175,6 +175,12 @@ struct AdminCommandCentreView: View {
                 }
                 AdminDestinationRow(title: "Retention", detail: "Contact members before they disengage", icon: "arrow.triangle.2.circlepath") {
                     AdminRetentionView(admin: admin, session: session)
+                }
+                AdminDestinationRow(title: "PT requests", detail: "Approve, reschedule and complete private training", icon: "figure.strengthtraining.traditional") {
+                    AdminPTRequestsView(admin: admin, session: session)
+                }
+                AdminDestinationRow(title: "Member notices", detail: "\(admin.liveAnnouncements) live · publish to web and iOS", icon: "bell.badge") {
+                    AdminCommunicationsView(admin: admin, session: session)
                 }
                 AdminDestinationRow(title: "Finance", detail: "Track pack sales and revenue", icon: "chart.line.uptrend.xyaxis") {
                     AdminFinanceView(admin: admin)
@@ -412,6 +418,147 @@ private struct AdminFinanceView: View {
     }
 }
 
+private struct AdminPTRequestsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var filter = "active"
+    @State private var notesRequest: AdminPTRequest?
+
+    private var rows: [AdminPTRequest] {
+        switch filter {
+        case "active": return admin.ptRequests.filter { ["requested", "reschedule_requested", "approved"].contains($0.status) }
+        case "completed": return admin.ptRequests.filter { $0.status == "completed" }
+        default: return admin.ptRequests
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Request filter", selection: $filter) {
+                    Text("Active").tag("active")
+                    Text("Completed").tag("completed")
+                    Text("All").tag("all")
+                }
+                .pickerStyle(.segmented)
+            }
+            .listRowBackground(Color.xertNavy)
+
+            if rows.isEmpty {
+                Text("No matching PT requests.")
+                    .listRowBackground(Color.xertInk)
+            }
+            ForEach(rows) { request in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(request.displayName).font(.headline)
+                            Text(request.requested_session_type)
+                                .font(.caption.weight(.bold)).foregroundStyle(Color.xertSteel)
+                        }
+                        Spacer()
+                        Text(request.status.replacingOccurrences(of: "_", with: " ").uppercased())
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(request.isPending ? Color.orange : Color.xertPale.opacity(0.65))
+                    }
+                    Text([request.preferred_day, request.preferred_time].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                    if let goal = request.training_goal, !goal.isEmpty {
+                        Text("Goal: \(goal)").font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                    }
+                    HStack(spacing: 8) {
+                        if let phone = request.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                            Link(destination: url) { Image(systemName: "phone") }.buttonStyle(.bordered)
+                        }
+                        if let email = request.email, let url = URL(string: "mailto:\(email)") {
+                            Link(destination: url) { Image(systemName: "envelope") }.buttonStyle(.bordered)
+                        }
+                        Menu {
+                            if request.isPending {
+                                requestAction("Approve", status: "approved", request: request)
+                                requestAction("Request reschedule", status: "reschedule_requested", request: request)
+                                requestAction("Decline", status: "declined", request: request)
+                            }
+                            if request.status == "approved" {
+                                requestAction("Mark complete", status: "completed", request: request)
+                                requestAction("Cancel", status: "cancelled", request: request)
+                            }
+                        } label: {
+                            Label("Update", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderedProminent).tint(Color.xertSteel)
+                        .disabled(admin.updatingPTRequestID != nil)
+
+                        Button { notesRequest = request } label: { Image(systemName: "note.text") }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Edit admin notes")
+                    }
+                    .font(.caption.weight(.bold))
+                }
+                .foregroundStyle(Color.xertOffWhite)
+                .padding(.vertical, 6)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("PT Requests")
+        .sheet(item: $notesRequest) { request in
+            AdminPTNotesEditor(request: request) { notes in
+                Task {
+                    _ = await admin.updatePTRequest(
+                        session: session,
+                        request: request,
+                        status: request.status,
+                        notes: notes,
+                        updateNotes: true
+                    )
+                    notesRequest = nil
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func requestAction(_ title: String, status: String, request: AdminPTRequest) -> some View {
+        Button(title) {
+            Task { _ = await admin.updatePTRequest(session: session, request: request, status: status) }
+        }
+    }
+}
+
+private struct AdminPTNotesEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let request: AdminPTRequest
+    let onSave: (String) -> Void
+    @State private var notes: String
+
+    init(request: AdminPTRequest, onSave: @escaping (String) -> Void) {
+        self.request = request
+        self.onSave = onSave
+        _notes = State(initialValue: request.admin_notes ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Private owner notes") {
+                    TextEditor(text: $notes).frame(minHeight: 160)
+                    Text("\(notes.count)/5000").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle(request.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(String(notes.prefix(5_000))) }
+                }
+            }
+        }
+    }
+}
+
 private struct AdminPlatformView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
@@ -492,6 +639,105 @@ private struct AdminPlatformView: View {
                 draft = value
             }
         )
+    }
+}
+
+private struct AdminCommunicationsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var composing = false
+
+    var body: some View {
+        List {
+            if admin.announcements.isEmpty {
+                Text("No member notices yet.").listRowBackground(Color.xertInk)
+            }
+            ForEach(admin.announcements) { notice in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        Text(notice.title).font(.headline)
+                        Spacer()
+                        Text(notice.stateLabel.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(notice.stateLabel == "Live" ? Color.green : Color.xertSteel)
+                    }
+                    Text(notice.body).font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.72)).lineLimit(4)
+                    HStack {
+                        Label(notice.tone.capitalized, systemImage: notice.tone == "urgent" ? "exclamationmark.triangle.fill" : "bell")
+                        Spacer()
+                        Text(notice.created_at.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.5))
+                }
+                .foregroundStyle(Color.xertOffWhite)
+                .padding(.vertical, 6)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Member Notices")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { composing = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("New member notice")
+            }
+        }
+        .sheet(isPresented: $composing) {
+            AdminAnnouncementComposer(isPublishing: admin.isPublishingAnnouncement) { title, body, tone in
+                Task {
+                    if await admin.publishAnnouncement(session: session, title: title, body: body, tone: tone) {
+                        composing = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct AdminAnnouncementComposer: View {
+    @Environment(\.dismiss) private var dismiss
+    let isPublishing: Bool
+    let onPublish: (String, String, String) -> Void
+    @State private var title = ""
+    @State private var body = ""
+    @State private var tone = "info"
+    @State private var confirming = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Member notice") {
+                    TextField("Title", text: $title)
+                    TextEditor(text: $body).frame(minHeight: 180)
+                    Text("\(body.count)/2000").font(.caption).foregroundStyle(.secondary)
+                    Picker("Priority", selection: $tone) {
+                        Text("Information").tag("info")
+                        Text("Action requested").tag("action")
+                        Text("Urgent").tag("urgent")
+                    }
+                }
+                Section {
+                    Text("Publishing makes this visible immediately in member accounts and requests Apple push delivery for enabled devices.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("New Notice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isPublishing) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isPublishing ? "Publishing..." : "Publish") { confirming = true }
+                        .disabled(isPublishing || title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 || body.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                }
+            }
+            .confirmationDialog("Publish this member notice now?", isPresented: $confirming, titleVisibility: .visible) {
+                Button("Publish to members") { onPublish(title, String(body.prefix(2_000)), tone) }
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                Text("The notice becomes live on the website and iOS app, and push delivery starts immediately.")
+            }
+        }
     }
 }
 

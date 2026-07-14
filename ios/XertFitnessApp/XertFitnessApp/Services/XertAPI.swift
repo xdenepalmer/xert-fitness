@@ -302,6 +302,91 @@ final class XertAPI {
         return settings.first
     }
 
+    func adminPTRequests(session auth: AuthSession) async throws -> [AdminPTRequest] {
+        try await restRequest(
+            path: "/rest/v1/private_session_requests",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,full_name,email,phone,requested_session_type,preferred_day,preferred_time,training_goal,experience_level,notes,admin_notes,status,created_at"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: "100")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminAnnouncements(session auth: AuthSession) async throws -> [AdminAnnouncement] {
+        try await restRequest(
+            path: "/rest/v1/member_announcements",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,expires_at,archived_at,created_at,updated_at"),
+                URLQueryItem(name: "audience", value: "eq.all"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: "100")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminPublishAnnouncement(
+        session auth: AuthSession,
+        title: String,
+        body: String,
+        tone: String
+    ) async throws {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (3...120).contains(normalizedTitle.count) else {
+            throw APIError(message: "Announcement titles must be between 3 and 120 characters.")
+        }
+        guard (3...2_000).contains(normalizedBody.count) else {
+            throw APIError(message: "Announcement messages must be between 3 and 2,000 characters.")
+        }
+        guard ["info", "action", "urgent"].contains(tone) else {
+            throw APIError(message: "Choose a valid announcement priority.")
+        }
+        let _: EmptyObject = try await vercelRequest(
+            path: "/api/admin-publish-announcement",
+            body: AdminAnnouncementPublishRequest(
+                id: nil,
+                announcement: AdminAnnouncementPayload(
+                    title: normalizedTitle,
+                    body: normalizedBody,
+                    tone: tone,
+                    expires_at: nil,
+                    cta_label: nil,
+                    cta_url: nil
+                ),
+                expected_updated_at: nil
+            ),
+            auth: auth
+        )
+    }
+
+    func adminUpdatePTRequest(
+        session auth: AuthSession,
+        requestID: UUID,
+        status: String,
+        adminNotes: String? = nil,
+        updateNotes: Bool = false
+    ) async throws {
+        let allowed = ["requested", "approved", "declined", "reschedule_requested", "completed", "cancelled"]
+        guard allowed.contains(status) else { throw APIError(message: "Choose a valid PT request status.") }
+        if let adminNotes, adminNotes.count > 5_000 {
+            throw APIError(message: "Admin notes must be 5,000 characters or fewer.")
+        }
+        let _: UUID? = try await rpc(
+            path: "admin_update_request",
+            body: AdminRequestUpdate(
+                p_request_type: "private_session",
+                p_request_id: requestID.uuidString,
+                p_status: status,
+                p_admin_notes: adminNotes?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                p_update_admin_notes: updateNotes
+            ),
+            auth: auth
+        )
+    }
+
     func adminUpdatePlatformSettings(
         session auth: AuthSession,
         settings: AdminPlatformSettings
@@ -635,6 +720,26 @@ private struct AdminSettingsUpdate: Encodable {
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
     let updated_at: String
+}
+private struct AdminRequestUpdate: Encodable {
+    let p_request_type: String
+    let p_request_id: String
+    let p_status: String
+    let p_admin_notes: String?
+    let p_update_admin_notes: Bool
+}
+private struct AdminAnnouncementPayload: Encodable {
+    let title: String
+    let body: String
+    let tone: String
+    let expires_at: String?
+    let cta_label: String?
+    let cta_url: String?
+}
+private struct AdminAnnouncementPublishRequest: Encodable {
+    let id: UUID?
+    let announcement: AdminAnnouncementPayload
+    let expected_updated_at: String?
 }
 private struct ProfileUpdate: Encodable {
     let full_name: String?

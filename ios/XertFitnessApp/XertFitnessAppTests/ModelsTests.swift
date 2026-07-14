@@ -29,6 +29,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(followUp.reasonLabel, "Credits expiring soon")
     }
 
+    func testNativeAdminRequestAndAnnouncementModelsDecode() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let request = try decoder.decode(AdminPTRequest.self, from: Data("""
+        {"id":"00000000-0000-0000-0000-000000000003","full_name":"Alex","email":"alex@example.com","phone":"0400000000","requested_session_type":"Personal training","preferred_day":"Friday","preferred_time":"Morning","training_goal":"Strength","experience_level":"Intermediate","notes":null,"admin_notes":null,"status":"requested","created_at":"2026-07-14T06:00:00Z"}
+        """.utf8))
+        XCTAssertTrue(request.isPending)
+        XCTAssertEqual(request.displayName, "Alex")
+
+        let announcement = try decoder.decode(AdminAnnouncement.self, from: Data("""
+        {"id":"00000000-0000-0000-0000-000000000004","title":"Class update","body":"Tonight's class starts at six.","tone":"info","audience":"all","cta_label":null,"cta_url":null,"published_at":"2026-07-14T06:00:00Z","expires_at":null,"archived_at":null,"created_at":"2026-07-14T05:00:00Z","updated_at":"2026-07-14T06:00:00.123456+00:00"}
+        """.utf8))
+        XCTAssertEqual(announcement.stateLabel, "Live")
+    }
+
     func testPendingCheckoutRoundTripsForTheSameUser() throws {
         let suiteName = "PendingCheckoutTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

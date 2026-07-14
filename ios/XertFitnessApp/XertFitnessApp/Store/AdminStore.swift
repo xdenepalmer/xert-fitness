@@ -9,11 +9,15 @@ final class AdminStore: ObservableObject {
     @Published private(set) var members: [AdminMemberSummary] = []
     @Published private(set) var orders: [OrderItem] = []
     @Published private(set) var settings: AdminPlatformSettings?
+    @Published private(set) var ptRequests: [AdminPTRequest] = []
+    @Published private(set) var announcements: [AdminAnnouncement] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
+    @Published private(set) var updatingPTRequestID: UUID?
+    @Published private(set) var isPublishingAnnouncement = false
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -30,6 +34,8 @@ final class AdminStore: ObservableObject {
         return paidOrders.filter { calendar.isDate($0.activityDate, equalTo: Date(), toGranularity: .month) }
             .reduce(0) { $0 + ($1.amount_cents ?? 0) }
     }
+    var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
+    var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
 
     func refresh(session: AuthSession) async {
         guard !isLoading else { return }
@@ -43,6 +49,8 @@ final class AdminStore: ObservableObject {
         async let memberRequest = api.adminMembers(session: session)
         async let orderRequest = api.orders(session: session)
         async let settingsRequest = api.adminPlatformSettings(session: session)
+        async let ptRequest = api.adminPTRequests(session: session)
+        async let announcementRequest = api.adminAnnouncements(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -58,6 +66,10 @@ final class AdminStore: ObservableObject {
         catch { failures.append("finance") }
         do { settings = try await settingsRequest; loadedSource = true }
         catch { failures.append("platform controls") }
+        do { ptRequests = try await ptRequest; loadedSource = true }
+        catch { failures.append("PT requests") }
+        do { announcements = try await announcementRequest; loadedSource = true }
+        catch { failures.append("member notices") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -120,6 +132,48 @@ final class AdminStore: ObservableObject {
         defer { isSavingSettings = false }
         do {
             settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func updatePTRequest(
+        session: AuthSession,
+        request: AdminPTRequest,
+        status: String,
+        notes: String? = nil,
+        updateNotes: Bool = false
+    ) async -> Bool {
+        guard updatingPTRequestID == nil else { return false }
+        updatingPTRequestID = request.id
+        defer { updatingPTRequestID = nil }
+        do {
+            try await api.adminUpdatePTRequest(
+                session: session,
+                requestID: request.id,
+                status: status,
+                adminNotes: notes,
+                updateNotes: updateNotes
+            )
+            ptRequests = try await api.adminPTRequests(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func publishAnnouncement(session: AuthSession, title: String, body: String, tone: String) async -> Bool {
+        guard !isPublishingAnnouncement else { return false }
+        isPublishingAnnouncement = true
+        defer { isPublishingAnnouncement = false }
+        do {
+            try await api.adminPublishAnnouncement(session: session, title: title, body: body, tone: tone)
+            announcements = try await api.adminAnnouncements(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {

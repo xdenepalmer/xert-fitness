@@ -106,6 +106,46 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminPTRequest: Identifiable, Codable, Hashable {
+    let id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let requested_session_type: String
+    let preferred_day: String?
+    let preferred_time: String?
+    let training_goal: String?
+    let experience_level: String?
+    let notes: String?
+    let admin_notes: String?
+    let status: String
+    let created_at: Date
+
+    var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "PT enquiry" }
+    var isPending: Bool { ["requested", "reschedule_requested"].contains(status) }
+}
+
+struct AdminAnnouncement: Identifiable, Codable, Hashable {
+    let id: UUID
+    let title: String
+    let body: String
+    let tone: String
+    let audience: String
+    let cta_label: String?
+    let cta_url: String?
+    let published_at: Date?
+    let expires_at: Date?
+    let archived_at: Date?
+    let created_at: Date
+    let updated_at: String
+
+    var stateLabel: String {
+        if archived_at != nil { return "Archived" }
+        if let expires_at, expires_at <= Date() { return "Expired" }
+        return published_at == nil ? "Draft" : "Live"
+    }
+}
+
 private extension String {
     var nilIfBlank: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)

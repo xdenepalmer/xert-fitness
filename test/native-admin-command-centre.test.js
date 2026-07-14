@@ -33,6 +33,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
     'admin_list_members_page',
     'admin_promote_next_waitlisted',
     'admin_add_member_note',
+    'admin_update_request',
   ]) assert.match(api, new RegExp(`path: "${rpc}"`));
 
   assert.match(adminStore, /func promoteNext/);
@@ -43,6 +44,11 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminRetentionView/);
   assert.match(view, /AdminFinanceView/);
   assert.match(view, /AdminPlatformView/);
+  assert.match(view, /AdminPTRequestsView/);
+  assert.match(view, /AdminCommunicationsView/);
   assert.match(api, /adminUpdatePlatformSettings/);
+  assert.match(api, /adminUpdatePTRequest/);
+  assert.match(api, /adminPublishAnnouncement/);
+  assert.match(api, /\/api\/admin-publish-announcement/);
   assert.match(api, /URLQueryItem\(name: "updated_at", value: "eq\.\\\(settings\.updated_at\)"\)/);
 });
