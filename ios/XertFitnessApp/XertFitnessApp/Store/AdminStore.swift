@@ -22,6 +22,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var classSessions: [AdminClassSession] = []
+    @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
+    @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -40,6 +42,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var recordingAttendanceSessionID: UUID?
     @Published private(set) var savingClassID: UUID?
     @Published private(set) var cancellingClassID: UUID?
+    @Published private(set) var savingScheduleWindowID: UUID?
+    @Published private(set) var deletingScheduleWindowID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -91,6 +95,8 @@ final class AdminStore: ObservableObject {
         async let eventGoalsRequest = api.adminEventGoalReferences(session: session)
         async let coachRequest = api.adminCoaches(session: session)
         async let classSessionRequest = api.adminClassSessions(session: session)
+        async let availabilityRequest = api.adminAvailabilityBlocks(session: session)
+        async let blackoutRequest = api.adminBlackoutPeriods(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -130,6 +136,10 @@ final class AdminStore: ObservableObject {
         catch { failures.append("team directory") }
         do { classSessions = try await classSessionRequest; loadedSource = true }
         catch { failures.append("full timetable") }
+        do { availabilityBlocks = try await availabilityRequest; loadedSource = true }
+        catch { failures.append("availability") }
+        do { blackoutPeriods = try await blackoutRequest; loadedSource = true }
+        catch { failures.append("blackouts") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -452,5 +462,49 @@ final class AdminStore: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    func saveAvailability(session: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async -> Bool {
+        guard savingScheduleWindowID == nil else { return false }
+        savingScheduleWindowID = block?.id ?? UUID()
+        defer { savingScheduleWindowID = nil }
+        do {
+            try await api.adminSaveAvailability(session: session, block: block, draft: draft)
+            availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func saveBlackout(session: AuthSession, period: AdminBlackoutPeriod?, draft: AdminBlackoutDraft) async -> Bool {
+        guard savingScheduleWindowID == nil else { return false }
+        savingScheduleWindowID = period?.id ?? UUID()
+        defer { savingScheduleWindowID = nil }
+        do {
+            try await api.adminSaveBlackout(session: session, period: period, draft: draft)
+            blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func deleteAvailability(session: AuthSession, block: AdminAvailabilityBlock) async -> Bool {
+        guard deletingScheduleWindowID == nil else { return false }
+        deletingScheduleWindowID = block.id
+        defer { deletingScheduleWindowID = nil }
+        do {
+            try await api.adminDeleteAvailability(session: session, block: block)
+            availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func deleteBlackout(session: AuthSession, period: AdminBlackoutPeriod) async -> Bool {
+        guard deletingScheduleWindowID == nil else { return false }
+        deletingScheduleWindowID = period.id
+        defer { deletingScheduleWindowID = nil }
+        do {
+            try await api.adminDeleteBlackout(session: session, period: period)
+            blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
+            lastUpdatedAt = Date(); return true
+        } catch { errorMessage = error.localizedDescription; return false }
     }
 }

@@ -176,6 +176,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Full timetable", detail: "Create, publish, edit, duplicate and cancel classes", icon: "calendar") {
                     AdminScheduleView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Availability & blackouts", detail: "Control bookable windows and protect closed periods", icon: "calendar.badge.exclamationmark") {
+                    AdminAvailabilityView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Retention", detail: "Contact members before they disengage", icon: "arrow.triangle.2.circlepath") {
                     AdminRetentionView(admin: admin, session: session)
                 }
@@ -707,6 +710,197 @@ private struct AdminClassEditor: View {
         .onChange(of: draft.status) { status in
             if status != "published" { draft.publicVisible = false }
         }
+    }
+}
+
+private enum AdminScheduleRemoval: Identifiable {
+    case availability(AdminAvailabilityBlock)
+    case blackout(AdminBlackoutPeriod)
+    var id: UUID {
+        switch self { case .availability(let item): return item.id; case .blackout(let item): return item.id }
+    }
+}
+
+private struct AdminAvailabilityView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var mode = "availability"
+    @State private var showingCreate = false
+    @State private var pendingRemoval: AdminScheduleRemoval?
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Schedule controls", selection: $mode) {
+                    Text("Availability").tag("availability")
+                    Text("Blackouts").tag("blackouts")
+                }
+                .pickerStyle(.segmented)
+            }
+            .listRowBackground(Color.xertNavy)
+
+            if mode == "availability" {
+                if admin.availabilityBlocks.isEmpty { Text("No availability blocks set.").listRowBackground(Color.xertInk) }
+                ForEach(admin.availabilityBlocks) { block in
+                    scheduleRow(
+                        title: block.type,
+                        detail: scheduleRange(block.start_time, block.end_time),
+                        note: [block.coach_name, block.notes].compactMap { $0 }.joined(separator: " · "),
+                        accent: block.is_bookable ? .green : Color.xertSteel,
+                        badge: block.is_bookable ? "BOOKABLE" : "PLANNING"
+                    ) {
+                        AdminAvailabilityEditor(admin: admin, session: session, block: block)
+                    } remove: { pendingRemoval = .availability(block) }
+                }
+            } else {
+                if admin.blackoutPeriods.isEmpty { Text("No blackout periods set.").listRowBackground(Color.xertInk) }
+                ForEach(admin.blackoutPeriods) { period in
+                    scheduleRow(
+                        title: period.reason.capitalized,
+                        detail: scheduleRange(period.start_time, period.end_time),
+                        note: "Affects \(period.affects.replacingOccurrences(of: "_", with: " "))" + (period.notes.map { " · \($0)" } ?? ""),
+                        accent: .red,
+                        badge: "CLOSED"
+                    ) {
+                        AdminBlackoutEditor(admin: admin, session: session, period: period)
+                    } remove: { pendingRemoval = .blackout(period) }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Schedule Controls")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel(mode == "availability" ? "Add availability" : "Add blackout")
+            }
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack {
+                if mode == "availability" {
+                    AdminAvailabilityEditor(admin: admin, session: session, block: nil)
+                } else {
+                    AdminBlackoutEditor(admin: admin, session: session, period: nil)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Remove schedule control?",
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+            presenting: pendingRemoval
+        ) { removal in
+            Button("Remove", role: .destructive) {
+                Task {
+                    switch removal {
+                    case .availability(let block): _ = await admin.deleteAvailability(session: session, block: block)
+                    case .blackout(let period): _ = await admin.deleteBlackout(session: session, period: period)
+                    }
+                    pendingRemoval = nil
+                }
+            }
+            Button("Keep", role: .cancel) { pendingRemoval = nil }
+        } message: { removal in
+            switch removal {
+            case .availability: Text("This time will no longer appear available for planning.")
+            case .blackout: Text("Classes and staff planning may immediately become available during this period.")
+            }
+        }
+    }
+
+    private func scheduleRange(_ start: Date, _ end: Date) -> String {
+        "\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func scheduleRow<Destination: View>(
+        title: String, detail: String, note: String, accent: Color, badge: String,
+        @ViewBuilder destination: () -> Destination, remove: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            NavigationLink(destination: destination()) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack { Text(title).font(.headline); Spacer(); Text(badge).font(.caption2.weight(.bold)).foregroundStyle(accent) }
+                    Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.65))
+                    if !note.isEmpty { Text(note).font(.caption2).foregroundStyle(Color.xertPale.opacity(0.45)) }
+                }
+            }
+            HStack { Spacer(); Button(role: .destructive, action: remove) { Image(systemName: "trash") }.buttonStyle(.plain) }
+        }
+        .foregroundStyle(Color.xertOffWhite)
+        .padding(.vertical, 5)
+        .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct AdminAvailabilityEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let block: AdminAvailabilityBlock?
+    private let baseline: AdminAvailabilityDraft
+    @State private var draft: AdminAvailabilityDraft
+
+    init(admin: AdminStore, session: AuthSession, block: AdminAvailabilityBlock?) {
+        let initial = AdminAvailabilityDraft(block: block)
+        self.admin = admin; self.session = session; self.block = block; baseline = initial
+        _draft = State(initialValue: initial)
+    }
+
+    var body: some View {
+        Form {
+            Section("Availability") {
+                Picker("Type", selection: $draft.type) { ForEach(AdminAvailabilityDraft.types, id: \.self) { Text($0.capitalized).tag($0) } }
+                DatePicker("Starts", selection: $draft.startTime)
+                DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
+                TextField("Coach (optional)", text: $draft.coachName)
+                Toggle("Bookable", isOn: $draft.isBookable)
+                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
+            }
+            saveButton(label: block == nil ? "Create availability" : "Save availability") {
+                await admin.saveAvailability(session: session, block: block, draft: draft)
+            }
+        }
+        .scrollContentBackground(.hidden).background(Color.xertNavy)
+        .navigationTitle(block == nil ? "New Availability" : "Edit Availability").navigationBarTitleDisplayMode(.inline)
+        .toolbar { if block == nil { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
+    }
+
+    @ViewBuilder private func saveButton(label: String, action: @escaping () async -> Bool) -> some View {
+        Section { Button { Task { if await action() { dismiss() } } } label: { HStack { Spacer(); Text(label).fontWeight(.bold); Spacer() } }
+            .disabled(admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+    }
+}
+
+private struct AdminBlackoutEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let period: AdminBlackoutPeriod?
+    private let baseline: AdminBlackoutDraft
+    @State private var draft: AdminBlackoutDraft
+
+    init(admin: AdminStore, session: AuthSession, period: AdminBlackoutPeriod?) {
+        let initial = AdminBlackoutDraft(period: period)
+        self.admin = admin; self.session = session; self.period = period; baseline = initial
+        _draft = State(initialValue: initial)
+    }
+
+    var body: some View {
+        Form {
+            Section("Blackout") {
+                Picker("Reason", selection: $draft.reason) { ForEach(AdminBlackoutDraft.reasons, id: \.self) { Text($0.capitalized).tag($0) } }
+                Picker("Affects", selection: $draft.affects) { ForEach(AdminBlackoutDraft.scopes, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) } }
+                DatePicker("Starts", selection: $draft.startTime)
+                DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
+                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
+            }
+            Section { Button { Task { if await admin.saveBlackout(session: session, period: period, draft: draft) { dismiss() } } } label: {
+                HStack { Spacer(); Text(period == nil ? "Create blackout" : "Save blackout").fontWeight(.bold); Spacer() }
+            }.disabled(admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+        }
+        .scrollContentBackground(.hidden).background(Color.xertNavy)
+        .navigationTitle(period == nil ? "New Blackout" : "Edit Blackout").navigationBarTitleDisplayMode(.inline)
+        .toolbar { if period == nil { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
     }
 }
 

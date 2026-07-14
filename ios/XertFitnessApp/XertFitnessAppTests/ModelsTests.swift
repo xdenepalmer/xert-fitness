@@ -1127,6 +1127,30 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(draft.hasEndTime)
     }
 
+    func testScheduleControlDraftsHydrateProtectedWindows() {
+        let start = Date().addingTimeInterval(3_600)
+        let end = start.addingTimeInterval(7_200)
+        let availability = AdminAvailabilityBlock(
+            id: UUID(), start_time: start, end_time: end, type: "PT available",
+            coach_name: "Dene", notes: "Member consults", is_bookable: true,
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+        let blackout = AdminBlackoutPeriod(
+            id: UUID(), start_time: start, end_time: end, affects: "group_classes",
+            reason: "facility maintenance", notes: "Floor works",
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+
+        let availabilityDraft = AdminAvailabilityDraft(block: availability)
+        let blackoutDraft = AdminBlackoutDraft(period: blackout)
+
+        XCTAssertTrue(availabilityDraft.isBookable)
+        XCTAssertEqual(availabilityDraft.coachName, "Dene")
+        XCTAssertEqual(blackoutDraft.affects, "group_classes")
+        XCTAssertEqual(blackoutDraft.reason, "facility maintenance")
+        XCTAssertEqual(blackoutDraft.endTime, end)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

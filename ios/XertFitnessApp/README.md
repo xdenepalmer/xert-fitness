@@ -53,6 +53,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
   modes, capacity, visibility and delivery details; duplicates classes as future
   drafts; and uses the dedicated cancellation workflow to return credits and
   request member push notification. Terminal classes cannot be reopened.
+  Native availability and blackout controls create, edit and remove private
+  planning windows with optimistic locking. Blackout conflict guards prevent
+  owners from silently overlapping published classes, matching desktop safety.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

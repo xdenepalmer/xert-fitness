@@ -116,6 +116,66 @@ struct AdminClassDraft: Equatable {
     }
 }
 
+struct AdminAvailabilityBlock: Identifiable, Codable, Hashable {
+    let id: UUID
+    let start_time: Date
+    let end_time: Date
+    let type: String
+    let coach_name: String?
+    let notes: String?
+    let is_bookable: Bool
+    let updated_at: String
+}
+
+struct AdminAvailabilityDraft: Equatable {
+    static let types = ["PT available", "private session available", "group class available", "admin only", "open gym placeholder", "workshop placeholder"]
+    var startTime: Date
+    var endTime: Date
+    var type: String
+    var coachName: String
+    var notes: String
+    var isBookable: Bool
+
+    init(block: AdminAvailabilityBlock? = nil, now: Date = Date()) {
+        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        startTime = block?.start_time ?? start
+        endTime = block?.end_time ?? start.addingTimeInterval(3_600)
+        type = block?.type ?? "PT available"
+        coachName = block?.coach_name ?? ""
+        notes = block?.notes ?? ""
+        isBookable = block?.is_bookable ?? false
+    }
+}
+
+struct AdminBlackoutPeriod: Identifiable, Codable, Hashable {
+    let id: UUID
+    let start_time: Date
+    let end_time: Date
+    let affects: String
+    let reason: String
+    let notes: String?
+    let updated_at: String
+}
+
+struct AdminBlackoutDraft: Equatable {
+    static let scopes = ["all", "group_classes", "pt_only", "facility_only", "coach_only"]
+    static let reasons = ["full day unavailable", "partial day unavailable", "recurring unavailable", "personal work", "facility maintenance", "equipment install", "private event", "soft launch restricted"]
+    var startTime: Date
+    var endTime: Date
+    var affects: String
+    var reason: String
+    var notes: String
+
+    init(period: AdminBlackoutPeriod? = nil, now: Date = Date()) {
+        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        startTime = period?.start_time ?? start
+        endTime = period?.end_time ?? start.addingTimeInterval(3_600)
+        affects = period?.affects ?? "all"
+        reason = period?.reason ?? "facility maintenance"
+        notes = period?.notes ?? ""
+    }
+}
+
 struct AdminWaitlistItem: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID
