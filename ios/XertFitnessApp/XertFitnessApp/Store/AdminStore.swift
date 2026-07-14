@@ -20,6 +20,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var eventGoalCounts: [UUID: Int] = [:]
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
     @Published private(set) var coaches: [AdminCoach] = []
+    @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -33,6 +34,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var loadingEventRosterID: UUID?
     @Published private(set) var savingCoachID: UUID?
     @Published private(set) var deletingCoachID: UUID?
+    @Published private(set) var loadingRosterSessionID: UUID?
+    @Published private(set) var updatingBookingID: UUID?
+    @Published private(set) var recordingAttendanceSessionID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -147,6 +151,65 @@ final class AdminStore: ObservableObject {
         do {
             try await api.adminPromoteNextWaitlisted(session: session, classSessionID: classSessionID)
             waitlist = try await api.adminWaitlist(session: session)
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadClassRoster(session: AuthSession, classSessionID: UUID) async {
+        guard loadingRosterSessionID == nil else { return }
+        loadingRosterSessionID = classSessionID
+        defer { loadingRosterSessionID = nil }
+        do {
+            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setBookingStatus(
+        session: AuthSession,
+        classSessionID: UUID,
+        bookingID: UUID,
+        status: String
+    ) async -> Bool {
+        guard updatingBookingID == nil else { return false }
+        updatingBookingID = bookingID
+        defer { updatingBookingID = nil }
+        do {
+            try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
+            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            waitlist = try await api.adminWaitlist(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func recordAttendance(
+        session: AuthSession,
+        classSessionID: UUID,
+        attendedIDs: [UUID],
+        noShowIDs: [UUID]
+    ) async -> Bool {
+        guard recordingAttendanceSessionID == nil else { return false }
+        recordingAttendanceSessionID = classSessionID
+        defer { recordingAttendanceSessionID = nil }
+        do {
+            try await api.adminRecordAttendance(
+                session: session,
+                classSessionID: classSessionID,
+                attendedIDs: attendedIDs,
+                noShowIDs: noShowIDs
+            )
+            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true

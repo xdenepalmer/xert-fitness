@@ -270,16 +270,20 @@ private struct AdminClassesView: View {
                     Text("No classes today.")
                 }
                 ForEach(admin.dailyOperations) { item in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.title).font(.headline)
-                        Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
-                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                        if item.attendance_due {
-                            Label("Roll call is due", systemImage: "checklist")
-                                .font(.caption.weight(.bold)).foregroundStyle(.orange)
+                    NavigationLink {
+                        AdminClassRosterView(admin: admin, session: session, operation: item)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(item.title).font(.headline)
+                            Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
+                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                            if item.attendance_due {
+                                Label("Roll call is due", systemImage: "checklist")
+                                    .font(.caption.weight(.bold)).foregroundStyle(.orange)
+                            }
                         }
+                        .foregroundStyle(Color.xertOffWhite)
                     }
-                    .foregroundStyle(Color.xertOffWhite)
                     .listRowBackground(Color.xertInk)
                 }
             }
@@ -324,6 +328,176 @@ private struct AdminClassesView: View {
         } message: { item in
             Text("This confirms the next FIFO waitlisted member into \(item.title) and consumes one available credit.")
         }
+    }
+}
+
+private struct AdminClassRosterView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let operation: AdminDailyOperation
+    @State private var attendance: [UUID: Bool] = [:]
+    @State private var confirmingRollCall = false
+
+    private var eligible: [AdminRosterMember] { admin.classRoster.filter(\.attendanceEligible) }
+    private var canRecordAttendance: Bool {
+        !eligible.isEmpty && operation.start_time <= Date()
+            && admin.recordingAttendanceSessionID == nil
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(operation.start_time.formatted(date: .abbreviated, time: .shortened)).font(.headline)
+                    Text([operation.coach_name, operation.location_zone].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                    Text("\(operation.confirmed_count) confirmed · \(operation.requested_count) requested · \(operation.waitlist_count) waiting")
+                        .font(.caption).foregroundStyle(Color.xertSteel)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            Section("Member roster") {
+                if admin.loadingRosterSessionID == operation.id {
+                    HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
+                } else if admin.classRoster.isEmpty {
+                    Text("No member bookings for this class.")
+                }
+                ForEach(admin.classRoster) { member in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(member.displayName).font(.headline)
+                                Text(member.status.replacingOccurrences(of: "_", with: " ").uppercased())
+                                    .font(.caption2.weight(.bold)).foregroundStyle(statusColour(member.status))
+                            }
+                            Spacer()
+                            if member.attendanceEligible && operation.start_time <= Date() {
+                                Toggle("Attended", isOn: Binding(
+                                    get: { attendance[member.id, default: member.status != "no_show"] },
+                                    set: { attendance[member.id] = $0 }
+                                ))
+                                .labelsHidden()
+                                .accessibilityLabel("\(member.displayName) attended")
+                            } else if let actions = bookingActions(member.status), !actions.isEmpty {
+                                Menu {
+                                    ForEach(actions) { action in
+                                        Button(role: action.role) {
+                                            Task {
+                                                _ = await admin.setBookingStatus(
+                                                    session: session,
+                                                    classSessionID: operation.id,
+                                                    bookingID: member.id,
+                                                    status: action.status
+                                                )
+                                            }
+                                        } label: { Label(action.label, systemImage: action.icon) }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle").font(.title3)
+                                }
+                                .disabled(admin.updatingBookingID != nil)
+                                .accessibilityLabel("Manage \(member.displayName) booking")
+                            }
+                        }
+                        HStack(spacing: 14) {
+                            if let email = contact(member.email), let url = URL(string: "mailto:\(email)") {
+                                Link(destination: url) { Label("Email", systemImage: "envelope") }
+                            }
+                            if let phone = contact(member.phone),
+                               let encoded = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                               let url = URL(string: "tel:\(encoded)") {
+                                Link(destination: url) { Label("Call", systemImage: "phone") }
+                            }
+                        }
+                        .font(.caption.weight(.semibold)).foregroundStyle(Color.xertSteel)
+                    }
+                    .padding(.vertical, 5)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            if operation.start_time <= Date() {
+                Section {
+                    Button { confirmingRollCall = true } label: {
+                        HStack {
+                            Spacer()
+                            if admin.recordingAttendanceSessionID == operation.id { ProgressView().tint(Color.xertNavy) }
+                            Label("Save complete roll call", systemImage: "checklist")
+                                .fontWeight(.bold)
+                            Spacer()
+                        }
+                    }
+                    .disabled(!canRecordAttendance)
+                    .listRowBackground(Color.xertSteel)
+                    .foregroundStyle(Color.xertNavy)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(operation.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await admin.loadClassRoster(session: session, classSessionID: operation.id)
+            attendance = Dictionary(uniqueKeysWithValues: admin.classRoster.filter(\.attendanceEligible).map {
+                ($0.id, $0.status != "no_show")
+            })
+        }
+        .confirmationDialog("Complete this class?", isPresented: $confirmingRollCall, titleVisibility: .visible) {
+            Button("Record attendance and complete class") {
+                let attended = eligible.filter { attendance[$0.id, default: $0.status != "no_show"] }.map(\.id)
+                let noShows = eligible.filter { !attendance[$0.id, default: $0.status != "no_show"] }.map(\.id)
+                Task {
+                    _ = await admin.recordAttendance(
+                        session: session,
+                        classSessionID: operation.id,
+                        attendedIDs: attended,
+                        noShowIDs: noShows
+                    )
+                }
+            }
+            Button("Review roll call", role: .cancel) {}
+        } message: {
+            Text("This records every confirmed member as attended or no-show, completes the class, and removes it from the public timetable.")
+        }
+    }
+
+    private struct BookingAction: Identifiable {
+        var id: String { status }
+        let status: String
+        let label: String
+        let icon: String
+        let role: ButtonRole?
+    }
+
+    private func bookingActions(_ status: String) -> [BookingAction]? {
+        switch status {
+        case "requested":
+            return [BookingAction(status: "confirmed", label: "Confirm place", icon: "checkmark.circle", role: nil),
+                    BookingAction(status: "waitlisted", label: "Move to waitlist", icon: "person.2.badge.clock", role: nil),
+                    BookingAction(status: "declined", label: "Decline request", icon: "xmark.circle", role: .destructive)]
+        case "confirmed":
+            return [BookingAction(status: "cancelled", label: "Cancel booking", icon: "calendar.badge.minus", role: .destructive)]
+        case "waitlisted":
+            return [BookingAction(status: "cancelled", label: "Remove from waitlist", icon: "person.crop.circle.badge.minus", role: .destructive)]
+        default:
+            return nil
+        }
+    }
+
+    private func statusColour(_ status: String) -> Color {
+        switch status {
+        case "confirmed", "attended": return .green
+        case "requested", "waitlisted": return .orange
+        case "declined", "cancelled", "no_show": return .red
+        default: return Color.xertSteel
+        }
+    }
+
+    private func contact(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

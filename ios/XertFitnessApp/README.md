@@ -45,6 +45,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   Native team-directory controls create, edit, order, publish, hide, and remove
   coaches and practitioners, including bios, experience, training goals, imagery,
   and social links with the same optimistic locking used by the desktop manager.
+  The native class desk opens live member rosters, resolves requested bookings,
+  manages waitlist removals and cancellations, provides direct member contact,
+  and records complete attended/no-show roll calls atomically. Credit release,
+  capacity checks, FIFO promotion, and class completion remain server enforced.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

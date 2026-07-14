@@ -1086,6 +1086,26 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(draft.published)
     }
 
+    func testAdminRosterMemberLimitsRollCallToAttendanceStatuses() {
+        let confirmed = AdminRosterMember(
+            booking_id: UUID(), member_id: UUID(), full_name: "Alex Runner",
+            email: "alex@example.com", phone: nil, status: "confirmed", booked_at: Date()
+        )
+        let requested = AdminRosterMember(
+            booking_id: UUID(), member_id: UUID(), full_name: "Sam Lifter",
+            email: nil, phone: nil, status: "requested", booked_at: Date()
+        )
+        let noShow = AdminRosterMember(
+            booking_id: UUID(), member_id: UUID(), full_name: nil,
+            email: "late@example.com", phone: nil, status: "no_show", booked_at: Date()
+        )
+
+        XCTAssertTrue(confirmed.attendanceEligible)
+        XCTAssertFalse(requested.attendanceEligible)
+        XCTAssertTrue(noShow.attendanceEligible)
+        XCTAssertEqual(noShow.displayName, "late@example.com")
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

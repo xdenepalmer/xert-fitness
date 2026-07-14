@@ -267,6 +267,46 @@ final class XertAPI {
         )
     }
 
+    func adminSessionRoster(session auth: AuthSession, classSessionID: UUID) async throws -> [AdminRosterMember] {
+        try await rpc(
+            path: "admin_session_roster",
+            body: AdminSessionRequest(p_session_id: classSessionID),
+            auth: auth
+        )
+    }
+
+    func adminSetBookingStatus(session auth: AuthSession, bookingID: UUID, status: String) async throws {
+        guard ["requested", "confirmed", "waitlisted", "cancelled", "declined"].contains(status) else {
+            throw APIError(message: "Choose a valid booking decision.")
+        }
+        let _: EmptyResponse = try await rpc(
+            path: "admin_set_booking_status",
+            body: AdminBookingStatusRequest(p_booking_id: bookingID, p_status: status),
+            auth: auth
+        )
+    }
+
+    @discardableResult
+    func adminRecordAttendance(
+        session auth: AuthSession,
+        classSessionID: UUID,
+        attendedIDs: [UUID],
+        noShowIDs: [UUID]
+    ) async throws -> Int {
+        guard !attendedIDs.isEmpty || !noShowIDs.isEmpty else {
+            throw APIError(message: "Complete the roll call before saving attendance.")
+        }
+        return try await rpc(
+            path: "admin_record_session_attendance",
+            body: AdminAttendanceRequest(
+                p_session_id: classSessionID,
+                p_attended_ids: attendedIDs,
+                p_no_show_ids: noShowIDs
+            ),
+            auth: auth
+        )
+    }
+
     func adminFollowUps(session auth: AuthSession, limit: Int = 20) async throws -> [AdminFollowUp] {
         try await rpc(
             path: "admin_member_follow_up_queue",
@@ -1058,6 +1098,15 @@ private struct EmptyBody: Encodable {}
 private struct EmptyObject: Decodable {}
 private struct AdminLimitRequest: Encodable { let p_limit: Int }
 private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
+private struct AdminBookingStatusRequest: Encodable {
+    let p_booking_id: UUID
+    let p_status: String
+}
+private struct AdminAttendanceRequest: Encodable {
+    let p_session_id: UUID
+    let p_attended_ids: [UUID]
+    let p_no_show_ids: [UUID]
+}
 private struct AdminMemberPageRequest: Encodable {
     let p_search: String?
     let p_role: String

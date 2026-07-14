@@ -40,6 +40,20 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var activeCount: Int { requested_count + confirmed_count }
 }
 
+struct AdminRosterMember: Identifiable, Codable, Hashable {
+    var id: UUID { booking_id }
+    let booking_id: UUID
+    let member_id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let status: String
+    let booked_at: Date
+
+    var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "XERT member" }
+    var attendanceEligible: Bool { ["confirmed", "attended", "no_show"].contains(status) }
+}
+
 struct AdminWaitlistItem: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID
