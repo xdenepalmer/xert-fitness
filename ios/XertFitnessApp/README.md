@@ -63,6 +63,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   identifiers and reconciliation audit details, safely recovers unresolved paid
   checkouts, and performs explicitly confirmed full refunds. Refunds use the same
   server workflow as desktop to revoke unused credits and cancel future bookings.
+  The native CRM manages member leads, trainer applicants, and partner enquiries
+  with complete paging, search and status filters, direct contact, application
+  details, internal notes, and up-to-100-record bulk transitions. Individual and
+  bulk changes use the same immutable lead-audit RPCs as the desktop workspace.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

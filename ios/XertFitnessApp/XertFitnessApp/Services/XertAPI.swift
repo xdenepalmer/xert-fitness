@@ -640,6 +640,83 @@ final class XertAPI {
         )
     }
 
+    func adminLeads(session auth: AuthSession, pipeline: AdminLeadPipeline) async throws -> [AdminLead] {
+        let pageSize = 500
+        var offset = 0
+        var leads: [AdminLead] = []
+        while true {
+            let page: [AdminLead] = try await restRequest(
+                path: "/rest/v1/\(pipeline.rawValue)",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "*"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            leads.append(contentsOf: page)
+            if page.count < pageSize { return leads }
+            offset += pageSize
+        }
+    }
+
+    func adminUpdateLead(
+        session auth: AuthSession,
+        pipeline: AdminLeadPipeline,
+        leadID: AdminLeadIdentifier,
+        status: String,
+        notes: String
+    ) async throws {
+        try validateLeadMutation(pipeline: pipeline, status: status, ids: [leadID])
+        guard notes.count <= 5_000 else { throw APIError(message: "Admin notes must be 5,000 characters or fewer.") }
+        let updated: Int = try await rpc(
+            path: "admin_update_lead",
+            body: AdminLeadUpdateRequest(
+                p_lead_type: pipeline.rawValue,
+                p_lead_id: leadID.value,
+                p_status: status,
+                p_admin_notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            ),
+            auth: auth
+        )
+        guard updated == 1 else { throw APIError(message: "Lead update was not acknowledged. Refresh and try again.") }
+    }
+
+    func adminUpdateLeadStatuses(
+        session auth: AuthSession,
+        pipeline: AdminLeadPipeline,
+        leadIDs: [AdminLeadIdentifier],
+        status: String
+    ) async throws {
+        try validateLeadMutation(pipeline: pipeline, status: status, ids: leadIDs)
+        let uniqueIDs = Array(Set(leadIDs)).map(\.value).sorted()
+        let updated: Int = try await rpc(
+            path: "admin_update_lead_statuses",
+            body: AdminLeadBulkUpdateRequest(
+                p_lead_type: pipeline.rawValue,
+                p_lead_ids: uniqueIDs,
+                p_status: status
+            ),
+            auth: auth
+        )
+        guard updated == uniqueIDs.count else {
+            throw APIError(message: "The complete lead selection was not updated. Refresh and review the pipeline.")
+        }
+    }
+
+    private func validateLeadMutation(
+        pipeline: AdminLeadPipeline,
+        status: String,
+        ids: [AdminLeadIdentifier]
+    ) throws {
+        guard pipeline.statuses.contains(status) else { throw APIError(message: "Choose a valid \(pipeline.shortLabel.lowercased()) lead status.") }
+        guard !ids.isEmpty, ids.count <= 100 else { throw APIError(message: "Select between 1 and 100 leads.") }
+        guard ids.allSatisfy({ !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.value.count <= 128 }) else {
+            throw APIError(message: "One or more lead records has an invalid identifier.")
+        }
+    }
+
     func adminAnnouncements(session auth: AuthSession) async throws -> [AdminAnnouncement] {
         try await restRequest(
             path: "/rest/v1/member_announcements",
@@ -1461,6 +1538,17 @@ private struct AdminCreditGrantRequest: Encodable {
 }
 private struct AdminRoleRequest: Encodable { let p_user_id: UUID; let p_role: String }
 private struct AdminNoteArchiveRequest: Encodable { let p_note_id: UUID; let p_archived: Bool }
+private struct AdminLeadUpdateRequest: Encodable {
+    let p_lead_type: String
+    let p_lead_id: String
+    let p_status: String
+    let p_admin_notes: String
+}
+private struct AdminLeadBulkUpdateRequest: Encodable {
+    let p_lead_type: String
+    let p_lead_ids: [String]
+    let p_status: String
+}
 private struct AdminMemberNoteRequest: Encodable {
     let p_user_id: UUID
     let p_category: String

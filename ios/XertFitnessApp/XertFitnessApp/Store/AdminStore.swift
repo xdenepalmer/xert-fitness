@@ -25,6 +25,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
+    @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -48,6 +49,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
+    @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
+    @Published private(set) var savingLeadIDs: Set<AdminLeadIdentifier> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -258,6 +261,75 @@ final class AdminStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    func leads(for pipeline: AdminLeadPipeline) -> [AdminLead] {
+        leadsByPipeline[pipeline] ?? []
+    }
+
+    func loadLeads(session: AuthSession, pipeline: AdminLeadPipeline, force: Bool = false) async {
+        guard loadingLeadPipeline == nil else { return }
+        if !force, leadsByPipeline[pipeline] != nil { return }
+        loadingLeadPipeline = pipeline
+        defer { loadingLeadPipeline = nil }
+        do {
+            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            lastUpdatedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveLead(
+        session: AuthSession,
+        pipeline: AdminLeadPipeline,
+        lead: AdminLead,
+        status: String,
+        notes: String
+    ) async -> Bool {
+        guard savingLeadIDs.isEmpty else { return false }
+        savingLeadIDs = [lead.id]
+        defer { savingLeadIDs = [] }
+        do {
+            try await api.adminUpdateLead(
+                session: session,
+                pipeline: pipeline,
+                leadID: lead.id,
+                status: status,
+                notes: notes
+            )
+            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func bulkUpdateLeads(
+        session: AuthSession,
+        pipeline: AdminLeadPipeline,
+        ids: Set<AdminLeadIdentifier>,
+        status: String
+    ) async -> Bool {
+        guard savingLeadIDs.isEmpty else { return false }
+        savingLeadIDs = ids
+        defer { savingLeadIDs = [] }
+        do {
+            try await api.adminUpdateLeadStatuses(
+                session: session,
+                pipeline: pipeline,
+                leadIDs: Array(ids),
+                status: status
+            )
+            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 

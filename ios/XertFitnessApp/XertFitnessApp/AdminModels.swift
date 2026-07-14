@@ -273,6 +273,93 @@ struct AdminPTRequest: Identifiable, Codable, Hashable {
     var isPending: Bool { ["requested", "reschedule_requested"].contains(status) }
 }
 
+enum AdminLeadPipeline: String, CaseIterable, Identifiable, Codable, Hashable {
+    case members = "member_interest"
+    case trainers = "trainer_interest"
+    case partners = "partner_interest"
+
+    var id: String { rawValue }
+    var shortLabel: String {
+        switch self {
+        case .members: return "Members"
+        case .trainers: return "Trainers"
+        case .partners: return "Partners"
+        }
+    }
+    var title: String {
+        switch self {
+        case .members: return "Member leads"
+        case .trainers: return "Trainer applicants"
+        case .partners: return "Partner enquiries"
+        }
+    }
+    var statuses: [String] {
+        switch self {
+        case .members:
+            return ["new", "contacted", "warm", "hot", "foundation_offer_sent", "booked_trial", "joined", "not_suitable", "archived"]
+        case .trainers:
+            return ["new", "reviewing", "contacted", "interview", "shortlisted", "not_suitable", "hired", "archived"]
+        case .partners:
+            return ["new", "reviewing", "contacted", "meeting", "approved", "not_suitable", "archived"]
+        }
+    }
+}
+
+struct AdminLeadIdentifier: Codable, Hashable {
+    let value: String
+
+    init(_ value: String) { self.value = value }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(String.self) {
+            self.value = value
+        } else if let value = try? container.decode(Int64.self) {
+            self.value = String(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Lead ID must be text or an integer.")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}
+
+struct AdminLead: Identifiable, Codable, Hashable {
+    let id: AdminLeadIdentifier
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let status: String?
+    let admin_notes: String?
+    let created_at: Date
+    let suburb_town: String?
+    let current_training_level: String?
+    let main_training_goals: [String]?
+    let preferred_training_times: [String]?
+    let qualifications: String?
+    let years_experience: String?
+    let functional_training_experience: String?
+    let specialties: [String]?
+    let profession: String?
+    let business_name: String?
+    let services_offered: [String]?
+    let short_intro: String?
+    let website_social_link: String?
+    let utm_source: String?
+    let utm_medium: String?
+    let utm_campaign: String?
+
+    var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "XERT lead" }
+    var effectiveStatus: String { status?.nilIfBlank ?? "new" }
+    var searchableText: String {
+        [full_name, email, phone, business_name, qualifications, profession, utm_source]
+            .compactMap { $0 }.joined(separator: " ").lowercased()
+    }
+}
+
 struct AdminAnnouncement: Identifiable, Codable, Hashable {
     let id: UUID
     let title: String

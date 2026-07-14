@@ -1199,6 +1199,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(note.archived_by, authorID)
     }
 
+    func testAdminLeadAcceptsLegacyNumericIdentityAndPipelineMetadata() throws {
+        let data = """
+        {
+          "id": 42,
+          "full_name": "Alex Runner",
+          "email": "alex@example.com",
+          "phone": "0400 123 456",
+          "status": "hot",
+          "admin_notes": "Foundation offer next.",
+          "created_at": "2026-07-14T01:00:00Z",
+          "main_training_goals": ["Strength", "Gold Coast Marathon"],
+          "utm_source": "instagram"
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let lead = try decoder.decode(AdminLead.self, from: data)
+
+        XCTAssertEqual(lead.id.value, "42")
+        XCTAssertEqual(lead.displayName, "Alex Runner")
+        XCTAssertEqual(lead.effectiveStatus, "hot")
+        XCTAssertTrue(lead.searchableText.contains("instagram"))
+        XCTAssertTrue(AdminLeadPipeline.members.statuses.contains("foundation_offer_sent"))
+        XCTAssertTrue(AdminLeadPipeline.trainers.statuses.contains("hired"))
+        XCTAssertTrue(AdminLeadPipeline.partners.statuses.contains("approved"))
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

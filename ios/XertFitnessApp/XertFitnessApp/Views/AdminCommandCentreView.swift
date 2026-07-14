@@ -182,6 +182,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Retention", detail: "Contact members before they disengage", icon: "arrow.triangle.2.circlepath") {
                     AdminRetentionView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Lead pipelines", detail: "Manage member, trainer and partner opportunities", icon: "person.crop.circle.badge.plus") {
+                    AdminLeadsView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "PT requests", detail: "Approve, reschedule and complete private training", icon: "figure.strengthtraining.traditional") {
                     AdminPTRequestsView(admin: admin, session: session)
                 }
@@ -1351,6 +1354,275 @@ private struct AdminOrderDetailView: View {
             }
             .listRowBackground(Color.xertInk)
         }
+    }
+}
+
+private struct AdminLeadsView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var pipeline = AdminLeadPipeline.members
+    @State private var query = ""
+    @State private var status = "all"
+    @State private var selectedLead: AdminLead?
+    @State private var selectedIDs: Set<AdminLeadIdentifier> = []
+    @State private var bulkStatus = ""
+
+    private var leads: [AdminLead] { admin.leads(for: pipeline) }
+    private var filteredLeads: [AdminLead] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return leads.filter { lead in
+            (status == "all" || lead.effectiveStatus == status)
+                && (needle.isEmpty || lead.searchableText.contains(needle))
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Lead pipeline", selection: $pipeline) {
+                    ForEach(AdminLeadPipeline.allCases) { option in
+                        Text(option.shortLabel).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Status", selection: $status) {
+                    Text("All statuses").tag("all")
+                    ForEach(pipeline.statuses, id: \.self) { value in
+                        Text(statusLabel(value)).tag(value)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color.xertSteel)
+            }
+            .listRowBackground(Color.xertInk)
+
+            if !selectedIDs.isEmpty {
+                Section("Bulk update") {
+                    HStack {
+                        Text("\(selectedIDs.count) selected")
+                        Spacer()
+                        Button("Clear") { selectedIDs = [] }
+                    }
+                    Picker("Move selected to", selection: $bulkStatus) {
+                        Text("Choose status").tag("")
+                        ForEach(pipeline.statuses, id: \.self) { value in
+                            Text(statusLabel(value)).tag(value)
+                        }
+                    }
+                    Button {
+                        let ids = selectedIDs
+                        Task {
+                            if await admin.bulkUpdateLeads(session: session, pipeline: pipeline, ids: ids, status: bulkStatus) {
+                                selectedIDs = []
+                                bulkStatus = ""
+                            }
+                        }
+                    } label: {
+                        Label(admin.savingLeadIDs.isEmpty ? "Apply bulk status" : "Updating leads...", systemImage: "person.2.badge.gearshape")
+                    }
+                    .disabled(bulkStatus.isEmpty || !admin.savingLeadIDs.isEmpty)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            Section(pipeline.title) {
+                if admin.loadingLeadPipeline == pipeline && leads.isEmpty {
+                    HStack { ProgressView(); Text("Loading pipeline...") }
+                        .listRowBackground(Color.xertInk)
+                } else if filteredLeads.isEmpty {
+                    AdminEmptyState(icon: "person.crop.circle.badge.questionmark", text: leads.isEmpty ? "No leads yet." : "No matching leads.")
+                        .listRowBackground(Color.xertInk)
+                }
+
+                ForEach(filteredLeads) { lead in
+                    HStack(spacing: 12) {
+                        Button { toggleSelection(lead.id) } label: {
+                            Image(systemName: selectedIDs.contains(lead.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.title3).foregroundStyle(Color.xertSteel)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedIDs.count >= 100 && !selectedIDs.contains(lead.id))
+                        .accessibilityLabel(selectedIDs.contains(lead.id) ? "Deselect \(lead.displayName)" : "Select \(lead.displayName)")
+
+                        Button { selectedLead = lead } label: {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(lead.displayName).font(.headline)
+                                    Text([lead.email, lead.phone].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " · "))
+                                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
+                                    if let goals = lead.main_training_goals, !goals.isEmpty {
+                                        Text(goals.prefix(3).joined(separator: ", "))
+                                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.5)).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 5) {
+                                    Text(statusLabel(lead.effectiveStatus).uppercased())
+                                        .font(.caption2.weight(.bold)).foregroundStyle(leadStatusColour(lead.effectiveStatus))
+                                    Text(lead.created_at.formatted(date: .abbreviated, time: .omitted))
+                                        .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.42))
+                                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.xertSteel)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .padding(.vertical, 5)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Lead Pipelines")
+        .searchable(text: $query, prompt: "Name, email, phone or source")
+        .refreshable { await admin.loadLeads(session: session, pipeline: pipeline, force: true) }
+        .task { await admin.loadLeads(session: session, pipeline: pipeline) }
+        .onChange(of: pipeline) { newPipeline in
+            query = ""
+            status = "all"
+            selectedIDs = []
+            bulkStatus = ""
+            selectedLead = nil
+            Task { await admin.loadLeads(session: session, pipeline: newPipeline) }
+        }
+        .sheet(item: $selectedLead) { lead in
+            NavigationStack {
+                AdminLeadDetailView(admin: admin, session: session, pipeline: pipeline, lead: lead)
+            }
+        }
+    }
+
+    private func toggleSelection(_ id: AdminLeadIdentifier) {
+        if selectedIDs.contains(id) { selectedIDs.remove(id) }
+        else if selectedIDs.count < 100 { selectedIDs.insert(id) }
+    }
+
+    private func statusLabel(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func leadStatusColour(_ value: String) -> Color {
+        switch value {
+        case "new", "hot": return .orange
+        case "joined", "hired", "approved", "booked_trial": return .green
+        case "not_suitable", "archived": return Color.xertPale.opacity(0.45)
+        default: return Color.xertSteel
+        }
+    }
+}
+
+private struct AdminLeadDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let pipeline: AdminLeadPipeline
+    let lead: AdminLead
+    @State private var status: String
+    @State private var notes: String
+
+    init(admin: AdminStore, session: AuthSession, pipeline: AdminLeadPipeline, lead: AdminLead) {
+        self.admin = admin
+        self.session = session
+        self.pipeline = pipeline
+        self.lead = lead
+        _status = State(initialValue: lead.effectiveStatus)
+        _notes = State(initialValue: lead.admin_notes ?? "")
+    }
+
+    private var isSaving: Bool { admin.savingLeadIDs.contains(lead.id) }
+
+    var body: some View {
+        List {
+            Section("Contact") {
+                detailRow("Name", lead.displayName)
+                if let email = nonBlank(lead.email), let url = URL(string: "mailto:\(email)") {
+                    Link(destination: url) { Label(email, systemImage: "envelope") }
+                }
+                if let phone = nonBlank(lead.phone), let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                    Link(destination: url) { Label(phone, systemImage: "phone") }
+                }
+                detailRow("Submitted", lead.created_at.formatted(date: .abbreviated, time: .shortened))
+            }
+
+            Section("Application") {
+                optionalRow("Business", lead.business_name)
+                optionalRow("Suburb", lead.suburb_town)
+                optionalRow("Training level", lead.current_training_level)
+                optionalList("Goals", lead.main_training_goals)
+                optionalList("Preferred times", lead.preferred_training_times)
+                optionalRow("Qualifications", lead.qualifications)
+                optionalRow("Experience", lead.years_experience)
+                optionalRow("Functional training", lead.functional_training_experience)
+                optionalList("Specialties", lead.specialties)
+                optionalRow("Profession", lead.profession)
+                optionalList("Services", lead.services_offered)
+                optionalRow("Introduction", lead.short_intro)
+                if let website = nonBlank(lead.website_social_link), let url = URL(string: website), url.scheme != nil {
+                    Link(destination: url) { Label("Website or social profile", systemImage: "safari") }
+                }
+                if let source = nonBlank(lead.utm_source) {
+                    detailRow("Source", [source, lead.utm_medium, lead.utm_campaign].compactMap { nonBlank($0) }.joined(separator: " / "))
+                }
+            }
+
+            Section("Pipeline") {
+                Picker("Status", selection: $status) {
+                    ForEach(pipeline.statuses, id: \.self) { value in
+                        Text(value.replacingOccurrences(of: "_", with: " ").capitalized).tag(value)
+                    }
+                }
+                TextEditor(text: $notes)
+                    .frame(minHeight: 120)
+                    .overlay(alignment: .topLeading) {
+                        if notes.isEmpty {
+                            Text("Internal notes").foregroundStyle(Color.xertPale.opacity(0.35)).padding(.top, 8).allowsHitTesting(false)
+                        }
+                    }
+                Text("\(notes.count)/5,000")
+                    .font(.caption2).foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
+                Button {
+                    Task {
+                        if await admin.saveLead(session: session, pipeline: pipeline, lead: lead, status: status, notes: notes) {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    Label(isSaving ? "Saving..." : "Save pipeline changes", systemImage: "checkmark.circle")
+                }
+                .disabled(isSaving || notes.count > 5_000)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(lead.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isSaving) } }
+    }
+
+    @ViewBuilder
+    private func optionalRow(_ label: String, _ value: String?) -> some View {
+        if let value = nonBlank(value) { detailRow(label, value) }
+    }
+
+    @ViewBuilder
+    private func optionalList(_ label: String, _ values: [String]?) -> some View {
+        if let values, !values.isEmpty { detailRow(label, values.joined(separator: ", ")) }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(Color.xertPale.opacity(0.48))
+            Text(value).foregroundStyle(Color.xertOffWhite)
+        }
+    }
+
+    private func nonBlank(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
