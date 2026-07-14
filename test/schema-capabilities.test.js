@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'targeted_member_notices'],
     ready: false,
     actions: [
       'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
@@ -41,6 +41,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
       'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
       'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
+      'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
     ],
   });
   assert.equal(summarizeSchemaCapabilities([
@@ -76,6 +77,7 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'schedule_optimistic_locking' },
     { capability: 'shared_admin_optimistic_locking' },
     { capability: 'catalog_optimistic_locking' },
+    { capability: 'targeted_member_notices' },
     { capability: 'admin_role_safety' },
   ]).ready, true);
 });
@@ -150,6 +152,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql', 'shared_admin_optimistic_locking'],
     ['../src/supabase/catalog_optimistic_locking_upgrade.sql', 'catalog_optimistic_locking'],
     ['../supabase/migrations/20260714020000_catalog_optimistic_locking.sql', 'catalog_optimistic_locking'],
+    ['../src/supabase/targeted_member_notices_upgrade.sql', 'targeted_member_notices'],
+    ['../supabase/migrations/20260714021000_targeted_member_notices.sql', 'targeted_member_notices'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -197,6 +201,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /schedule_optimistic_locking/);
   assert.match(yaml, /shared_admin_optimistic_locking/);
   assert.match(yaml, /catalog_optimistic_locking/);
+  assert.match(yaml, /targeted_member_notices/);
   assert.match(yaml, /\/api\/checkout/);
   assert.match(yaml, /expected HTTP 401/);
   assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
@@ -248,6 +253,7 @@ test('read-only production check reports every release capability and migration'
     'schedule_optimistic_locking',
     'shared_admin_optimistic_locking',
     'catalog_optimistic_locking',
+    'targeted_member_notices',
   ];
 
   for (const capability of capabilities) {

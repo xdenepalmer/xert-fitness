@@ -79,3 +79,43 @@ export function normalizeMemberNoteArchive(noteId, archived) {
   }
   return { noteId: normalizedNoteId, archived: Boolean(archived) };
 }
+
+const MEMBER_NOTICE_TONES = new Set(['info', 'action', 'urgent']);
+const MEMBER_NOTICE_ACTIONS = Object.freeze({
+  none: { label: null, url: null },
+  booking: { label: 'Book a class', url: '/booking' },
+  account: { label: 'View account', url: '/account' },
+  events: { label: 'View events', url: '/events' },
+});
+const MEMBER_NOTICE_EXPIRY_DAYS = new Set([7, 30, 90]);
+
+export function normalizeTargetedMemberNotice(userId, notice, now = new Date()) {
+  const normalizedUserId = String(userId || '').trim();
+  const title = String(notice?.title || '').trim();
+  const body = String(notice?.body || '').trim();
+  const tone = String(notice?.tone || 'info').trim().toLowerCase();
+  const actionKey = String(notice?.action || 'none').trim().toLowerCase();
+  const expiryDays = Number.parseInt(String(notice?.expiryDays || 30), 10);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedUserId)) {
+    throw new Error('A valid member account is required.');
+  }
+  if (title.length < 3 || title.length > 120) {
+    throw new Error('Notice titles must be between 3 and 120 characters.');
+  }
+  if (body.length < 3 || body.length > 2000) {
+    throw new Error('Notice messages must be between 3 and 2,000 characters.');
+  }
+  if (!MEMBER_NOTICE_TONES.has(tone)) throw new Error('Choose a valid notice priority.');
+  if (!Object.hasOwn(MEMBER_NOTICE_ACTIONS, actionKey)) throw new Error('Choose a valid notice action.');
+  if (!MEMBER_NOTICE_EXPIRY_DAYS.has(expiryDays)) throw new Error('Choose a valid notice expiry.');
+  const action = MEMBER_NOTICE_ACTIONS[actionKey];
+  return {
+    userId: normalizedUserId,
+    title,
+    body,
+    tone,
+    ctaLabel: action.label,
+    ctaUrl: action.url,
+    expiresAt: new Date(now.getTime() + expiryDays * 86_400_000).toISOString(),
+  };
+}

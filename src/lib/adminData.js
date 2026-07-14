@@ -4,7 +4,7 @@ import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponse
 import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
-  normalizeMemberNoteArchive, normalizeRoleChange
+  normalizeMemberNoteArchive, normalizeRoleChange, normalizeTargetedMemberNotice
 } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { blackoutPeriodMutationError, classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
@@ -842,6 +842,50 @@ export async function adminSetMemberNoteArchived(noteId, archived) {
   if (error) throw new Error(error.message);
 }
 
+export async function adminListMemberNotices(userId) {
+  const member = normalizeMemberDirectoryQuery({ memberId: userId });
+  const { data, error } = await supabase.rpc('admin_list_member_notices', {
+    p_user_id: member.memberId,
+  });
+  const missing = error?.code === 'PGRST202'
+    || /admin_list_member_notices.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+  if (missing) return { rows: [], available: false };
+  if (error) throw new Error(error.message);
+  return { rows: data || [], available: true };
+}
+
+export async function adminSendMemberNotice(userId, notice) {
+  const mutation = normalizeTargetedMemberNotice(userId, notice);
+  const { data: announcementId, error } = await supabase.rpc('admin_send_member_notice', {
+    p_user_id: mutation.userId,
+    p_title: mutation.title,
+    p_body: mutation.body,
+    p_tone: mutation.tone,
+    p_cta_label: mutation.ctaLabel,
+    p_cta_url: mutation.ctaUrl,
+    p_expires_at: mutation.expiresAt,
+  });
+  if (error) throw new Error(error.message);
+
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) {
+    return { announcement_id: announcementId, push: null, warning: 'The notice was saved, but push delivery needs a fresh admin sign-in.' };
+  }
+  const response = await fetch('/api/admin-publish-announcement', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ action: 'notify_targeted_announcement', announcement_id: announcementId }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { announcement_id: announcementId, push: null, warning: body.error || 'The notice was saved, but push delivery could not be completed.' };
+  }
+  return body;
+}
+
 export async function adminListMemberFollowUps(limit = 20) {
   const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 20));
   const { data, error } = await supabase.rpc('admin_member_follow_up_queue', { p_limit: safeLimit });
@@ -1438,7 +1482,7 @@ export async function getOperationsHealth() {
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders, grants, notes] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }), adminListMemberNotes(userId, true)]);
+  const [credits, bookings, orders, grants, notes, notices] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }), adminListMemberNotes(userId, true), adminListMemberNotices(userId)]);
   for (const r of [credits, bookings, orders]) {
     if (r.error) throw new Error(r.error.message);
   }
@@ -1449,7 +1493,9 @@ export async function adminMemberDetail(userId) {
     grants: grants.error ? [] : grants.data || [],
     creditAuditAvailable: !grants.error,
     notes: notes.rows,
-    memberNotesAvailable: notes.available
+    memberNotesAvailable: notes.available,
+    notices: notices.rows,
+    memberNoticesAvailable: notices.available
   };
 }
 

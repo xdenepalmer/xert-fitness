@@ -93,6 +93,33 @@ export async function notifyClassCancellation(admin, sessionId) {
   return { announcement_id: announcement.id, recipients: userIds.length, push };
 }
 
+export async function notifyTargetedAnnouncement(admin, announcementId) {
+  if (!UUID.test(announcementId)) throw new Error('TARGETED_NOTICE_ID_INVALID');
+  const { data: announcement, error: announcementError } = await admin
+    .from('member_announcements')
+    .select('id,title,body,cta_url,expires_at')
+    .eq('id', announcementId)
+    .eq('audience', 'targeted')
+    .eq('source_kind', 'member_direct')
+    .maybeSingle();
+  if (announcementError) throw announcementError;
+  if (!announcement) throw new Error('TARGETED_NOTICE_NOT_FOUND');
+
+  const [{ data: targets, error: targetError }, { data: previous, error: previousError }] = await Promise.all([
+    admin.from('member_announcement_targets').select('user_id').eq('announcement_id', announcement.id),
+    admin.from('push_notification_deliveries').select('status').eq('announcement_id', announcement.id),
+  ]);
+  if (targetError) throw targetError;
+  if (previousError) throw previousError;
+  const userIds = [...new Set((targets || []).map(target => target.user_id).filter(Boolean))];
+  if (userIds.length !== 1) throw new Error('TARGETED_NOTICE_RECIPIENT_INVALID');
+  if ((previous || []).length > 0) {
+    return { announcement_id: announcement.id, recipients: 1, push: summarizePreviousClassAlertPushes(previous) };
+  }
+  const push = await sendMemberAnnouncementPushes({ admin, announcement, targetUserIds: userIds });
+  return { announcement_id: announcement.id, recipients: 1, push };
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -117,6 +144,15 @@ export default async function handler(request, response) {
       } catch (error) {
         if (error.message?.startsWith('CLASS_NOTICE_')) throw error;
         throw new Error('CLASS_NOTICE_DELIVERY_FAILED', { cause: error });
+      }
+    }
+
+    if (body?.action === 'notify_targeted_announcement') {
+      try {
+        return json(await notifyTargetedAnnouncement(admin, String(body?.announcement_id || '').trim()));
+      } catch (error) {
+        if (error.message?.startsWith('TARGETED_NOTICE_')) throw error;
+        throw new Error('TARGETED_NOTICE_DELIVERY_FAILED', { cause: error });
       }
     }
 
@@ -152,8 +188,12 @@ export default async function handler(request, response) {
   } catch (error) {
     if (error.message === 'CLASS_NOTICE_SESSION_INVALID') return json({ error: 'A valid class session is required.' }, 400);
     if (error.message === 'CLASS_NOTICE_NOT_FOUND') return json({ error: 'No member-account cancellation notice was created for this class.' }, 404);
+    if (error.message === 'TARGETED_NOTICE_ID_INVALID') return json({ error: 'A valid private notice is required.' }, 400);
+    if (error.message === 'TARGETED_NOTICE_NOT_FOUND') return json({ error: 'Private member notice not found.' }, 404);
+    if (error.message === 'TARGETED_NOTICE_RECIPIENT_INVALID') return json({ error: 'Private member notice recipient is invalid.' }, 409);
     if (error.message?.startsWith('ANNOUNCEMENT_')) return json({ error: 'Announcement details are invalid.' }, 400);
     if (error.message?.startsWith('CLASS_NOTICE_')) return json({ error: 'The cancellation notice was saved, but push delivery could not be completed.' }, 500);
+    if (error.message?.startsWith('TARGETED_NOTICE_')) return json({ error: 'The private notice was saved, but push delivery could not be completed.' }, 500);
     return json({ error: 'Announcement could not be published.' }, 500);
   }
 }

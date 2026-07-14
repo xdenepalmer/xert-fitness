@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Archive, ArchiveRestore, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Ticket, UserRoundSearch, X } from 'lucide-react';
-import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberFollowUps, adminListMembersPage, adminMemberDetail, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
+import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberFollowUps, adminListMembersPage, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
@@ -27,6 +27,7 @@ const BOOKING_BADGE = {
   cancelled: { color: 'rgba(209,221,230,0.4)', label: 'Cancelled' },
 };
 const PAGE_SIZE = 50;
+const emptyNoticeDraft = () => ({ title: '', body: '', tone: 'info', action: 'none', expiryDays: '30' });
 
 function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const [detail, setDetail] = useState(null);
@@ -37,6 +38,11 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const [noteSaving, setNoteSaving] = useState(false);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [noteToArchive, setNoteToArchive] = useState(null);
+  const [noticeDraft, setNoticeDraft] = useState(emptyNoticeDraft);
+  const [noticeSaving, setNoticeSaving] = useState(false);
+  const [noticeError, setNoticeError] = useState('');
+  const [discardNoticeOpen, setDiscardNoticeOpen] = useState(false);
+  const noticeDirty = Boolean(noticeDraft.title.trim() || noticeDraft.body.trim());
 
   const loadDetail = () => {
     setDetail(null);
@@ -80,9 +86,40 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
     }
   };
 
+  const requestClose = () => {
+    if (noticeDirty && !noticeSaving) {
+      setDiscardNoticeOpen(true);
+      return;
+    }
+    onClose();
+  };
+
+  const handleSendNotice = async event => {
+    event.preventDefault();
+    setNoticeSaving(true);
+    setNoticeError('');
+    try {
+      const result = await adminSendMemberNotice(member.id, noticeDraft);
+      const push = result.push;
+      const description = result.warning
+        || (!push?.configured
+          ? 'It is available in the member app. APNs push is not configured.'
+          : push.delivered > 0
+            ? 'It is available in the member app and the push notification was delivered.'
+            : 'It is available in the member app. No active device received a push.');
+      toast({ title: 'Private notice sent', description });
+      setNoticeDraft(emptyNoticeDraft());
+      loadDetail();
+    } catch (error) {
+      setNoticeError(error.message || 'Could not send the private member notice.');
+    } finally {
+      setNoticeSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70" onClick={requestClose} />
       <div role="dialog" aria-modal="true" aria-labelledby="member-detail-title" className="relative w-full max-w-md h-full overflow-y-auto animate-slide-up sm:animate-none"
         style={{ backgroundColor: '#0e161e', borderLeft: '1px solid rgba(123,167,188,0.2)' }}>
         {/* Header */}
@@ -97,7 +134,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
               Member since {fmtDate(member.joined_at)}{member.role === 'admin' ? ' · Admin' : ''}
             </p>
           </div>
-          <button type="button" onClick={onClose} title="Close member detail" aria-label="Close member detail" className="p-1 shrink-0" style={{ color: 'rgba(209,221,230,0.5)' }}>
+          <button type="button" onClick={requestClose} title="Close member detail" aria-label="Close member detail" className="p-1 shrink-0" style={{ color: 'rgba(209,221,230,0.5)' }}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -110,6 +147,116 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
           </div>
         ) : (
           <div className="p-5 space-y-7">
+            {/* Private member notices */}
+            <section>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.7)' }}>
+                    <BellRing className="w-3.5 h-3.5" /> Private notices
+                  </h4>
+                  <p className="font-body text-[11px] leading-relaxed mt-1" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                    Send an account-only message with optional iOS push delivery.
+                  </p>
+                </div>
+              </div>
+
+              {!detail.memberNoticesAvailable ? (
+                <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+                  Private notices are paused until targeted_member_notices_upgrade.sql is applied.
+                </p>
+              ) : (
+                <>
+                  <form onSubmit={handleSendNotice} className="space-y-2">
+                    <label htmlFor="member-notice-title" className="sr-only">Private notice title</label>
+                    <input
+                      id="member-notice-title"
+                      value={noticeDraft.title}
+                      onChange={event => setNoticeDraft(current => ({ ...current, title: event.target.value }))}
+                      disabled={noticeSaving}
+                      minLength={3}
+                      maxLength={120}
+                      required
+                      placeholder="Notice title"
+                      className={`${inputCls} w-full min-h-11`}
+                    />
+                    <label htmlFor="member-notice-body" className="sr-only">Private notice message</label>
+                    <textarea
+                      id="member-notice-body"
+                      value={noticeDraft.body}
+                      onChange={event => setNoticeDraft(current => ({ ...current, body: event.target.value }))}
+                      disabled={noticeSaving}
+                      minLength={3}
+                      maxLength={2000}
+                      rows={4}
+                      required
+                      placeholder="What does this member need to know?"
+                      className={`${inputCls} w-full resize-y`}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
+                        Priority
+                        <select value={noticeDraft.tone} onChange={event => setNoticeDraft(current => ({ ...current, tone: event.target.value }))} disabled={noticeSaving} className={`${inputCls} w-full min-h-11 mt-1`}>
+                          <option value="info">Information</option>
+                          <option value="action">Action needed</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </label>
+                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
+                        Action
+                        <select value={noticeDraft.action} onChange={event => setNoticeDraft(current => ({ ...current, action: event.target.value }))} disabled={noticeSaving} className={`${inputCls} w-full min-h-11 mt-1`}>
+                          <option value="none">No action</option>
+                          <option value="booking">Book a class</option>
+                          <option value="account">View account</option>
+                          <option value="events">View events</option>
+                        </select>
+                      </label>
+                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
+                        Expires
+                        <select value={noticeDraft.expiryDays} onChange={event => setNoticeDraft(current => ({ ...current, expiryDays: event.target.value }))} disabled={noticeSaving} className={`${inputCls} w-full min-h-11 mt-1`}>
+                          <option value="7">7 days</option>
+                          <option value="30">30 days</option>
+                          <option value="90">90 days</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-body text-[10px] leading-relaxed" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                        The member sees this privately in XERT. Sending and receipt activity remain in this record.
+                      </p>
+                      <button type="submit" disabled={noticeSaving || noticeDraft.title.trim().length < 3 || noticeDraft.body.trim().length < 3}
+                        className="min-h-11 shrink-0 inline-flex items-center gap-2 px-3 bg-xert-steel font-display text-sm uppercase text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-40">
+                        {noticeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {noticeSaving ? 'Sending' : 'Send privately'}
+                      </button>
+                    </div>
+                  </form>
+                  {noticeError && <p role="alert" className="font-body text-xs text-xert-red mt-2">{noticeError}</p>}
+
+                  <div className="mt-4 space-y-2">
+                    {detail.notices.length === 0 ? (
+                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No private notices yet.</p>
+                    ) : detail.notices.map(notice => (
+                      <article key={notice.id} className="p-3" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)' }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-display text-sm uppercase text-xert-offwhite break-words">{notice.title}</p>
+                            <p className="font-body text-xs whitespace-pre-wrap break-words mt-1 text-xert-concrete/60">{notice.body}</p>
+                          </div>
+                          <span className="shrink-0 font-body text-[9px] uppercase tracking-wider px-2 py-1 border border-xert-steel/25 text-xert-steel">
+                            {notice.source_kind === 'class_cancellation' ? 'Automatic' : notice.tone}
+                          </span>
+                        </div>
+                        <p className="font-body text-[10px] mt-2 text-xert-concrete/35">
+                          {fmtDateTime(notice.published_at)} · {notice.dismissed_at ? 'Dismissed' : notice.read_at ? 'Read in app' : 'Awaiting app open'}
+                          {Number(notice.push_delivered) > 0 ? ' · Push delivered' : Number(notice.push_attempted) > 0 ? ' · Push failed' : ' · No push device'}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+
             {/* Staff notes */}
             <section>
               <div className="flex items-center justify-between gap-3 mb-3">
@@ -295,6 +442,21 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
             if (note) void handleNoteArchive(note);
           }}
           busy={noteSaving}
+        />
+        <AdminConfirmDialog
+          open={discardNoticeOpen}
+          onOpenChange={setDiscardNoticeOpen}
+          title="Discard private notice draft?"
+          description="This member notice has not been sent."
+          warning="The title and message you entered will be permanently discarded."
+          cancelLabel="Keep writing"
+          confirmLabel="Discard draft"
+          onConfirm={() => {
+            setDiscardNoticeOpen(false);
+            setNoticeDraft(emptyNoticeDraft());
+            onClose();
+          }}
+          busy={noticeSaving}
         />
       </div>
     </div>
