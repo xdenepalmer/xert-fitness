@@ -133,6 +133,17 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /id,utm_source,utm_medium,utm_campaign,source,created_at/);
   assert.match(api, /path: "\/rest\/v1\/member_interest"/);
   assert.match(adminStore, /func loadCampaignAttribution/);
+  assert.match(view, /AdminSiteContentView/);
+  assert.match(view, /AdminSiteContentEditor/);
+  assert.match(view, /Site content/);
+  assert.match(view, /PhotosPicker/);
+  assert.match(api, /func adminSiteContent/);
+  assert.match(api, /func adminSaveSiteContent/);
+  assert.match(api, /func adminUploadSiteImage/);
+  assert.match(api, /\/storage\/v1\/object\/site-images/);
+  assert.match(api, /updated_at", value: "eq\.\\\(expectedUpdatedAt\)/);
+  assert.match(adminStore, /func saveSiteContent/);
+  assert.match(adminStore, /func uploadSiteImage/);
   assert.match(view, /AdminBookingRequestsView/);
   assert.match(view, /AdminBookingRequestDetailView/);
   assert.match(view, /Booking requests/);

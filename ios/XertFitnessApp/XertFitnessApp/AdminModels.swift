@@ -491,6 +491,263 @@ struct AdminCampaignSummary {
     }
 }
 
+enum AdminSiteContentSection: String, CaseIterable, Identifiable, Codable {
+    case hero
+    case booking
+    case about
+    case contact
+    case faq
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .hero: return "Homepage Hero"
+        case .booking: return "Booking Page Intro"
+        case .about: return "About Page"
+        case .contact: return "Contact Details"
+        case .faq: return "FAQ"
+        }
+    }
+    var summary: String {
+        switch self {
+        case .hero: return "Headline, supporting copy and rotating photography"
+        case .booking: return "Opening copy above packs and bookings"
+        case .about: return "The public story and training philosophy"
+        case .contact: return "Public contact details, location and Instagram"
+        case .faq: return "Homepage questions and answers"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .hero: return "house"
+        case .booking: return "ticket"
+        case .about: return "doc.text"
+        case .contact: return "phone"
+        case .faq: return "questionmark.circle"
+        }
+    }
+    var publicPath: String {
+        switch self {
+        case .hero, .faq: return ""
+        case .booking: return "booking"
+        case .about: return "about"
+        case .contact: return "contact"
+        }
+    }
+}
+
+struct AdminFAQItem: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var q: String
+    var a: String
+
+    private enum CodingKeys: String, CodingKey { case q, a }
+
+    init(id: UUID = UUID(), q: String, a: String) {
+        self.id = id
+        self.q = q
+        self.a = a
+    }
+
+    static func == (lhs: AdminFAQItem, rhs: AdminFAQItem) -> Bool {
+        lhs.q == rhs.q && lhs.a == rhs.a
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(q)
+        hasher.combine(a)
+    }
+}
+
+struct AdminSiteContentData: Codable, Hashable {
+    var headline: String?
+    var subheading: String?
+    var supporting: String?
+    var photos: [String]?
+    var intro: String?
+    var paragraphs: [String]?
+    var email: String?
+    var phone: String?
+    var address: String?
+    var instagram_handle: String?
+    var instagram_url: String?
+    var items: [AdminFAQItem]?
+
+    init(
+        headline: String? = nil,
+        subheading: String? = nil,
+        supporting: String? = nil,
+        photos: [String]? = nil,
+        intro: String? = nil,
+        paragraphs: [String]? = nil,
+        email: String? = nil,
+        phone: String? = nil,
+        address: String? = nil,
+        instagram_handle: String? = nil,
+        instagram_url: String? = nil,
+        items: [AdminFAQItem]? = nil
+    ) {
+        self.headline = headline
+        self.subheading = subheading
+        self.supporting = supporting
+        self.photos = photos
+        self.intro = intro
+        self.paragraphs = paragraphs
+        self.email = email
+        self.phone = phone
+        self.address = address
+        self.instagram_handle = instagram_handle
+        self.instagram_url = instagram_url
+        self.items = items
+    }
+
+    func merged(over fallback: AdminSiteContentData) -> AdminSiteContentData {
+        AdminSiteContentData(
+            headline: headline ?? fallback.headline,
+            subheading: subheading ?? fallback.subheading,
+            supporting: supporting ?? fallback.supporting,
+            photos: photos ?? fallback.photos,
+            intro: intro ?? fallback.intro,
+            paragraphs: paragraphs ?? fallback.paragraphs,
+            email: email ?? fallback.email,
+            phone: phone ?? fallback.phone,
+            address: address ?? fallback.address,
+            instagram_handle: instagram_handle ?? fallback.instagram_handle,
+            instagram_url: instagram_url ?? fallback.instagram_url,
+            items: items ?? fallback.items
+        )
+    }
+
+    func normalized(for section: AdminSiteContentSection) throws -> AdminSiteContentData {
+        switch section {
+        case .hero:
+            return AdminSiteContentData(
+                headline: Self.clean(headline),
+                subheading: Self.clean(subheading),
+                supporting: Self.clean(supporting),
+                photos: try Self.cleanURLs(photos, allowLocal: true)
+            )
+        case .booking:
+            return AdminSiteContentData(intro: Self.clean(intro))
+        case .about:
+            let values = paragraphs?.compactMap { Self.clean($0) }
+            return AdminSiteContentData(paragraphs: values?.isEmpty == false ? values : nil)
+        case .contact:
+            let cleanEmail = Self.clean(email)
+            if let cleanEmail,
+               cleanEmail.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) == nil {
+                throw APIError(message: "Enter a valid public contact email.")
+            }
+            let instagramURL = try Self.cleanURLs(instagram_url.map { [$0] }, allowLocal: false)?.first
+            return AdminSiteContentData(
+                intro: Self.clean(intro),
+                email: cleanEmail,
+                phone: Self.clean(phone),
+                address: Self.clean(address),
+                instagram_handle: Self.clean(instagram_handle),
+                instagram_url: instagramURL
+            )
+        case .faq:
+            let entered = (items ?? []).compactMap { item -> AdminFAQItem? in
+                let question = Self.clean(item.q)
+                let answer = Self.clean(item.a)
+                return question == nil && answer == nil ? nil : AdminFAQItem(id: item.id, q: question ?? "", a: answer ?? "")
+            }
+            guard entered.allSatisfy({ !$0.q.isEmpty && !$0.a.isEmpty }) else {
+                throw APIError(message: "Every FAQ item needs both a question and an answer.")
+            }
+            return AdminSiteContentData(items: entered.isEmpty ? nil : entered)
+        }
+    }
+
+    static func defaults(for section: AdminSiteContentSection) -> AdminSiteContentData {
+        switch section {
+        case .hero:
+            return AdminSiteContentData(
+                headline: "Beat Your Best.",
+                subheading: "Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.",
+                supporting: "Semi-private training in Kingaroy with real coaching, progressive programming and sustainable progress.",
+                photos: [
+                    "/assets/hero-training-1.jpg", "/assets/hero-training-2.jpg", "/assets/training-style.jpg",
+                    "/assets/training-philosophy.jpg", "/assets/event-calendar.jpg"
+                ]
+            )
+        case .booking:
+            return AdminSiteContentData(intro: "XERT operates through a booking-based system to maintain coaching quality and controlled class sizes. Initial class sizes are set to 8 people and will gradually increase as the business launches.")
+        case .about:
+            return AdminSiteContentData(paragraphs: [
+                "XERT Fitness is a semi-private functional fitness studio based in Kingaroy, Queensland. We exist to help everyday people through to athletes train with structure and purpose. Every class at XERT is coached and deliberately programmed, blending strength, conditioning, movement quality and long-term performance.",
+                "Our programming follows the South East Queensland sporting and fitness calendar, so members always have a real goal ahead of them. Whether you are training for general fitness, preparing for a specific event, or chasing a strength milestone, your coach leads every session and helps you understand what the goal in front of you requires.",
+                "The training system combines structured functional fitness classes, an accessory training area, and support for health, performance, recovery and nutrition. Sessions are scalable, booking-based and designed to maintain coaching quality while helping members train consistently.",
+                "XERT is built around a simple philosophy: train for life, compete for fun. Members choose events, train together and build toward shared goals throughout the year."
+            ])
+        case .contact:
+            return AdminSiteContentData(
+                intro: "Have a question about classes, coaching, allied health partnerships or booking your first session? Reach out and we will help you plan your training.",
+                email: "byronhawley@gmail.com", phone: "", address: "Kingaroy, Queensland 4610",
+                instagram_handle: "@xert_fit", instagram_url: "https://instagram.com/xert_fit"
+            )
+        case .faq:
+            return AdminSiteContentData(items: [
+                AdminFAQItem(q: "When is XERT opening?", a: "Soft launch is planned for August. We'll open in stages — limited class capacity at first, building out as demand and space allow. Register your foundation interest to be notified first."),
+                AdminFAQItem(q: "What classes will be available?", a: "XERT offers structured functional training across strength, aerobic capacity, threshold and intensive sessions. Classes follow progressive training blocks and are coached so members understand the purpose of each session."),
+                AdminFAQItem(q: "Do I need to be fit to join?", a: "No. XERT is built for all levels — from complete beginners to experienced athletes. Coaches scale every session to the individual. The most important thing is showing up and committing to the process."),
+                AdminFAQItem(q: "What is the event prep focus?", a: "XERT follows the South East Queensland sporting and fitness calendar. Members can choose from endurance races, triathlons, trail runs, functional fitness events, local sport and XERT challenges, then train toward those goals together."),
+                AdminFAQItem(q: "Is there personal training available?", a: "Yes. 1-on-1 personal training sessions will be available in addition to group classes. You can request a PT session through the timetable page."),
+                AdminFAQItem(q: "What allied health services will be available?", a: "XERT is building relationships with physiotherapists, nutritionists, psychologists and other practitioners who will operate inside the facility. This means recovery, injury management and performance support are available without leaving the building."),
+                AdminFAQItem(q: "Where is XERT located?", a: "XERT is based in Kingaroy, Queensland 4610. The facility includes a main class training area, accessory training space, onsite parking, bathroom and changeroom access."),
+                AdminFAQItem(q: "How do I book my first session?", a: "Create a free account, purchase a class pass or pack on the booking page, then pick your class from the timetable. Your first session is coached end-to-end — arrive 10 minutes early and we will look after the rest.")
+            ])
+        }
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private static func cleanURLs(_ values: [String]?, allowLocal: Bool) throws -> [String]? {
+        var result: [String] = []
+        for value in values ?? [] {
+            guard let cleaned = clean(value) else { continue }
+            if allowLocal, cleaned.hasPrefix("/"), !cleaned.hasPrefix("//") {
+                result.append(cleaned)
+                continue
+            }
+            guard let components = URLComponents(string: cleaned),
+                  ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
+                  components.host != nil else {
+                throw APIError(message: "URL must use HTTPS or HTTP: \(cleaned)")
+            }
+            result.append(components.url?.absoluteString ?? cleaned)
+        }
+        return result.isEmpty ? nil : result
+    }
+}
+
+struct AdminSiteContentRow: Identifiable, Codable, Hashable {
+    let key: String
+    let data: AdminSiteContentData
+    let updated_at: String
+    var id: String { key }
+}
+
+enum AdminSiteContentDraftStore {
+    private static let prefix = "xert.admin.site-content.draft."
+
+    static func load(_ section: AdminSiteContentSection, defaults: UserDefaults = .standard) -> AdminSiteContentData? {
+        defaults.data(forKey: prefix + section.rawValue).flatMap { try? JSONDecoder().decode(AdminSiteContentData.self, from: $0) }
+    }
+
+    static func save(_ data: AdminSiteContentData, section: AdminSiteContentSection, defaults: UserDefaults = .standard) {
+        if let encoded = try? JSONEncoder().encode(data) { defaults.set(encoded, forKey: prefix + section.rawValue) }
+    }
+
+    static func clear(_ section: AdminSiteContentSection, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: prefix + section.rawValue)
+    }
+}
+
 struct AdminBookingSession: Codable, Hashable {
     let title: String
     let start_time: Date?

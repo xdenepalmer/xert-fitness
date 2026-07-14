@@ -682,6 +682,87 @@ final class XertAPI {
         }
     }
 
+    func adminSiteContent(session auth: AuthSession) async throws -> [AdminSiteContentRow] {
+        try await restRequest(
+            path: "/rest/v1/site_content",
+            queryItems: [
+                URLQueryItem(name: "select", value: "key,data,updated_at"),
+                URLQueryItem(name: "order", value: "key.asc")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminSaveSiteContent(
+        session auth: AuthSession,
+        section: AdminSiteContentSection,
+        expectedUpdatedAt: String?,
+        draft: AdminSiteContentData
+    ) async throws -> AdminSiteContentRow {
+        let normalized = try draft.normalized(for: section)
+        var queryItems: [URLQueryItem] = []
+        if let expectedUpdatedAt {
+            queryItems = [
+                URLQueryItem(name: "key", value: "eq.\(section.rawValue)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(expectedUpdatedAt)")
+            ]
+        }
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/site_content", queryItems: queryItems)
+        request.httpMethod = expectedUpdatedAt == nil ? "POST" : "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = expectedUpdatedAt == nil
+            ? try JSONEncoder().encode(AdminSiteContentInsertPayload(key: section.rawValue, data: normalized))
+            : try JSONEncoder().encode(AdminSiteContentUpdatePayload(data: normalized))
+        do {
+            let rows: [AdminSiteContentRow] = try await decode(request)
+            guard let saved = rows.first else {
+                throw APIError(message: "Site content changed elsewhere. Refresh and review the latest version.")
+            }
+            return saved
+        } catch let error as APIError where error.statusCode == 409 {
+            throw APIError(message: "Site content changed since you opened it. Refresh and review the latest version.")
+        }
+    }
+
+    func adminUploadSiteImage(
+        session auth: AuthSession,
+        data: Data,
+        mimeType: String,
+        fileExtension: String
+    ) async throws -> String {
+        guard !data.isEmpty, data.count <= 5 * 1_024 * 1_024 else {
+            throw APIError(message: "Image must be under 5 MB.")
+        }
+        guard mimeType.lowercased().hasPrefix("image/") else {
+            throw APIError(message: "Please choose an image file.")
+        }
+        let safeExtension = fileExtension.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !safeExtension.isEmpty else { throw APIError(message: "The selected image type is not supported.") }
+        let objectPath = "hero/\(Int(Date().timeIntervalSince1970 * 1_000))-\(UUID().uuidString.prefix(8)).\(safeExtension)"
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/storage/v1/object/site-images/\(objectPath)"
+        )
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        request.setValue("31536000", forHTTPHeaderField: "cache-control")
+        request.setValue("false", forHTTPHeaderField: "x-upsert")
+        request.httpBody = data
+        try await perform(request)
+
+        var publicURL = AppConfig.supabaseURL
+        for component in ["storage", "v1", "object", "public", "site-images", "hero"] {
+            publicURL.appendPathComponent(component)
+        }
+        publicURL.appendPathComponent(objectPath.split(separator: "/").last.map(String.init) ?? objectPath)
+        return publicURL.absoluteString
+    }
+
     func adminUpdateLead(
         session auth: AuthSession,
         pipeline: AdminLeadPipeline,
@@ -1681,6 +1762,11 @@ private struct AdminBlackoutPayload: Encodable {
     let reason: String
     let notes: String?
 }
+private struct AdminSiteContentInsertPayload: Encodable {
+    let key: String
+    let data: AdminSiteContentData
+}
+private struct AdminSiteContentUpdatePayload: Encodable { let data: AdminSiteContentData }
 private struct AdminMemberPageRequest: Encodable {
     let p_search: String?
     let p_role: String

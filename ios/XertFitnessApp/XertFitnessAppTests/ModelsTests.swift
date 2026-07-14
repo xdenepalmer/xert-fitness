@@ -1283,6 +1283,45 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(summary.csv.lowercased().contains("email"))
     }
 
+    func testSiteContentNormalizationMatchesPublicSchemaAndRejectsUnsafeValues() throws {
+        let contact = try AdminSiteContentData(
+            paragraphs: ["must not leak"],
+            email: " hello@xertfitness.com.au ",
+            phone: " 0400 000 000 ",
+            instagram_url: "https://instagram.com/xert_fit"
+        ).normalized(for: .contact)
+
+        XCTAssertEqual(contact.email, "hello@xertfitness.com.au")
+        XCTAssertEqual(contact.phone, "0400 000 000")
+        XCTAssertNil(contact.paragraphs)
+        XCTAssertNil(try AdminSiteContentData(paragraphs: [" ", ""]).normalized(for: .about).paragraphs)
+        XCTAssertThrowsError(try AdminSiteContentData(
+            items: [AdminFAQItem(q: "When?", a: "")]
+        ).normalized(for: .faq))
+        XCTAssertThrowsError(try AdminSiteContentData(
+            photos: ["javascript:alert(1)"]
+        ).normalized(for: .hero))
+        XCTAssertThrowsError(try AdminSiteContentData(email: "not-an-email").normalized(for: .contact))
+    }
+
+    func testSiteContentDraftRoundTripsWithoutPersistingFAQIdentity() throws {
+        let suiteName = "ModelsTests.site-content.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let draft = AdminSiteContentData(
+            headline: "A stronger public headline",
+            items: [AdminFAQItem(q: "Question?", a: "Answer.")]
+        )
+
+        AdminSiteContentDraftStore.save(draft, section: .hero, defaults: defaults)
+        let restored = AdminSiteContentDraftStore.load(.hero, defaults: defaults)
+        XCTAssertEqual(restored?.headline, draft.headline)
+        XCTAssertEqual(restored?.items?.first?.q, "Question?")
+
+        AdminSiteContentDraftStore.clear(.hero, defaults: defaults)
+        XCTAssertNil(AdminSiteContentDraftStore.load(.hero, defaults: defaults))
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }

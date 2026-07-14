@@ -71,6 +71,11 @@ The included `Info.plist` already contains these xcconfig substitutions:
   matches the desktop 30-day, 90-day, and all-time Queensland reporting ranges.
   Owners can compare sources, channels, campaign names and daily lead volume,
   then export a privacy-safe CSV that contains attribution rather than member PII.
+  The native Site Content workspace edits the same homepage hero, booking intro,
+  About copy, contact details and FAQs as desktop. Structured validation protects
+  public URLs and complete FAQ pairs; section drafts survive navigation locally;
+  stale edits are rejected by Supabase optimistic locking; and hero photos upload
+  to the shared public `site-images` bucket with the same 5 MB limit as the web CMS.
   A unified native booking inbox merges enquiry-form and member-credit requests,
   with age/source/status filters, direct contact, class context, workload totals,
   staff notes, guarded decisions, and bulk updates. Credit-backed transitions keep

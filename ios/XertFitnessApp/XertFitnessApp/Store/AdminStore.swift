@@ -27,6 +27,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
     @Published private(set) var campaignAttributionRows: [AdminCampaignAttributionRow] = []
+    @Published private(set) var siteContentRows: [AdminSiteContentRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
@@ -53,6 +54,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
     @Published private(set) var isLoadingCampaignAttribution = false
+    @Published private(set) var hasLoadedSiteContent = false
+    @Published private(set) var isLoadingSiteContent = false
+    @Published private(set) var savingSiteContentSection: AdminSiteContentSection?
+    @Published private(set) var isUploadingSiteImage = false
     @Published private(set) var savingLeadIDs: Set<AdminLeadIdentifier> = []
     @Published private(set) var isLoadingBookingRequests = false
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
@@ -283,6 +288,73 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func siteContentRow(for section: AdminSiteContentSection) -> AdminSiteContentRow? {
+        siteContentRows.first { $0.key == section.rawValue }
+    }
+
+    func loadSiteContent(session: AuthSession, force: Bool = false) async {
+        guard !isLoadingSiteContent else { return }
+        if !force, hasLoadedSiteContent { return }
+        isLoadingSiteContent = true
+        defer { isLoadingSiteContent = false }
+        do {
+            siteContentRows = try await api.adminSiteContent(session: session)
+            hasLoadedSiteContent = true
+            lastUpdatedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveSiteContent(
+        session: AuthSession,
+        section: AdminSiteContentSection,
+        expectedUpdatedAt: String?,
+        draft: AdminSiteContentData
+    ) async -> AdminSiteContentRow? {
+        guard savingSiteContentSection == nil else { return nil }
+        savingSiteContentSection = section
+        defer { savingSiteContentSection = nil }
+        do {
+            let saved = try await api.adminSaveSiteContent(
+                session: session,
+                section: section,
+                expectedUpdatedAt: expectedUpdatedAt,
+                draft: draft
+            )
+            siteContentRows.removeAll { $0.key == section.rawValue }
+            siteContentRows.append(saved)
+            AdminSiteContentDraftStore.clear(section)
+            lastUpdatedAt = Date()
+            return saved
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func uploadSiteImage(
+        session: AuthSession,
+        data: Data,
+        mimeType: String,
+        fileExtension: String
+    ) async -> String? {
+        guard !isUploadingSiteImage else { return nil }
+        isUploadingSiteImage = true
+        defer { isUploadingSiteImage = false }
+        do {
+            return try await api.adminUploadSiteImage(
+                session: session,
+                data: data,
+                mimeType: mimeType,
+                fileExtension: fileExtension
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 

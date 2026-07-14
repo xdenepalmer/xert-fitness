@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct AdminCommandCentreView: View {
@@ -188,6 +190,9 @@ struct AdminCommandCentreView: View {
                 }
                 AdminDestinationRow(title: "Lead pipelines", detail: "Manage member, trainer and partner opportunities", icon: "person.crop.circle.badge.plus") {
                     AdminLeadsView(admin: admin, session: session)
+                }
+                AdminDestinationRow(title: "Site content", detail: "Edit public copy, contact details, FAQs and hero photos", icon: "square.and.pencil") {
+                    AdminSiteContentView(admin: admin, session: session)
                 }
                 AdminDestinationRow(title: "Campaign attribution", detail: "Measure sources, channels, campaigns and daily lead volume", icon: "chart.bar.xaxis") {
                     AdminCampaignAttributionView(admin: admin, session: session)
@@ -1669,6 +1674,325 @@ private struct AdminBookingRequestDetailView: View {
             Text(label).foregroundStyle(Color.xertPale.opacity(0.55))
             Spacer()
             Text(value).multilineTextAlignment(.trailing).foregroundStyle(Color.xertOffWhite)
+        }
+    }
+}
+
+private struct AdminSiteContentView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+
+    var body: some View {
+        List {
+            Section {
+                Text("Changes publish to the public website immediately. Empty saved fields use XERT's built-in copy, and unfinished drafts stay on this device.")
+                    .foregroundStyle(Color.xertPale.opacity(0.7))
+            }
+            Section("Public sections") {
+                ForEach(AdminSiteContentSection.allCases) { section in
+                    NavigationLink {
+                        AdminSiteContentEditor(
+                            admin: admin,
+                            session: session,
+                            section: section,
+                            row: admin.siteContentRow(for: section)
+                        )
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(section.title).font(.headline)
+                                Text(section.summary).font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                            }
+                        } icon: {
+                            Image(systemName: section.icon).foregroundStyle(Color.xertSteel)
+                        }
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Site Content")
+        .overlay {
+            if admin.isLoadingSiteContent && !admin.hasLoadedSiteContent {
+                ProgressView("Loading live content...").tint(Color.xertSteel)
+            }
+        }
+        .refreshable { await admin.loadSiteContent(session: session, force: true) }
+        .task { await admin.loadSiteContent(session: session) }
+    }
+}
+
+private struct AdminSiteContentEditor: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let section: AdminSiteContentSection
+    let row: AdminSiteContentRow?
+    @State private var baseline: AdminSiteContentData
+    @State private var draft: AdminSiteContentData
+    @State private var expectedUpdatedAt: String?
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoURL = ""
+
+    init(admin: AdminStore, session: AuthSession, section: AdminSiteContentSection, row: AdminSiteContentRow?) {
+        self.admin = admin
+        self.session = session
+        self.section = section
+        self.row = row
+        let live = (row?.data ?? AdminSiteContentData()).merged(over: .defaults(for: section))
+        _baseline = State(initialValue: live)
+        _draft = State(initialValue: AdminSiteContentDraftStore.load(section) ?? live)
+        _expectedUpdatedAt = State(initialValue: row?.updated_at)
+    }
+
+    private var dirty: Bool { draft != baseline }
+    private var isSaving: Bool { admin.savingSiteContentSection == section }
+
+    var body: some View {
+        Form {
+            Section {
+                Label(section.summary, systemImage: section.icon)
+                    .foregroundStyle(Color.xertPale.opacity(0.72))
+                Link(destination: AppConfig.webURL(path: section.publicPath)) {
+                    Label("View live page", systemImage: "safari")
+                }
+            }
+
+            fields
+
+            Section {
+                Button {
+                    Task {
+                        if let saved = await admin.saveSiteContent(
+                            session: session,
+                            section: section,
+                            expectedUpdatedAt: expectedUpdatedAt,
+                            draft: draft
+                        ) {
+                            baseline = draft
+                            expectedUpdatedAt = saved.updated_at
+                        }
+                    }
+                } label: {
+                    if isSaving { ProgressView() } else { Label(dirty ? "Publish section" : "Published", systemImage: "checkmark.circle") }
+                }
+                .disabled(!dirty || isSaving)
+
+                Button {
+                    draft = .defaults(for: section)
+                } label: {
+                    Label("Restore original copy", systemImage: "arrow.counterclockwise")
+                }
+                if dirty {
+                    Button("Discard draft", role: .destructive) {
+                        draft = baseline
+                        AdminSiteContentDraftStore.clear(section)
+                    }
+                }
+            } footer: {
+                Text(dirty ? "Unsaved draft stored on this device." : "This section matches the live version loaded from Supabase.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(section.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: draft) { value in
+            if value == baseline { AdminSiteContentDraftStore.clear(section) }
+            else { AdminSiteContentDraftStore.save(value, section: section) }
+        }
+        .onChange(of: selectedPhoto) { item in
+            guard let item else { return }
+            Task { await upload(item) }
+        }
+    }
+
+    @ViewBuilder
+    private var fields: some View {
+        switch section {
+        case .hero:
+            Section("Hero copy") {
+                TextField("Headline", text: textBinding(\.headline))
+                TextField("Subheading", text: textBinding(\.subheading), axis: .vertical).lineLimit(3...8)
+                TextField("Supporting line", text: textBinding(\.supporting), axis: .vertical).lineLimit(3...8)
+            }
+            Section("Rotating photos") {
+                ForEach((draft.photos ?? []).indices, id: \.self) { index in
+                    heroPhotoRow(index: index)
+                }
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    Label(admin.isUploadingSiteImage ? "Uploading..." : "Upload photo", systemImage: "photo.badge.plus")
+                }
+                .disabled(admin.isUploadingSiteImage)
+                HStack {
+                    TextField("https://... or /assets/...", text: $photoURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    Button {
+                        guard !photoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        draft.photos = (draft.photos ?? []) + [photoURL]
+                        photoURL = ""
+                    } label: { Image(systemName: "plus.circle.fill") }
+                    .accessibilityLabel("Add photo URL")
+                }
+            }
+        case .booking:
+            Section("Booking introduction") {
+                TextField("Introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(5...12)
+            }
+        case .about:
+            Section("About paragraphs") {
+                ForEach((draft.paragraphs ?? []).indices, id: \.self) { index in
+                    editableTextListRow(index: index)
+                }
+                Button {
+                    draft.paragraphs = (draft.paragraphs ?? []) + [""]
+                } label: {
+                    Label("Add paragraph", systemImage: "plus")
+                }
+            }
+        case .contact:
+            Section("Public contact") {
+                TextField("Email", text: textBinding(\.email)).keyboardType(.emailAddress).textInputAutocapitalization(.never)
+                TextField("Phone", text: textBinding(\.phone)).keyboardType(.phonePad)
+                TextField("Address or location", text: textBinding(\.address), axis: .vertical)
+                TextField("Instagram handle", text: textBinding(\.instagram_handle)).textInputAutocapitalization(.never)
+                TextField("Instagram URL", text: textBinding(\.instagram_url)).keyboardType(.URL).textInputAutocapitalization(.never)
+                TextField("Contact page introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(4...10)
+            }
+        case .faq:
+            Section("Questions and answers") {
+                ForEach((draft.items ?? []).indices, id: \.self) { index in
+                    faqRow(index: index)
+                }
+                Button {
+                    draft.items = (draft.items ?? []) + [AdminFAQItem(q: "", a: "")]
+                } label: {
+                    Label("Add question", systemImage: "plus")
+                }
+            }
+        }
+    }
+
+    private func textBinding(_ keyPath: WritableKeyPath<AdminSiteContentData, String?>) -> Binding<String> {
+        Binding(
+            get: { draft[keyPath: keyPath] ?? "" },
+            set: { draft[keyPath: keyPath] = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private func heroPhotoRow(index: Int) -> some View {
+        let value = (draft.photos ?? [])[index]
+        HStack(spacing: 12) {
+            AsyncImage(url: publicImageURL(value)) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Image(systemName: "photo").foregroundStyle(Color.xertPale.opacity(0.4))
+            }
+            .frame(width: 58, height: 70).clipped()
+            Text(value).font(.caption).lineLimit(2)
+            Spacer()
+            reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
+                draft.photos?.swapAt(from, to)
+            } remove: {
+                draft.photos?.remove(at: index)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editableTextListRow(index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Paragraph \(index + 1)").font(.caption.weight(.bold))
+                Spacer()
+                reorderButtons(index: index, count: draft.paragraphs?.count ?? 0) { from, to in
+                    draft.paragraphs?.swapAt(from, to)
+                } remove: {
+                    draft.paragraphs?.remove(at: index)
+                }
+            }
+            TextField("Paragraph", text: Binding(
+                get: { draft.paragraphs?[index] ?? "" },
+                set: { draft.paragraphs?[index] = $0 }
+            ), axis: .vertical).lineLimit(5...14)
+        }
+    }
+
+    @ViewBuilder
+    private func faqRow(index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Question \(index + 1)").font(.caption.weight(.bold))
+                Spacer()
+                reorderButtons(index: index, count: draft.items?.count ?? 0) { from, to in
+                    draft.items?.swapAt(from, to)
+                } remove: {
+                    draft.items?.remove(at: index)
+                }
+            }
+            TextField("Question", text: Binding(
+                get: { draft.items?[index].q ?? "" },
+                set: { draft.items?[index].q = $0 }
+            ))
+            TextField("Answer", text: Binding(
+                get: { draft.items?[index].a ?? "" },
+                set: { draft.items?[index].a = $0 }
+            ), axis: .vertical).lineLimit(3...10)
+        }
+    }
+
+    private func reorderButtons(
+        index: Int,
+        count: Int,
+        move: @escaping (Int, Int) -> Void,
+        remove: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 4) {
+            Button { move(index, index - 1) } label: { Image(systemName: "arrow.up") }
+                .disabled(index == 0).accessibilityLabel("Move up")
+            Button { move(index, index + 1) } label: { Image(systemName: "arrow.down") }
+                .disabled(index >= count - 1).accessibilityLabel("Move down")
+            Button(role: .destructive, action: remove) { Image(systemName: "trash") }
+                .accessibilityLabel("Remove")
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func publicImageURL(_ value: String) -> URL? {
+        value.hasPrefix("/") ? AppConfig.webURL(path: value) : URL(string: value)
+    }
+
+    private func upload(_ item: PhotosPickerItem) async {
+        defer { selectedPhoto = nil }
+        guard let sourceData = try? await item.loadTransferable(type: Data.self) else {
+            admin.errorMessage = "The selected photo could not be read."
+            return
+        }
+        guard sourceData.count <= 5 * 1_024 * 1_024 else {
+            admin.errorMessage = "Image must be under 5 MB."
+            return
+        }
+        let type = item.supportedContentTypes.first(where: { $0.conforms(to: .image) }) ?? .jpeg
+        let upload: (data: Data, mimeType: String, fileExtension: String)
+        if type.conforms(to: .jpeg) || type.conforms(to: .png) {
+            upload = (sourceData, type.preferredMIMEType ?? "image/jpeg", type.preferredFilenameExtension ?? "jpg")
+        } else if let image = UIImage(data: sourceData), let jpeg = image.jpegData(compressionQuality: 0.9) {
+            upload = (jpeg, "image/jpeg", "jpg")
+        } else {
+            admin.errorMessage = "The selected image type could not be prepared for the website."
+            return
+        }
+        if let url = await admin.uploadSiteImage(
+            session: session,
+            data: upload.data,
+            mimeType: upload.mimeType,
+            fileExtension: upload.fileExtension
+        ) {
+            draft.photos = (draft.photos ?? []) + [url]
         }
     }
 }
