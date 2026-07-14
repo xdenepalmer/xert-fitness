@@ -33,6 +33,8 @@ The included `Info.plist` already contains these xcconfig substitutions:
   to web, in-app inboxes, and APNs. Supabase role checks and every admin RPC
   remain enforced server-side. Native operations health reports the complete
   migration contract alongside authenticated Stripe and APNs readiness.
+  The native audit ledger merges recent access, credit, request, notice, lead,
+  schedule, content, and booking changes into one searchable owner timeline.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

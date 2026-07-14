@@ -191,6 +191,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Operations health", detail: !admin.hasHealthSnapshot ? "Checking release services" : admin.healthIssues == 0 ? "Schema, Stripe and APNs ready" : "\(admin.healthIssues) release issue\(admin.healthIssues == 1 ? "" : "s")", icon: "checkmark.shield") {
                     AdminOperationsHealthView(admin: admin)
                 }
+                AdminDestinationRow(title: "Admin audit", detail: "Review recent business and platform changes", icon: "clock.arrow.circlepath") {
+                    AdminAuditView(admin: admin)
+                }
             }
         }
     }
@@ -792,6 +795,73 @@ private struct HealthCountRow: View {
         }
         .foregroundStyle(Color.xertOffWhite)
         .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct AdminAuditView: View {
+    @ObservedObject var admin: AdminStore
+    @State private var query = ""
+    @State private var category = "All"
+
+    private var categories: [String] {
+        ["All"] + Set(admin.auditEntries.map(\.category)).sorted()
+    }
+
+    private var rows: [AdminAuditEntry] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return admin.auditEntries.filter { entry in
+            (category == "All" || entry.category == category)
+                && (term.isEmpty || "\(entry.title) \(entry.detail) \(entry.category)".lowercased().contains(term))
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Audit category", selection: $category) {
+                    ForEach(categories, id: \.self) { Text($0).tag($0) }
+                }
+            }
+            .listRowBackground(Color.xertNavy)
+
+            if rows.isEmpty { Text("No matching administrative actions.").listRowBackground(Color.xertInk) }
+            ForEach(rows) { entry in
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: auditIcon(entry.category))
+                        .frame(width: 24).foregroundStyle(Color.xertSteel)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(entry.title).font(.headline)
+                            Spacer()
+                            Text(entry.category.uppercased())
+                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                        }
+                        Text(entry.detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
+                        Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.4))
+                    }
+                }
+                .foregroundStyle(Color.xertOffWhite)
+                .padding(.vertical, 5)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Admin Audit")
+        .searchable(text: $query, prompt: "Search changes")
+    }
+
+    private func auditIcon(_ category: String) -> String {
+        switch category {
+        case "Access": return "person.badge.key"
+        case "Credits": return "ticket"
+        case "Bookings", "Requests": return "calendar.badge.clock"
+        case "Notices": return "bell"
+        case "Content": return "square.and.pencil"
+        case "Schedule": return "calendar"
+        default: return "clock.arrow.circlepath"
+        }
     }
 }
 

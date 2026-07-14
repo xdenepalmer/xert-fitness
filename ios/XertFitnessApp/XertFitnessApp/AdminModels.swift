@@ -210,3 +210,11 @@ enum AdminSchemaReadiness {
         return required.subtracting(installed).sorted()
     }
 }
+
+struct AdminAuditEntry: Identifiable, Hashable {
+    let id: String
+    let category: String
+    let title: String
+    let detail: String
+    let createdAt: Date
+}

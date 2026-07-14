@@ -14,6 +14,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var schemaCapabilities: [AdminSchemaCapability] = []
     @Published private(set) var commerceHealth: AdminCommerceHealth?
     @Published private(set) var pushHealth: AdminPushHealth?
+    @Published private(set) var auditEntries: [AdminAuditEntry] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -66,6 +67,7 @@ final class AdminStore: ObservableObject {
         async let capabilitiesRequest = api.adminSchemaCapabilities(session: session)
         async let commerceRequest = api.adminCommerceHealth(session: session)
         async let pushRequest = api.adminPushHealth(session: session)
+        async let auditRequest = api.adminAudit(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -91,6 +93,8 @@ final class AdminStore: ObservableObject {
         catch { failures.append("Stripe health") }
         do { pushHealth = try await pushRequest; loadedSource = true }
         catch { failures.append("push health") }
+        do { auditEntries = try await auditRequest; loadedSource = true }
+        catch { failures.append("admin audit") }
 
         if loadedSource {
             lastUpdatedAt = Date()

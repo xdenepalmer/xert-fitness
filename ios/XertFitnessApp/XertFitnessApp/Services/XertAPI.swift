@@ -346,6 +346,73 @@ final class XertAPI {
         try await vercelGet(path: "/api/admin-push-health", auth: auth)
     }
 
+    func adminAudit(session auth: AuthSession) async throws -> [AdminAuditEntry] {
+        async let roles: [AdminRoleAuditRow] = adminAuditRows(
+            table: "admin_role_changes",
+            select: "id,target_user_id,previous_role,new_role,created_at",
+            auth: auth
+        )
+        async let credits: [AdminCreditAuditRow] = adminAuditRows(
+            table: "admin_credit_grants",
+            select: "id,user_id,sessions,note,created_at",
+            auth: auth
+        )
+        async let requests: [AdminRequestAuditRow] = adminAuditRows(
+            table: "admin_request_status_changes",
+            select: "id,request_type,previous_status,new_status,subject_label,subject_email,created_at",
+            auth: auth
+        )
+        async let notices: [AdminNoticeAuditRow] = adminAuditRows(
+            table: "member_announcement_admin_events",
+            select: "id,announcement_title,action,created_at",
+            auth: auth
+        )
+        async let leads: [AdminLeadAuditRow] = adminAuditRows(
+            table: "admin_lead_changes",
+            select: "id,lead_type,previous_status,new_status,subject_label,subject_email,created_at",
+            auth: auth
+        )
+        async let schedules: [AdminResourceAuditRow] = adminAuditRows(
+            table: "admin_schedule_changes",
+            select: "id,resource_type,action,subject_label,created_at",
+            auth: auth
+        )
+        async let content: [AdminResourceAuditRow] = adminAuditRows(
+            table: "admin_content_changes",
+            select: "id,resource_type,action,subject_label,created_at",
+            auth: auth
+        )
+        async let bookings: [AdminBookingAuditRow] = adminAuditRows(
+            table: "session_booking_changes",
+            select: "id,action,class_label,created_at",
+            auth: auth
+        )
+
+        let rows = try await (roles, credits, requests, notices, leads, schedules, content, bookings)
+        let all = [
+            rows.0.map { $0.entry }, rows.1.map { $0.entry }, rows.2.map { $0.entry },
+            rows.3.map { $0.entry }, rows.4.map { $0.entry }, rows.5.map { $0.entry(category: "Schedule") },
+            rows.6.map { $0.entry(category: "Content") }, rows.7.map { $0.entry }
+        ]
+        return all
+            .flatMap { $0 }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(300)
+            .map { $0 }
+    }
+
+    private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
+        try await restRequest(
+            path: "/rest/v1/\(table)",
+            queryItems: [
+                URLQueryItem(name: "select", value: select),
+                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "100")
+            ],
+            auth: auth
+        )
+    }
+
     func adminPublishAnnouncement(
         session auth: AuthSession,
         title: String,
@@ -766,6 +833,35 @@ private struct AdminAnnouncementPublishRequest: Encodable {
     let id: UUID?
     let announcement: AdminAnnouncementPayload
     let expected_updated_at: String?
+}
+
+private struct AdminRoleAuditRow: Decodable {
+    let id: UUID; let target_user_id: UUID; let previous_role: String; let new_role: String; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "role:\(id)", category: "Access", title: "Member role changed", detail: "\(previous_role) to \(new_role) · \(target_user_id.uuidString.prefix(8))", createdAt: created_at) }
+}
+private struct AdminCreditAuditRow: Decodable {
+    let id: UUID; let user_id: UUID; let sessions: Int; let note: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "credit:\(id)", category: "Credits", title: "\(sessions) credit\(sessions == 1 ? "" : "s") granted", detail: note ?? "Member \(user_id.uuidString.prefix(8))", createdAt: created_at) }
+}
+private struct AdminRequestAuditRow: Decodable {
+    let id: UUID; let request_type: String; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "request:\(id)", category: "Requests", title: "\(request_type == "class_booking" ? "Booking" : "PT") request updated", detail: "\(subject_label ?? subject_email ?? "Request") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at) }
+}
+private struct AdminNoticeAuditRow: Decodable {
+    let id: UUID; let announcement_title: String?; let action: String; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "notice:\(id)", category: "Notices", title: "Member notice \(action)", detail: announcement_title ?? "Member announcement", createdAt: created_at) }
+}
+private struct AdminLeadAuditRow: Decodable {
+    let id: UUID; let lead_type: String; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "lead:\(id)", category: "Leads", title: "\(lead_type.capitalized) lead updated", detail: "\(subject_label ?? subject_email ?? "Lead") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at) }
+}
+private struct AdminResourceAuditRow: Decodable {
+    let id: UUID; let resource_type: String; let action: String; let subject_label: String?; let created_at: Date
+    func entry(category: String) -> AdminAuditEntry { .init(id: "\(category.lowercased()):\(id)", category: category, title: "\(resource_type.replacingOccurrences(of: "_", with: " ").capitalized) \(action)", detail: subject_label ?? "Managed resource", createdAt: created_at) }
+}
+private struct AdminBookingAuditRow: Decodable {
+    let id: UUID; let action: String; let class_label: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "booking:\(id)", category: "Bookings", title: action.replacingOccurrences(of: "_", with: " ").capitalized, detail: class_label ?? "Class booking", createdAt: created_at) }
 }
 private struct ProfileUpdate: Encodable {
     let full_name: String?

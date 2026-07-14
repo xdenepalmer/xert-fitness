@@ -54,5 +54,11 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /\/api\/admin-push-health/);
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
+  assert.match(view, /AdminAuditView/);
+  for (const table of [
+    'admin_role_changes', 'admin_credit_grants', 'admin_request_status_changes',
+    'member_announcement_admin_events', 'admin_lead_changes', 'admin_schedule_changes',
+    'admin_content_changes', 'session_booking_changes',
+  ]) assert.match(api, new RegExp(`table: "${table}"`));
   assert.match(api, /URLQueryItem\(name: "updated_at", value: "eq\.\\\(settings\.updated_at\)"\)/);
 });
