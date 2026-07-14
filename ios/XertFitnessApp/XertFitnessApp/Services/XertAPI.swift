@@ -661,6 +661,27 @@ final class XertAPI {
         }
     }
 
+    func adminCampaignAttribution(session auth: AuthSession) async throws -> [AdminCampaignAttributionRow] {
+        let pageSize = 500
+        var offset = 0
+        var rows: [AdminCampaignAttributionRow] = []
+        while true {
+            let page: [AdminCampaignAttributionRow] = try await restRequest(
+                path: "/rest/v1/member_interest",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,utm_source,utm_medium,utm_campaign,source,created_at"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
+    }
+
     func adminUpdateLead(
         session auth: AuthSession,
         pipeline: AdminLeadPipeline,

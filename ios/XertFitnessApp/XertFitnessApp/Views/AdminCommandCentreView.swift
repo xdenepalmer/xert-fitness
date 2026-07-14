@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
@@ -187,6 +188,9 @@ struct AdminCommandCentreView: View {
                 }
                 AdminDestinationRow(title: "Lead pipelines", detail: "Manage member, trainer and partner opportunities", icon: "person.crop.circle.badge.plus") {
                     AdminLeadsView(admin: admin, session: session)
+                }
+                AdminDestinationRow(title: "Campaign attribution", detail: "Measure sources, channels, campaigns and daily lead volume", icon: "chart.bar.xaxis") {
+                    AdminCampaignAttributionView(admin: admin, session: session)
                 }
                 AdminDestinationRow(title: "PT requests", detail: "Approve, reschedule and complete private training", icon: "figure.strengthtraining.traditional") {
                     AdminPTRequestsView(admin: admin, session: session)
@@ -1666,6 +1670,201 @@ private struct AdminBookingRequestDetailView: View {
             Spacer()
             Text(value).multilineTextAlignment(.trailing).foregroundStyle(Color.xertOffWhite)
         }
+    }
+}
+
+private struct AdminCampaignAttributionView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var range = AdminCampaignRange.thirty
+    @State private var exportDocument: AdminCampaignCSVDocument?
+    @State private var isExporting = false
+
+    private var summary: AdminCampaignSummary {
+        AdminCampaignSummary(rows: admin.campaignAttributionRows, range: range)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Reporting range", selection: $range) {
+                    ForEach(AdminCampaignRange.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Member-interest attribution uses Australia/Brisbane reporting days and matches the desktop command centre.")
+            }
+
+            Section("Acquisition pulse") {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    AdminCampaignMetric(title: "Leads", value: "\(summary.total)")
+                    AdminCampaignMetric(title: "UTM attributed", value: "\(summary.attributed)")
+                    AdminCampaignMetric(title: "Direct / unknown", value: "\(summary.direct)")
+                    AdminCampaignMetric(
+                        title: "Attribution rate",
+                        value: summary.attributionRate.formatted(.percent.precision(.fractionLength(0)))
+                    )
+                }
+                .padding(.vertical, 4)
+                .listRowBackground(Color.xertNavy)
+            }
+
+            AdminCampaignBreakdownSection(
+                title: "Traffic sources", items: summary.sources, total: summary.total,
+                emptyText: "No source data in this range."
+            )
+            AdminCampaignBreakdownSection(
+                title: "Campaigns", items: summary.campaigns, total: summary.total,
+                emptyText: "No UTM campaigns in this range."
+            )
+            AdminCampaignBreakdownSection(
+                title: "Channels / mediums", items: summary.mediums, total: summary.total,
+                emptyText: "No channel data in this range."
+            )
+
+            Section("Daily signups - latest 30 Queensland days") {
+                if summary.dailySignups.allSatisfy({ $0.count == 0 }) {
+                    AdminEmptyState(icon: "chart.bar", text: "No member leads in the latest 30 days.")
+                        .listRowInsets(EdgeInsets())
+                } else {
+                    AdminCampaignDailyChart(days: summary.dailySignups)
+                        .listRowBackground(Color.xertInk)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Campaign Attribution")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminCampaignCSVDocument(csv: summary.csv)
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(summary.total == 0)
+                .accessibilityLabel("Export campaign attribution CSV")
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-campaign-attribution-\(range.rawValue)"
+        ) { result in
+            if case .failure(let error) = result { admin.errorMessage = error.localizedDescription }
+        }
+        .overlay {
+            if admin.isLoadingCampaignAttribution && admin.campaignAttributionRows.isEmpty {
+                ProgressView("Loading attribution...").tint(Color.xertSteel)
+            }
+        }
+        .refreshable { await admin.loadCampaignAttribution(session: session, force: true) }
+        .task { await admin.loadCampaignAttribution(session: session) }
+    }
+}
+
+private struct AdminCampaignMetric: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(Color.xertOffWhite)
+                .minimumScaleFactor(0.75)
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.xertPale.opacity(0.55))
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .padding(12)
+        .background(Color.xertInk)
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+    }
+}
+
+private struct AdminCampaignBreakdownSection: View {
+    let title: String
+    let items: [AdminCampaignBreakdown]
+    let total: Int
+    let emptyText: String
+
+    var body: some View {
+        Section(title) {
+            if items.isEmpty {
+                Text(emptyText).foregroundStyle(Color.xertPale.opacity(0.6))
+            } else {
+                ForEach(items.prefix(8)) { item in
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text(item.label).lineLimit(1)
+                            Spacer()
+                            Text("\(item.count)").fontWeight(.bold).monospacedDigit()
+                        }
+                        ProgressView(value: Double(item.count), total: Double(max(total, 1)))
+                            .tint(Color.xertSteel)
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+        }
+    }
+}
+
+private struct AdminCampaignDailyChart: View {
+    let days: [AdminCampaignDailyCount]
+    private var maximum: Int { max(days.map(\.count).max() ?? 0, 1) }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(days.indices, id: \.self) { index in
+                    let day = days[index]
+                    VStack(spacing: 4) {
+                        Text(day.count == 0 ? "" : "\(day.count)")
+                            .font(.caption2).monospacedDigit()
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                            .frame(height: 12)
+                        Rectangle()
+                            .fill(Color.xertSteel)
+                            .frame(width: 14, height: max(2, CGFloat(day.count) / CGFloat(maximum) * 92))
+                        Text(index % 5 == 0 || index == days.count - 1 ? String(day.dateKey.suffix(5)) : "")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.xertPale.opacity(0.45))
+                            .frame(width: 24)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(day.dateKey), \(day.count) signups")
+                }
+            }
+            .frame(minHeight: 125, alignment: .bottom)
+            .padding(.vertical, 6)
+        }
+    }
+}
+
+private struct AdminCampaignCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
     }
 }
 

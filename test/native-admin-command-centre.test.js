@@ -126,6 +126,13 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /ids\.count <= 100/);
   assert.match(adminStore, /func saveLead/);
   assert.match(adminStore, /func bulkUpdateLeads/);
+  assert.match(view, /AdminCampaignAttributionView/);
+  assert.match(view, /Campaign attribution/);
+  assert.match(view, /fileExporter/);
+  assert.match(api, /func adminCampaignAttribution/);
+  assert.match(api, /id,utm_source,utm_medium,utm_campaign,source,created_at/);
+  assert.match(api, /path: "\/rest\/v1\/member_interest"/);
+  assert.match(adminStore, /func loadCampaignAttribution/);
   assert.match(view, /AdminBookingRequestsView/);
   assert.match(view, /AdminBookingRequestDetailView/);
   assert.match(view, /Booking requests/);

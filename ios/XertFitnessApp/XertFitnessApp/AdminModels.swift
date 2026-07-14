@@ -360,6 +360,137 @@ struct AdminLead: Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminCampaignAttributionRow: Identifiable, Codable, Hashable {
+    let id: AdminLeadIdentifier
+    let utm_source: String?
+    let utm_medium: String?
+    let utm_campaign: String?
+    let source: String?
+    let created_at: Date
+}
+
+enum AdminCampaignRange: String, CaseIterable, Identifiable {
+    case thirty = "30"
+    case ninety = "90"
+    case all
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .thirty: return "30 days"
+        case .ninety: return "90 days"
+        case .all: return "All time"
+        }
+    }
+    var dayCount: Int? { self == .all ? nil : Int(rawValue) }
+}
+
+struct AdminCampaignBreakdown: Identifiable, Hashable {
+    let label: String
+    let count: Int
+    var id: String { label.lowercased() }
+}
+
+struct AdminCampaignDailyCount: Identifiable, Hashable {
+    let dateKey: String
+    let count: Int
+    var id: String { dateKey }
+}
+
+struct AdminCampaignSummary {
+    let rows: [AdminCampaignAttributionRow]
+    let attributed: Int
+    let sources: [AdminCampaignBreakdown]
+    let mediums: [AdminCampaignBreakdown]
+    let campaigns: [AdminCampaignBreakdown]
+    let dailySignups: [AdminCampaignDailyCount]
+
+    var total: Int { rows.count }
+    var direct: Int { total - attributed }
+    var attributionRate: Double { total == 0 ? 0 : Double(attributed) / Double(total) }
+
+    init(rows allRows: [AdminCampaignAttributionRow], range: AdminCampaignRange, now: Date = Date()) {
+        let calendar = EventItem.calendar
+        let validRows = allRows.filter { Self.dateKey($0.created_at, calendar: calendar) != nil }
+        let filteredRows: [AdminCampaignAttributionRow]
+        if let days = range.dayCount,
+           let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: calendar.startOfDay(for: now)) {
+            filteredRows = validRows.filter { $0.created_at >= cutoff }
+        } else {
+            filteredRows = validRows
+        }
+        rows = filteredRows
+
+        attributed = filteredRows.filter {
+            Self.clean($0.utm_source) != nil || Self.clean($0.utm_medium) != nil || Self.clean($0.utm_campaign) != nil
+        }.count
+        sources = Self.breakdown(rows: filteredRows, fallback: "Direct / unknown") {
+            Self.clean($0.utm_source) ?? Self.clean($0.source)
+        }
+        mediums = Self.breakdown(rows: filteredRows, fallback: "Unspecified") { Self.clean($0.utm_medium) }
+        campaigns = Self.breakdown(rows: filteredRows) { Self.clean($0.utm_campaign) }
+
+        let today = calendar.startOfDay(for: now)
+        dailySignups = (0..<30).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset - 29, to: today),
+                  let key = Self.dateKey(day, calendar: calendar),
+                  let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
+            return AdminCampaignDailyCount(
+                dateKey: key,
+                count: filteredRows.filter { $0.created_at >= day && $0.created_at < nextDay }.count
+            )
+        }
+    }
+
+    var csv: String {
+        let header = "Created,Brisbane Date,Attributed Source,UTM Medium,UTM Campaign,Recorded Form Source"
+        let body = rows.sorted { $0.created_at > $1.created_at }.map { row in
+            [
+                ISO8601DateFormatter().string(from: row.created_at),
+                Self.dateKey(row.created_at, calendar: EventItem.calendar) ?? "",
+                Self.clean(row.utm_source) ?? Self.clean(row.source) ?? "Direct / unknown",
+                Self.clean(row.utm_medium) ?? "",
+                Self.clean(row.utm_campaign) ?? "",
+                Self.clean(row.source) ?? ""
+            ].map(Self.csvField).joined(separator: ",")
+        }
+        return ([header] + body).joined(separator: "\n")
+    }
+
+    private static func breakdown(
+        rows: [AdminCampaignAttributionRow],
+        fallback: String? = nil,
+        label: (AdminCampaignAttributionRow) -> String?
+    ) -> [AdminCampaignBreakdown] {
+        var counts: [String: (label: String, count: Int)] = [:]
+        for row in rows {
+            guard let resolved = label(row) ?? fallback else { continue }
+            let key = resolved.lowercased()
+            let current = counts[key] ?? (resolved, 0)
+            counts[key] = (current.label, current.count + 1)
+        }
+        return counts.values
+            .map { AdminCampaignBreakdown(label: $0.label, count: $0.count) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        let cleaned = value?.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") ?? ""
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private static func dateKey(_ date: Date, calendar: Calendar) -> String? {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    private static func csvField(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n") ? "\"\(escaped)\"" : escaped
+    }
+}
+
 struct AdminBookingSession: Codable, Hashable {
     let title: String
     let start_time: Date?

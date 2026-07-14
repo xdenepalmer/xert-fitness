@@ -1250,8 +1250,59 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(booking.id.hasPrefix("member:"))
     }
 
+    func testCampaignAttributionMatchesQueenslandReportingAndPrivacySafeExport() {
+        let rows = [
+            campaignRow(
+                id: "1", source: " Facebook ", medium: "Paid Social", campaign: "Winter Push",
+                createdAt: queenslandDate(2026, 7, 13, 1, 30)
+            ),
+            campaignRow(
+                id: "2", source: "facebook", medium: "paid social", campaign: "Winter Push",
+                createdAt: queenslandDate(2026, 7, 13, 11, 0)
+            ),
+            campaignRow(
+                id: "3", source: nil, medium: nil, campaign: nil,
+                createdAt: queenslandDate(2026, 7, 1, 10, 0), recordedSource: "Website"
+            )
+        ]
+        let summary = AdminCampaignSummary(
+            rows: rows,
+            range: .thirty,
+            now: queenslandDate(2026, 7, 14, 12, 0)
+        )
+
+        XCTAssertEqual(summary.total, 3)
+        XCTAssertEqual(summary.attributed, 2)
+        XCTAssertEqual(summary.direct, 1)
+        XCTAssertEqual(summary.sources.first, AdminCampaignBreakdown(label: "Facebook", count: 2))
+        XCTAssertEqual(summary.mediums.first?.count, 2)
+        XCTAssertEqual(summary.campaigns.first, AdminCampaignBreakdown(label: "Winter Push", count: 2))
+        XCTAssertEqual(summary.dailySignups.first(where: { $0.dateKey == "2026-07-13" })?.count, 2)
+        XCTAssertTrue(summary.csv.contains("Brisbane Date"))
+        XCTAssertTrue(summary.csv.contains("Direct / unknown"))
+        XCTAssertFalse(summary.csv.lowercased().contains("email"))
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
+    }
+
+    private func campaignRow(
+        id: String,
+        source: String?,
+        medium: String?,
+        campaign: String?,
+        createdAt: Date,
+        recordedSource: String? = "website"
+    ) -> AdminCampaignAttributionRow {
+        AdminCampaignAttributionRow(
+            id: AdminLeadIdentifier(id),
+            utm_source: source,
+            utm_medium: medium,
+            utm_campaign: campaign,
+            source: recordedSource,
+            created_at: createdAt
+        )
     }
 
     private func order(id: UUID, status: String) -> OrderItem {

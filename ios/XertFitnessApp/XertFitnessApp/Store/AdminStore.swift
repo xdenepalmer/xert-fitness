@@ -26,6 +26,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
+    @Published private(set) var campaignAttributionRows: [AdminCampaignAttributionRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
@@ -51,6 +52,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
+    @Published private(set) var isLoadingCampaignAttribution = false
     @Published private(set) var savingLeadIDs: Set<AdminLeadIdentifier> = []
     @Published private(set) var isLoadingBookingRequests = false
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
@@ -269,6 +271,19 @@ final class AdminStore: ObservableObject {
 
     func leads(for pipeline: AdminLeadPipeline) -> [AdminLead] {
         leadsByPipeline[pipeline] ?? []
+    }
+
+    func loadCampaignAttribution(session: AuthSession, force: Bool = false) async {
+        guard !isLoadingCampaignAttribution else { return }
+        if !force, !campaignAttributionRows.isEmpty { return }
+        isLoadingCampaignAttribution = true
+        defer { isLoadingCampaignAttribution = false }
+        do {
+            campaignAttributionRows = try await api.adminCampaignAttribution(session: session)
+            lastUpdatedAt = Date()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func loadLeads(session: AuthSession, pipeline: AdminLeadPipeline, force: Bool = false) async {
