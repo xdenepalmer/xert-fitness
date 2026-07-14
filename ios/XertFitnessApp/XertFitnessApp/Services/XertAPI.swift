@@ -327,6 +327,25 @@ final class XertAPI {
         )
     }
 
+    func adminSchemaCapabilities(session auth: AuthSession) async throws -> [AdminSchemaCapability] {
+        try await restRequest(
+            path: "/rest/v1/xert_schema_capabilities",
+            queryItems: [
+                URLQueryItem(name: "select", value: "capability,installed_at"),
+                URLQueryItem(name: "order", value: "capability.asc")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminCommerceHealth(session auth: AuthSession) async throws -> AdminCommerceHealth {
+        try await vercelGet(path: "/api/admin-commerce-health", auth: auth)
+    }
+
+    func adminPushHealth(session auth: AuthSession) async throws -> AdminPushHealth {
+        try await vercelGet(path: "/api/admin-push-health", auth: auth)
+    }
+
     func adminPublishAnnouncement(
         session auth: AuthSession,
         title: String,
@@ -640,6 +659,13 @@ final class XertAPI {
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        return try await decode(request)
+    }
+
+    private func vercelGet<T: Decodable>(path: String, auth: AuthSession) async throws -> T {
+        var request = try request(baseURL: AppConfig.vercelBaseURL, path: path)
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         return try await decode(request)
     }
 

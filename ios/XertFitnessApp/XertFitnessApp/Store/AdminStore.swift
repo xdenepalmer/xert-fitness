@@ -11,6 +11,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var settings: AdminPlatformSettings?
     @Published private(set) var ptRequests: [AdminPTRequest] = []
     @Published private(set) var announcements: [AdminAnnouncement] = []
+    @Published private(set) var schemaCapabilities: [AdminSchemaCapability] = []
+    @Published private(set) var commerceHealth: AdminCommerceHealth?
+    @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -36,6 +39,15 @@ final class AdminStore: ObservableObject {
     }
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
     var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
+    var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
+    var healthIssues: Int {
+        missingSchemaCapabilities.count
+            + (commerceHealth?.ready == false ? 1 : 0)
+            + (pushHealth?.ready == false ? 1 : 0)
+    }
+    var hasHealthSnapshot: Bool {
+        !schemaCapabilities.isEmpty && commerceHealth != nil && pushHealth != nil
+    }
 
     func refresh(session: AuthSession) async {
         guard !isLoading else { return }
@@ -51,6 +63,9 @@ final class AdminStore: ObservableObject {
         async let settingsRequest = api.adminPlatformSettings(session: session)
         async let ptRequest = api.adminPTRequests(session: session)
         async let announcementRequest = api.adminAnnouncements(session: session)
+        async let capabilitiesRequest = api.adminSchemaCapabilities(session: session)
+        async let commerceRequest = api.adminCommerceHealth(session: session)
+        async let pushRequest = api.adminPushHealth(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -70,6 +85,12 @@ final class AdminStore: ObservableObject {
         catch { failures.append("PT requests") }
         do { announcements = try await announcementRequest; loadedSource = true }
         catch { failures.append("member notices") }
+        do { schemaCapabilities = try await capabilitiesRequest; loadedSource = true }
+        catch { failures.append("schema health") }
+        do { commerceHealth = try await commerceRequest; loadedSource = true }
+        catch { failures.append("Stripe health") }
+        do { pushHealth = try await pushRequest; loadedSource = true }
+        catch { failures.append("push health") }
 
         if loadedSource {
             lastUpdatedAt = Date()

@@ -31,7 +31,8 @@ The included `Info.plist` already contains these xcconfig substitutions:
   follow-up logging, finance visibility, and optimistic-locked live platform
   controls, native PT request management, and immediate member notice publishing
   to web, in-app inboxes, and APNs. Supabase role checks and every admin RPC
-  remain enforced server-side.
+  remain enforced server-side. Native operations health reports the complete
+  migration contract alongside authenticated Stripe and APNs readiness.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

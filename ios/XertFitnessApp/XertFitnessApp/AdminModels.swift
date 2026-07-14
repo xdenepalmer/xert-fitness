@@ -152,3 +152,61 @@ private extension String {
         return value.isEmpty ? nil : value
     }
 }
+
+struct AdminSchemaCapability: Codable, Hashable {
+    let capability: String
+    let installed_at: Date?
+}
+
+struct AdminEnvironmentHealth: Codable, Hashable {
+    let ready: Bool
+    let missing: [String]
+}
+
+struct AdminCommerceHealth: Codable, Hashable {
+    let ready: Bool
+    let active_product_count: Int
+    let stripe_price_count: Int
+    let dynamic_price_count: Int
+    let environment: AdminEnvironmentHealth
+}
+
+struct AdminPushHealth: Codable, Hashable {
+    struct Subscriptions: Codable, Hashable {
+        let production: Int
+        let sandbox: Int
+        let disabled: Int
+    }
+    struct Deliveries: Codable, Hashable {
+        let delivered: Int
+        let failed: Int
+        let invalid_token: Int
+    }
+
+    let ready: Bool
+    let environment: AdminEnvironmentHealth
+    let subscriptions: Subscriptions
+    let deliveries_24h: Deliveries
+}
+
+enum AdminSchemaReadiness {
+    static let required: Set<String> = [
+        "admin_role_safety", "audited_credit_grants", "booking_waitlist_withdrawal",
+        "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
+        "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
+        "checkout_reconciliation", "member_announcements", "announcement_receipts",
+        "announcement_actions", "announcement_archival", "booking_time_conflict_guard",
+        "admin_member_notes", "schedule_blackout_guard", "database_security_hardening",
+        "rls_policy_performance", "request_status_audit", "member_push_notifications",
+        "credit_expiry_follow_up", "member_pt_request_tracking", "public_form_integrity",
+        "lead_pipeline_audit", "schedule_change_audit", "content_change_audit",
+        "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
+        "schedule_optimistic_locking", "shared_admin_optimistic_locking",
+        "catalog_optimistic_locking", "targeted_member_notices"
+    ]
+
+    static func missing(from rows: [AdminSchemaCapability]) -> [String] {
+        let installed = Set(rows.map(\.capability))
+        return required.subtracting(installed).sorted()
+    }
+}

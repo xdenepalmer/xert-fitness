@@ -44,6 +44,13 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(announcement.stateLabel, "Live")
     }
 
+    func testNativeAdminSchemaReadinessNamesMissingCapabilities() {
+        let installed = AdminSchemaReadiness.required
+            .filter { $0 != "targeted_member_notices" }
+            .map { AdminSchemaCapability(capability: $0, installed_at: nil) }
+        XCTAssertEqual(AdminSchemaReadiness.missing(from: installed), ["targeted_member_notices"])
+    }
+
     func testPendingCheckoutRoundTripsForTheSameUser() throws {
         let suiteName = "PendingCheckoutTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

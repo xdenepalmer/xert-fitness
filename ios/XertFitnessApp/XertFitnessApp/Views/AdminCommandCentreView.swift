@@ -188,6 +188,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Platform controls", detail: "Control bookings, launch and public messaging", icon: "switch.2") {
                     AdminPlatformView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Operations health", detail: !admin.hasHealthSnapshot ? "Checking release services" : admin.healthIssues == 0 ? "Schema, Stripe and APNs ready" : "\(admin.healthIssues) release issue\(admin.healthIssues == 1 ? "" : "s")", icon: "checkmark.shield") {
+                    AdminOperationsHealthView(admin: admin)
+                }
             }
         }
     }
@@ -692,6 +695,103 @@ private struct AdminCommunicationsView: View {
                 }
             }
         }
+    }
+}
+
+private struct AdminOperationsHealthView: View {
+    @ObservedObject var admin: AdminStore
+
+    var body: some View {
+        List {
+            Section("Release readiness") {
+                HealthStatusRow(
+                    title: "Database contract",
+                    ready: admin.missingSchemaCapabilities.isEmpty,
+                    detail: admin.missingSchemaCapabilities.isEmpty
+                        ? "All \(AdminSchemaReadiness.required.count) required capabilities are installed."
+                        : "\(admin.missingSchemaCapabilities.count) required database capabilities are missing."
+                )
+                HealthStatusRow(
+                    title: "Stripe checkout",
+                    ready: admin.commerceHealth?.ready == true,
+                    detail: commerceDetail
+                )
+                HealthStatusRow(
+                    title: "Member push notifications",
+                    ready: admin.pushHealth?.ready == true,
+                    detail: pushDetail
+                )
+            }
+
+            if !admin.missingSchemaCapabilities.isEmpty {
+                Section("Missing database capabilities") {
+                    ForEach(admin.missingSchemaCapabilities, id: \.self) { capability in
+                        Label(capability.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "exclamationmark.triangle")
+                            .font(.subheadline).foregroundStyle(.orange)
+                            .listRowBackground(Color.xertInk)
+                    }
+                }
+            }
+            if let push = admin.pushHealth {
+                Section("APNs activity (24 hours)") {
+                    HealthCountRow(label: "Production devices", value: push.subscriptions.production)
+                    HealthCountRow(label: "Delivered", value: push.deliveries_24h.delivered)
+                    HealthCountRow(label: "Failed", value: push.deliveries_24h.failed + push.deliveries_24h.invalid_token)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Operations Health")
+    }
+
+    private var commerceDetail: String {
+        guard let health = admin.commerceHealth else { return "Commerce health is unavailable." }
+        if !health.environment.missing.isEmpty {
+            return "Missing: \(health.environment.missing.joined(separator: ", "))."
+        }
+        return "\(health.active_product_count) active packs; \(health.stripe_price_count) Stripe-linked and \(health.dynamic_price_count) dynamic."
+    }
+
+    private var pushDetail: String {
+        guard let health = admin.pushHealth else { return "Push health is unavailable." }
+        if !health.environment.missing.isEmpty {
+            return "Missing: \(health.environment.missing.joined(separator: ", "))."
+        }
+        return "\(health.subscriptions.production) production device\(health.subscriptions.production == 1 ? "" : "s") registered."
+    }
+}
+
+private struct HealthStatusRow: View {
+    let title: String
+    let ready: Bool
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ready ? Color.green : Color.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline).foregroundStyle(Color.xertOffWhite)
+                Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct HealthCountRow: View {
+    let label: String
+    let value: Int
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value.formatted()).fontWeight(.bold)
+        }
+        .foregroundStyle(Color.xertOffWhite)
+        .listRowBackground(Color.xertInk)
     }
 }
 
