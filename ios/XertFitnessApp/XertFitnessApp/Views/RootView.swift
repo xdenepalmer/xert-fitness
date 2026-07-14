@@ -104,6 +104,14 @@ struct RootView: View {
                     Label("Account", systemImage: "person.crop.circle")
                 }
                 .tag(3)
+
+            if store.profile?.isAdmin == true {
+                AdminCommandCentreView()
+                    .tabItem {
+                        Label("Admin", systemImage: "rectangle.3.group")
+                    }
+                    .tag(4)
+            }
         }
         .tint(.xertSteel)
         .alert("XERT", isPresented: Binding(

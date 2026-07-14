@@ -280,6 +280,9 @@ struct MemberProfile: Identifiable, Codable, Hashable {
     let full_name: String?
     let phone: String?
     let email: String?
+    let role: String?
+
+    var isAdmin: Bool { role == "admin" }
 }
 
 struct BookingItem: Identifiable, Codable, Hashable {

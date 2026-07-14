@@ -239,7 +239,7 @@ final class XertAPI {
 
     func profile(session auth: AuthSession) async throws -> MemberProfile? {
         var queryItems = [
-            URLQueryItem(name: "select", value: "id,full_name,phone"),
+            URLQueryItem(name: "select", value: "id,full_name,phone,email,role"),
             URLQueryItem(name: "limit", value: "1"),
         ]
         if let userID = auth.user?.id {
@@ -251,6 +251,122 @@ final class XertAPI {
             auth: auth
         )
         return profiles.first
+    }
+
+    // MARK: - Native admin command centre
+
+    func adminDailyOperations(session auth: AuthSession) async throws -> [AdminDailyOperation] {
+        try await rpc(path: "admin_daily_operations", body: EmptyBody(), auth: auth)
+    }
+
+    func adminWaitlist(session auth: AuthSession, limit: Int = 20) async throws -> [AdminWaitlistItem] {
+        try await rpc(
+            path: "admin_waitlist_overview",
+            body: AdminLimitRequest(p_limit: min(max(limit, 1), 50)),
+            auth: auth
+        )
+    }
+
+    func adminFollowUps(session auth: AuthSession, limit: Int = 20) async throws -> [AdminFollowUp] {
+        try await rpc(
+            path: "admin_member_follow_up_queue",
+            body: AdminLimitRequest(p_limit: min(max(limit, 1), 50)),
+            auth: auth
+        )
+    }
+
+    func adminMembers(session auth: AuthSession, search: String = "", limit: Int = 50) async throws -> [AdminMemberSummary] {
+        try await rpc(
+            path: "admin_list_members_page",
+            body: AdminMemberPageRequest(
+                p_search: search.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                p_role: "all",
+                p_credit: "all",
+                p_limit: min(max(limit, 1), 100),
+                p_offset: 0,
+                p_user_id: nil
+            ),
+            auth: auth
+        )
+    }
+
+    func adminPlatformSettings(session auth: AuthSession) async throws -> AdminPlatformSettings? {
+        let settings: [AdminPlatformSettings] = try await restRequest(
+            path: "/rest/v1/admin_settings",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,announcement_banner_text,announcement_banner_enabled,updated_at"),
+                URLQueryItem(name: "limit", value: "1")
+            ],
+            auth: auth
+        )
+        return settings.first
+    }
+
+    func adminUpdatePlatformSettings(
+        session auth: AuthSession,
+        settings: AdminPlatformSettings
+    ) async throws -> AdminPlatformSettings {
+        let banner = settings.announcementText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.announcement_banner_enabled && banner.isEmpty {
+            throw APIError(message: "Add announcement text before enabling the banner.")
+        }
+        guard settings.target_launch_date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
+            throw APIError(message: "Enter the launch date as YYYY-MM-DD.")
+        }
+
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/admin_settings",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(settings.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(settings.updated_at)")
+            ]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(AdminSettingsUpdate(
+            target_launch_date: settings.target_launch_date,
+            countdown_enabled: settings.countdown_enabled,
+            bookings_enabled: settings.bookings_enabled,
+            announcement_banner_text: banner.isEmpty ? nil : banner,
+            announcement_banner_enabled: settings.announcement_banner_enabled,
+            updated_at: ISO8601DateFormatter.standard.string(from: Date())
+        ))
+        let rows: [AdminPlatformSettings] = try await decode(request)
+        guard let updated = rows.first else {
+            throw APIError(message: "Platform settings changed elsewhere. Refresh and review the latest values before saving.")
+        }
+        return updated
+    }
+
+    @discardableResult
+    func adminPromoteNextWaitlisted(session auth: AuthSession, classSessionID: UUID) async throws -> UUID {
+        try await rpc(
+            path: "admin_promote_next_waitlisted",
+            body: AdminSessionRequest(p_session_id: classSessionID),
+            auth: auth
+        )
+    }
+
+    @discardableResult
+    func adminAddMemberNote(
+        session auth: AuthSession,
+        memberID: UUID,
+        category: String,
+        body: String
+    ) async throws -> UUID {
+        try await rpc(
+            path: "admin_add_member_note",
+            body: AdminMemberNoteRequest(
+                p_user_id: memberID,
+                p_category: category,
+                p_body: body
+            ),
+            auth: auth
+        )
     }
 
     func updateProfile(
@@ -497,6 +613,29 @@ final class XertAPI {
 
 private struct EmptyBody: Encodable {}
 private struct EmptyObject: Decodable {}
+private struct AdminLimitRequest: Encodable { let p_limit: Int }
+private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
+private struct AdminMemberPageRequest: Encodable {
+    let p_search: String?
+    let p_role: String
+    let p_credit: String
+    let p_limit: Int
+    let p_offset: Int
+    let p_user_id: UUID?
+}
+private struct AdminMemberNoteRequest: Encodable {
+    let p_user_id: UUID
+    let p_category: String
+    let p_body: String
+}
+private struct AdminSettingsUpdate: Encodable {
+    let target_launch_date: String
+    let countdown_enabled: Bool
+    let bookings_enabled: Bool
+    let announcement_banner_text: String?
+    let announcement_banner_enabled: Bool
+    let updated_at: String
+}
 private struct ProfileUpdate: Encodable {
     let full_name: String?
     let phone: String?

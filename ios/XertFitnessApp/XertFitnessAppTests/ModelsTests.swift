@@ -2,6 +2,33 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let profile = try decoder.decode(MemberProfile.self, from: Data("""
+        {"id":"00000000-0000-0000-0000-000000000001","full_name":"Owner","phone":null,"email":"owner@xert.com","role":"admin"}
+        """.utf8))
+        XCTAssertTrue(profile.isAdmin)
+
+        let operation = try decoder.decode(AdminDailyOperation.self, from: Data("""
+        {"session_id":"00000000-0000-0000-0000-000000000002","title":"XERT Engine","class_type":"conditioning","start_time":"2026-07-14T06:00:00Z","end_time":"2026-07-14T07:00:00Z","status":"published","capacity":12,"coach_name":"Byron","location_zone":"Floor","booking_mode":"instant","requested_count":2,"confirmed_count":7,"waitlist_count":1,"attended_count":0,"no_show_count":0,"public_request_count":1,"attendance_due":false}
+        """.utf8))
+        XCTAssertEqual(operation.activeCount, 9)
+        XCTAssertEqual(operation.waitlist_count, 1)
+    }
+
+    func testAdminRetentionReasonsAreOwnerReadable() {
+        let followUp = AdminFollowUp(
+            id: UUID(), full_name: "Alex", email: "alex@example.com", phone: nil,
+            role: "member", joined_at: Date(), credits_remaining: 3, bookings_count: 4,
+            last_attended_at: nil, next_booking_at: nil, last_follow_up_at: nil,
+            reason: "credits_expiring", priority: 1, credits_expiring: 2,
+            next_credit_expiry: Date().addingTimeInterval(86_400)
+        )
+        XCTAssertEqual(followUp.displayName, "Alex")
+        XCTAssertEqual(followUp.reasonLabel, "Credits expiring soon")
+    }
+
     func testPendingCheckoutRoundTripsForTheSameUser() throws {
         let suiteName = "PendingCheckoutTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
