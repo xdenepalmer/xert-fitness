@@ -54,6 +54,68 @@ struct AdminRosterMember: Identifiable, Codable, Hashable {
     var attendanceEligible: Bool { ["confirmed", "attended", "no_show"].contains(status) }
 }
 
+struct AdminClassSession: Identifiable, Codable, Hashable {
+    let id: UUID
+    let class_type: String?
+    let title: String
+    let description: String?
+    let coach_name: String?
+    let start_time: Date?
+    let end_time: Date?
+    let duration_minutes: Int?
+    let capacity: Int?
+    let location_zone: String?
+    let beginner_friendly: Bool?
+    let intensity_level: String?
+    let status: String
+    let public_visible: Bool?
+    let booking_mode: String?
+    let notes: String?
+}
+
+struct AdminClassDraft: Equatable {
+    static let classTypes = ["XERT Foundation", "XERT Strength", "XERT Engine", "XERT Hybrid", "XERT Event Prep", "XERT Team"]
+    static let intensities = ["Low", "Moderate", "High", "Very high"]
+    static let bookingModes = ["interest_only", "request_to_book", "instant_book"]
+
+    var classType: String
+    var title: String
+    var description: String
+    var coachName: String
+    var startTime: Date
+    var hasEndTime: Bool
+    var endTime: Date
+    var durationMinutes: Int
+    var capacity: Int
+    var location: String
+    var beginnerFriendly: Bool
+    var intensity: String
+    var status: String
+    var publicVisible: Bool
+    var bookingMode: String
+    var notes: String
+
+    init(classSession: AdminClassSession? = nil, now: Date = Date()) {
+        let defaultStart = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        classType = classSession?.class_type ?? "XERT Foundation"
+        title = classSession?.title ?? ""
+        description = classSession?.description ?? ""
+        coachName = classSession?.coach_name ?? ""
+        startTime = classSession?.start_time ?? defaultStart
+        hasEndTime = classSession?.end_time != nil
+        endTime = classSession?.end_time ?? defaultStart.addingTimeInterval(3_600)
+        durationMinutes = classSession?.duration_minutes ?? 60
+        capacity = classSession?.capacity ?? 8
+        location = classSession?.location_zone ?? "Main floor"
+        beginnerFriendly = classSession?.beginner_friendly ?? false
+        intensity = classSession?.intensity_level ?? "Moderate"
+        status = classSession?.status ?? "draft"
+        publicVisible = classSession?.public_visible ?? false
+        bookingMode = classSession?.booking_mode ?? "request_to_book"
+        notes = classSession?.notes ?? ""
+    }
+}
+
 struct AdminWaitlistItem: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID

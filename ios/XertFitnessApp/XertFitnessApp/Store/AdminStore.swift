@@ -21,6 +21,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var classRoster: [AdminRosterMember] = []
+    @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var promotingSessionID: UUID?
@@ -37,6 +38,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var loadingRosterSessionID: UUID?
     @Published private(set) var updatingBookingID: UUID?
     @Published private(set) var recordingAttendanceSessionID: UUID?
+    @Published private(set) var savingClassID: UUID?
+    @Published private(set) var cancellingClassID: UUID?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
 
@@ -87,6 +90,7 @@ final class AdminStore: ObservableObject {
         async let eventRequest = api.adminEvents(session: session)
         async let eventGoalsRequest = api.adminEventGoalReferences(session: session)
         async let coachRequest = api.adminCoaches(session: session)
+        async let classSessionRequest = api.adminClassSessions(session: session)
 
         var failures: [String] = []
         var loadedSource = false
@@ -124,6 +128,8 @@ final class AdminStore: ObservableObject {
         } catch { failures.append("event training groups") }
         do { coaches = try await coachRequest; loadedSource = true }
         catch { failures.append("team directory") }
+        do { classSessions = try await classSessionRequest; loadedSource = true }
+        catch { failures.append("full timetable") }
 
         if loadedSource {
             lastUpdatedAt = Date()
@@ -389,6 +395,57 @@ final class AdminStore: ObservableObject {
         do {
             try await api.adminDeleteCoach(session: session, coach: coach)
             coaches = try await api.adminCoaches(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func saveClass(session: AuthSession, classSession: AdminClassSession?, draft: AdminClassDraft) async -> Bool {
+        guard savingClassID == nil else { return false }
+        savingClassID = classSession?.id ?? UUID()
+        defer { savingClassID = nil }
+        do {
+            if let classSession {
+                try await api.adminUpdateClass(session: session, classSession: classSession, draft: draft)
+            } else {
+                try await api.adminCreateClass(session: session, draft: draft)
+            }
+            classSessions = try await api.adminClassSessions(session: session)
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func duplicateClass(session: AuthSession, classSession: AdminClassSession) async -> Bool {
+        var draft = AdminClassDraft(classSession: classSession)
+        draft.title = "\(classSession.title) (copy)"
+        let originalStart = classSession.start_time ?? Date()
+        let originalEnd = classSession.end_time ?? originalStart.addingTimeInterval(TimeInterval(draft.durationMinutes * 60))
+        draft.startTime = originalStart.addingTimeInterval(7 * 86_400)
+        draft.endTime = originalEnd.addingTimeInterval(7 * 86_400)
+        draft.status = "draft"
+        draft.publicVisible = false
+        return await saveClass(session: session, classSession: nil, draft: draft)
+    }
+
+    func cancelClass(session: AuthSession, classSession: AdminClassSession) async -> Bool {
+        guard cancellingClassID == nil else { return false }
+        cancellingClassID = classSession.id
+        defer { cancellingClassID = nil }
+        do {
+            _ = try await api.adminCancelClass(session: session, classSessionID: classSession.id)
+            do { try await api.adminNotifyClassCancellation(session: session, classSessionID: classSession.id) }
+            catch { errorMessage = "Class cancelled, but push delivery needs attention: \(error.localizedDescription)" }
+            classSessions = try await api.adminClassSessions(session: session)
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            waitlist = try await api.adminWaitlist(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {

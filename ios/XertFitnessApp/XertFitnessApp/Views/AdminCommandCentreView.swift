@@ -173,6 +173,9 @@ struct AdminCommandCentreView: View {
                 AdminDestinationRow(title: "Classes & waitlists", detail: "Run today's schedule and fill open places", icon: "calendar.badge.clock") {
                     AdminClassesView(admin: admin, session: session)
                 }
+                AdminDestinationRow(title: "Full timetable", detail: "Create, publish, edit, duplicate and cancel classes", icon: "calendar") {
+                    AdminScheduleView(admin: admin, session: session)
+                }
                 AdminDestinationRow(title: "Retention", detail: "Contact members before they disengage", icon: "arrow.triangle.2.circlepath") {
                     AdminRetentionView(admin: admin, session: session)
                 }
@@ -498,6 +501,212 @@ private struct AdminClassRosterView: View {
     private func contact(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct AdminScheduleView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var query = ""
+    @State private var showingCreate = false
+    @State private var pendingCancellation: AdminClassSession?
+
+    private var rows: [AdminClassSession] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !term.isEmpty else { return admin.classSessions }
+        return admin.classSessions.filter {
+            "\($0.title) \($0.class_type ?? "") \($0.coach_name ?? "") \($0.location_zone ?? "")".lowercased().contains(term)
+        }
+    }
+
+    var body: some View {
+        List {
+            if rows.isEmpty { Text("No matching classes.").listRowBackground(Color.xertInk) }
+            ForEach(rows) { item in
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(spacing: 2) {
+                        Text(item.start_time?.formatted(.dateTime.day()) ?? "--")
+                            .font(.title3.weight(.bold))
+                        Text(item.start_time?.formatted(.dateTime.month(.abbreviated)) ?? "TBC")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .frame(width: 42)
+                    .foregroundStyle(Color.xertSteel)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        NavigationLink {
+                            AdminClassEditor(admin: admin, session: session, classSession: item)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title).font(.headline)
+                                Text("\(item.start_time?.formatted(date: .omitted, time: .shortened) ?? "Time TBC") · \(item.capacity ?? 0) places")
+                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                            }
+                        }
+                        HStack {
+                            Text(item.status.uppercased()).foregroundStyle(classStatusColour(item.status))
+                            if item.public_visible { Text("PUBLIC").foregroundStyle(.green) }
+                            Spacer()
+                            Menu {
+                                Button {
+                                    Task { _ = await admin.duplicateClass(session: session, classSession: item) }
+                                } label: { Label("Duplicate as draft", systemImage: "plus.square.on.square") }
+                                if !["cancelled", "completed"].contains(item.status) {
+                                    Button(role: .destructive) { pendingCancellation = item } label: {
+                                        Label("Cancel class", systemImage: "calendar.badge.minus")
+                                    }
+                                }
+                            } label: { Image(systemName: "ellipsis.circle") }
+                                .disabled(admin.savingClassID != nil || admin.cancellingClassID != nil)
+                                .accessibilityLabel("Manage \(item.title)")
+                        }
+                        .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                }
+                .padding(.vertical, 6)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Full Timetable")
+        .searchable(text: $query, prompt: "Search timetable")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Create class")
+            }
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack { AdminClassEditor(admin: admin, session: session, classSession: nil) }
+        }
+        .confirmationDialog(
+            "Cancel this class?",
+            isPresented: Binding(get: { pendingCancellation != nil }, set: { if !$0 { pendingCancellation = nil } }),
+            presenting: pendingCancellation
+        ) { item in
+            Button("Cancel \(item.title)", role: .destructive) {
+                Task {
+                    _ = await admin.cancelClass(session: session, classSession: item)
+                    pendingCancellation = nil
+                }
+            }
+            Button("Keep class", role: .cancel) { pendingCancellation = nil }
+        } message: { _ in
+            Text("Every active booking is cancelled, reserved credits are returned, and affected members receive a cancellation notice.")
+        }
+    }
+
+    private func classStatusColour(_ status: String) -> Color {
+        switch status {
+        case "published": return .green
+        case "full": return .orange
+        case "cancelled": return .red
+        default: return Color.xertSteel
+        }
+    }
+}
+
+private struct AdminClassEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let classSession: AdminClassSession?
+    private let baseline: AdminClassDraft
+    @State private var draft: AdminClassDraft
+
+    private var isTerminal: Bool { classSession.map { ["cancelled", "completed"].contains($0.status) } ?? false }
+
+    init(admin: AdminStore, session: AuthSession, classSession: AdminClassSession?) {
+        let initial = AdminClassDraft(classSession: classSession)
+        self.admin = admin
+        self.session = session
+        self.classSession = classSession
+        baseline = initial
+        _draft = State(initialValue: initial)
+    }
+
+    var body: some View {
+        Form {
+            if isTerminal {
+                Section {
+                    Label("This class is \(classSession?.status ?? "closed") and cannot be reopened. Duplicate it to create a new draft.", systemImage: "lock")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
+            Section("Class") {
+                Picker("Type", selection: $draft.classType) {
+                    ForEach(AdminClassDraft.classTypes, id: \.self) { Text($0).tag($0) }
+                }
+                TextField("Title", text: $draft.title)
+                TextField("Description", text: $draft.description, axis: .vertical).lineLimit(2...6)
+                Picker("Status", selection: $draft.status) {
+                    Text("Draft").tag("draft")
+                    Text("Published").tag("published")
+                    Text("Full").tag("full")
+                }
+            }
+            Section("Date and capacity") {
+                DatePicker("Starts", selection: $draft.startTime)
+                Toggle("Set an end time", isOn: $draft.hasEndTime)
+                if draft.hasEndTime {
+                    DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
+                }
+                Stepper("Duration: \(draft.durationMinutes) min", value: $draft.durationMinutes, in: 15...240, step: 5)
+                Stepper("Capacity: \(draft.capacity)", value: $draft.capacity, in: 1...100)
+            }
+            Section("Delivery") {
+                TextField("Coach", text: $draft.coachName)
+                TextField("Location or zone", text: $draft.location)
+                Picker("Intensity", selection: $draft.intensity) {
+                    ForEach(AdminClassDraft.intensities, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("Booking mode", selection: $draft.bookingMode) {
+                    Text("Interest only").tag("interest_only")
+                    Text("Request to book").tag("request_to_book")
+                    Text("Instant book").tag("instant_book")
+                }
+                Toggle("Beginner friendly", isOn: $draft.beginnerFriendly)
+                Toggle("Visible on public timetable", isOn: $draft.publicVisible)
+                    .disabled(draft.status != "published")
+            }
+            Section("Internal notes") {
+                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...6)
+            }
+            if !isTerminal {
+                Section {
+                    Button {
+                        Task {
+                            if await admin.saveClass(session: session, classSession: classSession, draft: draft) { dismiss() }
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if admin.savingClassID != nil { ProgressView().tint(Color.xertNavy) }
+                            Text(classSession == nil ? "Create class" : "Save class").fontWeight(.bold)
+                            Spacer()
+                        }
+                    }
+                    .disabled(admin.savingClassID != nil || draft == baseline)
+                    .listRowBackground(Color.xertSteel)
+                    .foregroundStyle(Color.xertNavy)
+                }
+            }
+        }
+        .disabled(isTerminal)
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(classSession == nil ? "New Class" : "Edit Class")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if classSession == nil {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+        .onChange(of: draft.status) { status in
+            if status != "published" { draft.publicVisible = false }
+        }
     }
 }
 

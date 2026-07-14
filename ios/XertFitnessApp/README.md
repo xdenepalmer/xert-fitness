@@ -49,6 +49,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   manages waitlist removals and cancellations, provides direct member contact,
   and records complete attended/no-show roll calls atomically. Credit release,
   capacity checks, FIFO promotion, and class completion remain server enforced.
+  A searchable full-timetable manager creates and edits class metadata, booking
+  modes, capacity, visibility and delivery details; duplicates classes as future
+  drafts; and uses the dedicated cancellation workflow to return credits and
+  request member push notification. Terminal classes cannot be reopened.
 - Supabase password auth, sign-up, reset, and signed-in password updates.
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.

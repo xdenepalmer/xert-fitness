@@ -83,6 +83,14 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /path: "admin_record_session_attendance"/);
   assert.match(adminStore, /func setBookingStatus/);
   assert.match(adminStore, /func recordAttendance/);
+  assert.match(view, /AdminScheduleView/);
+  assert.match(view, /AdminClassEditor/);
+  assert.match(api, /func adminCreateClass/);
+  assert.match(api, /path: "admin_update_class_session"/);
+  assert.match(api, /path: "admin_cancel_class_session"/);
+  assert.match(api, /notify_class_cancellation/);
+  assert.match(adminStore, /func duplicateClass/);
+  assert.match(adminStore, /func cancelClass/);
   for (const table of [
     'admin_role_changes', 'admin_credit_grants', 'admin_request_status_changes',
     'member_announcement_admin_events', 'admin_lead_changes', 'admin_schedule_changes',

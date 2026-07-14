@@ -275,6 +275,97 @@ final class XertAPI {
         )
     }
 
+    func adminClassSessions(session auth: AuthSession) async throws -> [AdminClassSession] {
+        return try await restRequest(
+            path: "/rest/v1/class_sessions",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,class_type,title,description,coach_name,start_time,end_time,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,status,public_visible,booking_mode,notes"),
+                URLQueryItem(name: "order", value: "start_time.asc.nullslast"),
+                URLQueryItem(name: "limit", value: "1000")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminCreateClass(session auth: AuthSession, draft: AdminClassDraft) async throws {
+        let payload = try adminClassPayload(draft)
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/class_sessions")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        try await perform(request)
+    }
+
+    func adminUpdateClass(session auth: AuthSession, classSession: AdminClassSession, draft: AdminClassDraft) async throws {
+        guard !["cancelled", "completed"].contains(classSession.status) else {
+            throw APIError(message: "Cancelled and completed classes cannot be reopened. Create a new class instead.")
+        }
+        guard !["cancelled", "completed"].contains(draft.status) else {
+            throw APIError(message: "Use cancellation or attendance to close this class safely.")
+        }
+        let _: UUID = try await rpc(
+            path: "admin_update_class_session",
+            body: AdminClassUpdateRequest(
+                p_session_id: classSession.id,
+                p_session: try adminClassPayload(draft)
+            ),
+            auth: auth
+        )
+    }
+
+    @discardableResult
+    func adminCancelClass(session auth: AuthSession, classSessionID: UUID) async throws -> Int {
+        try await rpc(
+            path: "admin_cancel_class_session",
+            body: AdminSessionRequest(p_session_id: classSessionID),
+            auth: auth
+        )
+    }
+
+    func adminNotifyClassCancellation(session auth: AuthSession, classSessionID: UUID) async throws {
+        let _: AdminCancellationNoticeResponse = try await vercelRequest(
+            path: "/api/admin-publish-announcement",
+            body: AdminCancellationNoticeRequest(action: "notify_class_cancellation", session_id: classSessionID),
+            auth: auth
+        )
+    }
+
+    private func adminClassPayload(_ draft: AdminClassDraft) throws -> AdminClassPayload {
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { throw APIError(message: "A class title is required.") }
+        guard AdminClassDraft.classTypes.contains(draft.classType) else { throw APIError(message: "Choose a valid class type.") }
+        guard AdminClassDraft.intensities.contains(draft.intensity) else { throw APIError(message: "Choose a valid intensity.") }
+        guard AdminClassDraft.bookingModes.contains(draft.bookingMode) else { throw APIError(message: "Choose a valid booking mode.") }
+        guard ["draft", "published", "full"].contains(draft.status) else { throw APIError(message: "Choose a valid editable class status.") }
+        guard draft.capacity > 0, draft.durationMinutes > 0 else { throw APIError(message: "Capacity and duration must be positive whole numbers.") }
+        if draft.status == "published" && draft.startTime <= Date() {
+            throw APIError(message: "A published class must start in the future.")
+        }
+        if draft.hasEndTime && draft.endTime <= draft.startTime {
+            throw APIError(message: "Class end time must be after its start time.")
+        }
+        return AdminClassPayload(
+            class_type: draft.classType,
+            title: title,
+            description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            coach_name: draft.coachName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            start_time: ISO8601DateFormatter.standard.string(from: draft.startTime),
+            end_time: draft.hasEndTime ? ISO8601DateFormatter.standard.string(from: draft.endTime) : nil,
+            duration_minutes: draft.durationMinutes,
+            capacity: draft.capacity,
+            location_zone: draft.location.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            beginner_friendly: draft.beginnerFriendly,
+            intensity_level: draft.intensity,
+            status: draft.status,
+            public_visible: draft.status == "published" && draft.publicVisible,
+            booking_mode: draft.bookingMode,
+            notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
+    }
+
     func adminSetBookingStatus(session auth: AuthSession, bookingID: UUID, status: String) async throws {
         guard ["requested", "confirmed", "waitlisted", "cancelled", "declined"].contains(status) else {
             throw APIError(message: "Choose a valid booking decision.")
@@ -1107,6 +1198,32 @@ private struct AdminAttendanceRequest: Encodable {
     let p_attended_ids: [UUID]
     let p_no_show_ids: [UUID]
 }
+private struct AdminClassPayload: Encodable {
+    let class_type: String
+    let title: String
+    let description: String?
+    let coach_name: String?
+    let start_time: String
+    let end_time: String?
+    let duration_minutes: Int
+    let capacity: Int
+    let location_zone: String?
+    let beginner_friendly: Bool
+    let intensity_level: String
+    let status: String
+    let public_visible: Bool
+    let booking_mode: String
+    let notes: String?
+}
+private struct AdminClassUpdateRequest: Encodable {
+    let p_session_id: UUID
+    let p_session: AdminClassPayload
+}
+private struct AdminCancellationNoticeRequest: Encodable {
+    let action: String
+    let session_id: UUID
+}
+private struct AdminCancellationNoticeResponse: Decodable {}
 private struct AdminMemberPageRequest: Encodable {
     let p_search: String?
     let p_role: String

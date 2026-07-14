@@ -1106,6 +1106,27 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(noShow.displayName, "late@example.com")
     }
 
+    func testAdminClassDraftHydratesLegacyNullableMetadata() {
+        let start = Date().addingTimeInterval(86_400)
+        let session = AdminClassSession(
+            id: UUID(), class_type: nil, title: "Community Session", description: nil,
+            coach_name: nil, start_time: start, end_time: nil, duration_minutes: nil,
+            capacity: nil, location_zone: nil, beginner_friendly: nil,
+            intensity_level: nil, status: "draft", public_visible: nil,
+            booking_mode: nil, notes: nil
+        )
+
+        let draft = AdminClassDraft(classSession: session)
+
+        XCTAssertEqual(draft.classType, "XERT Foundation")
+        XCTAssertEqual(draft.durationMinutes, 60)
+        XCTAssertEqual(draft.capacity, 8)
+        XCTAssertEqual(draft.intensity, "Moderate")
+        XCTAssertEqual(draft.bookingMode, "request_to_book")
+        XCTAssertFalse(draft.publicVisible)
+        XCTAssertFalse(draft.hasEndTime)
+    }
+
     private func creditBatch(remaining: Int) -> CreditBatch {
         CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
     }
