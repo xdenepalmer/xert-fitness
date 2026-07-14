@@ -190,3 +190,71 @@ struct XertLogoHeader: View {
             .accessibilityLabel("XERT Fitness")
     }
 }
+
+/// Photographic first section for native feature tabs. It carries the same
+/// image-led hierarchy as the website while leaving the operational content
+/// immediately below it in the native List or Form.
+struct XertPageHero: View {
+    let imageName: String
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    var badge: String? = nil
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Image(imageName)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, minHeight: 250, maxHeight: 250)
+                .clipped()
+                .saturation(0.58)
+                .brightness(-0.14)
+                .contrast(1.08)
+                .accessibilityHidden(true)
+
+            LinearGradient(
+                colors: [
+                    Color.xertNavy.opacity(0.42),
+                    Color.xertDeep.opacity(0.5),
+                    Color.xertNavy.opacity(0.97),
+                ],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                XertLogoHeader(height: 24)
+                Text(eyebrow)
+                    .xertEyebrow()
+                Text(title)
+                    .xertDisplay(42)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let badge {
+                    Text(badge)
+                        .font(.caption2.weight(.bold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.xertSteel)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.55), lineWidth: 1))
+                        .padding(.top, 3)
+                }
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, minHeight: 250, maxHeight: 250)
+        .clipped()
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.xertSteel.opacity(0.72))
+                .frame(height: 2)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

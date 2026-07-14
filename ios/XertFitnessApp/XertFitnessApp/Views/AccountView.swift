@@ -40,6 +40,23 @@ struct AccountView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 Form {
+                    Section {
+                        XertPageHero(
+                            imageName: "AccountHero",
+                            eyebrow: store.isSignedIn ? "XERT Member" : "Train With XERT",
+                            title: store.isSignedIn ? "Your XERT." : "Join XERT.",
+                            subtitle: store.isSignedIn
+                                ? "Your credits, bookings, training goals and account controls in one place."
+                                : "Create your member account to book coached sessions, purchase packs and train toward shared events.",
+                            badge: store.isSignedIn
+                                ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") · \(timeline.upcoming.count) upcoming"
+                                : "Train for life · Compete for fun"
+                        )
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
                     if store.isSignedIn {
                         signedInSections(timeline: timeline)
                     } else {
@@ -47,8 +64,9 @@ struct AccountView: View {
                     }
                 }
                 .xertListBackground()
+                .listStyle(.plain)
                 .navigationTitle("Account")
-                .navigationBarTitleDisplayMode(.large)
+                .navigationBarTitleDisplayMode(.inline)
                 .refreshable {
                     await store.refresh()
                 }

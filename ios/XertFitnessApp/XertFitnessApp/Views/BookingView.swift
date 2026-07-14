@@ -14,6 +14,21 @@ struct BookingView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    XertPageHero(
+                        imageName: "BookHero",
+                        eyebrow: "XERT Classes",
+                        title: "Train. Book. Repeat.",
+                        subtitle: "Choose the session that matches your goal, reserve your place and arrive ready to work.",
+                        badge: store.isSignedIn
+                            ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
+                            : "Your first coached session starts here"
+                    )
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
                 noticeSections
                 creditsSection
                 packsSection
@@ -23,8 +38,9 @@ struct BookingView: View {
             }
             .tint(.xertSteel)
             .xertListBackground()
+            .listStyle(.plain)
             .navigationTitle("Book")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(
                 text: $classSearch,
                 placement: .navigationBarDrawer(displayMode: .always),

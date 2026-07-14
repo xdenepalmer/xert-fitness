@@ -1,28 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { X } from 'lucide-react';
 import { createProduct, getAllProducts, updateProduct } from '@/lib/adminData';
 import { normalizeProductAdminInput, normalizeProductCreateInput, productStripeTransitionError } from '@/lib/products';
 import AdminLoadError from './AdminLoadError';
+import AdminConfirmDialog from './AdminConfirmDialog';
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const NOOP = (_key, _dirty) => {};
 
-function ProductCard({ product, onSaved }) {
-  const [form, setForm] = useState({
-    name: product.name,
+function productEditorForm(product) {
+  return {
+    name: product.name || '',
     description: product.description || '',
-    price_dollars: (product.price_cents / 100).toFixed(2),
-    sessions_count: product.sessions_count,
-    validity_days: product.validity_days,
+    price_dollars: (Number(product.price_cents || 0) / 100).toFixed(2),
+    sessions_count: String(product.sessions_count ?? ''),
+    validity_days: String(product.validity_days ?? ''),
     currency: product.currency || 'aud',
-    sort_order: product.sort_order ?? 0,
-    featured: product.featured,
-    active: product.active,
+    sort_order: String(product.sort_order ?? 0),
+    featured: Boolean(product.featured),
+    active: Boolean(product.active),
     stripe_price_id: product.stripe_price_id || '',
-  });
+  };
+}
+
+function ProductCard({ product, onSaved, onDirtyChange }) {
+  const baseline = useMemo(() => productEditorForm(product), [product]);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const dirty = Object.keys(baseline).some(key => form[key] !== baseline[key]);
+
+  useEffect(() => {
+    onDirtyChange(product.id, dirty);
+  }, [dirty, onDirtyChange, product.id]);
+
+  useEffect(() => () => onDirtyChange(product.id, false), [onDirtyChange, product.id]);
   let transitionError = '';
   try {
     transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
@@ -40,7 +54,7 @@ function ProductCard({ product, onSaved }) {
     }
     setSaving(true);
     try {
-      await updateProduct(product.id, updates);
+      await updateProduct(product.id, updates, product.updated_at);
       await onSaved();
       toast({ title: 'Session pack saved', description: `${updates.name} is up to date.` });
     } catch (e) {
@@ -53,7 +67,10 @@ function ProductCard({ product, onSaved }) {
   return (
     <div className="bg-xert-ink border border-xert-steel/20 p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-lg text-xert-offwhite uppercase">{product.name}</h3>
+        <div>
+          <h3 className="font-display text-lg text-xert-offwhite uppercase">{product.name}</h3>
+          {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+        </div>
         <div className="flex items-center gap-2">
           {form.featured && <span className="font-body text-xs border border-xert-orange/40 text-xert-orange px-2 py-0.5 uppercase">Featured</span>}
           {!form.active && <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Inactive</span>}
@@ -113,7 +130,7 @@ function ProductCard({ product, onSaved }) {
           </span>
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
         </label>
-        <button onClick={handleSave} disabled={saving || Boolean(transitionError)}
+        <button onClick={handleSave} disabled={saving || !dirty || Boolean(transitionError)}
           className="ml-auto px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -128,18 +145,36 @@ const emptyProduct = () => ({
   active: false, stripe_price_id: '',
 });
 
-function NewProductDialog({ onClose, onCreated }) {
-  const [form, setForm] = useState(emptyProduct);
+function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
+  const baseline = useMemo(emptyProduct, []);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const set = (field, value) => setForm(current => ({ ...current, [field]: value }));
+  const dirty = Object.keys(baseline).some(key => form[key] !== baseline[key]);
+
+  useEffect(() => {
+    onDirtyChange('create', dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange('create', false), [onDirtyChange]);
+
+  const requestClose = useCallback(() => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  }, [dirty, onClose, saving]);
 
   useEffect(() => {
     const closeOnEscape = event => {
-      if (event.key === 'Escape' && !saving) onClose();
+      if (event.key === 'Escape') requestClose();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [onClose, saving]);
+  }, [requestClose]);
 
   const save = async () => {
     let product;
@@ -163,11 +198,14 @@ function NewProductDialog({ onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4" onMouseDown={event => { if (event.target === event.currentTarget) requestClose(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="new-product-title" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-xert-ink border border-xert-steel/20">
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 p-5 bg-xert-ink border-b border-xert-steel/20">
-          <h3 id="new-product-title" className="font-display text-xl text-xert-offwhite uppercase">New Session Pack</h3>
-          <button type="button" onClick={onClose} disabled={saving} aria-label="Close new session pack" title="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
+          <div>
+            <h3 id="new-product-title" className="font-display text-xl text-xert-offwhite uppercase">New Session Pack</h3>
+            {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+          </div>
+          <button type="button" onClick={requestClose} disabled={saving} aria-label="Close new session pack" title="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center text-xert-concrete/50 disabled:opacity-40"><X className="w-5 h-5" /></button>
         </header>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -190,19 +228,46 @@ function NewProductDialog({ onClose, onCreated }) {
           <p className="font-body text-xs text-xert-concrete/45">New packs start inactive unless explicitly enabled. The slug becomes the permanent checkout identifier.</p>
         </div>
         <footer className="flex gap-3 p-5 border-t border-xert-steel/20">
-          <button type="button" onClick={onClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
+          <button type="button" onClick={requestClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
           <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-11 bg-xert-steel text-xert-navy font-display text-sm uppercase disabled:opacity-40">{saving ? 'Creating...' : 'Create pack'}</button>
         </footer>
       </div>
+      <AdminConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard session pack draft?"
+        description="This new session pack has details that have not been saved."
+        warning="Closing now permanently discards the draft."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard draft"
+        onConfirm={onClose}
+        busy={saving}
+      />
     </div>
   );
 }
 
-export default function ProductsManager({ initialAction, onIntentHandled }) {
+export default function ProductsManager({ initialAction, onIntentHandled, onDirtyChange = NOOP }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [dirtyEditors, setDirtyEditors] = useState(() => new Set());
+
+  const handleDirtyChange = useCallback((key, dirty) => {
+    setDirtyEditors(current => {
+      const next = new Set(current);
+      if (dirty) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    onDirtyChange(dirtyEditors.size > 0);
+  }, [dirtyEditors, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const load = async () => {
     setLoading(true);
@@ -240,10 +305,10 @@ export default function ProductsManager({ initialAction, onIntentHandled }) {
         <div className="space-y-4">
           {products.length === 0
             ? <p className="font-body text-sm text-xert-concrete/60">No session packs have been configured.</p>
-            : products.map(p => <ProductCard key={p.id} product={p} onSaved={load} />)}
+            : products.map(p => <ProductCard key={`${p.id}:${p.updated_at || ''}`} product={p} onSaved={load} onDirtyChange={handleDirtyChange} />)}
         </div>
       )}
-      {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={load} />}
+      {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={load} onDirtyChange={handleDirtyChange} />}
     </div>
   );
 }

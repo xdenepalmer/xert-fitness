@@ -9,57 +9,42 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    CachedPublicDataNotice()
-                    StaleMemberDataNotice()
-                    DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    NativeHomeHero(
+                        isSignedIn: store.isSignedIn,
+                        onBook: { onNavigate(1) },
+                        onEvents: { onNavigate(2) },
+                        onRefresh: { Task { await store.refresh() } }
+                    )
+                    .frame(height: heroHeight)
 
-                    heroHeader
-                    announcementsSection
-                    creditExpirySection
-                    quickActions
-                    glanceSection
-                    todayTrainingSection
-                    nextUpSection
-                    nextEventSection
-                    sessionPacksSection
+                    VStack(alignment: .leading, spacing: 18) {
+                        CachedPublicDataNotice()
+                        StaleMemberDataNotice()
+                        DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
+                        announcementsSection
+                        todayTrainingSection
+                        creditExpirySection
+                        nextUpSection
+                        quickActions
+                        glanceSection
+                        nextEventSection
+                        sessionPacksSection
+                    }
+                    .padding()
                 }
-                .padding()
             }
+            .ignoresSafeArea(edges: .top)
             .refreshable {
                 await store.refresh()
             }
             .xertScreenBackground()
-            .navigationTitle("XERT")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .tint(.xertSteel)
-                .accessibilityLabel("Refresh")
-            }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
-    // MARK: - Hero
-
-    private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            XertLogoHeader(height: 26)
-            Text("XERT Fitness")
-                .xertDisplay(42)
-            Text("Train with purpose. Compete together.")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.xertSteel)
-            Text("Semi-private coaching, structured blocks, and event-led training for Kingaroy and South East Queensland.")
-                .font(.subheadline)
-                .foregroundStyle(Color.xertPale)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
+    private var heroHeight: CGFloat {
+        min(640, max(560, UIScreen.main.bounds.height * 0.72))
     }
 
     // MARK: - Member notices
@@ -334,6 +319,138 @@ struct HomeView: View {
             .filter { !$0.isComplete }
             .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
             .first
+    }
+}
+
+private struct NativeHomeHero: View {
+    let isSignedIn: Bool
+    let onBook: () -> Void
+    let onEvents: () -> Void
+    let onRefresh: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .bottomLeading) {
+                Image("HeroTraining")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .saturation(0.52)
+                    .brightness(-0.16)
+                    .contrast(1.08)
+                    .accessibilityHidden(true)
+
+                LinearGradient(
+                    colors: [
+                        Color.xertNavy.opacity(0.76),
+                        Color.xertDeep.opacity(0.45),
+                        Color.xertNavy.opacity(0.96),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .accessibilityHidden(true)
+
+                Rectangle()
+                    .fill(Color.xertSteel.opacity(0.78))
+                    .frame(height: 2)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .center) {
+                        XertLogoHeader(height: 36)
+                        Spacer()
+                        Button(action: onRefresh) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .background(Color.xertInk.opacity(0.72))
+                                .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+                        }
+                        .foregroundStyle(Color.xertSteel)
+                        .accessibilityLabel("Refresh XERT home")
+                    }
+
+                    Spacer(minLength: 24)
+
+                    HStack(spacing: 10) {
+                        Rectangle()
+                            .fill(Color.xertSteel)
+                            .frame(width: 28, height: 1)
+                        Text("Functional Fitness Training Facility")
+                            .font(.caption.weight(.bold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.xertSteel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Beat Your")
+                            .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Best.")
+                            .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .padding(.top, 10)
+
+                    Text("Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.xertPale)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 10)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            heroActions
+                        }
+                        VStack(spacing: 10) {
+                            heroActions
+                        }
+                    }
+                    .padding(.top, 18)
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.xertSteel)
+                            .frame(width: 7, height: 7)
+                        Text("Booking-based semi-private classes · Kingaroy QLD")
+                            .font(.caption2.weight(.semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.xertSteel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 14)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, max(proxy.safeAreaInsets.top, 18) + 10)
+                .padding(.bottom, 24)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var heroActions: some View {
+        Button(action: onBook) {
+            Text(isSignedIn ? "Book A Class" : "Book Your First Session")
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .buttonStyle(.xertPrimary)
+
+        Button(action: onEvents) {
+            Text("View Event Calendar")
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .buttonStyle(.xertGhost)
     }
 }
 

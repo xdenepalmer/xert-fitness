@@ -17,11 +17,13 @@ test('requires a new Stripe Price ID when fixed commercial terms change', () => 
   assert.equal(productStripeTransitionError(current, { ...current, price_cents: 5200, stripe_price_id: 'price_NEW' }), '');
 });
 
-test('product updates use the transactional RPC with a guarded legacy preflight', () => {
+test('product updates use the transactional RPC with a required record version', () => {
   const adminData = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
   assert.match(adminData, /rpc\('admin_update_product'/);
-  assert.match(adminData, /productStripeTransitionError\(current\.data, updates\)/);
+  assert.match(adminData, /p_expected_updated_at: expectedUpdatedAt/);
+  assert.match(adminData, /PRODUCT_STALE/);
   assert.match(adminData, /STRIPE_PRICE_REFRESH_REQUIRED/);
+  assert.doesNotMatch(adminData, /Compatibility path for projects awaiting the product update migration/);
 });
 
 test('database migration locks products and removes direct browser updates', () => {

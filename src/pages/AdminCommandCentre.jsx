@@ -119,11 +119,11 @@ export default function AdminCommandCentre() {
       case 'trainers': return <LeadTable key={section} type="trainer" />;
       case 'partners': return <LeadTable key={section} type="partner" />;
       case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} />;
-      case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
-      case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
+      case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
       case 'orders': return <OrdersManager />;
-      case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} />;
+      case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'content': return <ContentManager onDirtyChange={setHasUnsavedChanges} />;
       case 'bookings': return <BookingRequestsTable />;
       case 'pt-requests': return <PTRequestsTable />;

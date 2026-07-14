@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
@@ -11,37 +11,63 @@ const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail',
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const NOOP = _dirty => {};
+const EMPTY_EVENT = {
+  name: '', category: 'run', event_date: '', end_date: '', location: '',
+  region: 'South East Queensland', url: '', published: true, sort_order: 0,
+};
 
-function EventEditor({ event, onSave, onCancel }) {
-  const [form, setForm] = useState(
-    event || {
-      name: '',
-      category: 'run',
-      event_date: '',
-      end_date: '',
-      location: '',
-      region: 'South East Queensland',
-      url: '',
-      published: true,
-      sort_order: 0
-    }
-  );
+function eventEditorForm(event) {
+  if (!event?.id) return EMPTY_EVENT;
+  return {
+    name: event.name || '',
+    category: event.category || 'other',
+    event_date: event.event_date || '',
+    end_date: event.end_date || '',
+    location: event.location || '',
+    region: event.region || '',
+    url: event.url || '',
+    published: Boolean(event.published),
+    sort_order: event.sort_order ?? 0,
+  };
+}
+
+function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
+  const baseline = useMemo(() => eventEditorForm(event), [event]);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const dirty = Object.keys(EMPTY_EVENT).some(key => form[key] !== baseline[key]);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const requestCancel = useCallback(() => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onCancel();
+  }, [dirty, onCancel, saving]);
 
   useEffect(() => {
     const closeOnEscape = keyboardEvent => {
-      if (keyboardEvent.key === 'Escape' && !saving) onCancel();
+      if (keyboardEvent.key === 'Escape') requestCancel();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [onCancel, saving]);
+  }, [requestCancel]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const payload = normalizeEventInput(form);
-      if (event?.id) await updateEvent(event.id, payload);
+      if (event?.id) await updateEvent(event.id, payload, event.updated_at);
       else await createEvent(payload);
       onSave();
     } catch (e) {
@@ -56,11 +82,14 @@ function EventEditor({ event, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4" onMouseDown={mouseEvent => { if (mouseEvent.target === mouseEvent.currentTarget) requestCancel(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="event-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 id="event-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{event?.id ? 'Edit' : 'New'} Event</h3>
-          <button type="button" onClick={onCancel} aria-label="Close event editor" title="Close" className="min-w-11 min-h-11 p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors">
+          <div>
+            <h3 id="event-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{event?.id ? 'Edit' : 'New'} Event</h3>
+            {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+          </div>
+          <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close event editor" title="Close" className="min-w-11 min-h-11 p-2 text-xert-concrete/40 hover:text-xert-offwhite transition-colors disabled:opacity-40">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -115,7 +144,7 @@ function EventEditor({ event, onSave, onCancel }) {
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
+          <button type="button" onClick={requestCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
@@ -123,6 +152,17 @@ function EventEditor({ event, onSave, onCancel }) {
           </button>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard event changes?"
+        description="This calendar event has edits that have not been saved."
+        warning="Closing now permanently discards the changes in this editor."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={onCancel}
+        busy={saving}
+      />
     </div>
   );
 }
@@ -227,7 +267,7 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
   );
 }
 
-export default function EventsManager({ initialAction, onIntentHandled }) {
+export default function EventsManager({ initialAction, onIntentHandled, onDirtyChange = NOOP }) {
   const [events, setEvents] = useState([]);
   const [goalCounts, setGoalCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -303,7 +343,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
     setPendingDelete(null);
     setDeletingId(event.id);
     try {
-      await deleteEvent(event.id);
+      await deleteEvent(event.id, event.updated_at);
       toast({ title: 'Event deleted', description: `${event.name} was removed from the calendar.` });
       await load();
     } catch (e) {
@@ -443,6 +483,7 @@ export default function EventsManager({ initialAction, onIntentHandled }) {
             load();
           }}
           onCancel={() => setShowEditor(false)}
+          onDirtyChange={onDirtyChange}
         />
       )}
 

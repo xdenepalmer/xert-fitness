@@ -31,6 +31,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_daily_operations: 'Apply supabase/migrations/20260714016000_admin_daily_operations.sql in Supabase.',
   schedule_optimistic_locking: 'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
   shared_admin_optimistic_locking: 'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
+  catalog_optimistic_locking: 'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

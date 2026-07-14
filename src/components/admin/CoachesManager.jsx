@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
 import ImageUploader from '@/components/admin/ImageUploader';
@@ -15,28 +16,64 @@ const CATEGORIES = [
 
 const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
 const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const NOOP = _dirty => {};
+const EMPTY_COACH = {
+  name: '', role: '', category: 'coach', bio: '', experience: '',
+  currently_training_for: '', photo_url: '', social_url: '', sort_order: 0, published: true,
+};
 
-function CoachEditor({ coach, onSave, onCancel }) {
-  const [form, setForm] = useState(coach || {
-    name: '', role: '', category: 'coach', bio: '', experience: '',
-    currently_training_for: '', photo_url: '', social_url: '', sort_order: 0, published: true,
-  });
+function coachEditorForm(coach) {
+  if (!coach?.id) return EMPTY_COACH;
+  return {
+    name: coach.name || '',
+    role: coach.role || '',
+    category: coach.category || 'coach',
+    bio: coach.bio || '',
+    experience: coach.experience || '',
+    currently_training_for: coach.currently_training_for || '',
+    photo_url: coach.photo_url || '',
+    social_url: coach.social_url || '',
+    sort_order: coach.sort_order ?? 0,
+    published: Boolean(coach.published),
+  };
+}
+
+function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
+  const baseline = useMemo(() => coachEditorForm(coach), [coach]);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const dirty = Object.keys(EMPTY_COACH).some(key => form[key] !== baseline[key]);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const requestCancel = useCallback(() => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onCancel();
+  }, [dirty, onCancel, saving]);
 
   useEffect(() => {
     const closeOnEscape = event => {
-      if (event.key === 'Escape' && !saving) onCancel();
+      if (event.key === 'Escape') requestCancel();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [onCancel, saving]);
+  }, [requestCancel]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const payload = normalizeCoachInput(form);
-      if (coach?.id) await updateCoach(coach.id, payload);
+      if (coach?.id) await updateCoach(coach.id, payload, coach.updated_at);
       else await createCoach(payload);
       onSave();
     } catch (e) {
@@ -47,11 +84,14 @@ function CoachEditor({ coach, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4" onMouseDown={event => { if (event.target === event.currentTarget) requestCancel(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="coach-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 id="coach-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{coach?.id ? 'Edit' : 'New'} Team Member</h3>
-          <button type="button" onClick={onCancel} aria-label="Close team member editor" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">✕</button>
+          <div>
+            <h3 id="coach-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{coach?.id ? 'Edit' : 'New'} Team Member</h3>
+            {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+          </div>
+          <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close team member editor" title="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center text-xert-concrete/40 hover:text-xert-offwhite disabled:opacity-40"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -101,17 +141,28 @@ function CoachEditor({ coach, onSave, onCancel }) {
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={requestCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
           <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard team member changes?"
+        description="This team profile has edits that have not been saved."
+        warning="Closing now permanently discards the changes in this editor."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={onCancel}
+        busy={saving}
+      />
     </div>
   );
 }
 
-export default function CoachesManager({ initialAction, onIntentHandled }) {
+export default function CoachesManager({ initialAction, onIntentHandled, onDirtyChange = NOOP }) {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -146,7 +197,7 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
     setPendingDelete(null);
     setDeletingId(coach.id);
     try {
-      await deleteCoach(coach.id);
+      await deleteCoach(coach.id, coach.updated_at);
       toast({ title: 'Team member deleted', description: `${coach.name} was removed.` });
       await load();
     } catch (e) {
@@ -212,7 +263,7 @@ export default function CoachesManager({ initialAction, onIntentHandled }) {
       )}
 
       {showEditor && (
-        <CoachEditor coach={editing} onSave={() => { setShowEditor(false); load(); }} onCancel={() => setShowEditor(false)} />
+        <CoachEditor coach={editing} onSave={() => { setShowEditor(false); load(); }} onCancel={() => setShowEditor(false)} onDirtyChange={onDirtyChange} />
       )}
       <AdminConfirmDialog
         open={Boolean(pendingDelete)}

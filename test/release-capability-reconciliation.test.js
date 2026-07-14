@@ -45,6 +45,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/content_change_audit_upgrade.sql', '../supabase/migrations/20260714013000_content_change_audit.sql'],
     ['../src/supabase/booking_lifecycle_audit_upgrade.sql', '../supabase/migrations/20260714014000_booking_lifecycle_audit.sql'],
     ['../src/supabase/class_cancellation_notifications_upgrade.sql', '../supabase/migrations/20260714015000_class_cancellation_notifications.sql'],
+    ['../src/supabase/catalog_optimistic_locking_upgrade.sql', '../supabase/migrations/20260714020000_catalog_optimistic_locking.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {
     const normalize = (sql) => sql

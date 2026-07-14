@@ -18,7 +18,6 @@ import {
 import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
-import { productStripeTransitionError } from './products.js';
 import { adminAuditRangeStart } from './adminAudit.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
@@ -488,14 +487,26 @@ export async function createCoach(coach) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateCoach(id, updates) {
-  const result = await supabase.from('coaches').update(updates).eq('id', id).select('id');
-  assertAdminMutation(result, 'Coach update');
+export async function updateCoach(id, updates, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Coach version is missing. Refresh the admin view and try again.');
+  const result = await supabase
+    .from('coaches')
+    .update(updates)
+    .eq('id', id)
+    .eq('updated_at', expectedUpdatedAt)
+    .select('id');
+  assertAdminMutationVersion(result, 'Coach update');
 }
 
-export async function deleteCoach(id) {
-  const result = await supabase.from('coaches').delete().eq('id', id).select('id');
-  assertAdminMutation(result, 'Coach deletion');
+export async function deleteCoach(id, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Coach version is missing. Refresh the admin view and try again.');
+  const result = await supabase
+    .from('coaches')
+    .delete()
+    .eq('id', id)
+    .eq('updated_at', expectedUpdatedAt)
+    .select('id');
+  assertAdminMutationVersion(result, 'Coach deletion');
 }
 
 // ─── Events (admin CRUD) ────────────────────────────────────────────────────
@@ -529,14 +540,26 @@ export async function createEvent(event) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateEvent(id, updates) {
-  const result = await supabase.from('events').update(updates).eq('id', id).select('id');
-  assertAdminMutation(result, 'Event update');
+export async function updateEvent(id, updates, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Event version is missing. Refresh the admin view and try again.');
+  const result = await supabase
+    .from('events')
+    .update(updates)
+    .eq('id', id)
+    .eq('updated_at', expectedUpdatedAt)
+    .select('id');
+  assertAdminMutationVersion(result, 'Event update');
 }
 
-export async function deleteEvent(id) {
-  const result = await supabase.from('events').delete().eq('id', id).select('id');
-  assertAdminMutation(result, 'Event deletion');
+export async function deleteEvent(id, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Event version is missing. Refresh the admin view and try again.');
+  const result = await supabase
+    .from('events')
+    .delete()
+    .eq('id', id)
+    .eq('updated_at', expectedUpdatedAt)
+    .select('id');
+  assertAdminMutationVersion(result, 'Event deletion');
 }
 
 // ─── Member announcements ───────────────────────────────────────────────────
@@ -1049,30 +1072,27 @@ export async function createProduct(product) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateProduct(id, updates) {
+export async function updateProduct(id, updates, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Session pack version is missing. Refresh the admin view and try again.');
   const guarded = await supabase.rpc('admin_update_product', {
     p_product_id: id,
     p_product: updates,
+    p_expected_updated_at: expectedUpdatedAt,
   });
   if (!guarded.error) return guarded.data;
 
   const guardUnavailable = ['42883', 'PGRST202'].includes(guarded.error.code)
     || /admin_update_product.*(?:not found|schema cache|does not exist)/i.test(guarded.error.message || '');
   if (!guardUnavailable) {
+    if (/PRODUCT_STALE/i.test(guarded.error.message || '')) {
+      throw new Error('Session pack update was not applied because this pack changed since you opened it. Refresh the admin view and review the latest version.');
+    }
     if (/STRIPE_PRICE_REFRESH_REQUIRED/i.test(guarded.error.message || '')) {
       throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price or currency.');
     }
     throw new Error(guarded.error.message);
   }
-
-  // Compatibility path for projects awaiting the product update migration.
-  const current = await supabase.from('products').select('price_cents, currency, stripe_price_id').eq('id', id).single();
-  if (current.error) throw new Error(current.error.message);
-  const integrityError = productStripeTransitionError(current.data, updates);
-  if (integrityError) throw new Error(integrityError);
-
-  const result = await supabase.from('products').update(updates).eq('id', id).select('id');
-  assertAdminMutation(result, 'Product update');
+  throw new Error('Install the catalog optimistic-locking migration before editing session packs.');
 }
 
 // ─── Business stats (admin overview) ─────────────────────────────────────────

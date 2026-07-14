@@ -23,7 +23,6 @@ test('direct admin updates and deletes verify that the expected record still exi
     'deleteCoach',
     'updateEvent',
     'deleteEvent',
-    'updateProduct',
   ];
 
   for (const name of mutations) {
@@ -31,6 +30,13 @@ test('direct admin updates and deletes verify that the expected record still exi
     assert.match(body, /\.select\('(?:id|\*)'\)/, `${name} must request affected rows`);
     assert.match(body, /assertAdminMutation(?:Version)?\(/, `${name} must verify affected rows`);
   }
+});
+
+test('product updates use the versioned transactional RPC', () => {
+  const body = functionBody('updateProduct');
+  assert.match(body, /rpc\('admin_update_product'/);
+  assert.match(body, /p_expected_updated_at: expectedUpdatedAt/);
+  assert.match(body, /PRODUCT_STALE/);
 });
 
 test('lead operations use audited RPCs and verify exact mutation counts', () => {

@@ -11,6 +11,21 @@ struct EventsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    XertPageHero(
+                        imageName: "EventsHero",
+                        eyebrow: "XERT Annual Calendar 2026",
+                        title: "Compete Together.",
+                        subtitle: "Choose the event ahead, train with purpose and build toward it with the XERT community.",
+                        badge: trainingGoals.isEmpty
+                            ? "South East Queensland"
+                            : "\(trainingGoals.count) active training goal\(trainingGoals.count == 1 ? "" : "s")"
+                    )
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
                 if store.isUsingCachedPublicData {
                     Section {
                         CachedPublicDataNotice()
@@ -83,8 +98,9 @@ struct EventsView: View {
                 }
             }
             .xertListBackground()
+            .listStyle(.plain)
             .navigationTitle("Events")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable {
                 await store.refresh()
             }

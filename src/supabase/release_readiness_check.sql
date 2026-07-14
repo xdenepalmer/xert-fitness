@@ -34,7 +34,8 @@ with required (capability, migration) as (
     ('class_cancellation_notifications', 'supabase/migrations/20260714015000_class_cancellation_notifications.sql'),
     ('admin_daily_operations', 'supabase/migrations/20260714016000_admin_daily_operations.sql'),
     ('schedule_optimistic_locking', 'supabase/migrations/20260714018000_schedule_optimistic_locking.sql'),
-    ('shared_admin_optimistic_locking', 'supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql')
+    ('shared_admin_optimistic_locking', 'supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql'),
+    ('catalog_optimistic_locking', 'supabase/migrations/20260714020000_catalog_optimistic_locking.sql')
 ), readiness as (
   select
     required.capability,
