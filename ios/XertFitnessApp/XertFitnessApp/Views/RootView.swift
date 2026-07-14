@@ -11,6 +11,8 @@ struct RootView: View {
     @State private var privacyLockError: String?
     @State private var reminderBookingID: UUID?
     @State private var reminderNavigationRequest = 0
+    @State private var announcementID: UUID?
+    @State private var announcementNavigationRequest = 0
 
     var body: some View {
         Group {
@@ -72,7 +74,11 @@ struct RootView: View {
 
     private var memberTabs: some View {
         TabView(selection: $selectedTab) {
-            HomeView(onNavigate: { selectedTab = $0 })
+            HomeView(
+                announcementID: announcementID,
+                announcementNavigationRequest: announcementNavigationRequest,
+                onNavigate: { selectedTab = $0 }
+            )
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
@@ -194,7 +200,9 @@ struct RootView: View {
     }
 
     private func consumePendingAnnouncementRoute() {
-        guard AnnouncementPushNavigation.consumePendingAnnouncementID() != nil else { return }
+        guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
+        announcementID = pendingAnnouncementID
+        announcementNavigationRequest += 1
         selectedTab = 0
         Task { await store.refresh() }
     }
@@ -279,14 +287,36 @@ extension ShapeStyle where Self == Color {
 
 struct XertSection<Content: View>: View {
     let title: String
-    @ViewBuilder var content: Content
+    let actionTitle: String?
+    let action: (() -> Void)?
+    let content: Content
+
+    init(
+        title: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.actionTitle = actionTitle
+        self.action = action
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.xertSteel)
-                .tracking(1.8)
+            HStack(alignment: .center) {
+                Text(title.uppercased())
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.xertSteel)
+                    .tracking(1.8)
+                Spacer()
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.xertOffWhite)
+                }
+            }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -4,7 +4,12 @@ struct HomeView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
+    let announcementID: UUID?
+    let announcementNavigationRequest: Int
     let onNavigate: (Int) -> Void
+    @State private var showingNoticeCenter = false
+    @State private var highlightedAnnouncementID: UUID?
+    @State private var lastHandledAnnouncementRequest = 0
 
     var body: some View {
         NavigationStack {
@@ -12,8 +17,10 @@ struct HomeView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     NativeHomeHero(
                         isSignedIn: store.isSignedIn,
+                        noticeCount: store.announcements.count,
                         onBook: { onNavigate(1) },
                         onEvents: { onNavigate(2) },
+                        onNotices: openNoticeCenter,
                         onRefresh: { Task { await store.refresh() } }
                     )
                     .frame(height: heroHeight)
@@ -40,6 +47,28 @@ struct HomeView: View {
             }
             .xertScreenBackground()
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingNoticeCenter) {
+                MemberNoticeCenter(
+                    announcements: store.announcements,
+                    highlightedAnnouncementID: highlightedAnnouncementID,
+                    dismissingAnnouncementID: store.dismissingAnnouncementID,
+                    onAction: { announcement in
+                        showingNoticeCenter = false
+                        handleAnnouncementAction(announcement)
+                    },
+                    onDismiss: { announcement in
+                        Task { await store.dismissAnnouncement(announcement) }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .onChange(of: announcementNavigationRequest) { request in
+                handleAnnouncementNavigation(request)
+            }
+            .onAppear {
+                handleAnnouncementNavigation(announcementNavigationRequest)
+            }
         }
     }
 
@@ -52,9 +81,9 @@ struct HomeView: View {
     @ViewBuilder
     private var announcementsSection: some View {
         if store.isSignedIn && !store.announcements.isEmpty {
-            XertSection(title: "Member notices") {
+            XertSection(title: "Member notices", actionTitle: store.announcements.count > 2 ? "View all" : nil, action: openNoticeCenter) {
                 VStack(spacing: 12) {
-                    ForEach(store.announcements) { announcement in
+                    ForEach(Array(store.announcements.prefix(2))) { announcement in
                         MemberAnnouncementRow(
                             announcement: announcement,
                             isDismissing: store.dismissingAnnouncementID == announcement.id,
@@ -65,6 +94,18 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    private func openNoticeCenter() {
+        highlightedAnnouncementID = nil
+        showingNoticeCenter = true
+    }
+
+    private func handleAnnouncementNavigation(_ request: Int) {
+        guard request > lastHandledAnnouncementRequest else { return }
+        lastHandledAnnouncementRequest = request
+        highlightedAnnouncementID = announcementID
+        showingNoticeCenter = true
     }
 
     private func handleAnnouncementAction(_ announcement: MemberAnnouncement) {
@@ -324,8 +365,10 @@ struct HomeView: View {
 
 private struct NativeHomeHero: View {
     let isSignedIn: Bool
+    let noticeCount: Int
     let onBook: () -> Void
     let onEvents: () -> Void
+    let onNotices: () -> Void
     let onRefresh: () -> Void
 
     var body: some View {
@@ -362,6 +405,31 @@ private struct NativeHomeHero: View {
                     HStack(alignment: .center) {
                         XertLogoHeader(height: 36)
                         Spacer()
+                        if isSignedIn {
+                            Button(action: onNotices) {
+                                Image(systemName: noticeCount > 0 ? "bell.fill" : "bell")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.xertInk.opacity(0.72))
+                                    .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+                                    .overlay(alignment: .topTrailing) {
+                                        if noticeCount > 0 {
+                                            Text(noticeCount > 99 ? "99+" : "\(noticeCount)")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(Color.xertNavy)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.7)
+                                                .frame(minWidth: 18, minHeight: 18)
+                                                .padding(.horizontal, noticeCount > 9 ? 2 : 0)
+                                                .background(Color.xertSteel)
+                                                .clipShape(Capsule())
+                                                .offset(x: 5, y: -5)
+                                        }
+                                    }
+                            }
+                            .foregroundStyle(Color.xertSteel)
+                            .accessibilityLabel("Member notices, \(noticeCount) available")
+                        }
                         Button(action: onRefresh) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 16, weight: .semibold))
@@ -451,6 +519,68 @@ private struct NativeHomeHero: View {
                 .minimumScaleFactor(0.72)
         }
         .buttonStyle(.xertGhost)
+    }
+}
+
+private struct MemberNoticeCenter: View {
+    @Environment(\.dismiss) private var dismiss
+    let announcements: [MemberAnnouncement]
+    let highlightedAnnouncementID: UUID?
+    let dismissingAnnouncementID: UUID?
+    let onAction: (MemberAnnouncement) -> Void
+    let onDismiss: (MemberAnnouncement) -> Void
+
+    private var orderedAnnouncements: [MemberAnnouncement] {
+        guard
+            let highlightedAnnouncementID,
+            let highlighted = announcements.first(where: { $0.id == highlightedAnnouncementID })
+        else { return announcements }
+        return [highlighted] + announcements.filter { $0.id != highlightedAnnouncementID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    if orderedAnnouncements.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "bell.slash")
+                                .font(.title2)
+                                .foregroundStyle(Color.xertSteel)
+                            Text("You're all caught up")
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 64)
+                    } else {
+                        ForEach(orderedAnnouncements) { announcement in
+                            MemberAnnouncementRow(
+                                announcement: announcement,
+                                isDismissing: dismissingAnnouncementID == announcement.id,
+                                onAction: { onAction(announcement) },
+                                onDismiss: { onDismiss(announcement) }
+                            )
+                            .overlay {
+                                if announcement.id == highlightedAnnouncementID {
+                                    Rectangle().stroke(Color.xertSteel, lineWidth: 2)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .xertScreenBackground()
+            .navigationTitle("Member Notices")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(Color.xertSteel)
+                }
+            }
+        }
     }
 }
 
