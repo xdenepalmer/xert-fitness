@@ -22,12 +22,15 @@ test('native exact-task routes participate in privacy-safe Handoff continuation'
   assert.match(navigation, /activity\.isEligibleForSearch = !route\.isContextualTask/);
   assert.match(navigation, /activity\.isEligibleForPrediction = !route\.isContextualTask/);
   assert.match(navigation, /activity\.isEligibleForPublicIndexing = false/);
+  assert.match(navigation, /func shouldAdvertise\([\s\S]*!route\.isContextualTask \|\| isSignedIn/);
   assert.match(navigation, /version\.intValue == currentVersion/);
   assert.match(navigation, /restoredRoute != webRoute/);
   assert.match(navigation, /case handoff/);
-  assert.match(root, /\.userActivity\(XertRouteUserActivity\.activityType, isActive: !isPrivacyLocked\)/);
+  assert.match(root, /\.userActivity\(XertRouteUserActivity\.activityType, isActive: shouldAdvertiseCurrentRoute\)/);
+  assert.match(root, /XertRouteUserActivity\.shouldAdvertise\([\s\S]*isSignedIn: store\.isSignedIn,[\s\S]*isPrivacyLocked: isPrivacyLocked/);
   assert.match(root, /\.onContinueUserActivity\(XertRouteUserActivity\.activityType\)/);
   assert.match(root, /navigation\.open\(route, source: \.handoff\)/);
   assert.match(modelsTests, /testRouteUserActivityRoundTripsExactTasksWithoutIndexingPrivateContext/);
+  assert.match(modelsTests, /testRouteUserActivityAdvertisingProtectsSignedOutAndLockedMemberContext/);
   assert.match(modelsTests, /testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads/);
 });

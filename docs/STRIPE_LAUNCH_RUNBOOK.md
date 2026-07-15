@@ -88,9 +88,10 @@ The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
 Vercel payment settings are present; HTTP `503` reveals no values and prevents
 a false-green release audit.
 
-The command must report five `PASS` results. A webhook `500` means the Vercel
-Stripe secrets are absent; a missing fulfillment contract means the migration
-in step 1 has not been installed.
+The command must report six `PASS` results. A webhook `503` means the Vercel
+Stripe service is unavailable, normally because its private secrets are absent;
+a missing fulfillment contract means the migration in step 1 has not been
+installed. Keep **Session pack payments** disabled until all six checks pass.
 
 Open **iOS Admin > Operations Health** and require all of the following:
 

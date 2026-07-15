@@ -53,7 +53,7 @@ struct RootView: View {
             lockAndAuthenticate()
         }
         .onOpenURL(perform: handleOpenURL)
-        .userActivity(XertRouteUserActivity.activityType, isActive: !isPrivacyLocked) { activity in
+        .userActivity(XertRouteUserActivity.activityType, isActive: shouldAdvertiseCurrentRoute) { activity in
             XertRouteUserActivity.configure(activity, route: navigation.route)
         }
         .onContinueUserActivity(XertRouteUserActivity.activityType) { activity in
@@ -314,6 +314,14 @@ struct RootView: View {
             isSignedIn: store.isSignedIn,
             isEnabled: privacyLockEnabled,
             isUnlocked: isPrivacyUnlocked
+        )
+    }
+
+    private var shouldAdvertiseCurrentRoute: Bool {
+        XertRouteUserActivity.shouldAdvertise(
+            route: navigation.route,
+            isSignedIn: store.isSignedIn,
+            isPrivacyLocked: isPrivacyLocked
         )
     }
 

@@ -225,6 +225,15 @@ enum XertRouteUserActivity {
     private static let versionKey = "xert.routeVersion"
     private static let currentVersion = 1
 
+    static func shouldAdvertise(
+        route: XertMemberRoute,
+        isSignedIn: Bool,
+        isPrivacyLocked: Bool
+    ) -> Bool {
+        guard !isPrivacyLocked else { return false }
+        return !route.isContextualTask || isSignedIn
+    }
+
     static func configure(_ activity: NSUserActivity, route: XertMemberRoute) {
         activity.title = "Continue \(route.navigationTitle) in XERT"
         activity.webpageURL = route.webURL

@@ -51,7 +51,7 @@ test('Stripe readiness cannot pass when the private commerce environment is inco
 test('Stripe readiness names missing webhook configuration and fulfillment without exposing keys', async () => {
   const report = await inspectStripeReadiness({
     environment,
-    fetchImpl: readinessFetch({ webhookStatus: 500, capabilities: [] }),
+    fetchImpl: readinessFetch({ webhookStatus: 503, capabilities: [] }),
   });
   assert.equal(report.ready, false);
   assert.equal(report.checks.find(check => check.key === 'webhook').ready, false);

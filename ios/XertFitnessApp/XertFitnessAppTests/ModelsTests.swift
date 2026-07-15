@@ -82,6 +82,29 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(activity.isEligibleForPublicIndexing)
     }
 
+    func testRouteUserActivityAdvertisingProtectsSignedOutAndLockedMemberContext() {
+        XCTAssertTrue(XertRouteUserActivity.shouldAdvertise(
+            route: .events,
+            isSignedIn: false,
+            isPrivacyLocked: false
+        ))
+        XCTAssertFalse(XertRouteUserActivity.shouldAdvertise(
+            route: .upcomingBookings(nil),
+            isSignedIn: false,
+            isPrivacyLocked: false
+        ))
+        XCTAssertTrue(XertRouteUserActivity.shouldAdvertise(
+            route: .upcomingBookings(nil),
+            isSignedIn: true,
+            isPrivacyLocked: false
+        ))
+        XCTAssertFalse(XertRouteUserActivity.shouldAdvertise(
+            route: .events,
+            isSignedIn: true,
+            isPrivacyLocked: true
+        ))
+    }
+
     func testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads() throws {
         let wrongType = NSUserActivity(activityType: "com.example.other")
         XertRouteUserActivity.configure(wrongType, route: .booking)
