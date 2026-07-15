@@ -42,7 +42,21 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
   assert.match(root, /case \.home: return "1"[\s\S]*case \.account: return "5"/);
   assert.match(root, /keyboardShortcut\("a", modifiers: \[\.command, \.shift\]\)/);
   assert.match(root, /hoverEffect\(\.highlight\)/);
-  assert.equal((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length, 5);
+  assert.ok((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length >= 7);
+});
+
+test('compact dock visibly exposes exact task context, back, and quick switching', async () => {
+  const root = await readFile(rootURL, 'utf8');
+  assert.match(root, /XertNavigationDock\([\s\S]*currentRoute: navigation\.route/);
+  assert.match(root, /let currentRoute: XertMemberRoute/);
+  assert.match(root, /private var taskStrip: some View/);
+  assert.match(root, /Text\(currentRoute\.navigationTitle\)/);
+  assert.match(root, /lineLimit\(2\)[\s\S]*minimumScaleFactor\(0\.72\)/);
+  assert.match(root, /frame\(height: dynamicTypeSize\.isAccessibilitySize \? 58 : 46\)/);
+  assert.match(root, /Button\(action: onReturnPrevious\)[\s\S]*arrow\.uturn\.backward/);
+  assert.match(root, /Returns to the exact previous XERT task/);
+  assert.match(root, /Button\(action: onOpenCommands\)[\s\S]*magnifyingglass/);
+  assert.match(root, /Searches workspaces, recent tasks and available actions/);
 });
 
 test('member routing is typed, task-restorable, and owns native deep-link mapping', async () => {

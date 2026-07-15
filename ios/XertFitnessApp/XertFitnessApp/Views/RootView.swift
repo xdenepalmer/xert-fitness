@@ -191,6 +191,7 @@ struct RootView: View {
     private var navigationDock: some View {
         XertNavigationDock(
             selection: selectedDestinationBinding,
+            currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
@@ -593,6 +594,7 @@ private struct XertNavigationDock: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: XertPrimaryDestination
+    let currentRoute: XertMemberRoute
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
@@ -642,6 +644,8 @@ private struct XertNavigationDock: View {
                 .accessibilityHint("Opens protected gym operations and platform controls")
             }
 
+            taskStrip
+
             HStack(spacing: 0) {
                 ForEach(items) { item in
                     navigationButton(item)
@@ -679,6 +683,60 @@ private struct XertNavigationDock: View {
         .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
         .accessibilityAction(named: "Open XERT quick switcher") {
             onOpenCommands()
+        }
+    }
+
+    private var taskStrip: some View {
+        HStack(spacing: 8) {
+            if let previousRoute {
+                Button(action: onReturnPrevious) {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.xertSteel)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("[", modifiers: .command)
+                .accessibilityLabel("Back to \(previousRoute.navigationTitle)")
+                .accessibilityHint("Returns to the exact previous XERT task")
+                .accessibilityIdentifier("xert-navigation-history")
+            } else {
+                Image(systemName: currentRoute.destination.selectedIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
+            }
+
+            Text(currentRoute.navigationTitle)
+                .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .foregroundStyle(Color.xertOffWhite)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+
+            Button(action: onOpenCommands) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.xertPale)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("k", modifiers: .command)
+            .accessibilityLabel("XERT quick switcher")
+            .accessibilityHint("Searches workspaces, recent tasks and available actions")
+            .accessibilityIdentifier("xert-navigation-commands")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: dynamicTypeSize.isAccessibilitySize ? 58 : 46)
+        .background(Color.xertDeep.opacity(0.96))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.xertSteel.opacity(0.2)).frame(height: 1)
         }
     }
 
