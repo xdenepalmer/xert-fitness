@@ -3,7 +3,7 @@ import { Lock, AlertCircle } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 export default function AdminLogin() {
-  const { signIn } = useSupabaseAuth();
+  const { signIn, serviceReady } = useSupabaseAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -67,16 +67,18 @@ export default function AdminLogin() {
             />
           </div>
 
-          {error && (
+          {(error || !serviceReady) && (
             <div className="flex items-start gap-2 p-3" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)' }}>
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#f87171' }} />
-              <p className="font-body text-xs" style={{ color: '#fca5a5' }}>{error}</p>
+              <p className="font-body text-xs" style={{ color: '#fca5a5' }}>
+                {serviceReady ? error : 'XERT services are temporarily unavailable.'}
+              </p>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !serviceReady}
             className="w-full py-3.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
           >

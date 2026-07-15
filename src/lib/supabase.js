@@ -1,13 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+  PUBLIC_SERVICE_UNAVAILABLE_MESSAGE,
+  resolvePublicSupabaseConfig,
+} from '@/lib/publicRuntimeConfig';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const publicConfiguration = resolvePublicSupabaseConfig({
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+});
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase environment variables not set. Forms will not submit to Supabase.');
+if (!publicConfiguration.ready) {
+  console.error('XERT public service configuration failed validation.');
 }
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder'
+  publicConfiguration.supabaseUrl,
+  publicConfiguration.supabaseAnonKey
 );
+
+export const supabaseConfigurationReady = publicConfiguration.ready;
+
+export function requireSupabaseConfiguration() {
+  if (!supabaseConfigurationReady) {
+    throw new Error(PUBLIC_SERVICE_UNAVAILABLE_MESSAGE);
+  }
+}

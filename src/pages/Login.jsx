@@ -1,7 +1,12 @@
 // @ts-nocheck -- typed wrapper props are introduced during the UI migration.
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import {
+  requireSupabaseConfiguration,
+  supabase,
+  supabaseConfigurationReady,
+} from "@/lib/supabase";
+import { PUBLIC_SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/publicRuntimeConfig";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
@@ -23,6 +28,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
+      requireSupabaseConfiguration();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -38,16 +44,23 @@ export default function Login() {
 
   const handleGoogle = async () => {
     setError("");
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (signInError) {
-      setError(signInError.message || "Google sign-in failed");
+    try {
+      requireSupabaseConfiguration();
+      const { error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (signInError) throw signInError;
+    } catch (err) {
+      setError(err.message || "Google sign-in failed");
     }
   };
+
+  const visibleError = supabaseConfigurationReady
+    ? error
+    : PUBLIC_SERVICE_UNAVAILABLE_MESSAGE;
 
   return (
     <AuthLayout
@@ -68,6 +81,7 @@ export default function Login() {
         type="button"
         className="xert-btn-ghost w-full h-12 inline-flex items-center justify-center font-body text-sm font-medium mb-6"
         onClick={handleGoogle}
+        disabled={!supabaseConfigurationReady || loading}
       >
         <GoogleIcon className="w-5 h-5 mr-2" />
         Continue with Google
@@ -82,9 +96,9 @@ export default function Login() {
         </div>
       </div>
 
-      {error && (
+      {visibleError && (
         <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
-          {error}
+          {visibleError}
         </div>
       )}
 
@@ -130,7 +144,7 @@ export default function Login() {
         <button
           type="submit"
           className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
-          disabled={loading}
+          disabled={loading || !supabaseConfigurationReady}
         >
           {loading ? (
             <>

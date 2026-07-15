@@ -6,7 +6,7 @@ import {
   validateSupabasePublicKey,
   XERT_SUPABASE_HOST,
   XERT_VERCEL_HOST,
-} from '../scripts/validate-public-runtime-config.mjs';
+} from '../src/lib/publicRuntimeConfig.js';
 
 function legacyJWT(role) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');

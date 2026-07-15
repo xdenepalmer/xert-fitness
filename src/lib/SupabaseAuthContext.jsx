@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  requireSupabaseConfiguration,
+  supabase,
+  supabaseConfigurationReady,
+} from '@/lib/supabase';
 
 const SupabaseAuthContext = createContext(null);
 
@@ -11,6 +15,12 @@ export const SupabaseAuthProvider = ({ children }) => {
 
   useEffect(() => {
     let active = true;
+    if (!supabaseConfigurationReady) {
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     // Monotonic id so only the latest profile fetch may write state. A slow
     // fetch for an earlier session can no longer overwrite a newer result or
     // resurrect a profile after SIGNED_OUT cleared it.
@@ -83,11 +93,13 @@ export const SupabaseAuthProvider = ({ children }) => {
   }, []);
 
   const signIn = async (email, password) => {
+    requireSupabaseConfiguration();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
   };
 
   const signOut = async () => {
+    if (!supabaseConfigurationReady) return;
     await supabase.auth.signOut();
   };
 
@@ -100,6 +112,7 @@ export const SupabaseAuthProvider = ({ children }) => {
         isAdmin: profile?.role === 'admin',
         loading,
         profileLoading,
+        serviceReady: supabaseConfigurationReady,
         signIn,
         signOut,
       }}

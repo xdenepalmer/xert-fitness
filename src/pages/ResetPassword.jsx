@@ -1,7 +1,11 @@
 // @ts-nocheck -- typed wrapper props are introduced during the UI migration.
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import {
+  requireSupabaseConfiguration,
+  supabase,
+  supabaseConfigurationReady,
+} from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertTriangle } from "lucide-react";
@@ -30,6 +34,7 @@ export default function ResetPassword() {
       setError("");
 
       try {
+        requireSupabaseConfiguration();
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
@@ -67,6 +72,7 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
+      requireSupabaseConfiguration();
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
       window.location.href = "/login";
@@ -97,13 +103,15 @@ export default function ResetPassword() {
       <AuthLayout
         icon={AlertTriangle}
         eyebrow="Account recovery"
-        title="Invalid reset link"
-        subtitle="This password reset link is missing, invalid or expired"
-        footer={
+        title={supabaseConfigurationReady ? "Invalid reset link" : "Service unavailable"}
+        subtitle={supabaseConfigurationReady
+          ? "This password reset link is missing, invalid or expired"
+          : "Account recovery is temporarily unavailable"}
+        footer={supabaseConfigurationReady ? (
           <Link to="/forgot-password" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Request a new link
           </Link>
-        }
+        ) : null}
       >
         {error && (
           <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
@@ -111,7 +119,9 @@ export default function ResetPassword() {
           </div>
         )}
         <p className="font-body text-sm text-xert-pale/80 text-center">
-          Please request a new password reset email from the login screen.
+          {supabaseConfigurationReady
+            ? "Please request a new password reset email from the login screen."
+            : "Please try again shortly."}
         </p>
       </AuthLayout>
     );
@@ -166,7 +176,7 @@ export default function ResetPassword() {
         <button
           type="submit"
           className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
-          disabled={loading}
+          disabled={loading || !supabaseConfigurationReady}
         >
           {loading ? (
             <>
