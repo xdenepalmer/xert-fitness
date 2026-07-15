@@ -4,6 +4,7 @@ import UIKit
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @SceneStorage("xert.primaryDestination") private var selectedDestinationRawValue = XertPrimaryDestination.home.rawValue
     @StateObject private var navigation = XertNavigationCoordinator()
@@ -123,19 +124,16 @@ struct RootView: View {
                 .tag(XertPrimaryDestination.account)
         }
         .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .leading, spacing: 0) {
+            if navigationPresentation == .workspaceRail {
+                navigationRail
+            }
+        }
         .tint(.xertSteel)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            XertNavigationDock(
-                selection: selectedDestinationBinding,
-                isAdmin: store.profile?.isAdmin == true,
-                noticeCount: store.announcements.count,
-                bookingCount: activeBookingCount,
-                previousDestination: navigation.previousDestination,
-                onOpenAdmin: { showingAdminCommandCentre = true },
-                onReselect: handleReselection,
-                onStep: handleNavigationStep,
-                onReturnPrevious: returnToPreviousNavigationDestination
-            )
+            if navigationPresentation == .compactDock {
+                navigationDock
+            }
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
             if store.profile?.isAdmin == true {
@@ -164,6 +162,37 @@ struct RootView: View {
 
     private var activeBookingCount: Int {
         store.bookings.filter { $0.isActiveClassPlace && $0.start_time >= Date() }.count
+    }
+
+    private var navigationPresentation: XertNavigationPresentation {
+        .resolve(isRegularWidth: horizontalSizeClass == .regular)
+    }
+
+    private var navigationDock: some View {
+        XertNavigationDock(
+            selection: selectedDestinationBinding,
+            isAdmin: store.profile?.isAdmin == true,
+            noticeCount: store.announcements.count,
+            bookingCount: activeBookingCount,
+            previousDestination: navigation.previousDestination,
+            onOpenAdmin: { showingAdminCommandCentre = true },
+            onReselect: handleReselection,
+            onStep: handleNavigationStep,
+            onReturnPrevious: returnToPreviousNavigationDestination
+        )
+    }
+
+    private var navigationRail: some View {
+        XertNavigationRail(
+            selection: selectedDestinationBinding,
+            isAdmin: store.profile?.isAdmin == true,
+            noticeCount: store.announcements.count,
+            bookingCount: activeBookingCount,
+            previousDestination: navigation.previousDestination,
+            onOpenAdmin: { showingAdminCommandCentre = true },
+            onReselect: handleReselection,
+            onReturnPrevious: returnToPreviousNavigationDestination
+        )
     }
 
     private var selectedDestinationBinding: Binding<XertPrimaryDestination> {
@@ -284,6 +313,200 @@ struct RootView: View {
         reminderBookingID = bookingID
         reminderNavigationRequest += 1
         navigation.select(.account, source: .pushNotification)
+    }
+}
+
+private struct XertNavigationRail: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var selection: XertPrimaryDestination
+    let isAdmin: Bool
+    let noticeCount: Int
+    let bookingCount: Int
+    let previousDestination: XertPrimaryDestination?
+    let onOpenAdmin: () -> Void
+    let onReselect: (XertPrimaryDestination) -> Void
+    let onReturnPrevious: () -> Void
+    @Namespace private var selectionNamespace
+
+    private let items = XertPrimaryDestination.dockOrder
+
+    var body: some View {
+        VStack(spacing: 0) {
+            XertLogoHeader(height: dynamicTypeSize.isAccessibilitySize ? 24 : 21)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, 12)
+
+            if let previousDestination {
+                Button(action: onReturnPrevious) {
+                    VStack(spacing: 5) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("Back to \(previousDestination.title)")
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("[", modifiers: .command)
+                .hoverEffect(.highlight)
+                .accessibilityHint("Returns to the previous XERT workspace")
+                .accessibilityIdentifier("xert-navigation-history")
+            }
+
+            Rectangle()
+                .fill(Color.xertSteel.opacity(0.18))
+                .frame(height: 1)
+                .padding(.horizontal, 14)
+
+            VStack(spacing: 4) {
+                ForEach(items) { item in
+                    navigationButton(item)
+                }
+            }
+            .padding(.vertical, 8)
+
+            Spacer(minLength: 12)
+
+            if isAdmin {
+                Button(action: onOpenAdmin) {
+                    VStack(spacing: 7) {
+                        Image(systemName: "waveform.path.ecg.rectangle")
+                            .font(.system(size: 20, weight: .semibold))
+                        Text("Owner")
+                            .font(.caption2.weight(.bold))
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .frame(maxWidth: .infinity, minHeight: 66)
+                    .background(Color.xertDeep.opacity(0.96))
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Color.xertSteel.opacity(0.5)).frame(height: 1)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Owner Command Centre")
+                .accessibilityHint("Opens protected gym operations and platform controls")
+                .accessibilityIdentifier("xert-navigation-owner")
+            }
+        }
+        .frame(width: dynamicTypeSize.isAccessibilitySize ? 136 : 104)
+        .background(Color.xertInk.opacity(0.99).ignoresSafeArea(edges: .leading))
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color.xertSteel.opacity(0.24)).frame(width: 1)
+        }
+    }
+
+    private func navigationButton(_ item: XertPrimaryDestination) -> some View {
+        let selected = selection == item
+        let badge = item == .home ? noticeCount : item == .booking ? bookingCount : 0
+        return Button {
+            guard selection != item else {
+                onReselect(item)
+                return
+            }
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { selection = item }
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Image(systemName: selected ? item.selectedIcon : item.icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(selected ? Color.xertSteel : Color.xertPale.opacity(0.66))
+                        .frame(width: 42, height: 30)
+
+                    if badge > 0 {
+                        Text(badge > 99 ? "99+" : "\(badge)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.xertNavy)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .padding(.horizontal, badge > 9 ? 2 : 0)
+                            .background(Color.xertPale)
+                            .clipShape(Capsule())
+                            .offset(x: 18, y: -11)
+                    }
+                }
+                Text(item.title)
+                    .font(.caption2.weight(selected ? .bold : .semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+                    .foregroundStyle(selected ? Color.xertOffWhite : Color.xertPale.opacity(0.58))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.74)
+            }
+            .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 78 : 66)
+            .background(selected ? Color.xertSteel.opacity(0.09) : Color.clear)
+            .overlay(alignment: .leading) {
+                if selected {
+                    Rectangle()
+                        .fill(Color.xertSteel)
+                        .frame(width: 3, height: 36)
+                        .matchedGeometryEffect(id: "rail-navigation-selection", in: selectionNamespace)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(keyboardShortcut(for: item), modifiers: .command)
+        .hoverEffect(.highlight)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(selected ? "Selected" : "")
+        .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+        .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
+        .accessibilityActions {
+            if selected {
+                Button("Refresh \(item.title)") { onReselect(item) }
+                if let previousDestination {
+                    Button("Return to \(previousDestination.title)", action: onReturnPrevious)
+                }
+            }
+        }
+        .contextMenu {
+            if selected {
+                Button(action: { onReselect(item) }) {
+                    Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
+                }
+                if let previousDestination {
+                    Button(action: onReturnPrevious) {
+                        Label("Return to \(previousDestination.title)", systemImage: "arrow.uturn.backward")
+                    }
+                }
+            }
+        }
+    }
+
+    private func accessibilityHint(
+        for item: XertPrimaryDestination,
+        badge: Int,
+        selected: Bool
+    ) -> String {
+        var details: [String] = []
+        if badge > 0 {
+            details.append(item == .home
+                ? "\(badge) active member notices"
+                : "\(badge) upcoming bookings")
+        }
+        details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
+        return details.joined(separator: ". ")
+    }
+
+    private func keyboardShortcut(for item: XertPrimaryDestination) -> KeyEquivalent {
+        switch item {
+        case .home: return "1"
+        case .booking: return "2"
+        case .events: return "3"
+        case .explore: return "4"
+        case .account: return "5"
+        }
     }
 }
 
@@ -434,6 +657,7 @@ private struct XertNavigationDock: View {
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
         .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+        .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
         .accessibilityActions {
             if selected {
                 Button("Refresh \(item.title)") { onReselect(item) }

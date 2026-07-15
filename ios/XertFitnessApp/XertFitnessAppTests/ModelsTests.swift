@@ -39,6 +39,15 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(navigation.lastTransition?.source, .restoration)
     }
 
+    func testNavigationPresentationAdaptsWithoutChangingDestinationPolicy() {
+        XCTAssertEqual(XertNavigationPresentation.resolve(isRegularWidth: false), .compactDock)
+        XCTAssertEqual(XertNavigationPresentation.resolve(isRegularWidth: true), .workspaceRail)
+        XCTAssertEqual(
+            XertPrimaryDestination.dockOrder,
+            [.home, .booking, .events, .explore, .account]
+        )
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

@@ -20,6 +20,29 @@ test('native navigation uses five stable primary destinations without iOS More o
   assert.doesNotMatch(root, /Label\("Admin", systemImage:/);
 });
 
+test('native navigation adapts from a compact dock to an iPad workspace rail', async () => {
+  const [root, navigation] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
+  ]);
+  assert.match(root, /@Environment\(\\\.horizontalSizeClass\) private var horizontalSizeClass/);
+  assert.match(navigation, /enum XertNavigationPresentation: Equatable/);
+  assert.match(navigation, /isRegularWidth \? \.workspaceRail : \.compactDock/);
+  assert.match(root, /safeAreaInset\(edge: \.leading, spacing: 0\)[\s\S]*navigationPresentation == \.workspaceRail[\s\S]*navigationRail/);
+  assert.match(root, /safeAreaInset\(edge: \.bottom, spacing: 0\)[\s\S]*navigationPresentation == \.compactDock[\s\S]*navigationDock/);
+  assert.match(root, /private struct XertNavigationRail: View/);
+  assert.match(root, /XertLogoHeader\(height:/);
+  assert.match(root, /xert-navigation-history/);
+  assert.match(root, /xert-navigation-owner/);
+  assert.match(root, /rail-navigation-selection/);
+  assert.match(root, /frame\(width: dynamicTypeSize\.isAccessibilitySize \? 136 : 104\)/);
+  assert.match(root, /keyboardShortcut\(keyboardShortcut\(for: item\), modifiers: \.command\)/);
+  assert.match(root, /case \.home: return "1"[\s\S]*case \.account: return "5"/);
+  assert.match(root, /keyboardShortcut\("a", modifiers: \[\.command, \.shift\]\)/);
+  assert.match(root, /hoverEffect\(\.highlight\)/);
+  assert.equal((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length, 4);
+});
+
 test('primary routing is typed, restorable, and owns native deep-link mapping', async () => {
   const [root, navigation] = await Promise.all([
     readFile(rootURL, 'utf8'),

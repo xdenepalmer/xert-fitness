@@ -80,6 +80,15 @@ enum XertNavigationDirection: Equatable {
     case next
 }
 
+enum XertNavigationPresentation: Equatable {
+    case compactDock
+    case workspaceRail
+
+    static func resolve(isRegularWidth: Bool) -> Self {
+        isRegularWidth ? .workspaceRail : .compactDock
+    }
+}
+
 struct XertNavigationTransition: Equatable {
     let from: XertPrimaryDestination
     let to: XertPrimaryDestination
