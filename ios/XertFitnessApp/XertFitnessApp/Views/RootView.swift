@@ -201,11 +201,13 @@ struct RootView: View {
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
             previousRoute: navigation.previousRoute,
+            nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
             onStep: handleNavigationStep,
-            onReturnPrevious: returnToPreviousNavigationDestination
+            onReturnPrevious: returnToPreviousNavigationDestination,
+            onReturnNext: returnToNextNavigationDestination
         )
     }
 
@@ -216,10 +218,12 @@ struct RootView: View {
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
             previousRoute: navigation.previousRoute,
+            nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
-            onReturnPrevious: returnToPreviousNavigationDestination
+            onReturnPrevious: returnToPreviousNavigationDestination,
+            onReturnNext: returnToNextNavigationDestination
         )
     }
 
@@ -250,6 +254,11 @@ struct RootView: View {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
+    private func returnToNextNavigationDestination() {
+        guard navigation.returnToNext() else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+    }
+
     private func executeNavigationCommand(_ command: XertNavigationCommand) {
         showingNavigationCommands = false
         switch command.action {
@@ -261,6 +270,8 @@ struct RootView: View {
             executeNavigationActivity(activity)
         case .previous:
             returnToPreviousNavigationDestination()
+        case .next:
+            returnToNextNavigationDestination()
         case .refresh:
             handleReselection(navigation.selection)
         case .owner:
@@ -388,10 +399,12 @@ private struct XertNavigationRail: View {
     let noticeCount: Int
     let bookingCount: Int
     let previousRoute: XertMemberRoute?
+    let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onReturnPrevious: () -> Void
+    let onReturnNext: () -> Void
     @Namespace private var selectionNamespace
 
     private let items = XertPrimaryDestination.dockOrder
@@ -441,6 +454,27 @@ private struct XertNavigationRail: View {
                 .hoverEffect(.highlight)
                 .accessibilityHint("Returns to the previous XERT workspace")
                 .accessibilityIdentifier("xert-navigation-history")
+            }
+
+            if let nextRoute {
+                Button(action: onReturnNext) {
+                    VStack(spacing: 5) {
+                        Image(systemName: "arrow.uturn.forward")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("Forward to \(nextRoute.navigationTitle)")
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("]", modifiers: .command)
+                .hoverEffect(.highlight)
+                .accessibilityHint("Returns to the next XERT workspace task")
+                .accessibilityIdentifier("xert-navigation-forward-history")
             }
 
             Rectangle()
@@ -604,11 +638,13 @@ private struct XertNavigationDock: View {
     let noticeCount: Int
     let bookingCount: Int
     let previousRoute: XertMemberRoute?
+    let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onStep: (XertNavigationDirection) -> Void
     let onReturnPrevious: () -> Void
+    let onReturnNext: () -> Void
     @Namespace private var selectionNamespace
 
     private let items = XertPrimaryDestination.dockOrder
@@ -723,6 +759,22 @@ private struct XertNavigationDock: View {
                 .minimumScaleFactor(0.72)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
+
+            Button(action: onReturnNext) {
+                Image(systemName: "arrow.uturn.forward")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("]", modifiers: .command)
+            .disabled(nextRoute == nil)
+            .opacity(nextRoute == nil ? 0.24 : 1)
+            .accessibilityLabel(nextRoute.map { "Forward to \($0.navigationTitle)" } ?? "No forward task")
+            .accessibilityHint("Returns to the next XERT workspace task")
+            .accessibilityHidden(nextRoute == nil)
+            .accessibilityIdentifier("xert-navigation-forward-history")
 
             Button(action: onOpenCommands) {
                 Image(systemName: "magnifyingglass")

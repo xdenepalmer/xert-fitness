@@ -135,6 +135,7 @@ final class ModelsTests: XCTestCase {
             "not-json",
             #"{"version":2,"routeValues":["events/goals"]}"#,
             #"{"version":1,"routeValues":["booking/packs","unknown"]}"#,
+            #"{"version":1,"routeValues":["booking"],"forwardRouteValues":["unknown"]}"#,
             #"{"version":1,"routeValues":[]}"#,
             String(repeating: "x", count: XertNavigationWorkspaceSnapshot.maximumEncodedLength + 1),
         ]
@@ -145,6 +146,45 @@ final class ModelsTests: XCTestCase {
             XCTAssertEqual(navigation.route, fallback)
             XCTAssertEqual(navigation.routeHistory, [fallback])
         }
+    }
+
+    func testNavigationHistorySupportsForwardTraversalAndClearsAfterBranching() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.eventGoals, source: .content))
+
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertEqual(navigation.route, .sessionPacks)
+        XCTAssertEqual(navigation.nextRoute, .eventGoals)
+        XCTAssertTrue(navigation.returnToNext())
+        XCTAssertEqual(navigation.route, .eventGoals)
+        XCTAssertNil(navigation.nextRoute)
+
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertTrue(navigation.open(.booking, source: .dock))
+        XCTAssertNil(navigation.nextRoute)
+        XCTAssertFalse(navigation.returnToNext())
+    }
+
+    func testNavigationWorkspaceRestoresExactForwardTaskHistory() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000052"))
+        let source = XertNavigationCoordinator(initial: .home, historyLimit: 5)
+        XCTAssertTrue(source.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(source.open(.sessionPacks, source: .content))
+        XCTAssertTrue(source.open(.eventGoals, source: .commandPalette))
+        XCTAssertTrue(source.returnToPrevious())
+
+        let restored = XertNavigationCoordinator(initial: .account, historyLimit: 3)
+        restored.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.account.restorationValue
+        )
+
+        XCTAssertEqual(restored.route, .sessionPacks)
+        XCTAssertEqual(restored.nextRoute, .eventGoals)
+        XCTAssertTrue(restored.returnToNext())
+        XCTAssertEqual(restored.route, .eventGoals)
+        XCTAssertEqual(restored.lastTransition?.source, .history)
     }
 
     func testNavigationPresentationAdaptsWithoutChangingDestinationPolicy() {

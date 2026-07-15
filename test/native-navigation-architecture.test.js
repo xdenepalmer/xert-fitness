@@ -241,10 +241,34 @@ test('scene restoration preserves a bounded versioned exact-task workspace', asy
   assert.match(navigation, /func restore\(workspaceValue: String, fallbackRouteValue: String\)/);
   assert.match(navigation, /snapshot\.version == XertNavigationWorkspaceSnapshot\.currentVersion/);
   assert.match(navigation, /restoredRoutes\.count == snapshot\.routeValues\.count/);
-  assert.match(navigation, /restoredRoutes\.suffix\(historyLimit\)/);
+  assert.match(navigation, /restoredForwardRoutes\.prefix\(max\(0, historyLimit - 1\)\)/);
+  assert.match(navigation, /backwardCapacity = max\(1, historyLimit - boundedForwardRoutes\.count\)/);
+  assert.match(navigation, /restoredRoutes\.suffix\(backwardCapacity\)/);
   assert.match(root, /@SceneStorage\("xert\.memberWorkspace"\)/);
   assert.match(root, /navigation\.restore\([\s\S]*workspaceValue: restoredMemberWorkspace,[\s\S]*fallbackRouteValue: restoredMemberRoute/);
   assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
   assert.match(modelsTests, /testNavigationWorkspaceRestoresBoundedExactTaskHistory/);
   assert.match(modelsTests, /testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots/);
+});
+
+test('native task history supports bounded back and forward traversal', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /let forwardRouteValues: \[String\]\?/);
+  assert.match(navigation, /private\(set\) var forwardRouteHistory: \[XertMemberRoute\] = \[\]/);
+  assert.match(navigation, /var nextRoute: XertMemberRoute\?/);
+  assert.match(navigation, /func returnToNext\(source: XertNavigationSource = \.history\) -> Bool/);
+  assert.match(navigation, /forwardRouteHistory\.insert\(departedRoute, at: 0\)/);
+  assert.match(navigation, /let targetRoute = forwardRouteHistory\.removeFirst\(\)/);
+  assert.match(navigation, /forwardRouteHistory = \[\][\s\S]*routeHistory\.append\(targetRoute\)/);
+  assert.ok(navigation.includes('Forward to \\(nextRoute.navigationTitle)'));
+  assert.match(root, /nextRoute: navigation\.nextRoute/);
+  assert.match(root, /navigation\.returnToNext\(\)/);
+  assert.match(root, /keyboardShortcut\("\]", modifiers: \.command\)/);
+  assert.match(root, /xert-navigation-forward-history/);
+  assert.match(modelsTests, /testNavigationHistorySupportsForwardTraversalAndClearsAfterBranching/);
+  assert.match(modelsTests, /testNavigationWorkspaceRestoresExactForwardTaskHistory/);
 });
