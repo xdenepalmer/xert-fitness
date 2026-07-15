@@ -9,6 +9,8 @@ the iOS project, or Codemagic build logs.
 1. Apply `supabase/migrations/20260715010000_stripe_payment_fulfillment.sql`
    in the production Supabase SQL Editor. This makes payment settlement atomic
    and prevents delayed webhook retries from reversing refunds.
+   Until this capability is installed, `/api/checkout` returns HTTP `503`
+   before creating a Stripe session, so no customer can be charged prematurely.
 2. Complete the Australian business profile, bank account and identity checks.
 3. Confirm that **Charges enabled** and **Payouts enabled** are both true.
 4. Create one one-time Stripe Price in AUD for every active XERT session pack.

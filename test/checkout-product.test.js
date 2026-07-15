@@ -5,6 +5,7 @@ import {
   assertCheckoutProduct,
   assertStripePriceMatchesProduct,
   pendingOrderForCheckout,
+  paymentFulfillmentIsReady,
   reusableCheckoutURL,
   stripeModeForSecret,
 } from '../api/checkout.js';
@@ -28,6 +29,28 @@ const matchingStripePrice = {
   unit_amount: 4800,
   currency: 'aud',
 };
+
+test('checkout fails closed until atomic payment fulfillment is installed', async () => {
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() {
+      return { data: { capability: 'stripe_payment_fulfillment' }, error: null };
+    },
+  };
+  assert.equal(await paymentFulfillmentIsReady({ from() { return query; } }), true);
+
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await paymentFulfillmentIsReady({ from() { return query; } }), false);
+  query.maybeSingle = async () => ({ data: null, error: new Error('schema unavailable') });
+  assert.equal(await paymentFulfillmentIsReady({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const gate = source.indexOf('paymentFulfillmentIsReady(admin)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(gate >= 0 && sessionCreation > gate);
+  assert.match(source, /payment services are being upgraded[\s\S]*503/);
+});
 
 test('accepts a valid product before creating Stripe Checkout', () => {
   assert.doesNotThrow(() => assertCheckoutProduct(validProduct));

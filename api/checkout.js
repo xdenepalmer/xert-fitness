@@ -9,12 +9,23 @@ import { requestHeader, requestJson, sendJson } from './http.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
+const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 
 export function stripeModeForSecret(secret = '') {
   const value = String(secret).trim();
   if (/^(sk|rk)_live_/.test(value)) return 'live';
   if (/^(sk|rk)_test_/.test(value)) return 'test';
   return 'unknown';
+}
+
+export async function paymentFulfillmentIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', PAYMENT_FULFILLMENT_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === PAYMENT_FULFILLMENT_CAPABILITY;
 }
 
 /**
@@ -177,6 +188,12 @@ export default async function handler(request, response) {
 
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: 'Invalid or expired session.' }, 401);
+
+    if (!await paymentFulfillmentIsReady(admin)) {
+      return json({
+        error: 'Checkout is temporarily unavailable while payment services are being upgraded.',
+      }, 503);
+    }
 
     const { product_slug, return_target = 'web' } = await requestJson(request);
     if (!product_slug) return json({ error: 'Missing product.' }, 400);
