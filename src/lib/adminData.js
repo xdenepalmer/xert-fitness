@@ -1234,7 +1234,7 @@ async function healthCheck(key, label, fn) {
   }
 }
 
-async function getCommerceConfigurationHealth() {
+export async function getCommerceConfigurationHealth() {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
   const response = await fetch('/api/admin-commerce-health', {

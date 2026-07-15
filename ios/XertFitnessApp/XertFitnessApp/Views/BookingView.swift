@@ -182,6 +182,22 @@ struct BookingView: View {
 
     private var packsSection: some View {
         Section {
+            if store.paymentAvailabilityLoaded && !store.sessionPackPaymentsEnabled {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Pack purchases are paused")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Explore packs now. Secure checkout will reopen after XERT completes its payment launch checks.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertMuted)
+                    }
+                } icon: {
+                    Image(systemName: "creditcard")
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .accessibilityElement(children: .combine)
+            }
             ForEach(store.products) { product in
                 Button {
                     guard store.isSignedIn else {
@@ -221,10 +237,10 @@ struct BookingView: View {
                         }
                     }
                 }
-                .disabled(checkoutProductID != nil || checkoutBrowser.isPresenting)
+                .disabled(!store.sessionPackPaymentsEnabled || checkoutProductID != nil || checkoutBrowser.isPresenting)
             }
         } header: {
-            Text("Buy Session Packs").xertEyebrow()
+            Text(store.sessionPackPaymentsEnabled ? "Buy Session Packs" : "Session Packs").xertEyebrow()
         }
         .id(ScrollTarget.packs)
         .listRowBackground(Color.xertInk)

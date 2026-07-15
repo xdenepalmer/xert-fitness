@@ -7,7 +7,7 @@ import PageHeader from '@/components/public/PageHeader';
 import Skeleton from '@/components/public/Skeleton';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import {
-  getProducts, startCheckout, getAvailableSessions, bookSession, joinSessionWaitlist, getMyBookings, getMyCredits,
+  getProducts, getSessionPackPaymentAvailability, startCheckout, getAvailableSessions, bookSession, joinSessionWaitlist, getMyBookings, getMyCredits,
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
@@ -41,6 +41,8 @@ export default function Booking() {
   const [sessions, setSessions] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
   const [credits, setCredits] = useState(null);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
   const [bookingId, setBookingId] = useState(null);
@@ -48,7 +50,7 @@ export default function Booking() {
 
   const refresh = useCallback(async () => {
     setLoadErrors([]);
-    const requests = [getProducts(), getAvailableSessions()];
+    const requests = [getProducts(), getAvailableSessions(), getSessionPackPaymentAvailability()];
     if (session) requests.push(getMyCredits(), getMyBookings());
     const results = await Promise.allSettled(requests);
     const errors = [];
@@ -61,9 +63,11 @@ export default function Booking() {
     };
     apply(results[0], 'Session packs', setProducts, []);
     apply(results[1], 'Timetable', setSessions, []);
+    apply(results[2], 'Pack checkout', setPaymentsEnabled, false);
+    setPaymentAvailabilityLoaded(true);
     if (session) {
-      apply(results[2], 'Credits', setCredits, null);
-      apply(results[3], 'Your bookings', setMyBookings, []);
+      apply(results[3], 'Credits', setCredits, null);
+      apply(results[4], 'Your bookings', setMyBookings, []);
     } else {
       setCredits(null);
       setMyBookings([]);
@@ -91,6 +95,10 @@ export default function Booking() {
   const timetableUnavailable = loadErrors.some(error => error.startsWith('Timetable:'));
 
   const handleBuy = async (product) => {
+    if (!paymentsEnabled) {
+      toast({ title: 'Pack purchases are paused', description: 'XERT will reopen secure checkout when the next release checks are complete.' });
+      return;
+    }
     if (!session) {
       toast({ title: 'Create an account first', description: 'Sign in or register to purchase a pack — your credits are stored on your account.' });
       navigate('/register');
@@ -188,6 +196,15 @@ export default function Booking() {
 
           {/* Packs */}
           <section id="packs" className="mt-12">
+            {paymentAvailabilityLoaded && !paymentsEnabled && (
+              <div role="status" className="mb-4 flex items-start gap-3 border border-xert-steel/30 bg-xert-steel/10 p-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-xert-steel" />
+                <div>
+                  <p className="font-display text-sm uppercase text-xert-offwhite">Pack purchases are paused</p>
+                  <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/60">You can still explore packs and the timetable. Secure checkout will reopen after XERT completes its payment launch checks.</p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {(loading && products.length === 0 ? [] : products).map(pack => (
                 <article key={pack.id} className="relative border p-6 flex flex-col"
@@ -239,9 +256,11 @@ export default function Booking() {
                   </div>
                   <button
                     onClick={() => handleBuy(pack)}
-                    disabled={buyingSlug === pack.slug}
+                    disabled={!paymentsEnabled || buyingSlug === pack.slug}
                     className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
-                    {buyingSlug === pack.slug
+                    {!paymentsEnabled
+                      ? 'Purchases Paused'
+                      : buyingSlug === pack.slug
                       ? <Loader2 className="w-4 h-4 animate-spin" />
                       : <>{packCta(pack.slug)}<ArrowRight className="w-4 h-4" /></>}
                   </button>

@@ -1,7 +1,7 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, coaches, siteContent, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
+    case products, sessions, events, coaches, siteContent, platformSettings, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
 
     var displayName: String {
         switch self {
@@ -10,6 +10,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .events: return "event calendar"
         case .coaches: return "coaches and practitioners"
         case .siteContent: return "public site content"
+        case .platformSettings: return "pack purchase availability"
         case .credits: return "class credits"
         case .bookings: return "your bookings"
         case .orders: return "purchase history"
@@ -19,6 +20,10 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .announcements: return "member notices"
         }
     }
+}
+
+struct PublicPlatformSettings: Codable, Hashable {
+    let payments_enabled: Bool
 }
 
 struct MemberAnnouncement: Identifiable, Codable, Hashable {

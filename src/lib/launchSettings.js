@@ -9,6 +9,10 @@ function normalizeDate(value) {
   return normalized;
 }
 
+export function sessionPackPaymentsEnabled(settings) {
+  return settings?.payments_enabled === true;
+}
+
 export function normalizeLaunchSettings(settings = {}) {
   const announcement = String(settings.announcement_banner_text || '').trim();
   if (settings.announcement_banner_enabled && !announcement) {

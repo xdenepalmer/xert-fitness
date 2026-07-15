@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
 import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkoutAttempt';
+import { sessionPackPaymentsEnabled } from './launchSettings';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -8,6 +9,16 @@ export async function getProducts() {
   const { data, error } = await supabase.from('products').select('*').eq('active', true).order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+export async function getSessionPackPaymentAvailability() {
+  const { data, error } = await supabase
+    .from('admin_settings')
+    .select('payments_enabled')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return sessionPackPaymentsEnabled(data);
 }
 
 // ─── Checkout (Stripe via Vercel serverless) ──────────────────────────────────

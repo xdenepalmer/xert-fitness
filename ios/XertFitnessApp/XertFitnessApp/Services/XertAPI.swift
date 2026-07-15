@@ -138,6 +138,17 @@ final class XertAPI {
         )
     }
 
+    func publicPlatformSettings() async throws -> PublicPlatformSettings? {
+        let settings: [PublicPlatformSettings] = try await restRequest(
+            path: "/rest/v1/admin_settings",
+            queryItems: [
+                URLQueryItem(name: "select", value: "payments_enabled"),
+                URLQueryItem(name: "limit", value: "1")
+            ]
+        )
+        return settings.first
+    }
+
     func sessions() async throws -> [ClassSession] {
         try await rpc(path: "sessions_with_availability", body: EmptyBody())
     }

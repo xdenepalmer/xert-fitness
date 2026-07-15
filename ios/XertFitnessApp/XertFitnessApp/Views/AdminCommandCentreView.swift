@@ -2618,6 +2618,7 @@ private struct AdminPlatformView: View {
     let session: AuthSession
     @State private var draft: AdminPlatformSettings?
     @State private var saved = false
+    @State private var confirmingPaymentActivation = false
 
     var body: some View {
         Group {
@@ -2645,9 +2646,10 @@ private struct AdminPlatformView: View {
                     Section {
                         Button {
                             guard let draft else { return }
-                            Task {
-                                saved = await admin.saveSettings(session: session, draft: draft)
-                                if saved { self.draft = admin.settings }
+                            if draft.payments_enabled && admin.settings?.payments_enabled != true {
+                                confirmingPaymentActivation = true
+                            } else {
+                                save(draft)
                             }
                         } label: {
                             HStack {
@@ -2674,6 +2676,25 @@ private struct AdminPlatformView: View {
             if draft == nil || draft == settings { draft = settings }
         }
         .onChange(of: draft) { _ in saved = false }
+        .confirmationDialog("Open session pack checkout?", isPresented: $confirmingPaymentActivation, titleVisibility: .visible) {
+            Button("Enable pack checkout") {
+                guard let draft else { return }
+                save(draft)
+            }
+            .disabled(admin.commerceHealth?.ready != true)
+            Button("Keep payments paused", role: .cancel) {}
+        } message: {
+            Text(admin.commerceHealth?.ready == true
+                ? "Stripe launch checks are passing. Members will be able to start real purchases on the website and iOS app."
+                : "Stripe launch checks are not passing. Open Operations Health and resolve every issue before activation.")
+        }
+    }
+
+    private func save(_ settings: AdminPlatformSettings) {
+        Task {
+            saved = await admin.saveSettings(session: session, draft: settings)
+            if saved { draft = admin.settings }
+        }
     }
 
     private func settingBinding<Value>(_ keyPath: WritableKeyPath<AdminPlatformSettings, Value>) -> Binding<Value> {

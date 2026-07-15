@@ -882,6 +882,7 @@ struct AdminCommerceHealth: Codable, Hashable {
     let stripe_price_count: Int
     let dynamic_price_count: Int
     let environment: AdminEnvironmentHealth
+    let fulfillment_ready: Bool?
     let mode: String?
     let account: StripeAccount?
     let webhook: Webhook?

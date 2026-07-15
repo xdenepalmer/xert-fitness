@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
 
 /** @param {boolean} _dirty */
@@ -15,6 +16,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [pendingPaymentActivation, setPendingPaymentActivation] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -49,10 +51,9 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     setSettings(p => ({ ...p, [k]: v }));
   };
 
-  const handleSave = async () => {
+  const persistSettings = async normalized => {
     setSaving(true);
     try {
-      const normalized = normalizeLaunchSettings(settings);
       const updated = await updateSoftLaunchSettings(normalized, savedSettings);
       setSettings(updated);
       setSavedSettings(updated);
@@ -62,6 +63,30 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const normalized = normalizeLaunchSettings(settings);
+      const activatingPayments = normalized.payments_enabled && !savedSettings.payments_enabled;
+      if (!activatingPayments) {
+        await persistSettings(normalized);
+        return;
+      }
+
+      setSaving(true);
+      const health = await getCommerceConfigurationHealth();
+      setSaving(false);
+      if (!health.ready) {
+        const reason = health.issues?.[0]?.reason || 'Open Operations Health and complete every Stripe launch check first.';
+        toast({ title: 'Stripe is not ready to activate', description: reason, variant: 'destructive' });
+        return;
+      }
+      setPendingPaymentActivation(normalized);
+    } catch (e) {
+      setSaving(false);
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     }
   };
 
@@ -124,6 +149,21 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           </button>
         )}
       </div>
+      <AdminConfirmDialog
+        open={Boolean(pendingPaymentActivation)}
+        onOpenChange={open => !open && setPendingPaymentActivation(null)}
+        title="Open session pack checkout?"
+        description="Stripe launch checks are passing. Saving will allow signed-in members to start real pack purchases on the website and iOS app."
+        warning="Run one low-value purchase and refund immediately after activation."
+        cancelLabel="Keep payments paused"
+        confirmLabel="Enable pack checkout"
+        busy={saving}
+        onConfirm={() => {
+          const pending = pendingPaymentActivation;
+          setPendingPaymentActivation(null);
+          if (pending) void persistSettings(pending);
+        }}
+      />
     </div>
   );
 }

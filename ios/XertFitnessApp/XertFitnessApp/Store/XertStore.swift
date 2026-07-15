@@ -17,6 +17,8 @@ final class XertStore: ObservableObject {
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
+    @Published private(set) var sessionPackPaymentsEnabled = false
+    @Published private(set) var paymentAvailabilityLoaded = false
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var bookingSessionID: UUID?
@@ -138,6 +140,7 @@ final class XertStore: ObservableObject {
         async let eventRequest = api.events()
         async let coachRequest = api.coaches()
         async let siteContentRequest = api.siteContent()
+        async let platformSettingsRequest = api.publicPlatformSettings()
 
         var productsLoaded = false
         var sessionsLoaded = false
@@ -169,6 +172,18 @@ final class XertStore: ObservableObject {
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }
             unavailableDataSources.insert(.siteContent)
+        }
+
+        do {
+            let loadedSettings = try await platformSettingsRequest
+            guard canApplyRefresh(refreshVersion) else { return }
+            sessionPackPaymentsEnabled = loadedSettings?.payments_enabled == true
+            paymentAvailabilityLoaded = true
+        } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
+            sessionPackPaymentsEnabled = false
+            paymentAvailabilityLoaded = true
+            unavailableDataSources.insert(.platformSettings)
         }
 
         do {
@@ -623,6 +638,10 @@ final class XertStore: ObservableObject {
 
     func checkoutURL(for product: Product, attemptID: UUID) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
+        guard sessionPackPaymentsEnabled else {
+            errorMessage = "Session pack purchases are paused while XERT completes its payment launch checks."
+            return nil
+        }
         do {
             let authSession = try await validAuthSession()
             guard let userID = authSession.user?.id else {

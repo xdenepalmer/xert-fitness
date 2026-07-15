@@ -365,13 +365,14 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 12)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 13)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
         XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
         XCTAssertEqual(XertDataSource.announcements.displayName, "member notices")
         XCTAssertEqual(XertDataSource.coaches.displayName, "coaches and practitioners")
         XCTAssertEqual(XertDataSource.siteContent.displayName, "public site content")
+        XCTAssertEqual(XertDataSource.platformSettings.displayName, "pack purchase availability")
     }
 
     func testMemberAnnouncementDecodesPriorityAndExpiry() throws {

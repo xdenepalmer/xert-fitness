@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct, stripeModeForSecret } from './checkout.js';
+import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady, stripeModeForSecret } from './checkout.js';
 import { requestHeader, sendJson } from './http.js';
 import {
   validateCanonicalServiceURL,
@@ -169,14 +169,19 @@ export default async function handler(request, response) {
 
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(process.env);
+  const fulfillmentReady = await paymentFulfillmentIsReady(admin);
+  const fulfillmentIssues = fulfillmentReady
+    ? []
+    : [{ slug: 'database', reason: 'Atomic Stripe payment fulfillment is not installed.' }];
   if (environment.missing.includes('STRIPE_SECRET_KEY')) {
     return json({
       ready: false,
       active_product_count: activeProducts.length,
       stripe_price_count: activeProducts.filter(product => product.stripe_price_id).length,
       dynamic_price_count: activeProducts.filter(product => !product.stripe_price_id).length,
-      issues: environmentIssues(environment),
+      issues: [...fulfillmentIssues, ...environmentIssues(environment)],
       environment,
+      fulfillment_ready: fulfillmentReady,
     });
   }
 
@@ -196,7 +201,7 @@ export default async function handler(request, response) {
   ]);
   return json({
     ...productHealth,
-    ready: stripeMode !== 'unknown' && productHealth.ready && webhookHealth.ready && accountHealth.ready && environment.ready,
+    ready: stripeMode !== 'unknown' && productHealth.ready && webhookHealth.ready && accountHealth.ready && environment.ready && fulfillmentReady,
     mode: stripeMode,
     account: accountHealth,
     issues: [
@@ -204,9 +209,11 @@ export default async function handler(request, response) {
       ...(webhookHealth.issue ? [{ slug: 'webhook', reason: webhookHealth.issue }] : []),
       ...(accountHealth.issues || []).map(reason => ({ slug: 'account', reason })),
       ...(stripeMode === 'unknown' ? [{ slug: 'server', reason: 'Stripe key mode is not recognized.' }] : []),
+      ...fulfillmentIssues,
       ...environmentIssues(environment),
     ],
     environment,
+    fulfillment_ready: fulfillmentReady,
     webhook: webhookHealth,
   });
 }
