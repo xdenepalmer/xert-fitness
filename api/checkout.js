@@ -17,6 +17,8 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
 
 export function stripeModeForSecret(secret = '') {
   const value = String(secret).trim();
@@ -154,6 +156,38 @@ export function normalizeCheckoutAttemptID(value) {
     throw new Error('Checkout attempt identifier is invalid.');
   }
   return attemptID;
+}
+
+export function normalizeCheckoutRequest(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Checkout request must be a JSON object.');
+  }
+  const productSlug = String(input.product_slug || '').trim().toLowerCase();
+  if (!PRODUCT_SLUG_PATTERN.test(productSlug) || productSlug.length > 80) {
+    throw new Error('Product identifier is invalid.');
+  }
+  const returnTarget = input.return_target === undefined ? 'web' : String(input.return_target);
+  if (returnTarget !== 'web' && returnTarget !== 'ios') {
+    throw new Error('Unsupported checkout return target.');
+  }
+  return {
+    productSlug,
+    returnTarget,
+    suppliedAttemptID: input.checkout_attempt_id,
+  };
+}
+
+export function publicCheckoutFailure(error) {
+  if (error?.code === CHECKOUT_RECORDING_FAILED) {
+    return {
+      status: 503,
+      message: 'Checkout could not be recorded. No payment was taken; please try again.',
+    };
+  }
+  return {
+    status: 500,
+    message: 'Checkout could not be started. Please try again.',
+  };
 }
 
 /**
@@ -314,12 +348,13 @@ export default async function handler(request, response) {
     if (stripeMode === 'unknown') return json({ error: 'Stripe key mode is not recognized.' }, 500);
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const {
-      product_slug,
-      return_target = 'web',
-      checkout_attempt_id: suppliedAttemptID,
-    } = await requestJson(request);
-    if (!product_slug) return json({ error: 'Missing product.' }, 400);
+    let checkoutRequest;
+    try {
+      checkoutRequest = normalizeCheckoutRequest(await requestJson(request));
+    } catch (error) {
+      return json({ error: error.message }, 400);
+    }
+    const { productSlug, returnTarget, suppliedAttemptID } = checkoutRequest;
     let checkoutAttemptID;
     try {
       // Older installed clients remain compatible; updated clients keep this
@@ -335,7 +370,7 @@ export default async function handler(request, response) {
           stripeMode,
           expectedHost: XERT_VERCEL_HOST,
         }),
-        return_target
+        returnTarget
       );
     } catch (error) {
       return json({ error: error.message }, 400);
@@ -345,7 +380,7 @@ export default async function handler(request, response) {
     const { data: product, error: prodErr } = await admin
       .from('products')
       .select('*')
-      .eq('slug', product_slug)
+      .eq('slug', productSlug)
       .eq('active', true)
       .single();
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
@@ -404,7 +439,7 @@ export default async function handler(request, response) {
         product_slug: product.slug,
         sessions_count: String(product.sessions_count),
         validity_days: String(product.validity_days),
-        return_target,
+        return_target: returnTarget,
         checkout_attempt_id: checkoutAttemptID,
       },
     };
@@ -413,7 +448,7 @@ export default async function handler(request, response) {
         attemptID: checkoutAttemptID,
         userID: user.id,
         productID: product.id,
-        returnTarget: return_target,
+        returnTarget,
       }),
     });
 
@@ -426,11 +461,20 @@ export default async function handler(request, response) {
       if (pendingOrderError) throw pendingOrderError;
     } catch {
       await stripe.checkout.sessions.expire(session.id).catch(() => {});
-      throw new Error('Checkout could not be recorded. No payment was taken; please try again.');
+      const recordingError = new Error('Pending checkout order could not be saved.');
+      recordingError.code = CHECKOUT_RECORDING_FAILED;
+      throw recordingError;
     }
 
     return json({ url: session.url });
   } catch (e) {
-    return json({ error: e.message || 'Checkout failed.' }, 500);
+    const failure = publicCheckoutFailure(e);
+    console.error('Checkout request failed.', {
+      name: String(e?.name || 'Error'),
+      code: String(e?.code || 'UNEXPECTED_CHECKOUT_ERROR'),
+      type: String(e?.type || ''),
+      requestId: String(e?.requestId || ''),
+    });
+    return json({ error: failure.message }, failure.status);
   }
 }

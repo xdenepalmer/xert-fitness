@@ -7,8 +7,10 @@ import {
   checkoutIdempotencyKey,
   inspectCheckoutEnvironment,
   normalizeCheckoutAttemptID,
+  normalizeCheckoutRequest,
   pendingOrderForCheckout,
   paymentFulfillmentIsReady,
+  publicCheckoutFailure,
   reusableCheckoutURL,
   sessionPackPaymentsAreEnabled,
   stripeModeForSecret,
@@ -144,6 +146,52 @@ test('scopes Stripe idempotency to one member pack target and checkout attempt',
   assert.notEqual(checkoutIdempotencyKey(base), checkoutIdempotencyKey({ ...base, productID: 'another-product' }));
   assert.notEqual(checkoutIdempotencyKey(base), checkoutIdempotencyKey({ ...base, returnTarget: 'ios' }));
   assert.throws(() => normalizeCheckoutAttemptID('shared-or-guessable'), /identifier is invalid/i);
+});
+
+test('normalizes a bounded checkout request before any database or Stripe operation', () => {
+  assert.deepEqual(normalizeCheckoutRequest({
+    product_slug: ' Starter-4 ',
+    return_target: 'ios',
+    checkout_attempt_id: checkoutAttemptID,
+    ignored_amount: 1,
+  }), {
+    productSlug: 'starter-4',
+    returnTarget: 'ios',
+    suppliedAttemptID: checkoutAttemptID,
+  });
+  assert.deepEqual(normalizeCheckoutRequest({ product_slug: 'single' }), {
+    productSlug: 'single',
+    returnTarget: 'web',
+    suppliedAttemptID: undefined,
+  });
+  for (const input of [
+    null,
+    [],
+    {},
+    { product_slug: '../admin' },
+    { product_slug: 'a'.repeat(81) },
+    { product_slug: 'single', return_target: 'external' },
+  ]) assert.throws(() => normalizeCheckoutRequest(input), /request|product identifier|return target/i);
+});
+
+test('checkout never exposes raw provider errors to members', async () => {
+  const secretBearingError = Object.assign(new Error('Stripe sk_live_private failed at Supabase'), {
+    code: 'api_connection_error',
+    requestId: 'req_xert',
+  });
+  assert.deepEqual(publicCheckoutFailure(secretBearingError), {
+    status: 500,
+    message: 'Checkout could not be started. Please try again.',
+  });
+  assert.doesNotMatch(JSON.stringify(publicCheckoutFailure(secretBearingError)), /sk_live|Supabase|req_xert/);
+  assert.deepEqual(publicCheckoutFailure({ code: 'CHECKOUT_RECORDING_FAILED' }), {
+    status: 503,
+    message: 'Checkout could not be recorded. No payment was taken; please try again.',
+  });
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /json\(\{ error: e\.message/);
+  assert.match(source, /return json\(\{ error: failure\.message \}, failure\.status\)/);
 });
 
 test('accepts only an active one-time Stripe price matching the configured pack', () => {
