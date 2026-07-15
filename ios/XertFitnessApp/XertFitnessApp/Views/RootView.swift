@@ -214,6 +214,7 @@ struct RootView: View {
     private var navigationRail: some View {
         XertNavigationRail(
             selection: selectedDestinationBinding,
+            currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
@@ -395,6 +396,7 @@ private struct XertNavigationRail: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: XertPrimaryDestination
+    let currentRoute: XertMemberRoute
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
@@ -434,6 +436,25 @@ private struct XertNavigationRail: View {
             .accessibilityLabel("XERT quick switcher")
             .accessibilityHint("Searches workspaces and available actions")
             .accessibilityIdentifier("xert-navigation-commands")
+
+            ShareLink(item: currentRoute.webURL, subject: Text(currentRoute.navigationTitle)) {
+                VStack(spacing: 5) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Share")
+                        .font(.caption2.weight(.bold))
+                        .textCase(.uppercase)
+                        .tracking(0.7)
+                }
+                .foregroundStyle(Color.xertPale)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .accessibilityLabel("Share \(currentRoute.navigationTitle)")
+            .accessibilityHint("Shares a secure link to this exact XERT task")
+            .accessibilityIdentifier("xert-navigation-share")
 
             if let previousRoute {
                 Button(action: onReturnPrevious) {
@@ -775,6 +796,18 @@ private struct XertNavigationDock: View {
             .accessibilityHint("Returns to the next XERT workspace task")
             .accessibilityHidden(nextRoute == nil)
             .accessibilityIdentifier("xert-navigation-forward-history")
+
+            ShareLink(item: currentRoute.webURL, subject: Text(currentRoute.navigationTitle)) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.xertPale)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Share \(currentRoute.navigationTitle)")
+            .accessibilityHint("Shares a secure link to this exact XERT task")
+            .accessibilityIdentifier("xert-navigation-share")
 
             Button(action: onOpenCommands) {
                 Image(systemName: "magnifyingglass")

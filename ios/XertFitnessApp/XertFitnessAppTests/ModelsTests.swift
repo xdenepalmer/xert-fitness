@@ -7,7 +7,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://events"))), .events)
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness:///explore"))), .explore)
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://account"))), .account)
-        XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/booking"))))
+        XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/booking"))), .booking)
         XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://checkout?status=success"))))
     }
 
@@ -30,6 +30,31 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://account/bookings/not-a-uuid"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/packs?source=unknown"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://user:pass@booking/packs"))))
+    }
+
+    func testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins() throws {
+        let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
+        let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000024"))
+        let routes: [XertMemberRoute] = [
+            .home, .notices(nil), .notices(announcementID), .booking, .sessionPacks,
+            .purchaseConfirmation, .events, .eventGoals, .explore, .account,
+            .upcomingBookings(nil), .upcomingBookings(bookingID),
+        ]
+
+        for route in routes {
+            XCTAssertEqual(route.webURL.scheme, "https")
+            XCTAssertEqual(route.webURL.host, XertMemberRoute.canonicalWebHost)
+            XCTAssertEqual(XertMemberRoute.route(for: route.webURL), route)
+        }
+
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/booking#packs"))), .sessionPacks)
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/account#bookings"))), .upcomingBookings(nil))
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/coaches"))), .explore)
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "http://xert-fitness.vercel.app/booking"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://example.com/open/booking/packs"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/booking/packs?source=email"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://user:pass@xert-fitness.vercel.app/open/booking"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/admin"))))
     }
 
     func testNavigationCoordinatorTracksSourcesHistoryReselectionAndAdjacentTabs() {

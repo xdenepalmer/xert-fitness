@@ -31,6 +31,7 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
 const AppLanding = lazy(() => import('./pages/AppLanding'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
+const NativeTaskBridge = lazy(() => import('./pages/NativeTaskBridge'));
 
 function RouteLoader() {
   return (
@@ -61,6 +62,7 @@ const AppRoutes = () => (
       <Route path="/terms" element={<Terms />} />
       <Route path="/app" element={<AppLanding />} />
       <Route path="/checkout-return" element={<CheckoutReturn />} />
+      <Route path="/open/*" element={<NativeTaskBridge />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />
       {/* ADMIN — requires a signed-in user whose profiles.role = 'admin'.

@@ -59,6 +59,8 @@ enum XertPrimaryDestination: Int, CaseIterable, Identifiable, Hashable {
 }
 
 enum XertMemberRoute: Hashable {
+    static let canonicalWebHost = AppConfig.vercelHost
+
     case home
     case notices(UUID?)
     case booking
@@ -129,20 +131,52 @@ enum XertMemberRoute: Hashable {
         }
     }
 
+    var webURL: URL {
+        guard let url = URL(string: "https://\(Self.canonicalWebHost)/open/\(restorationValue)") else {
+            preconditionFailure("XERT route generated an invalid canonical web URL")
+        }
+        return url
+    }
+
     static func restore(_ value: String) -> Self? {
         route(forPath: "/\(value.trimmingCharacters(in: CharacterSet(charactersIn: "/")))")
     }
 
     static func route(for url: URL) -> Self? {
-        guard url.scheme?.lowercased() == "xertfitness",
-              url.user == nil,
-              url.password == nil,
-              url.query == nil,
-              url.fragment == nil else { return nil }
+        guard url.user == nil, url.password == nil, url.query == nil else { return nil }
+        if url.scheme?.lowercased() == "https" {
+            return webRoute(for: url)
+        }
+        guard url.scheme?.lowercased() == "xertfitness", url.fragment == nil else { return nil }
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased()
         let routePath = host.isEmpty ? path : "/\(host)\(path)"
         return route(forPath: routePath.isEmpty ? "/" : routePath)
+    }
+
+    private static func webRoute(for url: URL) -> Self? {
+        guard url.host?.lowercased() == canonicalWebHost else { return nil }
+        let path = url.path.lowercased()
+        let fragment = url.fragment?.lowercased()
+
+        if path.hasPrefix("/open/") {
+            guard fragment == nil else { return nil }
+            return restore(String(path.dropFirst("/open/".count)))
+        }
+
+        switch (path, fragment) {
+        case ("/", nil), ("/app", nil): return .home
+        case ("/booking", nil): return .booking
+        case ("/booking", "packs"): return .sessionPacks
+        case ("/events", nil): return .events
+        case ("/events", "goals"): return .eventGoals
+        case ("/account", nil): return .account
+        case ("/account", "bookings"): return .upcomingBookings(nil)
+        case ("/account", "notices"): return .notices(nil)
+        case ("/about", nil), ("/coaches", nil), ("/contact", nil), ("/training-guide", nil):
+            return .explore
+        default: return nil
+        }
     }
 
     private static func route(forPath path: String) -> Self? {

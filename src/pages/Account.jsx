@@ -314,7 +314,7 @@ export default function Account() {
         </div>
 
         {announcements.length > 0 && (
-          <section className="mb-10" aria-labelledby="member-notices-title">
+          <section id="notices" className="mb-10 scroll-mt-32" aria-labelledby="member-notices-title">
             <div className="mb-4 flex items-center gap-2">
               <BellRing className="h-5 w-5 text-xert-steel" aria-hidden="true" />
               <h2 id="member-notices-title" className="font-display text-2xl uppercase text-xert-offwhite">Member Notices</h2>
@@ -489,7 +489,7 @@ export default function Account() {
         </section>
 
         {/* Event goals */}
-        <section className="mb-10">
+        <section id="goals" className="mb-10 scroll-mt-32">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
               Training Goals
@@ -632,7 +632,7 @@ export default function Account() {
         )}
 
         {/* Upcoming bookings */}
-        <section className="mb-10">
+        <section id="bookings" className="mb-10 scroll-mt-32">
           <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
             Upcoming Classes
           </h2>

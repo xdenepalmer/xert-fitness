@@ -123,7 +123,7 @@ export default function Events() {
           containerClassName="max-w-6xl"
         />
 
-        <div className="max-w-6xl mx-auto px-6">
+        <div id="goals" className="max-w-6xl mx-auto px-6 scroll-mt-32">
           {/* Category filter */}
           {!loading && !error && events.length > 0 && (
             <div className="mt-8 space-y-5">
