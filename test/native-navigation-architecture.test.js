@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const rootURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url);
 const navigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift', import.meta.url);
+const modelsTestsURL = new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url);
 const viewURL = name => new URL(`../ios/XertFitnessApp/XertFitnessApp/Views/${name}.swift`, import.meta.url);
 
 test('native navigation uses five stable primary destinations without iOS More overflow', async () => {
@@ -74,9 +75,10 @@ test('member routing is typed, task-restorable, and owns native deep-link mappin
   assert.match(navigation, /final class XertNavigationCoordinator: ObservableObject/);
   assert.match(navigation, /@Published private\(set\) var route: XertMemberRoute/);
   assert.match(navigation, /func open\(_ targetRoute: XertMemberRoute/);
-  assert.match(navigation, /private\(set\) var history: \[XertPrimaryDestination\]/);
+  assert.match(navigation, /private\(set\) var routeHistory: \[XertMemberRoute\]/);
+  assert.match(navigation, /var history: \[XertPrimaryDestination\]/);
   assert.match(navigation, /func returnToPrevious\(source: XertNavigationSource/);
-  assert.match(navigation, /history\.count > historyLimit[\s\S]*history\.removeFirst/);
+  assert.match(navigation, /routeHistory\.count > historyLimit[\s\S]*routeHistory\.removeFirst/);
   for (const source of ['restoration', 'dock', 'dockSwipe', 'history', 'content', 'deepLink', 'pushNotification', 'checkout', 'commandPalette']) {
     assert.match(navigation, new RegExp(`case ${source}`));
   }
@@ -162,12 +164,12 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /DragGesture\(minimumDistance: 36\)/);
   assert.match(root, /abs\(horizontal\) > 44[\s\S]*abs\(vertical\) \* 1\.35/);
   assert.match(root, /navigation\.step\(direction\)/);
-  assert.match(root, /previousDestination: navigation\.previousDestination/);
+  assert.match(root, /previousRoute: navigation\.previousRoute/);
   assert.match(root, /navigation\.returnToPrevious\(\)/);
   assert.match(root, /\.accessibilityActions \{/);
-  assert.ok(root.includes('Button("Return to \\(previousDestination.title)"'));
+  assert.ok(root.includes('Button("Return to \\(previousRoute.navigationTitle)"'));
   assert.ok(root.includes('Label("Refresh \\(item.title)", systemImage: "arrow.clockwise")'));
-  assert.ok(root.includes('Label("Return to \\(previousDestination.title)", systemImage: "arrow.uturn.backward")'));
+  assert.ok(root.includes('Label("Return to \\(previousRoute.navigationTitle)", systemImage: "arrow.uturn.backward")'));
   assert.match(root, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
   assert.match(root, /withAnimation\(reduceMotion \? nil : \.easeOut/);
   assert.match(root, /active member notices/);
@@ -175,4 +177,20 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.checkout\)/);
   assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
   assert.match(root, /source: \.pushNotification/);
+});
+
+test('navigation history preserves exact member tasks instead of flattening them to tabs', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /private\(set\) var routeHistory: \[XertMemberRoute\]/);
+  assert.match(navigation, /var previousRoute: XertMemberRoute\?/);
+  assert.match(navigation, /routeHistory\.append\(targetRoute\)/);
+  assert.match(navigation, /guard let targetRoute = routeHistory\.last/);
+  assert.match(navigation, /route = targetRoute/);
+  assert.ok(navigation.includes('Back to \\(previousRoute.navigationTitle)'));
+  assert.match(root, /previousRoute: navigation\.previousRoute/);
+  assert.match(modelsTests, /testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs/);
 });

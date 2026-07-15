@@ -69,18 +69,43 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(navigation.route, .sessionPacks)
         XCTAssertGreaterThan(navigation.routeSequence, initialSequence)
         XCTAssertEqual(navigation.history, [.booking])
+        XCTAssertEqual(navigation.routeHistory, [.booking, .sessionPacks])
         XCTAssertEqual(navigation.lastTransition?.from, .booking)
         XCTAssertEqual(navigation.lastTransition?.to, .booking)
 
         XCTAssertTrue(navigation.open(.eventGoals, source: .deepLink))
         XCTAssertEqual(navigation.selection, .events)
         XCTAssertEqual(navigation.history, [.booking, .events])
+        XCTAssertEqual(navigation.routeHistory, [.booking, .sessionPacks, .eventGoals])
 
         navigation.restore(routeValue: XertMemberRoute.upcomingBookings(nil).restorationValue)
         XCTAssertEqual(navigation.selection, .account)
         XCTAssertEqual(navigation.route, .upcomingBookings(nil))
         XCTAssertEqual(navigation.history, [.account])
+        XCTAssertEqual(navigation.routeHistory, [.upcomingBookings(nil)])
         XCTAssertEqual(navigation.lastTransition?.source, .restoration)
+    }
+
+    func testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000031"))
+        let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 6)
+
+        XCTAssertTrue(navigation.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.purchaseConfirmation, source: .checkout))
+        XCTAssertEqual(navigation.previousRoute, .sessionPacks)
+        XCTAssertEqual(navigation.previousDestination, .booking)
+
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertEqual(navigation.selection, .booking)
+        XCTAssertEqual(navigation.route, .sessionPacks)
+        XCTAssertEqual(navigation.previousRoute, .notices(noticeID))
+
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertEqual(navigation.selection, .home)
+        XCTAssertEqual(navigation.route, .notices(noticeID))
+        XCTAssertEqual(navigation.previousRoute, .home)
+        XCTAssertEqual(navigation.history, [.home])
     }
 
     func testNavigationPresentationAdaptsWithoutChangingDestinationPolicy() {

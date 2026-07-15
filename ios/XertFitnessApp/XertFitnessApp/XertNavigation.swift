@@ -80,6 +80,21 @@ enum XertMemberRoute: Hashable {
         }
     }
 
+    var navigationTitle: String {
+        switch self {
+        case .home: return "Home"
+        case .notices(_): return "Member Notices"
+        case .booking: return "Book"
+        case .sessionPacks: return "Session Packs"
+        case .purchaseConfirmation: return "Purchase Confirmation"
+        case .events: return "Events"
+        case .eventGoals: return "Event Goals"
+        case .explore: return "Explore"
+        case .account: return "Account"
+        case .upcomingBookings(_): return "Upcoming Bookings"
+        }
+    }
+
     static func primary(_ destination: XertPrimaryDestination) -> Self {
         switch destination {
         case .home: return .home
@@ -242,7 +257,7 @@ final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var routeSequence: UInt = 0
     @Published private(set) var lastTransition: XertNavigationTransition?
     @Published private(set) var reselectionSequence: UInt = 0
-    private(set) var history: [XertPrimaryDestination]
+    private(set) var routeHistory: [XertMemberRoute]
 
     private let historyLimit: Int
     private var transitionSequence: UInt = 0
@@ -250,12 +265,24 @@ final class XertNavigationCoordinator: ObservableObject {
     init(initial: XertPrimaryDestination = .home, historyLimit: Int = 12) {
         selection = initial
         route = .primary(initial)
-        history = [initial]
+        routeHistory = [.primary(initial)]
         self.historyLimit = max(2, historyLimit)
     }
 
+    var history: [XertPrimaryDestination] {
+        routeHistory.reduce(into: []) { destinations, route in
+            if destinations.last != route.destination {
+                destinations.append(route.destination)
+            }
+        }
+    }
+
+    var previousRoute: XertMemberRoute? {
+        routeHistory.dropLast().last
+    }
+
     var previousDestination: XertPrimaryDestination? {
-        history.dropLast().last
+        previousRoute?.destination
     }
 
     func commandPaletteCommands(
@@ -288,13 +315,13 @@ final class XertNavigationCoordinator: ObservableObject {
             action: .refresh
         ))
 
-        if let previousDestination {
+        if let previousRoute {
             commands.append(XertNavigationCommand(
-                id: "previous-\(previousDestination.rawValue)",
-                title: "Back to \(previousDestination.title)",
-                subtitle: "Return through your workspace history",
+                id: "previous-\(previousRoute.restorationValue)",
+                title: "Back to \(previousRoute.navigationTitle)",
+                subtitle: "Return to the exact task in your workspace history",
                 icon: "arrow.uturn.backward",
-                keywords: ["back", "previous", "history", previousDestination.title],
+                keywords: ["back", "previous", "history", previousRoute.navigationTitle],
                 section: .system,
                 action: .previous
             ))
@@ -342,7 +369,7 @@ final class XertNavigationCoordinator: ObservableObject {
         selection = destination
         route = .primary(destination)
         routeSequence &+= 1
-        history = [destination]
+        routeHistory = [.primary(destination)]
         if previous == destination {
             lastTransition = nil
         } else {
@@ -357,7 +384,7 @@ final class XertNavigationCoordinator: ObservableObject {
         selection = destination
         route = restoredRoute
         routeSequence &+= 1
-        history = [destination]
+        routeHistory = [restoredRoute]
         if previous == destination {
             lastTransition = nil
         } else {
@@ -382,11 +409,9 @@ final class XertNavigationCoordinator: ObservableObject {
         selection = destination
         route = targetRoute
         routeSequence &+= 1
-        if destination != previous {
-            history.append(destination)
-            if history.count > historyLimit {
-                history.removeFirst(history.count - historyLimit)
-            }
+        routeHistory.append(targetRoute)
+        if routeHistory.count > historyLimit {
+            routeHistory.removeFirst(routeHistory.count - historyLimit)
         }
         recordTransition(from: previous, to: destination, source: source)
         return true
@@ -402,14 +427,14 @@ final class XertNavigationCoordinator: ObservableObject {
 
     @discardableResult
     func returnToPrevious(source: XertNavigationSource = .history) -> Bool {
-        guard history.count > 1 else { return false }
+        guard routeHistory.count > 1 else { return false }
         let previous = selection
-        history.removeLast()
-        guard let destination = history.last else { return false }
-        selection = destination
-        route = .primary(destination)
+        routeHistory.removeLast()
+        guard let targetRoute = routeHistory.last else { return false }
+        selection = targetRoute.destination
+        route = targetRoute
         routeSequence &+= 1
-        recordTransition(from: previous, to: destination, source: source)
+        recordTransition(from: previous, to: targetRoute.destination, source: source)
         return true
     }
 

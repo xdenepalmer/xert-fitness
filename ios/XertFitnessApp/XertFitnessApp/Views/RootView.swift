@@ -194,7 +194,7 @@ struct RootView: View {
             isAdmin: store.profile?.isAdmin == true,
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
-            previousDestination: navigation.previousDestination,
+            previousRoute: navigation.previousRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
@@ -209,7 +209,7 @@ struct RootView: View {
             isAdmin: store.profile?.isAdmin == true,
             noticeCount: store.announcements.count,
             bookingCount: activeBookingCount,
-            previousDestination: navigation.previousDestination,
+            previousRoute: navigation.previousRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
@@ -379,7 +379,7 @@ private struct XertNavigationRail: View {
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
-    let previousDestination: XertPrimaryDestination?
+    let previousRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
@@ -414,12 +414,12 @@ private struct XertNavigationRail: View {
             .accessibilityHint("Searches workspaces and available actions")
             .accessibilityIdentifier("xert-navigation-commands")
 
-            if let previousDestination {
+            if let previousRoute {
                 Button(action: onReturnPrevious) {
                     VStack(spacing: 5) {
                         Image(systemName: "arrow.uturn.backward")
                             .font(.system(size: 15, weight: .semibold))
-                        Text("Back to \(previousDestination.title)")
+                        Text("Back to \(previousRoute.navigationTitle)")
                             .font(.caption2.weight(.semibold))
                             .lineLimit(2)
                             .multilineTextAlignment(.center)
@@ -542,8 +542,8 @@ private struct XertNavigationRail: View {
         .accessibilityActions {
             if selected {
                 Button("Refresh \(item.title)") { onReselect(item) }
-                if let previousDestination {
-                    Button("Return to \(previousDestination.title)", action: onReturnPrevious)
+                if let previousRoute {
+                    Button("Return to \(previousRoute.navigationTitle)", action: onReturnPrevious)
                 }
             }
         }
@@ -552,9 +552,9 @@ private struct XertNavigationRail: View {
                 Button(action: { onReselect(item) }) {
                     Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
                 }
-                if let previousDestination {
+                if let previousRoute {
                     Button(action: onReturnPrevious) {
-                        Label("Return to \(previousDestination.title)", systemImage: "arrow.uturn.backward")
+                        Label("Return to \(previousRoute.navigationTitle)", systemImage: "arrow.uturn.backward")
                     }
                 }
             }
@@ -594,7 +594,7 @@ private struct XertNavigationDock: View {
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
-    let previousDestination: XertPrimaryDestination?
+    let previousRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
@@ -742,8 +742,8 @@ private struct XertNavigationDock: View {
         .accessibilityActions {
             if selected {
                 Button("Refresh \(item.title)") { onReselect(item) }
-                if let previousDestination {
-                    Button("Return to \(previousDestination.title)", action: onReturnPrevious)
+                if let previousRoute {
+                    Button("Return to \(previousRoute.navigationTitle)", action: onReturnPrevious)
                 }
             }
         }
@@ -755,9 +755,9 @@ private struct XertNavigationDock: View {
                 Button(action: { onReselect(item) }) {
                     Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
                 }
-                if let previousDestination {
+                if let previousRoute {
                     Button(action: onReturnPrevious) {
-                        Label("Return to \(previousDestination.title)", systemImage: "arrow.uturn.backward")
+                        Label("Return to \(previousRoute.navigationTitle)", systemImage: "arrow.uturn.backward")
                     }
                 }
             }
