@@ -60,6 +60,17 @@ modes.
 
 ## 4. Verify In XERT
 
+Run the read-only production boundary check before opening Stripe or spending a
+Codemagic build. It never creates a Checkout Session, refund or database row:
+
+```bash
+npm run check:stripe
+```
+
+The command must report five `PASS` results. A webhook `500` means the Vercel
+Stripe secrets are absent; a missing fulfillment contract means the migration
+in step 1 has not been installed.
+
 Open **iOS Admin > Operations Health** and require all of the following:
 
 - Stripe mode is the intended `TEST` or `LIVE` mode.

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "node --test test/*.test.js",
+    "check:stripe": "node --env-file-if-exists=.env.local scripts/check-stripe-readiness.mjs",
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
