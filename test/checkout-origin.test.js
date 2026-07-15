@@ -23,6 +23,35 @@ test('rejects non-web checkout return URLs', () => {
   );
 });
 
+test('live checkout requires the exact canonical XERT return origin', () => {
+  const options = { stripeMode: 'live', expectedHost: 'xert-fitness.vercel.app' };
+  assert.equal(
+    resolveCheckoutOrigin(
+      'https://preview-xert.vercel.app/api/checkout',
+      'https://xert-fitness.vercel.app',
+      options,
+    ),
+    'https://xert-fitness.vercel.app',
+  );
+
+  for (const appBaseUrl of [
+    '',
+    'http://xert-fitness.vercel.app',
+    'https://preview-xert.vercel.app',
+    'https://xert-fitness.vercel.app/preview',
+    'https://xert-fitness.vercel.app?next=elsewhere',
+  ]) {
+    assert.throws(
+      () => resolveCheckoutOrigin(
+        'https://xert-fitness.vercel.app/api/checkout',
+        appBaseUrl,
+        options,
+      ),
+      /APP_BASE_URL must be/i,
+    );
+  }
+});
+
 test('uses a public app-return page for native checkout without changing web returns', () => {
   assert.deepEqual(resolveCheckoutReturnURLs('https://xertfitness.app', 'ios'), {
     success: 'https://xertfitness.app/checkout-return?status=success',

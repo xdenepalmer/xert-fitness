@@ -2,6 +2,10 @@ import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { requestHeader, requestJson, sendJson } from './http.js';
+import {
+  validateCanonicalServiceURL,
+  XERT_VERCEL_HOST,
+} from '../src/lib/publicRuntimeConfig.js';
 
 // Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
@@ -36,7 +40,14 @@ export async function paymentFulfillmentIsReady(admin) {
  * canonical URL wins; otherwise Vercel's request URL keeps the buyer on the
  * deployment that created the Checkout Session.
  */
-export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '') {
+export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '', options = {}) {
+  if (options.stripeMode === 'live') {
+    return validateCanonicalServiceURL(
+      appBaseUrl,
+      'APP_BASE_URL',
+      options.expectedHost || XERT_VERCEL_HOST,
+    );
+  }
   const candidate = appBaseUrl.trim() || requestUrl;
   const url = new URL(candidate);
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -216,6 +227,8 @@ export default async function handler(request, response) {
     if (!process.env.STRIPE_SECRET_KEY) {
       return json({ error: 'Stripe is not configured.' }, 500);
     }
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') return json({ error: 'Stripe key mode is not recognized.' }, 500);
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     const {
@@ -235,7 +248,10 @@ export default async function handler(request, response) {
     let returnURLs;
     try {
       returnURLs = resolveCheckoutReturnURLs(
-        resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || ''),
+        resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '', {
+          stripeMode,
+          expectedHost: XERT_VERCEL_HOST,
+        }),
         return_target
       );
     } catch (error) {
@@ -252,8 +268,6 @@ export default async function handler(request, response) {
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
     assertCheckoutProduct(product);
 
-    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
-    if (stripeMode === 'unknown') return json({ error: 'Stripe key mode is not recognized.' }, 500);
     if (stripeMode === 'live' && !product.stripe_price_id) {
       return json({ error: 'This pack is not linked to a live Stripe Price yet.' }, 409);
     }

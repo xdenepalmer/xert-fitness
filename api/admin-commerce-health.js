@@ -2,6 +2,10 @@ import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { assertCheckoutProduct, assertStripePriceMatchesProduct, stripeModeForSecret } from './checkout.js';
 import { requestHeader, sendJson } from './http.js';
+import {
+  validateCanonicalServiceURL,
+  XERT_VERCEL_HOST,
+} from '../src/lib/publicRuntimeConfig.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,8 +23,11 @@ export function inspectCommerceEnvironment(environment = {}) {
   if (!String(environment.STRIPE_WEBHOOK_SECRET || '').trim()) missing.push('STRIPE_WEBHOOK_SECRET');
 
   try {
-    const appBaseUrl = new URL(String(environment.APP_BASE_URL || '').trim());
-    if (appBaseUrl.protocol !== 'https:' || !appBaseUrl.hostname) missing.push('APP_BASE_URL');
+    validateCanonicalServiceURL(
+      environment.APP_BASE_URL,
+      'APP_BASE_URL',
+      XERT_VERCEL_HOST,
+    );
   } catch {
     missing.push('APP_BASE_URL');
   }

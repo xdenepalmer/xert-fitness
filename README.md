@@ -40,7 +40,7 @@ Set this non-secret server configuration as well, using the canonical public
 website URL (without a trailing slash):
 
 ```bash
-APP_BASE_URL=https://your-domain.example
+APP_BASE_URL=https://xert-fitness.vercel.app
 ```
 
 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` must also be set in Vercel so the

@@ -54,8 +54,27 @@ test('commerce health requires the complete production payment environment witho
   assert.deepEqual(inspectCommerceEnvironment({
     STRIPE_SECRET_KEY: 'secret-value',
     STRIPE_WEBHOOK_SECRET: 'webhook-value',
-    APP_BASE_URL: 'https://xert.example.com',
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
   }), { ready: true, missing: [] });
+
+  for (const APP_BASE_URL of [
+    'https://xert.example.com',
+    'https://xert-fitness.vercel.app/checkout-return',
+    'https://xert-fitness.vercel.app?preview=true',
+  ]) {
+    assert.deepEqual(inspectCommerceEnvironment({
+      STRIPE_SECRET_KEY: 'secret-value',
+      STRIPE_WEBHOOK_SECRET: 'webhook-value',
+      APP_BASE_URL,
+    }), { ready: false, missing: ['APP_BASE_URL'] });
+  }
+
+  assert.deepEqual(inspectCommerceEnvironment({
+    STRIPE_SECRET_KEY: 'secret-value',
+    STRIPE_WEBHOOK_SECRET: 'webhook-value',
+    APP_BASE_URL: 'https://lookalike.example.com',
+    EXPECTED_APP_HOST: 'lookalike.example.com',
+  }), { ready: false, missing: ['APP_BASE_URL'] });
 });
 
 test('commerce health names invalid database values and Stripe mismatches', async () => {
