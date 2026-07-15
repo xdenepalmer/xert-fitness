@@ -130,9 +130,11 @@ struct RootView: View {
                 isAdmin: store.profile?.isAdmin == true,
                 noticeCount: store.announcements.count,
                 bookingCount: activeBookingCount,
+                previousDestination: navigation.previousDestination,
                 onOpenAdmin: { showingAdminCommandCentre = true },
                 onReselect: handleReselection,
-                onStep: handleNavigationStep
+                onStep: handleNavigationStep,
+                onReturnPrevious: returnToPreviousNavigationDestination
             )
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
@@ -184,6 +186,11 @@ struct RootView: View {
     private func handleNavigationStep(_ direction: XertNavigationDirection) {
         guard navigation.step(direction) else { return }
         UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    private func returnToPreviousNavigationDestination() {
+        guard navigation.returnToPrevious() else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     private var isPrivacyLocked: Bool {
@@ -287,9 +294,11 @@ private struct XertNavigationDock: View {
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
+    let previousDestination: XertPrimaryDestination?
     let onOpenAdmin: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onStep: (XertNavigationDirection) -> Void
+    let onReturnPrevious: () -> Void
     @Namespace private var selectionNamespace
 
     private let items = XertPrimaryDestination.dockOrder
@@ -425,6 +434,26 @@ private struct XertNavigationDock: View {
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
         .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+        .accessibilityActions {
+            if selected {
+                Button("Refresh \(item.title)") { onReselect(item) }
+                if let previousDestination {
+                    Button("Return to \(previousDestination.title)", action: onReturnPrevious)
+                }
+            }
+        }
+        .contextMenu {
+            if selected {
+                Button(action: { onReselect(item) }) {
+                    Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
+                }
+                if let previousDestination {
+                    Button(action: onReturnPrevious) {
+                        Label("Return to \(previousDestination.title)", systemImage: "arrow.uturn.backward")
+                    }
+                }
+            }
+        }
     }
 
     private func accessibilityHint(

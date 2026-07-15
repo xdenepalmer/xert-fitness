@@ -41,7 +41,7 @@ test('primary routing is typed, restorable, and owns native deep-link mapping', 
   assert.match(navigation, /private\(set\) var history: \[XertPrimaryDestination\]/);
   assert.match(navigation, /func returnToPrevious\(source: XertNavigationSource/);
   assert.match(navigation, /history\.count > historyLimit[\s\S]*history\.removeFirst/);
-  for (const source of ['restoration', 'dock', 'dockSwipe', 'content', 'deepLink', 'pushNotification', 'checkout']) {
+  for (const source of ['restoration', 'dock', 'dockSwipe', 'history', 'content', 'deepLink', 'pushNotification', 'checkout']) {
     assert.match(navigation, new RegExp(`case ${source}`));
   }
 });
@@ -67,6 +67,12 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /DragGesture\(minimumDistance: 36\)/);
   assert.match(root, /abs\(horizontal\) > 44[\s\S]*abs\(vertical\) \* 1\.35/);
   assert.match(root, /navigation\.step\(direction\)/);
+  assert.match(root, /previousDestination: navigation\.previousDestination/);
+  assert.match(root, /navigation\.returnToPrevious\(\)/);
+  assert.match(root, /\.accessibilityActions \{/);
+  assert.ok(root.includes('Button("Return to \\(previousDestination.title)"'));
+  assert.ok(root.includes('Label("Refresh \\(item.title)", systemImage: "arrow.clockwise")'));
+  assert.ok(root.includes('Label("Return to \\(previousDestination.title)", systemImage: "arrow.uturn.backward")'));
   assert.match(root, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
   assert.match(root, /withAnimation\(reduceMotion \? nil : \.easeOut/);
   assert.match(root, /active member notices/);

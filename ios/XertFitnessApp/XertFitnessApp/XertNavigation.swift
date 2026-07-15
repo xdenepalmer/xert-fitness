@@ -68,6 +68,7 @@ enum XertNavigationSource: String, Equatable {
     case restoration
     case dock
     case dockSwipe
+    case history
     case content
     case deepLink
     case pushNotification
@@ -143,7 +144,7 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func returnToPrevious(source: XertNavigationSource = .content) -> Bool {
+    func returnToPrevious(source: XertNavigationSource = .history) -> Bool {
         guard history.count > 1 else { return false }
         let previous = selection
         history.removeLast()

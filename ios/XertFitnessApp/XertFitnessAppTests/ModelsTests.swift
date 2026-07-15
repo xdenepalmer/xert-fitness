@@ -27,6 +27,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(navigation.lastTransition?.source, .dockSwipe)
         XCTAssertTrue(navigation.returnToPrevious())
         XCTAssertEqual(navigation.selection, .booking)
+        XCTAssertEqual(navigation.lastTransition?.source, .history)
 
         XCTAssertTrue(navigation.select(.events, source: .deepLink))
         XCTAssertTrue(navigation.select(.explore, source: .pushNotification))
