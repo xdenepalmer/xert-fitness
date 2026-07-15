@@ -2975,8 +2975,34 @@ private struct AdminProductsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
 
+    private var activeProducts: [AdminProduct] { admin.products.filter(\.active) }
+    private var liveBlockedProducts: [AdminProduct] { activeProducts.filter { !$0.hasStableStripePriceID } }
+    private var isLiveReady: Bool { !activeProducts.isEmpty && liveBlockedProducts.isEmpty }
+
     var body: some View {
         List {
+            Section {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: isLiveReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(isLiveReady ? Color.green : Color.orange)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("LIVE STRIPE READINESS").font(.caption.weight(.bold))
+                        if activeProducts.isEmpty {
+                            Text("Activate at least one pack and attach its live Stripe Price ID before launch.")
+                        } else if isLiveReady {
+                            Text("All \(activeProducts.count) active packs have stable Stripe Price IDs.")
+                        } else {
+                            Text("\(liveBlockedProducts.count) of \(activeProducts.count) active packs block live checkout: \(liveBlockedProducts.map(\.slug).joined(separator: ", ")).")
+                            Text("Test checkout may use dynamic prices. Live checkout requires a live price_ ID.")
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.75))
+                }
+                .padding(.vertical, 5)
+                .listRowBackground(Color.xertInk)
+            }
             if admin.products.isEmpty { Text("No session packs configured.").listRowBackground(Color.xertInk) }
             ForEach(admin.products) { product in
                 NavigationLink {
@@ -2994,9 +3020,17 @@ private struct AdminProductsView: View {
                                 .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
                         }
                         Spacer()
-                        Text(product.active ? "LIVE" : "OFF")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(product.active ? Color.green : Color.xertPale.opacity(0.4))
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(product.active ? "LIVE" : "OFF")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(product.active ? Color.green : Color.xertPale.opacity(0.4))
+                            if product.active {
+                                Label(product.hasStableStripePriceID ? "Stripe linked" : "Live blocked",
+                                      systemImage: product.hasStableStripePriceID ? "checkmark.circle" : "exclamationmark.triangle")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(product.hasStableStripePriceID ? Color.green : Color.orange)
+                            }
+                        }
                     }
                     .foregroundStyle(Color.xertOffWhite)
                     .padding(.vertical, 6)
@@ -3024,6 +3058,14 @@ private struct AdminProductEditor: View {
         _draft = State(initialValue: AdminProductDraft(product: product))
     }
 
+    private var normalizedStripePriceID: String {
+        draft.stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var stripePriceIDIsValid: Bool {
+        normalizedStripePriceID.isEmpty || normalizedStripePriceID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) != nil
+    }
+
     var body: some View {
         Form {
             Section("Pack details") {
@@ -3041,8 +3083,18 @@ private struct AdminProductEditor: View {
             Section("Sale state") {
                 Toggle("Active and purchasable", isOn: $draft.active)
                 Toggle("Featured pack", isOn: $draft.featured)
-                TextField("Stripe Price ID (optional)", text: $draft.stripePriceID)
+                TextField("Stripe Price ID (required for live checkout)", text: $draft.stripePriceID)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
+                if draft.active && normalizedStripePriceID.isEmpty {
+                    Label("This active pack blocks live Stripe checkout.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if !stripePriceIDIsValid {
+                    Label("Use a Stripe Price ID beginning with price_.", systemImage: "xmark.circle.fill")
+                        .font(.caption).foregroundStyle(.red)
+                } else if !normalizedStripePriceID.isEmpty {
+                    Label("Stable Stripe price linked.", systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green)
+                }
                 if product.stripe_price_id != nil {
                     Text("Replace or clear the Stripe Price ID before changing price or currency.")
                         .font(.caption).foregroundStyle(.orange)
@@ -3063,7 +3115,7 @@ private struct AdminProductEditor: View {
                         Spacer()
                     }
                 }
-                .disabled(admin.savingProductID != nil || draft == AdminProductDraft(product: product))
+                .disabled(admin.savingProductID != nil || draft == AdminProductDraft(product: product) || !stripePriceIDIsValid)
                 .listRowBackground(Color.xertSteel)
                 .foregroundStyle(Color.xertNavy)
             }

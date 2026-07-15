@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatPackPrice, formatPackValidity, normalizeProductAdminInput, normalizeProductCreateInput, packCta } from '../src/lib/products.js';
+import { formatPackPrice, formatPackValidity, normalizeProductAdminInput, normalizeProductCreateInput, packCta, productStripeReadiness } from '../src/lib/products.js';
 
 test('formats the administrator-managed product values for Australian members', () => {
   assert.equal(formatPackPrice(4800, 'aud'), '$48.00');
@@ -65,4 +65,22 @@ test('rejects ambiguous prices and malformed Stripe price IDs', () => {
   assert.throws(() => normalizeProductAdminInput({ ...valid, stripe_price_id: 'prod_ABC123' }), /price_/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'dollars' }), /3-letter/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, sort_order: -1 }), /Display order/);
+});
+
+test('reports the exact active packs blocking live Stripe checkout', () => {
+  assert.deepEqual(productStripeReadiness([
+    { slug: 'single', active: true, stripe_price_id: null },
+    { slug: 'starter-4', active: true, stripe_price_id: ' price_STARTER4 ' },
+    { slug: 'retired', active: false, stripe_price_id: null },
+    { slug: 'invalid', active: true, stripe_price_id: 'prod_INVALID' },
+  ]), {
+    activeCount: 3,
+    linkedCount: 1,
+    missingCount: 2,
+    missingSlugs: ['single', 'invalid'],
+    readyForLive: false,
+  });
+
+  assert.equal(productStripeReadiness([{ slug: 'single', active: true, stripe_price_id: 'price_LIVE1' }]).readyForLive, true);
+  assert.equal(productStripeReadiness([]).readyForLive, false);
 });

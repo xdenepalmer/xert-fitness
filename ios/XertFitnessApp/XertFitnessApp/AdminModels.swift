@@ -951,6 +951,10 @@ struct AdminProduct: Identifiable, Codable, Hashable {
     let updated_at: String
 
     var displayPrice: String { (Double(price_cents) / 100).formatted(.currency(code: currency.uppercased())) }
+    var hasStableStripePriceID: Bool {
+        guard let stripePriceID = stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return stripePriceID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) != nil
+    }
 }
 
 struct AdminProductDraft: Equatable {

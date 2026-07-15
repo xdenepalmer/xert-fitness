@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { createProduct, getAllProducts, updateProduct } from '@/lib/adminData';
-import { normalizeProductAdminInput, normalizeProductCreateInput, productStripeTransitionError } from '@/lib/products';
+import { normalizeProductAdminInput, normalizeProductCreateInput, productStripeReadiness, productStripeTransitionError } from '@/lib/products';
 import AdminLoadError from './AdminLoadError';
 import AdminConfirmDialog from './AdminConfirmDialog';
 
@@ -38,6 +38,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
 
   useEffect(() => () => onDirtyChange(product.id, false), [onDirtyChange, product.id]);
   let transitionError = '';
+  const hasStripePrice = /^price_[A-Za-z0-9]+$/.test(form.stripe_price_id.trim());
   try {
     transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
   } catch {
@@ -110,7 +111,15 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
       </div>
 
       <div>
-        <label htmlFor={`product-${product.id}-stripe`} className={labelCls}>Stripe Price ID (optional - overrides ad-hoc pricing)</label>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <label htmlFor={`product-${product.id}-stripe`} className={`${labelCls} mb-0`}>Stripe Price ID (required for live checkout)</label>
+          {form.active && (
+            <span className={`inline-flex items-center gap-1 font-body text-xs ${hasStripePrice ? 'text-green-400' : 'text-xert-orange'}`}>
+              {hasStripePrice ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {hasStripePrice ? 'Live ready' : 'Blocks live checkout'}
+            </span>
+          )}
+        </div>
         <input id={`product-${product.id}-stripe`} value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} />
         {transitionError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{transitionError}</p>}
       </div>
@@ -220,7 +229,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
             <div><label htmlFor="new-product-validity" className={labelCls}>Validity</label><input id="new-product-validity" type="number" min="1" value={form.validity_days} onChange={e => set('validity_days', e.target.value)} className={inputCls} /></div>
             <div><label htmlFor="new-product-order" className={labelCls}>Order</label><input id="new-product-order" type="number" min="0" value={form.sort_order} onChange={e => set('sort_order', e.target.value)} className={inputCls} /></div>
           </div>
-          <div><label htmlFor="new-product-stripe" className={labelCls}>Stripe Price ID (optional)</label><input id="new-product-stripe" value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} /></div>
+          <div><label htmlFor="new-product-stripe" className={labelCls}>Stripe Price ID (required for live checkout)</label><input id="new-product-stripe" value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} /></div>
           <div className="flex flex-wrap gap-5">
             <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.featured} onChange={e => set('featured', e.target.checked)} /> Featured</label>
             <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} /> Active and purchasable</label>
@@ -253,6 +262,7 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
   const [loadError, setLoadError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [dirtyEditors, setDirtyEditors] = useState(() => new Set());
+  const stripeReadiness = useMemo(() => productStripeReadiness(products), [products]);
 
   const handleDirtyChange = useCallback((key, dirty) => {
     setDirtyEditors(current => {
@@ -297,6 +307,28 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
         Price changes apply to new purchases immediately. Existing credits are unaffected.
       </p>
+      {!loading && !loadError && (
+        <div role="status" className={`mb-6 border-l-4 px-4 py-3 ${stripeReadiness.readyForLive ? 'border-green-500 bg-green-500/10' : 'border-xert-orange bg-xert-orange/10'}`}>
+          <div className="flex items-start gap-3">
+            {stripeReadiness.readyForLive
+              ? <CheckCircle2 className="mt-0.5 w-5 h-5 shrink-0 text-green-400" />
+              : <AlertTriangle className="mt-0.5 w-5 h-5 shrink-0 text-xert-orange" />}
+            <div>
+              <p className="font-display text-sm uppercase text-xert-offwhite">Live Stripe readiness</p>
+              <p className="mt-1 font-body text-xs text-xert-concrete/70">
+                {stripeReadiness.activeCount === 0
+                  ? 'No active packs. Activate at least one pack and attach its live Stripe Price ID before launch.'
+                  : stripeReadiness.readyForLive
+                    ? `All ${stripeReadiness.activeCount} active pack${stripeReadiness.activeCount === 1 ? '' : 's'} have stable Stripe Price IDs.`
+                    : `${stripeReadiness.missingCount} of ${stripeReadiness.activeCount} active pack${stripeReadiness.activeCount === 1 ? '' : 's'} block live checkout: ${stripeReadiness.missingSlugs.join(', ')}.`}
+              </p>
+              {!stripeReadiness.readyForLive && stripeReadiness.activeCount > 0 && (
+                <p className="mt-1 font-body text-xs text-xert-concrete/45">Test checkout may use dynamic prices. Live checkout intentionally refuses packs without a live price_ ID.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {loadError ? (
         <AdminLoadError message={loadError} onRetry={load} />
       ) : loading ? (

@@ -58,6 +58,10 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminAuditView/);
   assert.match(view, /AdminProductsView/);
   assert.match(view, /AdminProductEditor/);
+  assert.match(view, /LIVE STRIPE READINESS/);
+  assert.match(view, /liveBlockedProducts/);
+  assert.match(view, /This active pack blocks live Stripe checkout/);
+  assert.match(view, /stripePriceIDIsValid/);
   assert.match(api, /path: "admin_update_product"/);
   assert.match(api, /p_expected_updated_at: product\.updated_at/);
   assert.match(adminStore, /func saveProduct/);

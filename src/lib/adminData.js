@@ -1298,8 +1298,8 @@ export async function getOperationsHealth() {
       return {
         status: missingStripePrices > 0 ? 'attention' : 'ok',
         count: products.length,
-        detail: missingStripePrices > 0 ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} use ad-hoc Stripe pricing.` : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
-        action: missingStripePrices > 0 ? 'Add Stripe Price IDs for cleaner product reporting.' : null
+        detail: missingStripePrices > 0 ? `${products.length} active pack${products.length === 1 ? '' : 's'}; ${missingStripePrices} block live checkout until linked to a Stripe Price.` : `${products.length} active pack${products.length === 1 ? '' : 's'} with Stripe price IDs.`,
+        action: missingStripePrices > 0 ? 'Add live Stripe Price IDs in Session Packs before production cutover.' : null
       };
     }),
 

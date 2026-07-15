@@ -26,6 +26,19 @@ export function packCta(slug) {
   return PACK_CTAS[slug] || 'View Pack';
 }
 
+export function productStripeReadiness(products = []) {
+  const activeProducts = products.filter(product => Boolean(product?.active));
+  const missingProducts = activeProducts.filter(product => !/^price_[A-Za-z0-9]+$/.test(String(product?.stripe_price_id || '').trim()));
+
+  return {
+    activeCount: activeProducts.length,
+    linkedCount: activeProducts.length - missingProducts.length,
+    missingCount: missingProducts.length,
+    missingSlugs: missingProducts.map(product => String(product.slug || product.name || 'unnamed-pack')),
+    readyForLive: activeProducts.length > 0 && missingProducts.length === 0,
+  };
+}
+
 export function normalizeProductAdminInput(form) {
   const name = String(form.name || '').trim();
   if (!name) throw new Error('A pack name is required.');
