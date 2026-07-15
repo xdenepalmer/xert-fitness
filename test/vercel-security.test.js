@@ -29,8 +29,8 @@ test('Vercel never caches API responses or stale service workers', () => {
   assert.equal(headersFor('/sw.js')['Service-Worker-Allowed'], '/');
 });
 
-test('SPA routing excludes serverless API paths', () => {
+test('SPA routing excludes serverless APIs and platform association files', () => {
   assert.deepEqual(config.rewrites, [
-    { source: '/((?!api/).*)', destination: '/index.html' },
+    { source: '/((?!api/|\\.well-known/).*)', destination: '/index.html' },
   ]);
 });

@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appID": "25R438YK9F.com.xertfitness.app",
+        "components": [
+          {
+            "/": "/open/*",
+            "comment": "Opens canonical XERT member tasks in the native app."
+          }
+        ]
+      }
+    ]
+  }
+}

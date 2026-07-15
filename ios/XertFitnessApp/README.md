@@ -141,6 +141,10 @@ The signed release workflow also loads the shared `appstore` group. It expects t
 
 Create or use the shared App Store Connect integration named `codemagic`, then enable **Push Notifications** for `com.xertfitness.app` in Apple Developer and fetch its App Store provisioning profile. The release guard verifies the bundle identifier, complete iPad orientation metadata, export-compliance declaration, `aps-environment`, `application-identifier`, and the bundled `PrivacyInfo.xcprivacy` in the signed IPA before TestFlight upload. It intentionally fails when the App ID/profile is missing the push capability or Apple-required bundle metadata is absent.
 
+### Universal-link activation
+
+The production site serves `/.well-known/apple-app-site-association` for Apple team `25R438YK9F`, bundle `com.xertfitness.app`, and only the canonical `/open/*` task-link namespace. Before adding `applinks:xert-fitness.vercel.app` to `XertFitnessApp.entitlements`, confirm the XERT App ID belongs to that same Apple team, enable **Associated Domains** for the XERT App ID, and regenerate the App Store provisioning profile. Adding the entitlement before the capability/profile update will make the signed-entitlement release guard fail.
+
 Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 30 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability.
 
 Remote member notices also require these server-only Vercel variables. Never place them in `xert_env`, the app bundle, or a `VITE_` variable:
