@@ -2627,6 +2627,9 @@ private struct AdminPlatformView: View {
                         Toggle("Bookings enabled", isOn: settingBinding(\.bookings_enabled))
                         Text("Disabling bookings changes public class actions to registration interest.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                        Toggle("Session pack payments", isOn: settingBinding(\.payments_enabled))
+                        Text("Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass.")
+                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         Toggle("Launch countdown", isOn: settingBinding(\.countdown_enabled))
                     }
                     Section("Public announcement") {

@@ -94,6 +94,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6 space-y-0">
         <Toggle label="Countdown enabled" desc="Shows countdown timer on public pages." field="countdown_enabled" />
         <Toggle label="Bookings enabled" desc="Shows booking buttons on class cards. When off, shows Register Interest CTA." field="bookings_enabled" />
+        <Toggle label="Session pack payments" desc="Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass." field="payments_enabled" />
         <Toggle label="Announcement banner" desc="Shows a banner across the top of the public site." field="announcement_banner_enabled" />
       </div>
 

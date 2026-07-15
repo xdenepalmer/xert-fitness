@@ -18,6 +18,7 @@ export function normalizeLaunchSettings(settings = {}) {
   return {
     countdown_enabled: Boolean(settings.countdown_enabled),
     bookings_enabled: Boolean(settings.bookings_enabled),
+    payments_enabled: Boolean(settings.payments_enabled),
     announcement_banner_enabled: Boolean(settings.announcement_banner_enabled),
     target_launch_date: normalizeDate(settings.target_launch_date),
     announcement_banner_text: announcement || null,
@@ -28,6 +29,7 @@ export function launchSettingsChanged(current = {}, saved = {}) {
   const fields = [
     'countdown_enabled',
     'bookings_enabled',
+    'payments_enabled',
     'announcement_banner_enabled',
     'target_launch_date',
     'announcement_banner_text',

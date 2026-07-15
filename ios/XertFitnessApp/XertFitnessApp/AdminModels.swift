@@ -244,6 +244,7 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     var target_launch_date: String
     var countdown_enabled: Bool
     var bookings_enabled: Bool
+    var payments_enabled: Bool
     var announcement_banner_text: String?
     var announcement_banner_enabled: Bool
     let updated_at: String

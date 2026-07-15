@@ -100,6 +100,16 @@ export async function paymentFulfillmentIsReady(admin) {
   return data?.capability === PAYMENT_FULFILLMENT_CAPABILITY;
 }
 
+export async function sessionPackPaymentsAreEnabled(admin) {
+  const { data, error } = await admin
+    .from('admin_settings')
+    .select('payments_enabled')
+    .limit(1)
+    .maybeSingle();
+  if (error) return false;
+  return data?.payments_enabled === true;
+}
+
 /**
  * Stripe return URLs must never come from a request Origin header: browsers
  * and non-browser clients can supply that header themselves. A configured
@@ -288,6 +298,12 @@ export default async function handler(request, response) {
     if (!await paymentFulfillmentIsReady(admin)) {
       return json({
         error: 'Checkout is temporarily unavailable while payment services are being upgraded.',
+      }, 503);
+    }
+
+    if (!await sessionPackPaymentsAreEnabled(admin)) {
+      return json({
+        error: 'Session pack purchases are temporarily unavailable.',
       }, 503);
     }
 

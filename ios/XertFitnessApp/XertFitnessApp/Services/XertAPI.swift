@@ -620,7 +620,7 @@ final class XertAPI {
         let settings: [AdminPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,announcement_banner_text,announcement_banner_enabled,updated_at"),
+                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,announcement_banner_text,announcement_banner_enabled,updated_at"),
                 URLQueryItem(name: "limit", value: "1")
             ],
             auth: auth
@@ -1436,6 +1436,7 @@ final class XertAPI {
             target_launch_date: settings.target_launch_date,
             countdown_enabled: settings.countdown_enabled,
             bookings_enabled: settings.bookings_enabled,
+            payments_enabled: settings.payments_enabled,
             announcement_banner_text: banner.isEmpty ? nil : banner,
             announcement_banner_enabled: settings.announcement_banner_enabled,
             updated_at: ISO8601DateFormatter.standard.string(from: Date())
@@ -1859,6 +1860,7 @@ private struct AdminSettingsUpdate: Encodable {
     let target_launch_date: String
     let countdown_enabled: Bool
     let bookings_enabled: Bool
+    let payments_enabled: Bool
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
     let updated_at: String

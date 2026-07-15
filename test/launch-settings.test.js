@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { launchSettingsChanged, normalizeLaunchSettings } from '../src/lib/launchSettings.js';
 
-test('normalizes only launch settings that the public app actually consumes', () => {
+test('normalizes every live platform control, including the server payment switch', () => {
   const result = normalizeLaunchSettings({
     id: 'must-not-be-sent', payments_enabled: true, fitbox_enabled: true,
     countdown_enabled: true, bookings_enabled: false,
@@ -15,6 +15,7 @@ test('normalizes only launch settings that the public app actually consumes', ()
   assert.deepEqual(result, {
     countdown_enabled: true,
     bookings_enabled: false,
+    payments_enabled: true,
     announcement_banner_enabled: true,
     target_launch_date: '2026-08-01',
     announcement_banner_text: 'Foundation registrations open',
@@ -31,6 +32,7 @@ test('tracks only live launch fields against the last saved snapshot', () => {
     id: 'row-id',
     countdown_enabled: true,
     bookings_enabled: false,
+    payments_enabled: false,
     announcement_banner_enabled: false,
     target_launch_date: '2026-08-01',
     announcement_banner_text: null,
@@ -39,5 +41,6 @@ test('tracks only live launch fields against the last saved snapshot', () => {
   assert.equal(launchSettingsChanged({ ...saved }, saved), false);
   assert.equal(launchSettingsChanged({ ...saved, id: 'different-row-id' }, saved), false);
   assert.equal(launchSettingsChanged({ ...saved, bookings_enabled: true }, saved), true);
+  assert.equal(launchSettingsChanged({ ...saved, payments_enabled: true }, saved), true);
   assert.equal(launchSettingsChanged({ ...saved, announcement_banner_text: '' }, saved), false);
 });

@@ -10,6 +10,7 @@ import {
   pendingOrderForCheckout,
   paymentFulfillmentIsReady,
   reusableCheckoutURL,
+  sessionPackPaymentsAreEnabled,
   stripeModeForSecret,
 } from '../api/checkout.js';
 
@@ -59,6 +60,34 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
   assert.ok(gate >= 0 && stripeConfigurationGate > gate);
   assert.ok(gate >= 0 && sessionCreation > gate);
   assert.match(source, /payment services are being upgraded[\s\S]*503/);
+});
+
+test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {
+  const query = {
+    select() { return query; },
+    limit() { return query; },
+    async maybeSingle() {
+      return { data: { payments_enabled: true }, error: null };
+    },
+  };
+  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), true);
+
+  query.maybeSingle = async () => ({ data: { payments_enabled: false }, error: null });
+  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
+  query.maybeSingle = async () => ({ data: null, error: new Error('settings unavailable') });
+  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const authenticationGate = source.indexOf("if (!token) return json({ error: 'Not authenticated.' }, 401)");
+  const paymentGate = source.indexOf('if (!await sessionPackPaymentsAreEnabled(admin))');
+  const stripeConfigurationGate = source.indexOf('if (!process.env.STRIPE_SECRET_KEY)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(paymentGate > authenticationGate);
+  assert.ok(stripeConfigurationGate > paymentGate);
+  assert.ok(sessionCreation > paymentGate);
+  assert.match(source, /Session pack purchases are temporarily unavailable[\s\S]*503/);
 });
 
 test('checkout exposes a value-free gate for the complete canonical payment environment', () => {

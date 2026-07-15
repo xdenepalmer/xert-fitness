@@ -121,8 +121,9 @@ Open **iOS Admin > Operations Health** and require all of the following:
 
 ## Rollback
 
-If any live check fails, disable public bookings in **Admin > Platform Controls**
-and do not delete Stripe records. Preserve orders and webhook history for
+If any live check fails, disable **Session pack payments** in **Admin > Platform
+Controls**. This server-side switch blocks new website and iOS Checkout sessions;
+do not delete Stripe records. Preserve orders and webhook history for
 reconciliation. Restore the previous Vercel deployment or correct the affected
 secret/Price, redeploy, then use **Admin > Finance > Check and reconcile payment**
 for any customer whose payment status is uncertain.
