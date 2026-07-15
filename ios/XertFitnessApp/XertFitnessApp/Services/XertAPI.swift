@@ -1702,6 +1702,9 @@ final class XertAPI {
         path: String,
         queryItems: [URLQueryItem] = []
     ) throws -> URLRequest {
+        guard AppConfig.isTrustedServiceBaseURL(baseURL) else {
+            throw APIError(message: "XERT services are temporarily unavailable.")
+        }
         var url = baseURL
         for component in path.split(separator: "/") {
             url.appendPathComponent(String(component))

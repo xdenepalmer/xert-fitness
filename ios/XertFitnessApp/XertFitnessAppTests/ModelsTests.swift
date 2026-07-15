@@ -648,6 +648,38 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(AppConfig.normalizedWebBaseURL("javascript:alert('no')"))
     }
 
+    func testRuntimeConfigurationTrustsOnlyXERTOriginsAndPublicKeys() throws {
+        let supabase = try XCTUnwrap(AppConfig.canonicalServiceURL(
+            "https://ugmkwoapjcpiucsrxwzt.supabase.co/",
+            expectedHost: AppConfig.supabaseHost
+        ))
+        let vercel = try XCTUnwrap(AppConfig.canonicalServiceURL(
+            "https://xert-fitness.vercel.app",
+            expectedHost: AppConfig.vercelHost
+        ))
+        XCTAssertTrue(AppConfig.isTrustedServiceBaseURL(supabase))
+        XCTAssertTrue(AppConfig.isTrustedServiceBaseURL(vercel))
+
+        for unsafe in [
+            "http://ugmkwoapjcpiucsrxwzt.supabase.co",
+            "https://another-project.supabase.co",
+            "https://ugmkwoapjcpiucsrxwzt.supabase.co/rest/v1",
+            "https://user:password@ugmkwoapjcpiucsrxwzt.supabase.co",
+            "\thttps://ugmkwoapjcpiucsrxwzt.supabase.co"
+        ] {
+            XCTAssertNil(AppConfig.canonicalServiceURL(unsafe, expectedHost: AppConfig.supabaseHost))
+        }
+        XCTAssertFalse(AppConfig.isTrustedServiceBaseURL(URL(string: "https://example.com")!))
+
+        let legacyAnon = "e30.eyJyb2xlIjoiYW5vbiJ9.signature"
+        let legacyServiceRole = "e30.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature"
+        XCTAssertTrue(AppConfig.isPublicSupabaseKey(legacyAnon))
+        XCTAssertTrue(AppConfig.isPublicSupabaseKey("sb_publishable_abcdefghijklmnopqrstuvwx"))
+        XCTAssertFalse(AppConfig.isPublicSupabaseKey(legacyServiceRole))
+        XCTAssertFalse(AppConfig.isPublicSupabaseKey("sb_secret_abcdefghijklmnopqrstuvwx"))
+        XCTAssertFalse(AppConfig.isPublicSupabaseKey("\t\(legacyAnon)"))
+    }
+
     func testWebRoutesReplaceAnAccidentalBasePath() {
         let base = AppConfig.normalizedWebBaseURL("https://xert-fitness.vercel.app/preview-token")!
 
