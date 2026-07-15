@@ -53,6 +53,7 @@ workflows:
       - name: Generate Xcode project
         script: |
           cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          bash ci/configure-universal-links.sh
           xcodegen generate
       - name: Run Swift unit tests
         script: |
@@ -245,7 +246,7 @@ workflows:
             echo "::warning:: Production Stripe webhook preflight expected HTTP 400 but received $WEBHOOK_CODE. Response body:"
             head -c 300 "$WEBHOOK_BODY"; echo
             case "$WEBHOOK_CODE" in
-              500) echo "Add STRIPE_WEBHOOK_SECRET and the other server secrets to the Vercel Production environment, then redeploy." ;;
+              503) echo "Add STRIPE_WEBHOOK_SECRET and the other server secrets to the Vercel Production environment, then redeploy." ;;
               404) echo "The /api/stripe-webhook Vercel Function was not deployed." ;;
               000) echo "The Stripe webhook function timed out or could not be reached." ;;
             esac
@@ -359,6 +360,7 @@ workflows:
       - name: Generate Xcode project
         script: |
           cd "$CM_BUILD_DIR/$IOS_DIRECTORY"
+          bash ci/configure-universal-links.sh
           xcodegen generate
       - name: Run Swift unit tests
         script: |
@@ -423,6 +425,16 @@ workflows:
             echo "::error:: Missing application-identifier entitlement!"
             exit 1
           }
+          ASSOCIATED_DOMAINS="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains' "$WORK/entitlements.plist" 2>/dev/null || true)"
+          if [ "${ENABLE_UNIVERSAL_LINKS:-false}" = "true" ]; then
+            printf '%s' "$ASSOCIATED_DOMAINS" | grep -Fq "applinks:xert-fitness.vercel.app" || {
+              echo "::error:: Universal Links were enabled but the signed IPA is missing the XERT Associated Domains entitlement."
+              exit 1
+            }
+          elif [ -n "$ASSOCIATED_DOMAINS" ]; then
+            echo "::error:: Signed IPA contains Associated Domains while ENABLE_UNIVERSAL_LINKS is not true."
+            exit 1
+          fi
 
           INFO_PLIST="$APP_PATH/Info.plist"
           [ -f "$INFO_PLIST" ] || { echo "::error:: signed app Info.plist is missing"; exit 1; }
@@ -466,7 +478,7 @@ workflows:
             echo "::error:: Privacy manifest is missing XERT account data declarations!"
             exit 1
           }
-          echo "Signed bundle verified: identifier, iPad orientations, export compliance, entitlements and privacy manifest present."
+          echo "Signed bundle verified: identifier, iPad orientations, export compliance, gated entitlements and privacy manifest present."
     artifacts:
       - ios/XertFitnessApp/build/test-results.xcresult
       - ios/XertFitnessApp/build/ios/ipa/*.ipa

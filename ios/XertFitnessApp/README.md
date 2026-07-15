@@ -143,7 +143,7 @@ Create or use the shared App Store Connect integration named `codemagic`, then e
 
 ### Universal-link activation
 
-The production site serves `/.well-known/apple-app-site-association` for Apple team `25R438YK9F`, bundle `com.xertfitness.app`, and only the canonical `/open/*` task-link namespace. Before adding `applinks:xert-fitness.vercel.app` to `XertFitnessApp.entitlements`, confirm the XERT App ID belongs to that same Apple team, enable **Associated Domains** for the XERT App ID, and regenerate the App Store provisioning profile. Adding the entitlement before the capability/profile update will make the signed-entitlement release guard fail.
+The production site serves `/.well-known/apple-app-site-association` for Apple team `25R438YK9F`, bundle `com.xertfitness.app`, and only the canonical `/open/*` task-link namespace. Confirm the XERT App ID belongs to that same Apple team, enable **Associated Domains** for the XERT App ID, and regenerate the App Store provisioning profile. Then add `ENABLE_UNIVERSAL_LINKS=true` to the Codemagic `xert_env` group. CI verifies the live AASA file, injects `applinks:xert-fitness.vercel.app` before project generation, and requires the entitlement in the signed IPA. Until that switch is explicitly enabled, CI removes the entitlement so the current profile keeps building safely.
 
 Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 30 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability.
 
