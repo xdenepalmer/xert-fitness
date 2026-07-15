@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   assertStripeEventMode,
@@ -9,6 +10,8 @@ import {
   persistStripeRefund,
   stripeRefundForEvent,
   stripeModeForSecret,
+  validStripeSignatureHeader,
+  webhookRequestIssue,
 } from '../api/stripe-webhook.js';
 
 const NOW = new Date('2026-07-12T00:00:00.000Z');
@@ -51,6 +54,44 @@ test('fails closed when Stripe event and secret-key modes do not match', () => {
     () => assertStripeEventMode({ ...checkoutEvent(), livemode: undefined }, 'sk_test_xert'),
     /mode is missing/i
   );
+});
+
+test('webhook validates a bounded signed JSON envelope before Stripe parsing', () => {
+  const signature = `t=1783814400,v1=${'a'.repeat(64)}`;
+  assert.equal(validStripeSignatureHeader(signature), true);
+  assert.equal(validStripeSignatureHeader(`v1=${'a'.repeat(64)}`), false);
+  assert.equal(validStripeSignatureHeader('t=1783814400,v1=short'), false);
+  assert.equal(validStripeSignatureHeader('x'.repeat(4097)), false);
+  assert.equal(webhookRequestIssue({ contentType: 'application/json', signature, rawBody: '{}' }), null);
+  assert.deepEqual(webhookRequestIssue({ contentType: 'text/plain', signature, rawBody: '{}' }), {
+    status: 415,
+    message: 'Webhook content type must be application/json.',
+  });
+  assert.deepEqual(webhookRequestIssue({ contentType: 'application/json', signature: '', rawBody: '{}' }), {
+    status: 400,
+    message: 'Invalid webhook signature.',
+  });
+  assert.deepEqual(webhookRequestIssue({ contentType: 'application/json', signature, rawBody: '' }), {
+    status: 400,
+    message: 'Webhook body is required.',
+  });
+  assert.deepEqual(webhookRequestIssue({
+    contentType: 'application/json; charset=utf-8',
+    signature,
+    rawBody: 'x'.repeat(1024 * 1024 + 1),
+  }), {
+    status: 413,
+    message: 'Webhook body is too large.',
+  });
+});
+
+test('webhook public failures never echo Stripe or database exception messages', async () => {
+  const source = await readFile(new URL('../api/stripe-webhook.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /signature verification failed: \$\{e\.message\}/);
+  assert.doesNotMatch(source, /Handler error: \$\{e\.message\}/);
+  assert.match(source, /return text\('Invalid webhook signature\.', 400\)/);
+  assert.match(source, /return text\('Webhook processing failed\.', 500\)/);
+  assert.match(source, /Webhook service is unavailable\.[\s\S]*503/);
 });
 
 test('creates one durable fulfilment record for a paid checkout', () => {

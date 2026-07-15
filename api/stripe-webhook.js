@@ -18,6 +18,34 @@ const FAILURE_EVENT_TYPES = new Set([
   'checkout.session.expired',
   'checkout.session.async_payment_failed',
 ]);
+const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+
+export function validStripeSignatureHeader(value) {
+  const header = String(value || '').trim();
+  if (!header || header.length > 4096) return false;
+  const parts = header.split(',').map(part => part.trim());
+  const timestamp = parts.find(part => part.startsWith('t='))?.slice(2);
+  const signatures = parts
+    .filter(part => part.startsWith('v1='))
+    .map(part => part.slice(3));
+  return /^\d+$/.test(timestamp || '')
+    && signatures.some(signature => /^[a-f0-9]{16,}$/i.test(signature));
+}
+
+export function webhookRequestIssue({ contentType, signature, rawBody }) {
+  if (!String(contentType || '').toLowerCase().startsWith('application/json')) {
+    return { status: 415, message: 'Webhook content type must be application/json.' };
+  }
+  if (!validStripeSignatureHeader(signature)) {
+    return { status: 400, message: 'Invalid webhook signature.' };
+  }
+  const bodyBytes = Buffer.byteLength(String(rawBody || ''), 'utf8');
+  if (bodyBytes === 0) return { status: 400, message: 'Webhook body is required.' };
+  if (bodyBytes > MAX_WEBHOOK_BODY_BYTES) {
+    return { status: 413, message: 'Webhook body is too large.' };
+  }
+  return null;
+}
 
 export function stripeModeForSecret(secretKey) {
   if (/^sk_live_/.test(secretKey || '')) return 'live';
@@ -211,10 +239,10 @@ export default async function handler(request, response) {
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!process.env.STRIPE_SECRET_KEY || !webhookSecret) {
-    return text('Stripe is not configured.', 500);
+    return text('Webhook service is unavailable.', 503);
   }
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    return text('Supabase is not configured.', 500);
+    return text('Webhook service is unavailable.', 503);
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -222,12 +250,23 @@ export default async function handler(request, response) {
 
   const signature = requestHeader(request, 'stripe-signature');
   const rawBody = await requestText(request);
+  const requestIssue = webhookRequestIssue({
+    contentType: requestHeader(request, 'content-type'),
+    signature,
+    rawBody,
+  });
+  if (requestIssue) return text(requestIssue.message, requestIssue.status);
 
   let event;
   try {
     event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
   } catch (e) {
-    return text(`Webhook signature verification failed: ${e.message}`, 400);
+    console.warn('Stripe webhook signature rejected.', {
+      name: String(e?.name || 'Error'),
+      type: String(e?.type || ''),
+      code: String(e?.code || ''),
+    });
+    return text('Invalid webhook signature.', 400);
   }
 
   try {
@@ -239,8 +278,14 @@ export default async function handler(request, response) {
     const refund = stripeRefundForEvent(event);
     if (refund) await persistStripeRefund(admin, refund);
   } catch (e) {
-      // 500 makes Stripe retry delivery.
-      return text(`Handler error: ${e.message}`, 500);
+    console.error('Stripe webhook processing failed.', {
+      eventId: String(event?.id || ''),
+      eventType: String(event?.type || ''),
+      name: String(e?.name || 'Error'),
+      code: String(e?.code || ''),
+    });
+    // A generic 500 makes Stripe retry without exposing provider or SQL details.
+    return text('Webhook processing failed.', 500);
   }
 
   return sendJson(response, { received: true });
