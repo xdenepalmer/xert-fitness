@@ -99,9 +99,43 @@ struct XertNavigationTransition: Equatable {
 
 enum XertNavigationCommandAction: Hashable {
     case destination(XertPrimaryDestination)
+    case activity(XertNavigationActivity)
     case previous
     case refresh
     case owner
+}
+
+enum XertNavigationActivity: Hashable {
+    case notices
+    case upcomingBookings
+    case eventGoals
+    case pendingCheckout
+}
+
+enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
+    case now = "Now"
+    case navigate = "Navigate"
+    case system = "System"
+
+    var id: Self { self }
+}
+
+struct XertNavigationContext: Equatable {
+    let isSignedIn: Bool
+    let noticeCount: Int
+    let bookingCount: Int
+    let creditCount: Int
+    let eventGoalCount: Int
+    let hasPendingCheckout: Bool
+
+    static let empty = XertNavigationContext(
+        isSignedIn: false,
+        noticeCount: 0,
+        bookingCount: 0,
+        creditCount: 0,
+        eventGoalCount: 0,
+        hasPendingCheckout: false
+    )
 }
 
 struct XertNavigationCommand: Identifiable, Hashable {
@@ -110,6 +144,7 @@ struct XertNavigationCommand: Identifiable, Hashable {
     let subtitle: String
     let icon: String
     let keywords: [String]
+    let section: XertNavigationCommandSection
     let action: XertNavigationCommandAction
 
     fileprivate var searchIndex: String {
@@ -136,19 +171,25 @@ final class XertNavigationCoordinator: ObservableObject {
         history.dropLast().last
     }
 
-    func commandPaletteCommands(isAdmin: Bool) -> [XertNavigationCommand] {
+    func commandPaletteCommands(
+        isAdmin: Bool,
+        context: XertNavigationContext = .empty
+    ) -> [XertNavigationCommand] {
         var commands = XertPrimaryDestination.dockOrder
             .filter { $0 != selection }
             .map { destination in
                 XertNavigationCommand(
                     id: "destination-\(destination.rawValue)",
                     title: "Open \(destination.title)",
-                    subtitle: commandSubtitle(for: destination),
+                    subtitle: commandSubtitle(for: destination, context: context),
                     icon: destination.icon,
                     keywords: commandKeywords(for: destination),
+                    section: .navigate,
                     action: .destination(destination)
                 )
             }
+
+        commands.insert(contentsOf: activityCommands(context: context), at: 0)
 
         commands.append(XertNavigationCommand(
             id: "refresh-\(selection.rawValue)",
@@ -156,6 +197,7 @@ final class XertNavigationCoordinator: ObservableObject {
             subtitle: "Reload the latest XERT member and training data",
             icon: "arrow.clockwise",
             keywords: ["reload", "sync", "update", selection.title],
+            section: .system,
             action: .refresh
         ))
 
@@ -166,6 +208,7 @@ final class XertNavigationCoordinator: ObservableObject {
                 subtitle: "Return through your workspace history",
                 icon: "arrow.uturn.backward",
                 keywords: ["back", "previous", "history", previousDestination.title],
+                section: .system,
                 action: .previous
             ))
         }
@@ -177,6 +220,7 @@ final class XertNavigationCoordinator: ObservableObject {
                 subtitle: "Open protected gym operations and platform controls",
                 icon: "waveform.path.ecg.rectangle",
                 keywords: ["admin", "business", "operations", "members", "payments"],
+                section: .system,
                 action: .owner
             ))
         }
@@ -272,14 +316,84 @@ final class XertNavigationCoordinator: ObservableObject {
         )
     }
 
-    private func commandSubtitle(for destination: XertPrimaryDestination) -> String {
-        switch destination {
-        case .home: return "Member dashboard, notices and next training actions"
-        case .booking: return "Classes, availability, session packs and PT requests"
-        case .events: return "Annual event calendar and shared competition goals"
-        case .explore: return "Training philosophy, coaches and XERT information"
-        case .account: return "Bookings, credits, purchases and account security"
+    private func activityCommands(context: XertNavigationContext) -> [XertNavigationCommand] {
+        guard context.isSignedIn else { return [] }
+        var commands: [XertNavigationCommand] = []
+
+        if context.hasPendingCheckout {
+            commands.append(XertNavigationCommand(
+                id: "activity-pending-checkout",
+                title: "Check purchase confirmation",
+                subtitle: "Reconcile your pending session-pack purchase",
+                icon: "clock.arrow.circlepath",
+                keywords: ["purchase", "payment", "stripe", "pending", "credits"],
+                section: .now,
+                action: .activity(.pendingCheckout)
+            ))
         }
+        if context.noticeCount > 0 {
+            commands.append(XertNavigationCommand(
+                id: "activity-notices",
+                title: "Review \(context.noticeCount) member \(noun(context.noticeCount, singular: "notice", plural: "notices"))",
+                subtitle: "Open current updates from the XERT team",
+                icon: "bell.badge",
+                keywords: ["announcement", "message", "update", "news"],
+                section: .now,
+                action: .activity(.notices)
+            ))
+        }
+        if context.bookingCount > 0 {
+            commands.append(XertNavigationCommand(
+                id: "activity-upcoming-bookings",
+                title: "View \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))",
+                subtitle: "Review class details, reminders and cancellations",
+                icon: "calendar.badge.clock",
+                keywords: ["class", "schedule", "reminder", "cancel"],
+                section: .now,
+                action: .activity(.upcomingBookings)
+            ))
+        }
+        if context.eventGoalCount > 0 {
+            commands.append(XertNavigationCommand(
+                id: "activity-event-goals",
+                title: "Review \(context.eventGoalCount) event \(noun(context.eventGoalCount, singular: "goal", plural: "goals"))",
+                subtitle: "See the competitions you are training toward",
+                icon: "target",
+                keywords: ["race", "competition", "calendar", "training"],
+                section: .now,
+                action: .activity(.eventGoals)
+            ))
+        }
+        return commands
+    }
+
+    private func commandSubtitle(
+        for destination: XertPrimaryDestination,
+        context: XertNavigationContext
+    ) -> String {
+        switch destination {
+        case .home:
+            return context.noticeCount > 0
+                ? "\(context.noticeCount) active \(noun(context.noticeCount, singular: "notice", plural: "notices")) and next training actions"
+                : "Member dashboard, notices and next training actions"
+        case .booking:
+            return context.isSignedIn
+                ? "\(context.creditCount) \(noun(context.creditCount, singular: "credit", plural: "credits")) available; classes, packs and PT"
+                : "Classes, availability, session packs and PT requests"
+        case .events:
+            return context.eventGoalCount > 0
+                ? "\(context.eventGoalCount) selected \(noun(context.eventGoalCount, singular: "goal", plural: "goals")) in the annual calendar"
+                : "Annual event calendar and shared competition goals"
+        case .explore: return "Training philosophy, coaches and XERT information"
+        case .account:
+            return context.bookingCount > 0
+                ? "\(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings")), purchases and security"
+                : "Bookings, credits, purchases and account security"
+        }
+    }
+
+    private func noun(_ count: Int, singular: String, plural: String) -> String {
+        count == 1 ? singular : plural
     }
 
     private func commandKeywords(for destination: XertPrimaryDestination) -> [String] {

@@ -79,6 +79,40 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testNavigationCommandPalettePromotesLiveMemberActivity() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        let context = XertNavigationContext(
+            isSignedIn: true,
+            noticeCount: 2,
+            bookingCount: 1,
+            creditCount: 7,
+            eventGoalCount: 3,
+            hasPendingCheckout: true
+        )
+
+        let commands = navigation.commandPaletteCommands(isAdmin: false, context: context)
+        XCTAssertEqual(
+            commands.filter { $0.section == .now }.map(\.action),
+            [
+                .activity(.pendingCheckout),
+                .activity(.notices),
+                .activity(.upcomingBookings),
+                .activity(.eventGoals),
+            ]
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(commands, query: "stripe pending").map(\.action),
+            [.activity(.pendingCheckout)]
+        )
+        XCTAssertTrue(commands.contains {
+            $0.action == .destination(.booking) && $0.subtitle.contains("7 credits available")
+        })
+        XCTAssertFalse(
+            navigation.commandPaletteCommands(isAdmin: false, context: .empty)
+                .contains { $0.section == .now }
+        )
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

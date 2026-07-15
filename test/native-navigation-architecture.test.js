@@ -76,11 +76,17 @@ test('native navigation exposes a searchable contextual command switcher', async
     readFile(new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url), 'utf8'),
   ]);
   assert.match(navigation, /enum XertNavigationCommandAction: Hashable/);
-  assert.match(navigation, /func commandPaletteCommands\(isAdmin: Bool\)/);
+  assert.match(navigation, /struct XertNavigationContext: Equatable/);
+  assert.match(navigation, /enum XertNavigationActivity: Hashable/);
+  assert.match(navigation, /enum XertNavigationCommandSection: String, CaseIterable, Identifiable/);
+  assert.match(navigation, /func commandPaletteCommands\([\s\S]*context: XertNavigationContext = \.empty/);
   assert.match(navigation, /static func filteredCommands/);
   assert.match(navigation, /terms\.allSatisfy \{ command\.searchIndex\.contains\(\$0\) \}/);
   assert.match(navigation, /if isAdmin \{[\s\S]*action: \.owner/);
   assert.match(root, /XertNavigationCommandPalette/);
+  assert.match(root, /context: navigationContext/);
+  assert.match(root, /XertNavigationCommandSection\.allCases/);
+  assert.match(root, /Section \{[\s\S]*Text\(section\.rawValue\)/);
   assert.match(root, /\.searchable\(text: \$query/);
   assert.match(root, /keyboardShortcut\("k", modifiers: \.command\)/);
   assert.match(root, /accessibilityAction\(named: "Open XERT quick switcher"/);
@@ -89,7 +95,9 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /guard store\.profile\?\.isAdmin == true else \{ return \}/);
   assert.match(root, /\.sheet\(isPresented: \$showingNavigationCommands, onDismiss: completeCommandDismissal\)/);
   assert.match(root, /opensAdminAfterCommandDismissal = true[\s\S]*completeCommandDismissal/);
+  assert.match(root, /executeNavigationActivity[\s\S]*case \.pendingCheckout:[\s\S]*store\.reconcilePendingCheckout\(\)/);
   assert.match(modelsTests, /testNavigationCommandPaletteIsContextualRoleAwareAndSearchable/);
+  assert.match(modelsTests, /testNavigationCommandPalettePromotesLiveMemberActivity/);
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
@@ -104,6 +112,9 @@ test('navigation carries operational state and native interaction feedback', asy
   const root = await readFile(rootURL, 'utf8');
   assert.match(root, /noticeCount: store\.announcements\.count/);
   assert.match(root, /bookingCount: activeBookingCount/);
+  assert.match(root, /creditCount: store\.creditTotal/);
+  assert.match(root, /eventGoalCount: store\.eventGoalIDs\.count/);
+  assert.match(root, /hasPendingCheckout: store\.isCheckoutConfirmationPending \|\| store\.isReconcilingCheckout/);
   assert.match(root, /UISelectionFeedbackGenerator\(\)\.selectionChanged\(\)/);
   assert.match(root, /matchedGeometryEffect\(id: "primary-navigation-selection"/);
   assert.match(root, /dynamicTypeSize\.isAccessibilitySize \? 80 : 66/);

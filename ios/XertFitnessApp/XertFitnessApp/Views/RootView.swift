@@ -145,7 +145,10 @@ struct RootView: View {
         }
         .sheet(isPresented: $showingNavigationCommands, onDismiss: completeCommandDismissal) {
             XertNavigationCommandPalette(
-                commands: navigation.commandPaletteCommands(isAdmin: store.profile?.isAdmin == true),
+                commands: navigation.commandPaletteCommands(
+                    isAdmin: store.profile?.isAdmin == true,
+                    context: navigationContext
+                ),
                 onSelect: executeNavigationCommand
             )
             .presentationDetents([.medium, .large])
@@ -176,6 +179,17 @@ struct RootView: View {
 
     private var navigationPresentation: XertNavigationPresentation {
         .resolve(isRegularWidth: horizontalSizeClass == .regular)
+    }
+
+    private var navigationContext: XertNavigationContext {
+        XertNavigationContext(
+            isSignedIn: store.isSignedIn,
+            noticeCount: store.announcements.count,
+            bookingCount: activeBookingCount,
+            creditCount: store.creditTotal,
+            eventGoalCount: store.eventGoalIDs.count,
+            hasPendingCheckout: store.isCheckoutConfirmationPending || store.isReconcilingCheckout
+        )
     }
 
     private var navigationDock: some View {
@@ -239,6 +253,8 @@ struct RootView: View {
         switch command.action {
         case .destination(let destination):
             navigation.select(destination, source: .commandPalette)
+        case .activity(let activity):
+            executeNavigationActivity(activity)
         case .previous:
             returnToPreviousNavigationDestination()
         case .refresh:
@@ -246,6 +262,20 @@ struct RootView: View {
         case .owner:
             guard store.profile?.isAdmin == true else { return }
             opensAdminAfterCommandDismissal = true
+        }
+    }
+
+    private func executeNavigationActivity(_ activity: XertNavigationActivity) {
+        switch activity {
+        case .notices:
+            navigation.select(.home, source: .commandPalette)
+        case .upcomingBookings:
+            navigation.select(.account, source: .commandPalette)
+        case .eventGoals:
+            navigation.select(.events, source: .commandPalette)
+        case .pendingCheckout:
+            navigation.select(.booking, source: .commandPalette)
+            Task { await store.reconcilePendingCheckout() }
         }
     }
 
@@ -783,37 +813,22 @@ private struct XertNavigationCommandPalette: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(filteredCommands) { command in
-                        Button {
-                            dismiss()
-                            onSelect(command)
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: command.icon)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(Color.xertSteel)
-                                    .frame(width: 34, height: 34)
-                                    .background(Color.xertSteel.opacity(0.1))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(command.title)
-                                        .font(.headline)
-                                        .foregroundStyle(Color.xertOffWhite)
-                                    Text(command.subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(Color.xertPale.opacity(0.7))
-                                        .lineLimit(2)
+                    List {
+                        ForEach(XertNavigationCommandSection.allCases) { section in
+                            let sectionCommands = filteredCommands.filter { $0.section == section }
+                            if !sectionCommands.isEmpty {
+                                Section {
+                                    ForEach(sectionCommands) { command in
+                                        commandRow(command)
+                                    }
+                                } header: {
+                                    Text(section.rawValue)
+                                        .font(.caption2.weight(.bold))
+                                        .textCase(.uppercase)
+                                        .foregroundStyle(Color.xertSteel)
                                 }
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(Color.xertSteel.opacity(0.65))
                             }
-                            .frame(minHeight: 54)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Color.xertInk)
-                        .listRowSeparatorTint(Color.xertSteel.opacity(0.16))
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -834,6 +849,39 @@ private struct XertNavigationCommandPalette: View {
         }
         .tint(Color.xertSteel)
         .preferredColorScheme(.dark)
+    }
+
+    private func commandRow(_ command: XertNavigationCommand) -> some View {
+        Button {
+            dismiss()
+            onSelect(command)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: command.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 34, height: 34)
+                    .background(Color.xertSteel.opacity(0.1))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(command.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text(command.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.xertSteel.opacity(0.65))
+            }
+            .frame(minHeight: 54)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.16))
     }
 }
 
