@@ -1214,6 +1214,36 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(AnnouncementPushNavigation.consumePendingAnnouncementID(defaults: defaults))
     }
 
+    func testQuickActionsMapToTypedRoutesAndSurviveColdLaunchOnce() throws {
+        XCTAssertEqual(XertQuickActionNavigation.route(for: XertQuickActionNavigation.bookType), .booking)
+        XCTAssertEqual(XertQuickActionNavigation.route(for: XertQuickActionNavigation.bookingsType), .upcomingBookings(nil))
+        XCTAssertEqual(XertQuickActionNavigation.route(for: XertQuickActionNavigation.eventsType), .events)
+        XCTAssertNil(XertQuickActionNavigation.route(for: "com.xertfitness.app.quick.unknown"))
+
+        let suiteName = "XertQuickActionNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(XertQuickActionNavigation.markPending(
+            shortcutType: "com.xertfitness.app.quick.unknown",
+            defaults: defaults
+        ))
+        XCTAssertNil(XertQuickActionNavigation.consumePendingRoute(defaults: defaults))
+        XCTAssertTrue(XertQuickActionNavigation.markPending(
+            shortcutType: XertQuickActionNavigation.bookingsType,
+            defaults: defaults
+        ))
+        XCTAssertEqual(
+            XertQuickActionNavigation.consumePendingRoute(defaults: defaults),
+            .upcomingBookings(nil)
+        )
+        XCTAssertNil(XertQuickActionNavigation.consumePendingRoute(defaults: defaults))
+
+        defaults.set("tampered", forKey: XertQuickActionNavigation.pendingShortcutTypeKey)
+        XCTAssertNil(XertQuickActionNavigation.consumePendingRoute(defaults: defaults))
+        XCTAssertNil(defaults.string(forKey: XertQuickActionNavigation.pendingShortcutTypeKey))
+    }
+
     func testBookingCalendarPlannerUsesValidEndOrOneHourFallback() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let explicitEnd = start.addingTimeInterval(45 * 60)

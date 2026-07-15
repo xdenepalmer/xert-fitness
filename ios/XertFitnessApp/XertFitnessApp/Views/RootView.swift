@@ -67,6 +67,7 @@ struct RootView: View {
             )
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
+            consumePendingQuickActionRoute()
         }
         .onChange(of: navigation.route) { route in
             restoredMemberRoute = route.restorationValue
@@ -84,6 +85,9 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenAnnouncements)) { _ in
             consumePendingAnnouncementRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xertOpenQuickAction)) { _ in
+            consumePendingQuickActionRoute()
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertRefreshAnnouncements)) { _ in
             Task { await store.refresh() }
@@ -404,6 +408,11 @@ struct RootView: View {
     private func consumePendingReminderRoute() {
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
         navigation.open(.upcomingBookings(bookingID), source: .pushNotification)
+    }
+
+    private func consumePendingQuickActionRoute() {
+        guard let route = XertQuickActionNavigation.consumePendingRoute() else { return }
+        navigation.open(route, source: .quickAction)
     }
 }
 

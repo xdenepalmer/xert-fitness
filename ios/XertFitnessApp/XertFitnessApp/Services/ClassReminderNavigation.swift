@@ -72,6 +72,22 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         return true
     }
 
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if let shortcutItem = options.shortcutItem {
+            XertQuickActionNavigation.markPending(shortcutType: shortcutItem.type)
+        }
+        let configuration = UISceneConfiguration(
+            name: "XERT Member Workspace",
+            sessionRole: connectingSceneSession.role
+        )
+        configuration.delegateClass = XertSceneDelegate.self
+        return configuration
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let value = deviceToken.map { String(format: "%02x", $0) }.joined()
         let token = DevicePushToken(value: value, environment: MemberPushRegistration.environment)
@@ -122,5 +138,19 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             }
         }
         completionHandler()
+    }
+}
+
+final class XertSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        let handled = XertQuickActionNavigation.markPending(shortcutType: shortcutItem.type)
+        if handled {
+            NotificationCenter.default.post(name: .xertOpenQuickAction, object: nil)
+        }
+        completionHandler(handled)
     }
 }

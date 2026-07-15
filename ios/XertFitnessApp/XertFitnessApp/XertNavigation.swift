@@ -217,6 +217,7 @@ enum XertNavigationSource: String, Equatable {
     case checkout
     case commandPalette
     case handoff
+    case quickAction
 }
 
 enum XertRouteUserActivity {

@@ -37,6 +37,33 @@
     <array>
         <string>com.xertfitness.app.member-task</string>
     </array>
+    <key>UIApplicationShortcutItems</key>
+    <array>
+        <dict>
+            <key>UIApplicationShortcutItemType</key>
+            <string>com.xertfitness.app.quick.book</string>
+            <key>UIApplicationShortcutItemTitle</key>
+            <string>Book a class</string>
+            <key>UIApplicationShortcutItemIconSymbolName</key>
+            <string>calendar.badge.plus</string>
+        </dict>
+        <dict>
+            <key>UIApplicationShortcutItemType</key>
+            <string>com.xertfitness.app.quick.bookings</string>
+            <key>UIApplicationShortcutItemTitle</key>
+            <string>Upcoming bookings</string>
+            <key>UIApplicationShortcutItemIconSymbolName</key>
+            <string>list.bullet.rectangle</string>
+        </dict>
+        <dict>
+            <key>UIApplicationShortcutItemType</key>
+            <string>com.xertfitness.app.quick.events</string>
+            <key>UIApplicationShortcutItemTitle</key>
+            <string>Event calendar</string>
+            <key>UIApplicationShortcutItemIconSymbolName</key>
+            <string>trophy</string>
+        </dict>
+    </array>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>SUPABASE_URL</key>
