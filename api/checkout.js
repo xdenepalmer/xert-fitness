@@ -175,15 +175,14 @@ export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  const authHeader = requestHeader(request, 'authorization');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return json({ error: 'Not authenticated.' }, 401);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   try {
-    const authHeader = requestHeader(request, 'authorization');
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return json({ error: 'Not authenticated.' }, 401);
-
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: 'Invalid or expired session.' }, 401);
 

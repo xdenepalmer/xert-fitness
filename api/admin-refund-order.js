@@ -86,21 +86,21 @@ export async function performAdminRefund({ admin, stripe, orderId, reason, userI
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  if (!process.env.STRIPE_SECRET_KEY) return json({ error: 'Stripe is not configured.' }, 500);
+
+  const authHeader = requestHeader(request, 'authorization');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return json({ error: 'Not authenticated.' }, 401);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
 
   try {
-    const authHeader = requestHeader(request, 'authorization');
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return json({ error: 'Not authenticated.' }, 401);
-    const { orderId, reason } = normalizeRefundRequest(await requestJson(request));
-
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const { data: { user }, error: userError } = await admin.auth.getUser(token);
     if (userError || !user) return json({ error: 'Invalid or expired session.' }, 401);
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
     if (profileError) return json({ error: 'Could not verify admin access.' }, 500);
     if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
+    if (!process.env.STRIPE_SECRET_KEY) return json({ error: 'Stripe is not configured.' }, 500);
+    const { orderId, reason } = normalizeRefundRequest(await requestJson(request));
 
     const result = await performAdminRefund({
       admin,

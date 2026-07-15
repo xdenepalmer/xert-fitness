@@ -63,3 +63,14 @@ for (const [name, handler, method] of [
     assert.match(String(response.body?.error || response.body), /Method not allowed/);
   });
 }
+
+test('payment endpoints authenticate before reporting server configuration', async () => {
+  for (const handler of [checkoutHandler, adminRefundHandler, adminReconcileHandler]) {
+    const response = createVercelResponse();
+    await handler({ method: 'POST', headers: {} }, response);
+
+    assert.equal(response.completed, true);
+    assert.equal(response.statusCode, 401);
+    assert.match(response.body?.error || '', /Not authenticated/);
+  }
+});
