@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  assertCreatedRefundMatchesOrder,
   assertRefundableOrder,
   normalizeRefundRequest,
   performAdminRefund,
@@ -36,6 +37,27 @@ test('Stripe payment identity, amount, currency, and paid state must match the o
   assert.throws(() => assertRefundableOrder(order, paymentIntent, { ...charge, amount_refunded: 1000 }), /CHARGE_NOT_FULLY_REFUNDABLE/);
 });
 
+test('created refund must preserve the complete order payment identity', () => {
+  const refund = {
+    id: 're_xert', status: 'succeeded', amount: 4800, currency: 'aud',
+    payment_intent: 'pi_xert', charge: 'ch_xert',
+  };
+  assert.doesNotThrow(() => assertCreatedRefundMatchesOrder(refund, order, paymentIntent, charge));
+  assert.throws(() => assertCreatedRefundMatchesOrder({ ...refund, status: 'pending' }, order, paymentIntent, charge), /REFUND_PENDING/);
+  for (const mismatch of [
+    { amount: 4700 },
+    { currency: 'usd' },
+    { payment_intent: 'pi_other' },
+    { charge: 'ch_other' },
+    { id: '' },
+  ]) {
+    assert.throws(
+      () => assertCreatedRefundMatchesOrder({ ...refund, ...mismatch }, order, paymentIntent, charge),
+      /REFUND_RESULT_MISMATCH/,
+    );
+  }
+});
+
 test('admin refund uses a stable Stripe idempotency key then reconciles through one RPC', async () => {
   const calls = { refunds: [], rpc: [] };
   const admin = {
@@ -58,7 +80,10 @@ test('admin refund uses a stable Stripe idempotency key then reconciles through 
     refunds: {
       async create(payload, options) {
         calls.refunds.push({ payload, options });
-        return { id: 're_xert', status: 'succeeded', amount: 4800, created: 1783814400, charge: 'ch_xert' };
+        return {
+          id: 're_xert', status: 'succeeded', amount: 4800, currency: 'aud',
+          payment_intent: 'pi_xert', created: 1783814400, charge: 'ch_xert',
+        };
       },
     },
   };

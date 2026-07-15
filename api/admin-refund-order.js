@@ -45,6 +45,25 @@ export function assertRefundableOrder(order, paymentIntent, charge) {
   }
 }
 
+export function assertCreatedRefundMatchesOrder(refund, order, paymentIntent, charge) {
+  const refundPaymentIntentId = typeof refund?.payment_intent === 'string'
+    ? refund.payment_intent
+    : refund?.payment_intent?.id;
+  const refundChargeId = typeof refund?.charge === 'string'
+    ? refund.charge
+    : refund?.charge?.id;
+  if (refund?.status !== 'succeeded') throw new Error('REFUND_PENDING');
+  if (
+    !refund?.id
+    || refundPaymentIntentId !== paymentIntent?.id
+    || refundChargeId !== charge?.id
+    || refund.amount !== order?.amount_cents
+    || String(refund.currency || '').toLowerCase() !== String(order?.currency || '').toLowerCase()
+  ) {
+    throw new Error('REFUND_RESULT_MISMATCH');
+  }
+}
+
 export async function performAdminRefund({ admin, stripe, orderId, reason, userId, now = new Date() }) {
   const { data: order, error: orderError } = await admin
     .from('orders')
@@ -67,14 +86,14 @@ export async function performAdminRefund({ admin, stripe, orderId, reason, userI
     reason,
     metadata: { xert_order_id: order.id, initiated_by: userId },
   }, { idempotencyKey: `xert-order-refund-${order.id}` });
-  if (refund.status !== 'succeeded') throw new Error('REFUND_PENDING');
+  assertCreatedRefundMatchesOrder(refund, order, paymentIntent, charge);
 
   const refundedAt = new Date((refund.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString();
   const { data, error } = await admin.rpc('reconcile_stripe_order_refund', {
     p_refund_id: refund.id,
     p_event_id: `admin:${userId}:${refund.id}`,
     p_payment_intent_id: paymentIntent.id,
-    p_charge_id: typeof refund.charge === 'string' ? refund.charge : refund.charge?.id || null,
+    p_charge_id: typeof refund.charge === 'string' ? refund.charge : refund.charge.id,
     p_amount_cents: refund.amount,
     p_currency: paymentIntent.currency,
     p_refunded_at: refundedAt,
@@ -118,6 +137,9 @@ export default async function handler(request, response) {
       return json({ error: 'This order cannot be safely refunded.' }, 409);
     }
     if (message === 'REFUND_PENDING') return json({ error: 'Stripe is still processing this refund. Refresh shortly.' }, 409);
+    if (message === 'REFUND_RESULT_MISMATCH') {
+      return json({ error: 'Stripe returned an unexpected refund result. Refresh Orders and Stripe before retrying.' }, 409);
+    }
     return json({ error: 'Refund state could not be confirmed. Refresh Orders and Stripe before retrying.' }, 500);
   }
 }
