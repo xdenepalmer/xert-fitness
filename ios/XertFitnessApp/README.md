@@ -25,7 +25,13 @@ The included `Info.plist` already contains these xcconfig substitutions:
 
 ## Included
 
-- Native SwiftUI tab app: Home, Book, Events, Account.
+- Native SwiftUI tab app: Home, Book, Events, Explore, Account.
+- Explore mirrors the public website's CMS-backed About copy, FAQ and contact
+  details, published coaches and practitioners, functional training guide, and
+  native foundation-member, trainer and allied-health partner interest forms.
+  All three applications validate locally and enter the same protected Supabase
+  CRM pipelines as their desktop equivalents. Home hero imagery and copy plus
+  the booking introduction also update from the shared owner-managed CMS.
 - Admin-only native Command Centre tab with owner business metrics, today's
   class desk, FIFO waitlist promotion, searchable member directory, retention
   follow-up logging, finance visibility, and optimistic-locked live platform

@@ -1,25 +1,31 @@
 import Foundation
 
 struct PublicDataSnapshot: Codable, Equatable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let schemaVersion: Int
     let savedAt: Date
     let products: [Product]
     let sessions: [ClassSession]
     let events: [EventItem]
+    let coaches: [AdminCoach]
+    let siteContent: [AdminSiteContentRow]
 
     init(
         savedAt: Date = Date(),
         products: [Product],
         sessions: [ClassSession],
-        events: [EventItem]
+        events: [EventItem],
+        coaches: [AdminCoach] = [],
+        siteContent: [AdminSiteContentRow] = []
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.savedAt = savedAt
         self.products = products
         self.sessions = sessions
         self.events = events
+        self.coaches = coaches
+        self.siteContent = siteContent
     }
 }
 

@@ -19,7 +19,8 @@ struct BookingView: View {
                         imageName: "BookHero",
                         eyebrow: "XERT Classes",
                         title: "Train. Book. Repeat.",
-                        subtitle: "Choose the session that matches your goal, reserve your place and arrive ready to work.",
+                        subtitle: store.publicContent(for: .booking).intro
+                            ?? "Choose the session that matches your goal, reserve your place and arrive ready to work.",
                         badge: store.isSignedIn
                             ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
                             : "Your first coached session starts here"

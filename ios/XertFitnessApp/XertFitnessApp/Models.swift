@@ -1,13 +1,15 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
+    case products, sessions, events, coaches, siteContent, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
 
     var displayName: String {
         switch self {
         case .products: return "session packs"
         case .sessions: return "class timetable"
         case .events: return "event calendar"
+        case .coaches: return "coaches and practitioners"
+        case .siteContent: return "public site content"
         case .credits: return "class credits"
         case .bookings: return "your bookings"
         case .orders: return "purchase history"
@@ -591,6 +593,184 @@ struct PasswordUpdateRequest: Encodable, Equatable {
         }
 
         self.password = password
+    }
+}
+
+enum NativeInterestKind: String, Identifiable {
+    case member = "member_interest"
+    case trainer = "trainer_interest"
+    case partner = "partner_interest"
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .member: return "Foundation Interest"
+        case .trainer: return "Coach Application"
+        case .partner: return "Partner Enquiry"
+        }
+    }
+}
+
+struct NativeInterestDraft: Equatable {
+    var fullName = ""
+    var email = ""
+    var phone = ""
+    var ageRange = ""
+    var suburbTown = ""
+    var trainingLevel = ""
+    var goals: Set<String> = []
+    var preferredTimes: Set<String> = []
+    var occupationGroup = ""
+    var groupClasses = false
+    var personalTraining = false
+    var workshops = false
+    var eventPrep = false
+    var injuries = ""
+    var joiningReason = ""
+    var mailingList = false
+    var qualifications = ""
+    var yearsExperience = ""
+    var functionalExperience = ""
+    var availability: Set<String> = []
+    var specialties: Set<String> = []
+    var firstAidCPR = false
+    var insuranceStatus = ""
+    var shortIntro = ""
+    var socialLinks = ""
+    var businessName = ""
+    var profession = ""
+    var services: Set<String> = []
+    var availabilityText = ""
+    var subcontractInterest = false
+    var preferredModel = ""
+    var websiteSocialLink = ""
+    var consentsToContact = false
+}
+
+struct MemberInterestSubmission: Encodable, Equatable {
+    let full_name: String
+    let email: String
+    let phone: String
+    let age_range: String
+    let suburb_town: String
+    let current_training_level: String
+    let main_training_goals: [String]
+    let preferred_training_times: [String]
+    let occupation_group: String?
+    let interested_in_group_classes: Bool
+    let interested_in_pt: Bool
+    let interested_in_workshops: Bool
+    let interested_in_event_prep: Bool
+    let injuries_or_limitations_optional: String?
+    let biggest_reason_for_joining: String?
+    let consent_to_contact: Bool
+    let mailing_list_consent: Bool
+    let source = "ios_app"
+    let status = "new"
+
+    init(_ draft: NativeInterestDraft) throws {
+        let common = try InterestValidation.common(draft)
+        guard !draft.ageRange.isEmpty else { throw APIError(message: "Choose your age range.") }
+        guard let suburb = InterestValidation.optional(draft.suburbTown) else { throw APIError(message: "Enter your suburb or town.") }
+        guard !draft.trainingLevel.isEmpty else { throw APIError(message: "Choose your current training level.") }
+        guard !draft.goals.isEmpty else { throw APIError(message: "Select at least one training goal.") }
+        guard !draft.preferredTimes.isEmpty else { throw APIError(message: "Select at least one preferred training time.") }
+        guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
+        full_name = common.name; email = common.email; phone = common.phone
+        age_range = draft.ageRange; suburb_town = suburb; current_training_level = draft.trainingLevel
+        main_training_goals = draft.goals.sorted(); preferred_training_times = draft.preferredTimes.sorted()
+        occupation_group = InterestValidation.optional(draft.occupationGroup)
+        interested_in_group_classes = draft.groupClasses; interested_in_pt = draft.personalTraining
+        interested_in_workshops = draft.workshops; interested_in_event_prep = draft.eventPrep
+        injuries_or_limitations_optional = InterestValidation.optional(draft.injuries)
+        biggest_reason_for_joining = InterestValidation.optional(draft.joiningReason)
+        consent_to_contact = true; mailing_list_consent = draft.mailingList
+    }
+}
+
+struct TrainerInterestSubmission: Encodable, Equatable {
+    let full_name: String
+    let email: String
+    let phone: String
+    let qualifications: String
+    let years_experience: String
+    let functional_training_experience: String
+    let availability: [String]
+    let specialties: [String]
+    let interested_in_group_classes: Bool
+    let interested_in_pt: Bool
+    let interested_in_workshops: Bool
+    let first_aid_cpr: Bool
+    let insurance_status: String?
+    let short_intro: String?
+    let social_links: String?
+    let consent_to_contact: Bool
+    let source = "ios_app"
+    let status = "new"
+
+    init(_ draft: NativeInterestDraft) throws {
+        let common = try InterestValidation.common(draft)
+        guard let qualifications = InterestValidation.optional(draft.qualifications) else { throw APIError(message: "Enter your qualifications.") }
+        guard !draft.yearsExperience.isEmpty else { throw APIError(message: "Choose your years of experience.") }
+        guard let functional = InterestValidation.optional(draft.functionalExperience) else { throw APIError(message: "Describe your functional training experience.") }
+        guard !draft.availability.isEmpty else { throw APIError(message: "Select at least one availability window.") }
+        guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
+        full_name = common.name; email = common.email; phone = common.phone
+        self.qualifications = qualifications; years_experience = draft.yearsExperience
+        functional_training_experience = functional; availability = draft.availability.sorted()
+        specialties = draft.specialties.sorted(); interested_in_group_classes = draft.groupClasses
+        interested_in_pt = draft.personalTraining; interested_in_workshops = draft.workshops
+        first_aid_cpr = draft.firstAidCPR; insurance_status = InterestValidation.optional(draft.insuranceStatus)
+        short_intro = InterestValidation.optional(draft.shortIntro); social_links = InterestValidation.optional(draft.socialLinks)
+        consent_to_contact = true
+    }
+}
+
+struct PartnerInterestSubmission: Encodable, Equatable {
+    let full_name: String
+    let business_name: String
+    let email: String
+    let phone: String
+    let profession: String
+    let services_offered: [String]
+    let availability: String?
+    let subcontract_interest: Bool
+    let workshop_interest: Bool
+    let preferred_model: String?
+    let website_social_link: String?
+    let short_intro: String?
+    let consent_to_contact: Bool
+    let source = "ios_app"
+    let status = "new"
+
+    init(_ draft: NativeInterestDraft) throws {
+        let common = try InterestValidation.common(draft)
+        guard let business = InterestValidation.optional(draft.businessName) else { throw APIError(message: "Enter your business or practice name.") }
+        guard let profession = InterestValidation.optional(draft.profession) else { throw APIError(message: "Enter your profession or specialty.") }
+        guard !draft.services.isEmpty else { throw APIError(message: "Select at least one service.") }
+        guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
+        full_name = common.name; business_name = business; email = common.email; phone = common.phone
+        self.profession = profession; services_offered = draft.services.sorted()
+        availability = InterestValidation.optional(draft.availabilityText)
+        subcontract_interest = draft.subcontractInterest; workshop_interest = draft.workshops
+        preferred_model = InterestValidation.optional(draft.preferredModel)
+        website_social_link = InterestValidation.optional(draft.websiteSocialLink)
+        short_intro = InterestValidation.optional(draft.shortIntro); consent_to_contact = true
+    }
+}
+
+private enum InterestValidation {
+    static func common(_ draft: NativeInterestDraft) throws -> (name: String, email: String, phone: String) {
+        guard let name = optional(draft.fullName), name.count <= 100 else { throw APIError(message: "Enter your full name.") }
+        let email = draft.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard email.contains("@"), email.contains("."), email.count <= 254 else { throw APIError(message: "Enter a valid email address.") }
+        guard let phone = optional(draft.phone), phone.count <= 40 else { throw APIError(message: "Enter your phone number.") }
+        return (name, email, phone)
+    }
+
+    static func optional(_ value: String) -> String? {
+        let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? nil : String(clean.prefix(5_000))
     }
 }
 

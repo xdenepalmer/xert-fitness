@@ -112,25 +112,64 @@ extension View {
 // MARK: - Screen scaffolding
 
 extension View {
-    /// Navy full-bleed background every branded screen sits on.
+    /// Full-bleed architectural backdrop shared by every branded screen.
     func xertScreenBackground() -> some View {
-        background(Color.xertNavy.ignoresSafeArea())
+        background(XertScreenBackdrop().ignoresSafeArea())
     }
 
     /// Hides the system list/scroll background so the navy shows through.
     func xertListBackground() -> some View {
         scrollContentBackground(.hidden)
-            .background(Color.xertNavy.ignoresSafeArea())
+            .background(XertScreenBackdrop().ignoresSafeArea())
     }
 
     /// Brand card: ink surface with the site's hairline steel border and the
     /// sharp 2pt radius from the web (`--radius: 0.125rem`).
     func xertCardStyle() -> some View {
-        background(Color.xertInk)
+        background(Color.xertCard.opacity(0.94))
             .overlay(
                 RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color.xertSteel.opacity(0.18), lineWidth: 1)
+                    .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
             )
+    }
+}
+
+/// Low-contrast blueprint texture used by the website, rendered natively so it
+/// stays crisp at every device scale and does not require a decorative asset.
+struct XertScreenBackdrop: View {
+    var body: some View {
+        ZStack {
+            Color.xertNavy
+
+            Canvas { context, size in
+                let spacing: CGFloat = 56
+                var grid = Path()
+                stride(from: CGFloat.zero, through: size.width, by: spacing).forEach { x in
+                    grid.move(to: CGPoint(x: x, y: 0))
+                    grid.addLine(to: CGPoint(x: x, y: size.height))
+                }
+                stride(from: CGFloat.zero, through: size.height, by: spacing).forEach { y in
+                    grid.move(to: CGPoint(x: 0, y: y))
+                    grid.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                context.stroke(grid, with: .color(Color.xertSteel.opacity(0.055)), lineWidth: 0.7)
+
+                var rail = Path()
+                rail.move(to: CGPoint(x: size.width * 0.82, y: 0))
+                rail.addLine(to: CGPoint(x: size.width * 0.32, y: size.height))
+                context.stroke(rail, with: .color(Color.xertSteel.opacity(0.07)), lineWidth: 28)
+            }
+            .allowsHitTesting(false)
+
+            VStack {
+                Rectangle()
+                    .fill(Color.xertSteel.opacity(0.34))
+                    .frame(height: 1)
+                Spacer()
+            }
+            .allowsHitTesting(false)
+        }
+        .accessibilityHidden(true)
     }
 }
 

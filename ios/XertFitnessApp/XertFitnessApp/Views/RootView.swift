@@ -96,6 +96,12 @@ struct RootView: View {
                 }
                 .tag(2)
 
+            ExploreView(onNavigate: { selectedTab = $0 })
+                .tabItem {
+                    Label("Explore", systemImage: "safari")
+                }
+                .tag(4)
+
             AccountView(
                 reminderBookingID: reminderBookingID,
                 reminderNavigationRequest: reminderNavigationRequest
@@ -110,7 +116,7 @@ struct RootView: View {
                     .tabItem {
                         Label("Admin", systemImage: "rectangle.3.group")
                     }
-                    .tag(4)
+                    .tag(5)
             }
         }
         .tint(.xertSteel)
@@ -314,10 +320,12 @@ struct XertSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
-                Text(title.uppercased())
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.xertSteel)
-                    .tracking(1.8)
+                Rectangle()
+                    .fill(Color.xertSteel)
+                    .frame(width: 22, height: 1)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .xertDisplay(24)
                 Spacer()
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
@@ -328,9 +336,19 @@ struct XertSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
+        .padding(.vertical, 18)
+        .padding(.horizontal, 16)
+        .background(Color.xertInk.opacity(0.72))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.xertSteel.opacity(0.55))
+                .frame(width: 2)
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.xertSteel.opacity(0.15))
+                .frame(height: 1)
+        }
     }
 }
 

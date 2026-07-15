@@ -5,13 +5,16 @@ import test from 'node:test';
 const homeURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift', import.meta.url);
 const heroAssetURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Assets.xcassets/HeroTraining.imageset/hero-training.jpg', import.meta.url);
 const heroContentsURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Assets.xcassets/HeroTraining.imageset/Contents.json', import.meta.url);
+const trainingStyleURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Assets.xcassets/TrainingStyle.imageset/training-style.jpg', import.meta.url);
+const themeURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Theme.swift', import.meta.url);
 
 test('native home opens with the photographic XERT website hero language', async () => {
   const home = await readFile(homeURL, 'utf8');
   assert.match(home, /NativeHomeHero/);
   assert.match(home, /Image\("HeroTraining"\)/);
   assert.match(home, /XertLogoHeader\(height: 36\)/);
-  assert.match(home, /Text\("Beat Your"\)[\s\S]*Text\("Best\."\)/);
+  assert.match(home, /store\.publicContent\(for: \.hero\)/);
+  assert.match(home, /Text\(content\.headline \?\? "Beat Your Best\."\)/);
   assert.match(home, /Functional Fitness Training Facility/);
   assert.match(home, /Structured functional fitness coaching designed for strength/);
   assert.match(home, /Booking-based semi-private classes · Kingaroy QLD/);
@@ -24,9 +27,24 @@ test('native hero stays functional and leaves member operations directly below i
   assert.match(home, /onBook: \{ onNavigate\(1\) \}/);
   assert.match(home, /onEvents: \{ onNavigate\(2\) \}/);
   assert.match(home, /onRefresh: \{ Task \{ await store\.refresh\(\) \} \}/);
-  assert.match(home, /NativeHomeHero[\s\S]*announcementsSection[\s\S]*todayTrainingSection[\s\S]*creditExpirySection/);
+  assert.match(home, /NativeHomeHero[\s\S]*NativeValueStrip[\s\S]*announcementsSection[\s\S]*NativeTrainingIdentity[\s\S]*todayTrainingSection[\s\S]*creditExpirySection/);
   assert.match(home, /\.ignoresSafeArea\(edges: \.top\)/);
   assert.match(home, /\.toolbar\(\.hidden, for: \.navigationBar\)/);
+});
+
+test('native home carries the website visual system below the hero', async () => {
+  const [home, theme] = await Promise.all([
+    readFile(homeURL, 'utf8'),
+    readFile(themeURL, 'utf8'),
+  ]);
+  assert.match(home, /Discipline[\s\S]*Structure[\s\S]*Purpose[\s\S]*Performance/);
+  assert.match(home, /Image\("TrainingStyle"\)/);
+  assert.match(home, /Purposeful\.\\nProgressive\.\\nSustainable\./);
+  assert.match(home, /Coach-led[\s\S]*Progressive[\s\S]*Event-led/);
+  assert.match(theme, /struct XertScreenBackdrop/);
+  assert.match(theme, /Canvas \{ context, size in/);
+  assert.match(theme, /background\(XertScreenBackdrop\(\)\.ignoresSafeArea\(\)\)/);
+  await access(trainingStyleURL);
 });
 
 test('native hero ships the real training photograph through the asset catalogue', async () => {

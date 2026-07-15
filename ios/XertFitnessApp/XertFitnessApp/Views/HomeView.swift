@@ -16,6 +16,7 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     NativeHomeHero(
+                        content: store.publicContent(for: .hero),
                         isSignedIn: store.isSignedIn,
                         noticeCount: store.announcements.count,
                         onBook: { onNavigate(1) },
@@ -25,11 +26,14 @@ struct HomeView: View {
                     )
                     .frame(height: heroHeight)
 
+                    NativeValueStrip()
+
                     VStack(alignment: .leading, spacing: 18) {
                         CachedPublicDataNotice()
                         StaleMemberDataNotice()
                         DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
                         announcementsSection
+                        NativeTrainingIdentity(onExplore: { onNavigate(4) })
                         todayTrainingSection
                         creditExpirySection
                         nextUpSection
@@ -364,6 +368,7 @@ struct HomeView: View {
 }
 
 private struct NativeHomeHero: View {
+    let content: AdminSiteContentData
     let isSignedIn: Bool
     let noticeCount: Int
     let onBook: () -> Void
@@ -374,9 +379,7 @@ private struct NativeHomeHero: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .bottomLeading) {
-                Image("HeroTraining")
-                    .resizable()
-                    .scaledToFill()
+                heroImage
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .saturation(0.52)
@@ -454,21 +457,15 @@ private struct NativeHomeHero: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Beat Your")
-                            .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
-                            .textCase(.uppercase)
-                            .foregroundStyle(Color.xertOffWhite)
-                        Text("Best.")
-                            .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
-                            .textCase(.uppercase)
-                            .foregroundStyle(Color.xertSteel)
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    Text(content.headline ?? "Beat Your Best.")
+                        .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.xertOffWhite)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.58)
                     .padding(.top, 10)
 
-                    Text("Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.")
+                    Text(content.subheading ?? "Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.xertPale)
                         .fixedSize(horizontal: false, vertical: true)
@@ -488,7 +485,7 @@ private struct NativeHomeHero: View {
                         Circle()
                             .fill(Color.xertSteel)
                             .frame(width: 7, height: 7)
-                        Text("Booking-based semi-private classes · Kingaroy QLD")
+                        Text(content.supporting ?? "Booking-based semi-private classes · Kingaroy QLD")
                             .font(.caption2.weight(.semibold))
                             .textCase(.uppercase)
                             .foregroundStyle(Color.xertSteel)
@@ -502,6 +499,26 @@ private struct NativeHomeHero: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var heroImage: some View {
+        if let raw = content.photos?.first, let url = publicPhotoURL(raw) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { fallbackImage }
+            }
+        } else {
+            fallbackImage
+        }
+    }
+
+    private var fallbackImage: some View {
+        Image("HeroTraining").resizable().scaledToFill()
+    }
+
+    private func publicPhotoURL(_ value: String) -> URL? {
+        value.hasPrefix("/") ? AppConfig.webURL(path: value) : URL(string: value)
     }
 
     @ViewBuilder
@@ -519,6 +536,147 @@ private struct NativeHomeHero: View {
                 .minimumScaleFactor(0.72)
         }
         .buttonStyle(.xertGhost)
+    }
+}
+
+private struct NativeValueStrip: View {
+    private let values = ["Discipline", "Structure", "Purpose", "Performance"]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                        if index > 0 {
+                            Circle()
+                                .fill(Color.xertSteel.opacity(0.45))
+                                .frame(width: 4, height: 4)
+                        }
+                        Text(value)
+                            .font(XertTheme.displayFont(size: 17, relativeTo: .headline))
+                            .textCase(.uppercase)
+                            .tracking(1.4)
+                            .foregroundStyle(index.isMultiple(of: 2) ? Color.xertOffWhite : Color.xertSteel)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 15)
+            }
+
+            HStack(spacing: 0) {
+                ValueMetric(label: "Coached model", value: "Semi-private")
+                ValueMetric(label: "Programming", value: "12-week blocks")
+                ValueMetric(label: "Location", value: "Kingaroy QLD")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+            .background(Color.xertDeep.opacity(0.86))
+        }
+        .background(Color.xertInk.opacity(0.94))
+        .overlay(alignment: .top) { Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(height: 1) }
+    }
+}
+
+private struct ValueMetric: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.xertSteel)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(value)
+                .font(XertTheme.displayFont(size: 15, relativeTo: .subheadline))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.xertOffWhite)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .padding(.horizontal, 8)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(width: 1)
+        }
+    }
+}
+
+private struct NativeTrainingIdentity: View {
+    let onExplore: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
+                Image("TrainingStyle")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 230)
+                    .clipped()
+                    .saturation(0.62)
+                    .brightness(-0.18)
+                    .accessibilityHidden(true)
+
+                LinearGradient(
+                    colors: [Color.clear, Color.xertNavy.opacity(0.94)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("The XERT training system")
+                        .xertEyebrow()
+                    Text("Purposeful.\nProgressive.\nSustainable.")
+                        .xertDisplay(39)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(18)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Every session is programmed with intent and delivered through a booking-based coaching model designed to help you train consistently, move better and improve over time.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    TrainingPillar(icon: "figure.strengthtraining.traditional", label: "Coach-led")
+                    TrainingPillar(icon: "chart.line.uptrend.xyaxis", label: "Progressive")
+                    TrainingPillar(icon: "trophy", label: "Event-led")
+                }
+
+                Button("Explore how XERT trains", action: onExplore)
+                    .buttonStyle(.xertGhost)
+            }
+            .padding(18)
+            .background(Color.xertInk.opacity(0.9))
+        }
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.24), lineWidth: 1))
+    }
+}
+
+private struct TrainingPillar: View {
+    let icon: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.xertSteel)
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.xertOffWhite)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, minHeight: 68)
+        .background(Color.xertDeep.opacity(0.34))
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
     }
 }
 

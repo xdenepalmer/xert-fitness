@@ -157,11 +157,13 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 10)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 12)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
         XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
         XCTAssertEqual(XertDataSource.announcements.displayName, "member notices")
+        XCTAssertEqual(XertDataSource.coaches.displayName, "coaches and practitioners")
+        XCTAssertEqual(XertDataSource.siteContent.displayName, "public site content")
     }
 
     func testMemberAnnouncementDecodesPriorityAndExpiry() throws {
@@ -1320,6 +1322,30 @@ final class ModelsTests: XCTestCase {
 
         AdminSiteContentDraftStore.clear(.hero, defaults: defaults)
         XCTAssertNil(AdminSiteContentDraftStore.load(.hero, defaults: defaults))
+    }
+
+    func testNativeInterestSubmissionsValidateAndMapEveryDesktopPipeline() throws {
+        var member = NativeInterestDraft()
+        member.fullName = " Alex Runner "; member.email = " ALEX@example.com "; member.phone = "0400 123 456"
+        member.ageRange = "31–40"; member.suburbTown = "Kingaroy"; member.trainingLevel = "Regular trainer"
+        member.goals = ["Strength"]; member.preferredTimes = ["Early morning"]; member.consentsToContact = true
+        let memberPayload = try MemberInterestSubmission(member)
+        XCTAssertEqual(memberPayload.email, "alex@example.com")
+        XCTAssertEqual(memberPayload.source, "ios_app")
+        XCTAssertEqual(memberPayload.status, "new")
+
+        var trainer = member
+        trainer.qualifications = "Cert IV"; trainer.yearsExperience = "3–5 years"
+        trainer.functionalExperience = "Five years coaching functional strength."; trainer.availability = ["Evenings"]
+        XCTAssertEqual(try TrainerInterestSubmission(trainer).availability, ["Evenings"])
+
+        var partner = member
+        partner.businessName = "South Burnett Physio"; partner.profession = "Physiotherapist"
+        partner.services = ["Physiotherapy"]
+        XCTAssertEqual(try PartnerInterestSubmission(partner).services_offered, ["Physiotherapy"])
+
+        member.consentsToContact = false
+        XCTAssertThrowsError(try MemberInterestSubmission(member))
     }
 
     private func creditBatch(remaining: Int) -> CreditBatch {

@@ -7,6 +7,8 @@ final class XertStore: ObservableObject {
     @Published var products: [Product] = []
     @Published var sessions: [ClassSession] = []
     @Published var events: [EventItem] = []
+    @Published var coaches: [AdminCoach] = []
+    @Published var siteContent: [AdminSiteContentRow] = []
     @Published var credits: [CreditBatch] = []
     @Published var bookings: [BookingItem] = []
     @Published var orders: [OrderItem] = []
@@ -27,6 +29,7 @@ final class XertStore: ObservableObject {
     @Published var isDeletingAccount = false
     @Published var isRequestingPrivateSession = false
     @Published var isRequestingClassInterest = false
+    @Published var isSubmittingInterest = false
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
     @Published private(set) var classReminderLeadTime = ClassReminderPreference.leadTime()
     @Published private(set) var memberPushEnabled = MemberPushPreference.isEnabled()
@@ -62,11 +65,35 @@ final class XertStore: ObservableObject {
         credits.expirySummary()
     }
 
+    func publicContent(for section: AdminSiteContentSection) -> AdminSiteContentData {
+        let saved = siteContent.first { $0.key == section.rawValue }?.data ?? AdminSiteContentData()
+        return saved.merged(over: .defaults(for: section))
+    }
+
+    func submitInterest(kind: NativeInterestKind, draft: NativeInterestDraft) async -> Bool {
+        guard !isSubmittingInterest else { return false }
+        isSubmittingInterest = true
+        defer { isSubmittingInterest = false }
+        do {
+            switch kind {
+            case .member: try await api.submitMemberInterest(MemberInterestSubmission(draft))
+            case .trainer: try await api.submitTrainerInterest(TrainerInterestSubmission(draft))
+            case .partner: try await api.submitPartnerInterest(PartnerInterestSubmission(draft))
+            }
+            return true
+        } catch {
+            present(error)
+            return false
+        }
+    }
+
     func bootstrap() async {
         if let cached = PublicDataCache.load() {
             products = cached.products
             sessions = cached.sessions
             events = cached.events
+            coaches = cached.coaches
+            siteContent = cached.siteContent
             publicDataUpdatedAt = cached.savedAt
             isUsingCachedPublicData = true
         }
@@ -109,6 +136,8 @@ final class XertStore: ObservableObject {
         async let productRequest = api.products()
         async let sessionRequest = api.sessions()
         async let eventRequest = api.events()
+        async let coachRequest = api.coaches()
+        async let siteContentRequest = api.siteContent()
 
         var productsLoaded = false
         var sessionsLoaded = false
@@ -122,6 +151,24 @@ final class XertStore: ObservableObject {
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }
             unavailableDataSources.insert(.products)
+        }
+
+        do {
+            let loadedCoaches = try await coachRequest
+            guard canApplyRefresh(refreshVersion) else { return }
+            coaches = loadedCoaches
+        } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
+            unavailableDataSources.insert(.coaches)
+        }
+
+        do {
+            let loadedContent = try await siteContentRequest
+            guard canApplyRefresh(refreshVersion) else { return }
+            siteContent = loadedContent
+        } catch {
+            guard canApplyRefresh(refreshVersion) else { return }
+            unavailableDataSources.insert(.siteContent)
         }
 
         do {
@@ -151,7 +198,9 @@ final class XertStore: ObservableObject {
             let snapshot = PublicDataSnapshot(
                 products: products,
                 sessions: sessions,
-                events: events
+                events: events,
+                coaches: coaches,
+                siteContent: siteContent
             )
             PublicDataCache.save(snapshot)
             publicDataUpdatedAt = snapshot.savedAt

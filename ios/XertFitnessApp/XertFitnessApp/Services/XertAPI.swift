@@ -693,6 +693,27 @@ final class XertAPI {
         )
     }
 
+    func siteContent() async throws -> [AdminSiteContentRow] {
+        try await restRequest(
+            path: "/rest/v1/site_content",
+            queryItems: [
+                URLQueryItem(name: "select", value: "key,data,updated_at"),
+                URLQueryItem(name: "order", value: "key.asc")
+            ]
+        )
+    }
+
+    func coaches() async throws -> [AdminCoach] {
+        try await restRequest(
+            path: "/rest/v1/coaches",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
+                URLQueryItem(name: "published", value: "eq.true"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ]
+        )
+    }
+
     func adminSaveSiteContent(
         session auth: AuthSession,
         section: AdminSiteContentSection,
@@ -1543,6 +1564,29 @@ final class XertAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(requestBody)
+        try await perform(request)
+    }
+
+    func submitMemberInterest(_ body: MemberInterestSubmission) async throws {
+        try await submitPublicInterest(table: NativeInterestKind.member.rawValue, body: body)
+    }
+
+    func submitTrainerInterest(_ body: TrainerInterestSubmission) async throws {
+        try await submitPublicInterest(table: NativeInterestKind.trainer.rawValue, body: body)
+    }
+
+    func submitPartnerInterest(_ body: PartnerInterestSubmission) async throws {
+        try await submitPublicInterest(table: NativeInterestKind.partner.rawValue, body: body)
+    }
+
+    private func submitPublicInterest<Body: Encodable>(table: String, body: Body) async throws {
+        guard NativeInterestKind(rawValue: table) != nil else { throw APIError(message: "Unknown XERT interest form.") }
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/\(table)")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(body)
         try await perform(request)
     }
 
