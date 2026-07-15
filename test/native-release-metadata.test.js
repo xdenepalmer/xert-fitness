@@ -29,3 +29,12 @@ test('Codemagic verifies signed App Store metadata before publishing', () => {
   assert.match(codemagic, /UISupportedInterfaceOrientations~ipad/);
   assert.match(codemagic, /App Store upload would fail validation/);
 });
+
+test('Codemagic refuses to embed privileged or cross-project runtime configuration', () => {
+  assert.match(codemagic, /EXPECTED_SUPABASE_HOST: ugmkwoapjcpiucsrxwzt\.supabase\.co/);
+  assert.match(codemagic, /EXPECTED_VERCEL_HOST: xert-fitness\.vercel\.app/);
+  assert.match(codemagic, /validate-public-runtime-config\.mjs/);
+  const validation = codemagic.indexOf('validate-public-runtime-config.mjs');
+  const configWrite = codemagic.indexOf('cat > "$CM_BUILD_DIR/$IOS_DIRECTORY/Config.xcconfig"', validation);
+  assert.ok(validation >= 0 && configWrite > validation);
+});

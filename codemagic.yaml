@@ -91,6 +91,8 @@ workflows:
         IOS_DIRECTORY: ios/XertFitnessApp
         XCODE_PROJECT: XertFitness.xcodeproj
         XCODE_SCHEME: XertFitness
+        EXPECTED_SUPABASE_HOST: ugmkwoapjcpiucsrxwzt.supabase.co
+        EXPECTED_VERCEL_HOST: xert-fitness.vercel.app
     scripts:
       - name: Write XERT runtime configuration
         script: |
@@ -98,6 +100,8 @@ workflows:
           : "${SUPABASE_URL:?Add SUPABASE_URL as a Codemagic application environment variable.}"
           : "${SUPABASE_ANON_KEY:?Add SUPABASE_ANON_KEY as a Codemagic application environment variable.}"
           : "${VERCEL_BASE_URL:?Add VERCEL_BASE_URL as a Codemagic application environment variable.}"
+
+          node "$CM_BUILD_DIR/scripts/validate-public-runtime-config.mjs"
 
           escape_xcconfig_url() {
             printf '%s' "$1" | sed 's#//#/$()/#'
