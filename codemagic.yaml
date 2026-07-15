@@ -150,6 +150,18 @@ workflows:
           ws_guard SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
 
           curl --silent --show-error --fail --max-time 20 "$VERCEL_BASE_URL/" >/dev/null
+          COMMERCE_CODE="$(curl --silent --show-error --max-time 20 \
+            --output /dev/null --write-out '%{http_code}' \
+            --request HEAD "$VERCEL_BASE_URL/api/checkout")" || COMMERCE_CODE=000
+          if [ "$COMMERCE_CODE" != "204" ]; then
+            case "$COMMERCE_CODE" in
+              503) echo "Add APP_BASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET to Vercel Production, then redeploy." ;;
+              404) echo "The checkout readiness contract was not deployed from main." ;;
+              000) echo "The commerce environment check timed out or could not be reached." ;;
+            esac
+            report_service_issue "Commerce environment gate expected HTTP 204 but received $COMMERCE_CODE."
+          fi
+
           API_BODY="$(mktemp)"
           API_CODE="$(curl --silent --show-error --max-time 20 \
             -o "$API_BODY" -w '%{http_code}' \

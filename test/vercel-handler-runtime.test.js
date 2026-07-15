@@ -34,6 +34,10 @@ function createVercelResponse() {
       this.body = body;
       return this;
     },
+    end() {
+      this.completed = true;
+      return this;
+    },
   };
 }
 
@@ -73,4 +77,14 @@ test('payment endpoints authenticate before reporting server configuration', asy
     assert.equal(response.statusCode, 401);
     assert.match(response.body?.error || '', /Not authenticated/);
   }
+});
+
+test('checkout HEAD completes a body-free private commerce readiness probe', async () => {
+  const response = createVercelResponse();
+  await checkoutHandler({ method: 'HEAD', headers: {} }, response);
+
+  assert.equal(response.completed, true);
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body, undefined);
+  assert.equal(response.headers['cache-control'], 'private, no-store, max-age=0');
 });

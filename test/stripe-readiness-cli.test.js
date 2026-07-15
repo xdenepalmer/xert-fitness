@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { inspectStripeReadiness } from '../scripts/check-stripe-readiness.mjs';
 
@@ -9,12 +10,16 @@ const environment = {
 };
 
 function response(status, body = '') {
-  return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+  const responseBody = [204, 205, 304].includes(status)
+    ? null
+    : typeof body === 'string' ? body : JSON.stringify(body);
+  return new Response(responseBody, { status });
 }
 
-function readinessFetch({ webhookStatus = 400, capabilities = [{ capability: 'stripe_payment_fulfillment' }] } = {}) {
-  return async url => {
+function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilities = [{ capability: 'stripe_payment_fulfillment' }] } = {}) {
+  return async (url, options = {}) => {
     const path = new URL(url).pathname;
+    if (path === '/api/checkout' && options.method === 'HEAD') return response(commerceStatus);
     if (path === '/api/checkout') return response(401, { error: 'Not authenticated.' });
     if (path === '/api/admin-refund-order') return response(401, { error: 'Not authenticated.' });
     if (path === '/api/admin-reconcile-order') return response(401, { error: 'Not authenticated.' });
@@ -27,8 +32,20 @@ function readinessFetch({ webhookStatus = 400, capabilities = [{ capability: 'st
 test('Stripe readiness requires every safe production boundary and atomic fulfillment', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 5);
+  assert.equal(report.checks.length, 6);
   assert.ok(report.checks.every(check => check.ready));
+});
+
+test('Stripe readiness cannot pass when the private commerce environment is incomplete', async () => {
+  const report = await inspectStripeReadiness({
+    environment,
+    fetchImpl: readinessFetch({ commerceStatus: 503 }),
+  });
+  const environmentCheck = report.checks.find(check => check.key === 'environment');
+  assert.equal(report.ready, false);
+  assert.equal(environmentCheck.ready, false);
+  assert.match(environmentCheck.remediation, /APP_BASE_URL/);
+  assert.doesNotMatch(JSON.stringify(report), /service-role-value|stripe-secret-value/);
 });
 
 test('Stripe readiness names missing webhook configuration and fulfillment without exposing keys', async () => {
@@ -60,4 +77,11 @@ test('Stripe readiness rejects unsafe endpoints and malformed keys before networ
     }),
     /must never be embedded/,
   );
+});
+
+test('Codemagic requires the same body-free commerce environment gate before TestFlight', async () => {
+  const yaml = await readFile(new URL('../codemagic.yaml', import.meta.url), 'utf8');
+  assert.match(yaml, /--request HEAD "\$VERCEL_BASE_URL\/api\/checkout"/);
+  assert.match(yaml, /COMMERCE_CODE" != "204"/);
+  assert.match(yaml, /APP_BASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET/);
 });

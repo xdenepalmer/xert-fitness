@@ -44,16 +44,16 @@ test('commerce health requires the complete production payment environment witho
     missing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'APP_BASE_URL'],
   });
   assert.deepEqual(inspectCommerceEnvironment({
-    STRIPE_SECRET_KEY: 'secret-value',
-    STRIPE_WEBHOOK_SECRET: 'webhook-value',
+    STRIPE_SECRET_KEY: 'sk_test_secret_value',
+    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
     APP_BASE_URL: 'http://xert.example.com',
   }), {
     ready: false,
     missing: ['APP_BASE_URL'],
   });
   assert.deepEqual(inspectCommerceEnvironment({
-    STRIPE_SECRET_KEY: 'secret-value',
-    STRIPE_WEBHOOK_SECRET: 'webhook-value',
+    STRIPE_SECRET_KEY: 'sk_test_secret_value',
+    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
     APP_BASE_URL: 'https://xert-fitness.vercel.app',
   }), { ready: true, missing: [] });
 
@@ -63,18 +63,24 @@ test('commerce health requires the complete production payment environment witho
     'https://xert-fitness.vercel.app?preview=true',
   ]) {
     assert.deepEqual(inspectCommerceEnvironment({
-      STRIPE_SECRET_KEY: 'secret-value',
-      STRIPE_WEBHOOK_SECRET: 'webhook-value',
+      STRIPE_SECRET_KEY: 'sk_test_secret_value',
+      STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
       APP_BASE_URL,
     }), { ready: false, missing: ['APP_BASE_URL'] });
   }
 
   assert.deepEqual(inspectCommerceEnvironment({
-    STRIPE_SECRET_KEY: 'secret-value',
-    STRIPE_WEBHOOK_SECRET: 'webhook-value',
+    STRIPE_SECRET_KEY: 'sk_test_secret_value',
+    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
     APP_BASE_URL: 'https://lookalike.example.com',
     EXPECTED_APP_HOST: 'lookalike.example.com',
   }), { ready: false, missing: ['APP_BASE_URL'] });
+
+  assert.deepEqual(inspectCommerceEnvironment({
+    STRIPE_SECRET_KEY: 'secret-value',
+    STRIPE_WEBHOOK_SECRET: 'webhook-value',
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
+  }), { ready: false, missing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] });
 });
 
 test('commerce health names invalid database values and Stripe mismatches', async () => {

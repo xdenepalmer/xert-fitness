@@ -52,7 +52,8 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   validateSupabasePublicKey(anonKey);
 
   const jsonHeaders = { 'Content-Type': 'application/json' };
-  const [checkout, refund, reconciliation, webhook, capabilities] = await Promise.all([
+  const [environmentGate, checkout, refund, reconciliation, webhook, capabilities] = await Promise.all([
+    probe(fetchImpl, `${vercelBaseURL}/api/checkout`, { method: 'HEAD' }),
     probe(fetchImpl, `${vercelBaseURL}/api/checkout`, {
       method: 'POST',
       headers: { ...jsonHeaders, Authorization: 'Bearer xert-readiness-invalid-token' },
@@ -78,6 +79,13 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   ]);
 
   const checks = [
+    statusCheck(
+      'environment',
+      'Commerce environment gate',
+      environmentGate,
+      204,
+      'Add the canonical APP_BASE_URL, Supabase service role, Stripe secret, and Stripe webhook secret to Vercel Production, then redeploy.'
+    ),
     statusCheck(
       'checkout',
       'Authenticated checkout boundary',

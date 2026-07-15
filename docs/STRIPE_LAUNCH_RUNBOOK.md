@@ -67,6 +67,11 @@ Codemagic build. It never creates a Checkout Session, refund or database row:
 npm run check:stripe
 ```
 
+The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
+`204` proves the canonical app and Supabase origins plus the required private
+Vercel payment settings are present; HTTP `503` reveals no values and prevents
+a false-green release audit.
+
 The command must report five `PASS` results. A webhook `500` means the Vercel
 Stripe secrets are absent; a missing fulfillment contract means the migration
 in step 1 has not been installed.

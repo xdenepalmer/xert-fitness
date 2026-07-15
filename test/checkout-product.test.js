@@ -5,6 +5,7 @@ import {
   assertCheckoutProduct,
   assertStripePriceMatchesProduct,
   checkoutIdempotencyKey,
+  inspectCheckoutEnvironment,
   normalizeCheckoutAttemptID,
   pendingOrderForCheckout,
   paymentFulfillmentIsReady,
@@ -58,6 +59,43 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
   assert.ok(gate >= 0 && stripeConfigurationGate > gate);
   assert.ok(gate >= 0 && sessionCreation > gate);
   assert.match(source, /payment services are being upgraded[\s\S]*503/);
+});
+
+test('checkout exposes a value-free gate for the complete canonical payment environment', () => {
+  const validEnvironment = {
+    SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-value',
+    STRIPE_SECRET_KEY: 'sk_test_stripe-secret-value',
+    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
+  };
+  assert.deepEqual(inspectCheckoutEnvironment(validEnvironment), { ready: true, invalid: [] });
+
+  for (const [name, value] of [
+    ['SUPABASE_URL', 'https://another-project.supabase.co'],
+    ['SUPABASE_SERVICE_ROLE_KEY', ''],
+    ['STRIPE_SECRET_KEY', 'secret-value'],
+    ['STRIPE_WEBHOOK_SECRET', 'webhook-value'],
+    ['APP_BASE_URL', 'https://preview-xert.vercel.app'],
+  ]) {
+    const result = inspectCheckoutEnvironment({ ...validEnvironment, [name]: value });
+    assert.equal(result.ready, false);
+    assert.ok(result.invalid.includes(name));
+    assert.doesNotMatch(JSON.stringify(result), /service-role-value|stripe-secret-value|webhook_value/);
+  }
+
+  for (const environment of [
+    { ...validEnvironment, SUPABASE_SERVICE_ROLE_KEY: ` ${validEnvironment.SUPABASE_SERVICE_ROLE_KEY}` },
+    { ...validEnvironment, STRIPE_SECRET_KEY: `${validEnvironment.STRIPE_SECRET_KEY}\n` },
+    { ...validEnvironment, STRIPE_WEBHOOK_SECRET: `${validEnvironment.STRIPE_WEBHOOK_SECRET} ` },
+    {
+      ...validEnvironment,
+      SUPABASE_SERVICE_ROLE_KEY: 'public-key-reused-by-mistake',
+      SUPABASE_ANON_KEY: 'public-key-reused-by-mistake',
+    },
+  ]) {
+    assert.equal(inspectCheckoutEnvironment(environment).ready, false);
+  }
 });
 
 test('accepts a valid product before creating Stripe Checkout', () => {

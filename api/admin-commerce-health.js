@@ -19,8 +19,18 @@ const REQUIRED_WEBHOOK_EVENTS = [
 
 export function inspectCommerceEnvironment(environment = {}) {
   const missing = [];
-  if (!String(environment.STRIPE_SECRET_KEY || '').trim()) missing.push('STRIPE_SECRET_KEY');
-  if (!String(environment.STRIPE_WEBHOOK_SECRET || '').trim()) missing.push('STRIPE_WEBHOOK_SECRET');
+  const stripeSecretKey = String(environment.STRIPE_SECRET_KEY || '');
+  const webhookSecret = String(environment.STRIPE_WEBHOOK_SECRET || '');
+  if (
+    stripeSecretKey !== stripeSecretKey.trim()
+    || /\s/.test(stripeSecretKey)
+    || stripeModeForSecret(stripeSecretKey) === 'unknown'
+  ) missing.push('STRIPE_SECRET_KEY');
+  if (
+    webhookSecret !== webhookSecret.trim()
+    || /\s/.test(webhookSecret)
+    || !/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)
+  ) missing.push('STRIPE_WEBHOOK_SECRET');
 
   try {
     validateCanonicalServiceURL(
