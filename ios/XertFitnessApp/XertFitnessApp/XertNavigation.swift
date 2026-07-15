@@ -73,6 +73,7 @@ enum XertNavigationSource: String, Equatable {
     case deepLink
     case pushNotification
     case checkout
+    case commandPalette
 }
 
 enum XertNavigationDirection: Equatable {
@@ -96,6 +97,26 @@ struct XertNavigationTransition: Equatable {
     let sequence: UInt
 }
 
+enum XertNavigationCommandAction: Hashable {
+    case destination(XertPrimaryDestination)
+    case previous
+    case refresh
+    case owner
+}
+
+struct XertNavigationCommand: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let icon: String
+    let keywords: [String]
+    let action: XertNavigationCommandAction
+
+    fileprivate var searchIndex: String {
+        ([title, subtitle] + keywords).joined(separator: " ").lowercased()
+    }
+}
+
 final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var selection: XertPrimaryDestination
     @Published private(set) var lastTransition: XertNavigationTransition?
@@ -113,6 +134,75 @@ final class XertNavigationCoordinator: ObservableObject {
 
     var previousDestination: XertPrimaryDestination? {
         history.dropLast().last
+    }
+
+    func commandPaletteCommands(isAdmin: Bool) -> [XertNavigationCommand] {
+        var commands = XertPrimaryDestination.dockOrder
+            .filter { $0 != selection }
+            .map { destination in
+                XertNavigationCommand(
+                    id: "destination-\(destination.rawValue)",
+                    title: "Open \(destination.title)",
+                    subtitle: commandSubtitle(for: destination),
+                    icon: destination.icon,
+                    keywords: commandKeywords(for: destination),
+                    action: .destination(destination)
+                )
+            }
+
+        commands.append(XertNavigationCommand(
+            id: "refresh-\(selection.rawValue)",
+            title: "Refresh \(selection.title)",
+            subtitle: "Reload the latest XERT member and training data",
+            icon: "arrow.clockwise",
+            keywords: ["reload", "sync", "update", selection.title],
+            action: .refresh
+        ))
+
+        if let previousDestination {
+            commands.append(XertNavigationCommand(
+                id: "previous-\(previousDestination.rawValue)",
+                title: "Back to \(previousDestination.title)",
+                subtitle: "Return through your workspace history",
+                icon: "arrow.uturn.backward",
+                keywords: ["back", "previous", "history", previousDestination.title],
+                action: .previous
+            ))
+        }
+
+        if isAdmin {
+            commands.append(XertNavigationCommand(
+                id: "owner-command-centre",
+                title: "Owner Command Centre",
+                subtitle: "Open protected gym operations and platform controls",
+                icon: "waveform.path.ecg.rectangle",
+                keywords: ["admin", "business", "operations", "members", "payments"],
+                action: .owner
+            ))
+        }
+        return commands
+    }
+
+    static func filteredCommands(
+        _ commands: [XertNavigationCommand],
+        query: String
+    ) -> [XertNavigationCommand] {
+        let terms = query
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !terms.isEmpty else { return commands }
+
+        return commands
+            .filter { command in
+                terms.allSatisfy { command.searchIndex.contains($0) }
+            }
+            .sorted { lhs, rhs in
+                let lhsStarts = lhs.title.lowercased().hasPrefix(terms[0])
+                let rhsStarts = rhs.title.lowercased().hasPrefix(terms[0])
+                if lhsStarts != rhsStarts { return lhsStarts }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
     }
 
     func restore(rawValue: Int) {
@@ -180,5 +270,25 @@ final class XertNavigationCoordinator: ObservableObject {
             source: source,
             sequence: transitionSequence
         )
+    }
+
+    private func commandSubtitle(for destination: XertPrimaryDestination) -> String {
+        switch destination {
+        case .home: return "Member dashboard, notices and next training actions"
+        case .booking: return "Classes, availability, session packs and PT requests"
+        case .events: return "Annual event calendar and shared competition goals"
+        case .explore: return "Training philosophy, coaches and XERT information"
+        case .account: return "Bookings, credits, purchases and account security"
+        }
+    }
+
+    private func commandKeywords(for destination: XertPrimaryDestination) -> [String] {
+        switch destination {
+        case .home: return ["dashboard", "notices", "today", "training"]
+        case .booking: return ["book", "class", "timetable", "pack", "pt"]
+        case .events: return ["calendar", "race", "competition", "goal"]
+        case .explore: return ["coaches", "about", "philosophy", "contact"]
+        case .account: return ["profile", "credits", "orders", "security"]
+        }
     }
 }

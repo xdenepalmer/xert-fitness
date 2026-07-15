@@ -17,6 +17,8 @@ struct RootView: View {
     @State private var announcementID: UUID?
     @State private var announcementNavigationRequest = 0
     @State private var showingAdminCommandCentre = false
+    @State private var showingNavigationCommands = false
+    @State private var opensAdminAfterCommandDismissal = false
 
     var body: some View {
         Group {
@@ -141,6 +143,14 @@ struct RootView: View {
                     .environmentObject(store)
             }
         }
+        .sheet(isPresented: $showingNavigationCommands, onDismiss: completeCommandDismissal) {
+            XertNavigationCommandPalette(
+                commands: navigation.commandPaletteCommands(isAdmin: store.profile?.isAdmin == true),
+                onSelect: executeNavigationCommand
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .alert("XERT", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -176,6 +186,7 @@ struct RootView: View {
             bookingCount: activeBookingCount,
             previousDestination: navigation.previousDestination,
             onOpenAdmin: { showingAdminCommandCentre = true },
+            onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
             onStep: handleNavigationStep,
             onReturnPrevious: returnToPreviousNavigationDestination
@@ -190,6 +201,7 @@ struct RootView: View {
             bookingCount: activeBookingCount,
             previousDestination: navigation.previousDestination,
             onOpenAdmin: { showingAdminCommandCentre = true },
+            onOpenCommands: { showingNavigationCommands = true },
             onReselect: handleReselection,
             onReturnPrevious: returnToPreviousNavigationDestination
         )
@@ -220,6 +232,28 @@ struct RootView: View {
     private func returnToPreviousNavigationDestination() {
         guard navigation.returnToPrevious() else { return }
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+    }
+
+    private func executeNavigationCommand(_ command: XertNavigationCommand) {
+        showingNavigationCommands = false
+        switch command.action {
+        case .destination(let destination):
+            navigation.select(destination, source: .commandPalette)
+        case .previous:
+            returnToPreviousNavigationDestination()
+        case .refresh:
+            handleReselection(navigation.selection)
+        case .owner:
+            guard store.profile?.isAdmin == true else { return }
+            opensAdminAfterCommandDismissal = true
+        }
+    }
+
+    private func completeCommandDismissal() {
+        guard opensAdminAfterCommandDismissal else { return }
+        opensAdminAfterCommandDismissal = false
+        guard store.profile?.isAdmin == true else { return }
+        showingAdminCommandCentre = true
     }
 
     private var isPrivacyLocked: Bool {
@@ -325,6 +359,7 @@ private struct XertNavigationRail: View {
     let bookingCount: Int
     let previousDestination: XertPrimaryDestination?
     let onOpenAdmin: () -> Void
+    let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onReturnPrevious: () -> Void
     @Namespace private var selectionNamespace
@@ -336,6 +371,26 @@ private struct XertNavigationRail: View {
             XertLogoHeader(height: dynamicTypeSize.isAccessibilitySize ? 24 : 21)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, 12)
+
+            Button(action: onOpenCommands) {
+                VStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Switch")
+                        .font(.caption2.weight(.bold))
+                        .textCase(.uppercase)
+                        .tracking(0.7)
+                }
+                .foregroundStyle(Color.xertPale)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("k", modifiers: .command)
+            .hoverEffect(.highlight)
+            .accessibilityLabel("XERT quick switcher")
+            .accessibilityHint("Searches workspaces and available actions")
+            .accessibilityIdentifier("xert-navigation-commands")
 
             if let previousDestination {
                 Button(action: onReturnPrevious) {
@@ -519,6 +574,7 @@ private struct XertNavigationDock: View {
     let bookingCount: Int
     let previousDestination: XertPrimaryDestination?
     let onOpenAdmin: () -> Void
+    let onOpenCommands: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onStep: (XertNavigationDirection) -> Void
     let onReturnPrevious: () -> Void
@@ -597,6 +653,9 @@ private struct XertNavigationDock: View {
             )
         }
         .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
+        .accessibilityAction(named: "Open XERT quick switcher") {
+            onOpenCommands()
+        }
     }
 
     private func navigationButton(_ item: XertPrimaryDestination) -> some View {
@@ -667,6 +726,9 @@ private struct XertNavigationDock: View {
             }
         }
         .contextMenu {
+            Button(action: onOpenCommands) {
+                Label("Quick switcher", systemImage: "magnifyingglass")
+            }
             if selected {
                 Button(action: { onReselect(item) }) {
                     Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
@@ -693,6 +755,85 @@ private struct XertNavigationDock: View {
         }
         details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
         return details.joined(separator: ". ")
+    }
+}
+
+private struct XertNavigationCommandPalette: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+    let commands: [XertNavigationCommand]
+    let onSelect: (XertNavigationCommand) -> Void
+
+    private var filteredCommands: [XertNavigationCommand] {
+        XertNavigationCoordinator.filteredCommands(commands, query: query)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if filteredCommands.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(Color.xertSteel)
+                        Text("No matching XERT actions")
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(filteredCommands) { command in
+                        Button {
+                            dismiss()
+                            onSelect(command)
+                        } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: command.icon)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Color.xertSteel)
+                                    .frame(width: 34, height: 34)
+                                    .background(Color.xertSteel.opacity(0.1))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(command.title)
+                                        .font(.headline)
+                                        .foregroundStyle(Color.xertOffWhite)
+                                    Text(command.subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(Color.xertSteel.opacity(0.65))
+                            }
+                            .frame(minHeight: 54)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.xertInk)
+                        .listRowSeparatorTint(Color.xertSteel.opacity(0.16))
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .background(Color.xertNavy.ignoresSafeArea())
+            .navigationTitle("Quick Switcher")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search XERT")
+            .focused($searchFocused)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(Color.xertSteel)
+                }
+            }
+            .onAppear { searchFocused = true }
+        }
+        .tint(Color.xertSteel)
+        .preferredColorScheme(.dark)
     }
 }
 

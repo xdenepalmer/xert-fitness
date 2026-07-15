@@ -40,7 +40,7 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
   assert.match(root, /case \.home: return "1"[\s\S]*case \.account: return "5"/);
   assert.match(root, /keyboardShortcut\("a", modifiers: \[\.command, \.shift\]\)/);
   assert.match(root, /hoverEffect\(\.highlight\)/);
-  assert.equal((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length, 4);
+  assert.equal((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length, 5);
 });
 
 test('primary routing is typed, restorable, and owns native deep-link mapping', async () => {
@@ -64,9 +64,32 @@ test('primary routing is typed, restorable, and owns native deep-link mapping', 
   assert.match(navigation, /private\(set\) var history: \[XertPrimaryDestination\]/);
   assert.match(navigation, /func returnToPrevious\(source: XertNavigationSource/);
   assert.match(navigation, /history\.count > historyLimit[\s\S]*history\.removeFirst/);
-  for (const source of ['restoration', 'dock', 'dockSwipe', 'history', 'content', 'deepLink', 'pushNotification', 'checkout']) {
+  for (const source of ['restoration', 'dock', 'dockSwipe', 'history', 'content', 'deepLink', 'pushNotification', 'checkout', 'commandPalette']) {
     assert.match(navigation, new RegExp(`case ${source}`));
   }
+});
+
+test('native navigation exposes a searchable contextual command switcher', async () => {
+  const [root, navigation, modelsTests] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url), 'utf8'),
+  ]);
+  assert.match(navigation, /enum XertNavigationCommandAction: Hashable/);
+  assert.match(navigation, /func commandPaletteCommands\(isAdmin: Bool\)/);
+  assert.match(navigation, /static func filteredCommands/);
+  assert.match(navigation, /terms\.allSatisfy \{ command\.searchIndex\.contains\(\$0\) \}/);
+  assert.match(navigation, /if isAdmin \{[\s\S]*action: \.owner/);
+  assert.match(root, /XertNavigationCommandPalette/);
+  assert.match(root, /\.searchable\(text: \$query/);
+  assert.match(root, /keyboardShortcut\("k", modifiers: \.command\)/);
+  assert.match(root, /accessibilityAction\(named: "Open XERT quick switcher"/);
+  assert.match(root, /Label\("Quick switcher", systemImage: "magnifyingglass"\)/);
+  assert.match(root, /navigation\.select\(destination, source: \.commandPalette\)/);
+  assert.match(root, /guard store\.profile\?\.isAdmin == true else \{ return \}/);
+  assert.match(root, /\.sheet\(isPresented: \$showingNavigationCommands, onDismiss: completeCommandDismissal\)/);
+  assert.match(root, /opensAdminAfterCommandDismissal = true[\s\S]*completeCommandDismissal/);
+  assert.match(modelsTests, /testNavigationCommandPaletteIsContextualRoleAwareAndSearchable/);
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {

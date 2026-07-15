@@ -48,6 +48,37 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testNavigationCommandPaletteIsContextualRoleAwareAndSearchable() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(navigation.select(.booking, source: .content))
+
+        let memberCommands = navigation.commandPaletteCommands(isAdmin: false)
+        XCTAssertFalse(memberCommands.contains { $0.action == .owner })
+        XCTAssertTrue(memberCommands.contains { $0.action == .previous })
+        XCTAssertTrue(memberCommands.contains { $0.action == .refresh })
+        XCTAssertEqual(
+            memberCommands.compactMap { command -> XertPrimaryDestination? in
+                guard case .destination(let destination) = command.action else { return nil }
+                return destination
+            },
+            XertPrimaryDestination.dockOrder.filter { $0 != .booking }
+        )
+
+        let ownerCommands = navigation.commandPaletteCommands(isAdmin: true)
+        XCTAssertTrue(ownerCommands.contains { $0.action == .owner })
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "payment operations").map(\.action),
+            [.owner]
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(memberCommands, query: "race calendar").map(\.action),
+            [.destination(.events)]
+        )
+        XCTAssertTrue(
+            XertNavigationCoordinator.filteredCommands(memberCommands, query: "not a command").isEmpty
+        )
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
