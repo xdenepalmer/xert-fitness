@@ -108,6 +108,45 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(navigation.history, [.home])
     }
 
+    func testNavigationWorkspaceRestoresBoundedExactTaskHistory() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000051"))
+        let source = XertNavigationCoordinator(initial: .home, historyLimit: 4)
+        XCTAssertTrue(source.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(source.open(.sessionPacks, source: .content))
+        XCTAssertTrue(source.open(.eventGoals, source: .commandPalette))
+
+        let restored = XertNavigationCoordinator(initial: .account, historyLimit: 3)
+        restored.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.account.restorationValue
+        )
+
+        XCTAssertEqual(restored.route, .eventGoals)
+        XCTAssertEqual(restored.routeHistory, [.notices(noticeID), .sessionPacks, .eventGoals])
+        XCTAssertEqual(restored.previousRoute, .sessionPacks)
+        XCTAssertEqual(restored.lastTransition?.source, .restoration)
+        XCTAssertTrue(restored.returnToPrevious())
+        XCTAssertEqual(restored.route, .sessionPacks)
+    }
+
+    func testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots() {
+        let fallback = XertMemberRoute.upcomingBookings(nil)
+        let invalidSnapshots = [
+            "not-json",
+            #"{"version":2,"routeValues":["events/goals"]}"#,
+            #"{"version":1,"routeValues":["booking/packs","unknown"]}"#,
+            #"{"version":1,"routeValues":[]}"#,
+            String(repeating: "x", count: XertNavigationWorkspaceSnapshot.maximumEncodedLength + 1),
+        ]
+
+        for snapshot in invalidSnapshots {
+            let navigation = XertNavigationCoordinator(initial: .home)
+            navigation.restore(workspaceValue: snapshot, fallbackRouteValue: fallback.restorationValue)
+            XCTAssertEqual(navigation.route, fallback)
+            XCTAssertEqual(navigation.routeHistory, [fallback])
+        }
+    }
+
     func testNavigationPresentationAdaptsWithoutChangingDestinationPolicy() {
         XCTAssertEqual(XertNavigationPresentation.resolve(isRegularWidth: false), .compactDock)
         XCTAssertEqual(XertNavigationPresentation.resolve(isRegularWidth: true), .workspaceRail)

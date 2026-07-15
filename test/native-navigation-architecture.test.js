@@ -67,7 +67,7 @@ test('member routing is typed, task-restorable, and owns native deep-link mappin
   assert.match(root, /@SceneStorage\("xert\.memberRoute"\)/);
   assert.match(root, /Binding<XertPrimaryDestination>/);
   assert.match(root, /@StateObject private var navigation = XertNavigationCoordinator\(\)/);
-  assert.match(root, /navigation\.restore\(routeValue: restoredMemberRoute\)/);
+  assert.match(root, /navigation\.restore\([\s\S]*workspaceValue: restoredMemberWorkspace,[\s\S]*fallbackRouteValue: restoredMemberRoute/);
   assert.match(root, /restoredMemberRoute = route\.restorationValue/);
   assert.match(root, /private func navigate\(to destination: XertPrimaryDestination\)/);
   assert.match(root, /XertMemberRoute\.route\(for: url\)/);
@@ -226,4 +226,25 @@ test('navigation history preserves exact member tasks instead of flattening them
   assert.ok(navigation.includes('Back to \\(previousRoute.navigationTitle)'));
   assert.match(root, /previousRoute: navigation\.previousRoute/);
   assert.match(modelsTests, /testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs/);
+});
+
+test('scene restoration preserves a bounded versioned exact-task workspace', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /struct XertNavigationWorkspaceSnapshot: Codable, Equatable/);
+  assert.match(navigation, /maximumEncodedLength = 4_096/);
+  assert.match(navigation, /maximumRouteCount = 32/);
+  assert.match(navigation, /var workspaceRestorationValue: String/);
+  assert.match(navigation, /func restore\(workspaceValue: String, fallbackRouteValue: String\)/);
+  assert.match(navigation, /snapshot\.version == XertNavigationWorkspaceSnapshot\.currentVersion/);
+  assert.match(navigation, /restoredRoutes\.count == snapshot\.routeValues\.count/);
+  assert.match(navigation, /restoredRoutes\.suffix\(historyLimit\)/);
+  assert.match(root, /@SceneStorage\("xert\.memberWorkspace"\)/);
+  assert.match(root, /navigation\.restore\([\s\S]*workspaceValue: restoredMemberWorkspace,[\s\S]*fallbackRouteValue: restoredMemberRoute/);
+  assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
+  assert.match(modelsTests, /testNavigationWorkspaceRestoresBoundedExactTaskHistory/);
+  assert.match(modelsTests, /testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots/);
 });

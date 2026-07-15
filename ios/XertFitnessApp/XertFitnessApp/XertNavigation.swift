@@ -205,6 +205,20 @@ struct XertNavigationTransition: Equatable {
     let sequence: UInt
 }
 
+struct XertNavigationWorkspaceSnapshot: Codable, Equatable {
+    static let currentVersion = 1
+    static let maximumEncodedLength = 4_096
+    static let maximumRouteCount = 32
+
+    let version: Int
+    let routeValues: [String]
+
+    init(routes: [XertMemberRoute]) {
+        version = Self.currentVersion
+        routeValues = routes.map(\.restorationValue)
+    }
+}
+
 enum XertNavigationCommandAction: Hashable {
     case destination(XertPrimaryDestination)
     case route(XertMemberRoute)
@@ -277,7 +291,10 @@ final class XertNavigationCoordinator: ObservableObject {
         selection = initial
         route = .primary(initial)
         routeHistory = [.primary(initial)]
-        self.historyLimit = max(2, historyLimit)
+        self.historyLimit = min(
+            max(2, historyLimit),
+            XertNavigationWorkspaceSnapshot.maximumRouteCount
+        )
     }
 
     var history: [XertPrimaryDestination] {
@@ -294,6 +311,16 @@ final class XertNavigationCoordinator: ObservableObject {
 
     var previousDestination: XertPrimaryDestination? {
         previousRoute?.destination
+    }
+
+    var workspaceRestorationValue: String {
+        let snapshot = XertNavigationWorkspaceSnapshot(routes: routeHistory)
+        guard
+            let data = try? JSONEncoder().encode(snapshot),
+            let value = String(data: data, encoding: .utf8),
+            value.count <= XertNavigationWorkspaceSnapshot.maximumEncodedLength
+        else { return "" }
+        return value
     }
 
     func commandPaletteCommands(
@@ -391,12 +418,39 @@ final class XertNavigationCoordinator: ObservableObject {
 
     func restore(routeValue: String) {
         let restoredRoute = XertMemberRoute.restore(routeValue) ?? .home
+        applyRestoredRoutes([restoredRoute])
+    }
+
+    func restore(workspaceValue: String, fallbackRouteValue: String) {
+        guard
+            !workspaceValue.isEmpty,
+            workspaceValue.count <= XertNavigationWorkspaceSnapshot.maximumEncodedLength,
+            let data = workspaceValue.data(using: .utf8),
+            let snapshot = try? JSONDecoder().decode(XertNavigationWorkspaceSnapshot.self, from: data),
+            snapshot.version == XertNavigationWorkspaceSnapshot.currentVersion,
+            !snapshot.routeValues.isEmpty,
+            snapshot.routeValues.count <= XertNavigationWorkspaceSnapshot.maximumRouteCount
+        else {
+            restore(routeValue: fallbackRouteValue)
+            return
+        }
+
+        let restoredRoutes = snapshot.routeValues.compactMap { XertMemberRoute.restore($0) }
+        guard restoredRoutes.count == snapshot.routeValues.count else {
+            restore(routeValue: fallbackRouteValue)
+            return
+        }
+        applyRestoredRoutes(Array(restoredRoutes.suffix(historyLimit)))
+    }
+
+    private func applyRestoredRoutes(_ restoredRoutes: [XertMemberRoute]) {
+        guard let restoredRoute = restoredRoutes.last else { return }
         let destination = restoredRoute.destination
         let previous = selection
         selection = destination
         route = restoredRoute
         routeSequence &+= 1
-        routeHistory = [restoredRoute]
+        routeHistory = restoredRoutes
         if previous == destination {
             lastTransition = nil
         } else {

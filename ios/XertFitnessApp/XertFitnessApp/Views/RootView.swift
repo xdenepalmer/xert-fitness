@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @SceneStorage("xert.memberRoute") private var restoredMemberRoute = XertMemberRoute.home.restorationValue
+    @SceneStorage("xert.memberWorkspace") private var restoredMemberWorkspace = ""
     @StateObject private var navigation = XertNavigationCoordinator()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
     @State private var isPrivacyUnlocked = false
@@ -53,12 +54,16 @@ struct RootView: View {
         }
         .onOpenURL(perform: handleOpenURL)
         .onAppear {
-            navigation.restore(routeValue: restoredMemberRoute)
+            navigation.restore(
+                workspaceValue: restoredMemberWorkspace,
+                fallbackRouteValue: restoredMemberRoute
+            )
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
         }
         .onChange(of: navigation.route) { route in
             restoredMemberRoute = route.restorationValue
+            restoredMemberWorkspace = navigation.workspaceRestorationValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
