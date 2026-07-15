@@ -1859,7 +1859,7 @@ private struct AdminSettingsUpdate: Encodable {
 private struct AdminRequestUpdate: Encodable {
     let p_request_type: String
     let p_request_id: String
-    let p_status: String
+    let p_status: String?
     let p_admin_notes: String?
     let p_update_admin_notes: Bool
 }

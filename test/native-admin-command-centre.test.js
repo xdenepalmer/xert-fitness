@@ -162,3 +162,9 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   ]) assert.match(api, new RegExp(`table: "${table}"`));
   assert.match(api, /URLQueryItem\(name: "updated_at", value: "eq\.\\\(settings\.updated_at\)"\)/);
 });
+
+test('native request notes can omit a workflow status exactly like the RPC contract', async () => {
+  const api = await readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8');
+  assert.match(api, /private struct AdminRequestUpdate: Encodable \{[\s\S]*let p_status: String\?/);
+  assert.match(api, /adminUpdateLegacyBookingNotes[\s\S]*p_status: nil[\s\S]*p_update_admin_notes: true/);
+});
