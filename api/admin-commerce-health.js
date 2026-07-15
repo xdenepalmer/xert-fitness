@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct } from './checkout.js';
+import { assertCheckoutProduct, assertStripePriceMatchesProduct, stripeModeForSecret } from './checkout.js';
 import { requestHeader, sendJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -35,7 +35,7 @@ function environmentIssues(environmentHealth) {
   }));
 }
 
-export async function inspectCommerceProducts(products, retrieveStripePrice) {
+export async function inspectCommerceProducts(products, retrieveStripePrice, options = {}) {
   const issues = [];
   let stripePriceCount = 0;
   let dynamicPriceCount = 0;
@@ -51,6 +51,9 @@ export async function inspectCommerceProducts(products, retrieveStripePrice) {
 
     if (!product.stripe_price_id) {
       dynamicPriceCount += 1;
+      if (options.requireLinkedPrices) {
+        issues.push({ slug, reason: 'Live checkout requires a stable Stripe Price ID.' });
+      }
       continue;
     }
 
@@ -63,7 +66,7 @@ export async function inspectCommerceProducts(products, retrieveStripePrice) {
       continue;
     }
     try {
-      assertStripePriceMatchesProduct(product, stripePrice);
+      assertStripePriceMatchesProduct(product, stripePrice, options.expectedLivemode ?? null);
     } catch {
       issues.push({ slug, reason: 'Stripe amount, currency, type, or active state does not match.' });
     }
@@ -74,6 +77,24 @@ export async function inspectCommerceProducts(products, retrieveStripePrice) {
     active_product_count: products?.length || 0,
     stripe_price_count: stripePriceCount,
     dynamic_price_count: dynamicPriceCount,
+    issues,
+  };
+}
+
+export function inspectStripeAccount(account) {
+  const issues = [];
+  if (!account?.details_submitted) issues.push('Stripe business verification is incomplete.');
+  if (!account?.charges_enabled) issues.push('Stripe charges are not enabled.');
+  if (!account?.payouts_enabled) issues.push('Stripe payouts are not enabled.');
+  if (String(account?.country || '').toUpperCase() !== 'AU') issues.push('Stripe account country must be Australia.');
+  if (String(account?.default_currency || '').toLowerCase() !== 'aud') issues.push('Stripe default currency must be AUD.');
+  return {
+    ready: issues.length === 0,
+    charges_enabled: account?.charges_enabled === true,
+    payouts_enabled: account?.payouts_enabled === true,
+    details_submitted: account?.details_submitted === true,
+    country: String(account?.country || '').toUpperCase() || null,
+    default_currency: String(account?.default_currency || '').toLowerCase() || null,
     issues,
   };
 }
@@ -143,18 +164,29 @@ export default async function handler(request, response) {
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const [productHealth, webhookHealth] = await Promise.all([
-    inspectCommerceProducts(activeProducts, priceId => stripe.prices.retrieve(priceId)),
+  const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+  const [productHealth, webhookHealth, accountHealth] = await Promise.all([
+    inspectCommerceProducts(activeProducts, priceId => stripe.prices.retrieve(priceId), {
+      requireLinkedPrices: stripeMode === 'live',
+      expectedLivemode: stripeMode === 'live',
+    }),
     stripe.webhookEndpoints.list({ limit: 100 })
       .then(result => inspectStripeWebhookEndpoints(result.data, process.env.APP_BASE_URL || ''))
       .catch(() => ({ ready: false, missing_events: REQUIRED_WEBHOOK_EVENTS, issue: 'Stripe webhook settings could not be verified.' })),
+    stripe.accounts.retrieve()
+      .then(inspectStripeAccount)
+      .catch(() => ({ ready: false, issues: ['Stripe account readiness could not be verified.'] })),
   ]);
   return json({
     ...productHealth,
-    ready: productHealth.ready && webhookHealth.ready && environment.ready,
+    ready: stripeMode !== 'unknown' && productHealth.ready && webhookHealth.ready && accountHealth.ready && environment.ready,
+    mode: stripeMode,
+    account: accountHealth,
     issues: [
       ...productHealth.issues,
       ...(webhookHealth.issue ? [{ slug: 'webhook', reason: webhookHealth.issue }] : []),
+      ...(accountHealth.issues || []).map(reason => ({ slug: 'account', reason })),
+      ...(stripeMode === 'unknown' ? [{ slug: 'server', reason: 'Stripe key mode is not recognized.' }] : []),
       ...environmentIssues(environment),
     ],
     environment,

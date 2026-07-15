@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import adminCommerceHealthHandler, { inspectCommerceEnvironment, inspectCommerceProducts, inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
+import adminCommerceHealthHandler, {
+  inspectCommerceEnvironment,
+  inspectCommerceProducts,
+  inspectStripeAccount,
+  inspectStripeWebhookEndpoints,
+} from '../api/admin-commerce-health.js';
 
 const validProduct = {
   slug: 'starter-4',
@@ -75,6 +80,54 @@ test('commerce health names invalid database values and Stripe mismatches', asyn
     { slug: 'bad-stripe', reason: 'Stripe amount, currency, type, or active state does not match.' },
     { slug: 'missing-stripe', reason: 'Stripe Price ID could not be loaded.' },
   ]);
+});
+
+test('live commerce requires stable live-mode Stripe prices', async () => {
+  const result = await inspectCommerceProducts([
+    { ...validProduct, slug: 'linked' },
+    { ...validProduct, slug: 'dynamic', stripe_price_id: null },
+  ], async priceId => ({
+    id: priceId,
+    active: true,
+    type: 'one_time',
+    unit_amount: 4800,
+    currency: 'aud',
+    livemode: false,
+  }), { requireLinkedPrices: true, expectedLivemode: true });
+
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.issues, [
+    { slug: 'linked', reason: 'Stripe amount, currency, type, or active state does not match.' },
+    { slug: 'dynamic', reason: 'Live checkout requires a stable Stripe Price ID.' },
+  ]);
+});
+
+test('commerce health verifies Australian charge and payout readiness', () => {
+  assert.deepEqual(inspectStripeAccount({
+    details_submitted: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    country: 'AU',
+    default_currency: 'aud',
+  }), {
+    ready: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    details_submitted: true,
+    country: 'AU',
+    default_currency: 'aud',
+    issues: [],
+  });
+
+  const result = inspectStripeAccount({
+    details_submitted: false,
+    charges_enabled: false,
+    payouts_enabled: false,
+    country: 'US',
+    default_currency: 'usd',
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.issues.length, 5);
 });
 
 test('commerce health requires checkout and refund events on the canonical Stripe webhook', () => {

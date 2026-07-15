@@ -8,6 +8,14 @@ import { requestHeader, requestJson, sendJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
+
+export function stripeModeForSecret(secret = '') {
+  const value = String(secret).trim();
+  if (/^(sk|rk)_live_/.test(value)) return 'live';
+  if (/^(sk|rk)_test_/.test(value)) return 'test';
+  return 'unknown';
+}
 
 /**
  * Stripe return URLs must never come from a request Origin header: browsers
@@ -67,7 +75,7 @@ export function assertCheckoutProduct(product) {
  * source of truth. Refuse checkout when it would charge a different amount or
  * currency than the pack the member selected in XERT.
  */
-export function assertStripePriceMatchesProduct(product, stripePrice) {
+export function assertStripePriceMatchesProduct(product, stripePrice, expectedLivemode = null) {
   if (
     !stripePrice ||
     stripePrice.deleted === true ||
@@ -76,9 +84,52 @@ export function assertStripePriceMatchesProduct(product, stripePrice) {
     stripePrice.type !== 'one_time' ||
     stripePrice.unit_amount !== product?.price_cents ||
     String(stripePrice.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
+    || (typeof expectedLivemode === 'boolean' && stripePrice.livemode !== expectedLivemode)
   ) {
     throw new Error('Stripe price does not match the product configuration.');
   }
+}
+
+export function reusableCheckoutURL(checkout, user, product) {
+  const metadata = checkout?.metadata || {};
+  const url = (() => {
+    try { return new URL(checkout?.url || ''); } catch { return null; }
+  })();
+  if (
+    checkout?.status !== 'open'
+    || checkout?.payment_status !== 'unpaid'
+    || !url || url.protocol !== 'https:'
+    || metadata.user_id !== user?.id
+    || metadata.product_id !== product?.id
+    || checkout.amount_total !== product?.price_cents
+    || String(checkout.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
+  ) return null;
+  return url.toString();
+}
+
+async function findReusableCheckout({ admin, stripe, user, product, now = new Date() }) {
+  const cutoff = new Date(now.getTime() - REUSABLE_CHECKOUT_WINDOW_MS).toISOString();
+  const { data, error } = await admin
+    .from('orders')
+    .select('stripe_checkout_session_id')
+    .eq('user_id', user.id)
+    .eq('product_id', product.id)
+    .eq('status', 'pending')
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false })
+    .limit(3);
+  if (error) return null;
+  for (const order of data || []) {
+    if (!order.stripe_checkout_session_id) continue;
+    try {
+      const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
+      const url = reusableCheckoutURL(checkout, user, product);
+      if (url) return url;
+    } catch {
+      // A missing or expired Stripe session is not reusable; create a clean one.
+    }
+  }
+  return null;
 }
 
 export function pendingOrderForCheckout(checkout, user, product) {
@@ -149,10 +200,19 @@ export default async function handler(request, response) {
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
     assertCheckoutProduct(product);
 
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') return json({ error: 'Stripe key mode is not recognized.' }, 500);
+    if (stripeMode === 'live' && !product.stripe_price_id) {
+      return json({ error: 'This pack is not linked to a live Stripe Price yet.' }, 409);
+    }
+
+    const reusableURL = await findReusableCheckout({ admin, stripe, user, product });
+    if (reusableURL) return json({ url: reusableURL, reused: true });
+
     let lineItem;
     if (product.stripe_price_id) {
       const stripePrice = await stripe.prices.retrieve(product.stripe_price_id);
-      assertStripePriceMatchesProduct(product, stripePrice);
+      assertStripePriceMatchesProduct(product, stripePrice, stripeMode === 'live');
       lineItem = { price: stripePrice.id, quantity: 1 };
     } else {
       lineItem = {
@@ -170,11 +230,24 @@ export default async function handler(request, response) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      customer_creation: 'always',
+      billing_address_collection: 'auto',
       line_items: [lineItem],
       customer_email: user.email,
       client_reference_id: user.id,
       success_url: returnURLs.success,
       cancel_url: returnURLs.cancel,
+      // Stripe requires at least 30 minutes. The extra five minutes avoids a
+      // boundary rejection caused by network transit or clock skew.
+      expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
+      payment_intent_data: {
+        description: `XERT Fitness - ${product.name}`,
+        metadata: {
+          xert_user_id: user.id,
+          xert_product_id: product.id,
+          xert_product_slug: product.slug,
+        },
+      },
       metadata: {
         user_id: user.id,
         product_id: product.id,

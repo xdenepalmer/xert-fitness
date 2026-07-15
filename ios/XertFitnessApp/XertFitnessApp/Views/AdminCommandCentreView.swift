@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @StateObject private var admin = AdminStore()
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,16 @@ struct AdminCommandCentreView: View {
             .background(Color.xertNavy.ignoresSafeArea())
             .navigationTitle("Command Centre")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let onClose {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: onClose) {
+                            Label("Close", systemImage: "xmark")
+                        }
+                        .foregroundStyle(Color.xertSteel)
+                    }
+                }
+            }
             .alert("Command Centre", isPresented: Binding(
                 get: { admin.errorMessage != nil },
                 set: { if !$0 { admin.errorMessage = nil } }
@@ -2772,6 +2783,30 @@ private struct AdminOperationsHealthView: View {
                     }
                 }
             }
+            if let commerce = admin.commerceHealth {
+                Section("Stripe launch checklist") {
+                    HealthValueRow(label: "Mode", value: commerce.mode?.uppercased() ?? "Unknown")
+                    HealthCheckRow(label: "Business verification", ready: commerce.account?.details_submitted == true)
+                    HealthCheckRow(label: "Charges enabled", ready: commerce.account?.charges_enabled == true)
+                    HealthCheckRow(label: "Payouts enabled", ready: commerce.account?.payouts_enabled == true)
+                    HealthCheckRow(
+                        label: "Active packs linked",
+                        ready: commerce.active_product_count > 0 && commerce.stripe_price_count == commerce.active_product_count
+                    )
+                    HealthCheckRow(label: "Webhook registered", ready: commerce.webhook?.ready == true)
+                }
+
+                if let issues = commerce.issues, !issues.isEmpty {
+                    Section("Stripe actions required") {
+                        ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                            Label(issue.reason, systemImage: "exclamationmark.triangle")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.orange)
+                                .listRowBackground(Color.xertInk)
+                        }
+                    }
+                }
+            }
             if let push = admin.pushHealth {
                 Section("APNs activity (24 hours)") {
                     HealthCountRow(label: "Production devices", value: push.subscriptions.production)
@@ -2790,7 +2825,9 @@ private struct AdminOperationsHealthView: View {
         if !health.environment.missing.isEmpty {
             return "Missing: \(health.environment.missing.joined(separator: ", "))."
         }
-        return "\(health.active_product_count) active packs; \(health.stripe_price_count) Stripe-linked and \(health.dynamic_price_count) dynamic."
+        let mode = health.mode?.uppercased() ?? "UNKNOWN"
+        let payout = health.account?.payouts_enabled == true ? "payouts ready" : "payouts need attention"
+        return "\(mode): \(health.active_product_count) active packs; \(health.stripe_price_count) Stripe-linked, \(health.dynamic_price_count) dynamic; \(payout)."
     }
 
     private var pushDetail: String {
@@ -2815,6 +2852,38 @@ private struct HealthStatusRow: View {
                 Text(title).font(.headline).foregroundStyle(Color.xertOffWhite)
                 Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
             }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct HealthCheckRow: View {
+    let label: String
+    let ready: Bool
+
+    var body: some View {
+        HStack {
+            Text(label).foregroundStyle(Color.xertPale)
+            Spacer()
+            Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ready ? Color.green : Color.orange)
+                .accessibilityLabel(ready ? "Ready" : "Needs attention")
+        }
+        .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct HealthValueRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label).foregroundStyle(Color.xertPale)
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.xertSteel)
         }
         .listRowBackground(Color.xertInk)
     }

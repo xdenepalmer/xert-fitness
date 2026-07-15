@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
@@ -13,6 +14,7 @@ struct RootView: View {
     @State private var reminderNavigationRequest = 0
     @State private var announcementID: UUID?
     @State private var announcementNavigationRequest = 0
+    @State private var showingAdminCommandCentre = false
 
     var body: some View {
         Group {
@@ -110,16 +112,24 @@ struct RootView: View {
                     Label("Account", systemImage: "person.crop.circle")
                 }
                 .tag(3)
-
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .tint(.xertSteel)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            XertNavigationDock(
+                selection: $selectedTab,
+                isAdmin: store.profile?.isAdmin == true,
+                noticeCount: store.announcements.count,
+                bookingCount: activeBookingCount,
+                onOpenAdmin: { showingAdminCommandCentre = true }
+            )
+        }
+        .fullScreenCover(isPresented: $showingAdminCommandCentre) {
             if store.profile?.isAdmin == true {
-                AdminCommandCentreView()
-                    .tabItem {
-                        Label("Admin", systemImage: "rectangle.3.group")
-                    }
-                    .tag(5)
+                AdminCommandCentreView(onClose: { showingAdminCommandCentre = false })
+                    .environmentObject(store)
             }
         }
-        .tint(.xertSteel)
         .alert("XERT", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -137,6 +147,10 @@ struct RootView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+
+    private var activeBookingCount: Int {
+        store.bookings.filter { $0.isActiveClassPlace && $0.start_time >= Date() }.count
     }
 
     private var isPrivacyLocked: Bool {
@@ -226,6 +240,152 @@ struct RootView: View {
         reminderBookingID = bookingID
         reminderNavigationRequest += 1
         selectedTab = 3
+    }
+}
+
+private struct XertNavigationItem: Identifiable {
+    let id: Int
+    let title: String
+    let icon: String
+    let selectedIcon: String
+}
+
+private struct XertNavigationDock: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var selection: Int
+    let isAdmin: Bool
+    let noticeCount: Int
+    let bookingCount: Int
+    let onOpenAdmin: () -> Void
+    @Namespace private var selectionNamespace
+
+    private let items = [
+        XertNavigationItem(id: 0, title: "Home", icon: "house", selectedIcon: "house.fill"),
+        XertNavigationItem(id: 1, title: "Book", icon: "calendar.badge.plus", selectedIcon: "calendar.badge.plus"),
+        XertNavigationItem(id: 2, title: "Events", icon: "trophy", selectedIcon: "trophy.fill"),
+        XertNavigationItem(id: 4, title: "Explore", icon: "safari", selectedIcon: "safari.fill"),
+        XertNavigationItem(id: 3, title: "Account", icon: "person.crop.circle", selectedIcon: "person.crop.circle.fill"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isAdmin {
+                Button(action: onOpenAdmin) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "waveform.path.ecg.rectangle")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.xertSteel)
+                        Text("Owner Command Centre")
+                            .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
+                            .textCase(.uppercase)
+                            .tracking(1.2)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Spacer()
+                        Text("Open")
+                            .font(.caption2.weight(.bold))
+                            .textCase(.uppercase)
+                            .tracking(1.1)
+                            .foregroundStyle(Color.xertSteel)
+                        Image(systemName: "chevron.up")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .frame(minHeight: 38)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(Color.xertDeep.opacity(0.96))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.xertSteel.opacity(0.48)).frame(height: 1)
+                }
+                .accessibilityHint("Opens protected gym operations and platform controls")
+            }
+
+            HStack(spacing: 0) {
+                ForEach(items) { item in
+                    navigationButton(item)
+                }
+            }
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 80 : 66)
+            .background {
+                ZStack {
+                    Color.xertInk.opacity(0.98)
+                    Canvas { context, size in
+                        let width = size.width / CGFloat(items.count)
+                        for index in 1..<items.count {
+                            var line = Path()
+                            line.move(to: CGPoint(x: CGFloat(index) * width, y: 14))
+                            line.addLine(to: CGPoint(x: CGFloat(index) * width, y: size.height - 12))
+                            context.stroke(line, with: .color(Color.xertSteel.opacity(0.08)), lineWidth: 1)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+            .overlay(alignment: .top) {
+                Rectangle().fill(Color.xertSteel.opacity(0.24)).frame(height: 1)
+            }
+        }
+        .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
+    }
+
+    private func navigationButton(_ item: XertNavigationItem) -> some View {
+        let selected = selection == item.id
+        let badge = item.id == 0 ? noticeCount : item.id == 1 ? bookingCount : 0
+        return Button {
+            guard selection != item.id else { return }
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.easeOut(duration: 0.2)) { selection = item.id }
+        } label: {
+            VStack(spacing: 4) {
+                ZStack {
+                    if item.id == 1 {
+                        Rectangle()
+                            .fill(selected ? Color.xertPale : Color.xertSteel)
+                            .frame(width: 38, height: 34)
+                            .overlay(Rectangle().stroke(Color.xertOffWhite.opacity(0.32), lineWidth: 1))
+                    }
+                    Image(systemName: selected ? item.selectedIcon : item.icon)
+                        .font(.system(size: item.id == 1 ? 17 : 18, weight: .semibold))
+                        .foregroundStyle(item.id == 1 ? Color.xertNavy : selected ? Color.xertSteel : Color.xertPale.opacity(0.62))
+                        .frame(width: 38, height: 34)
+
+                    if badge > 0 {
+                        Text(badge > 99 ? "99+" : "\(badge)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.xertNavy)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .padding(.horizontal, badge > 9 ? 2 : 0)
+                            .background(Color.xertPale)
+                            .clipShape(Capsule())
+                            .offset(x: 16, y: -12)
+                    }
+                }
+                Text(item.title)
+                    .font(.caption2.weight(selected ? .bold : .semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+                    .foregroundStyle(selected ? Color.xertOffWhite : Color.xertPale.opacity(0.55))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                if selected {
+                    Rectangle()
+                        .fill(Color.xertSteel)
+                        .frame(width: item.id == 1 ? 42 : 28, height: 2)
+                        .matchedGeometryEffect(id: "primary-navigation-selection", in: selectionNamespace)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(selected ? "Selected" : "")
+        .accessibilityHint(item.id == 1 && bookingCount > 0 ? "\(bookingCount) upcoming bookings" : "")
     }
 }
 

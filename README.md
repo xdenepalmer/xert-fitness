@@ -56,6 +56,10 @@ After deploying, create a Stripe webhook endpoint pointing at
 `charge.refunded`,
 then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 
+Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the
+complete test-mode setup, owner health checks, purchase/refund proof, live
+cutover and rollback sequence.
+
 ## Database
 
 The Supabase schema is defined in:

@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct, pendingOrderForCheckout } from '../api/checkout.js';
+import {
+  assertCheckoutProduct,
+  assertStripePriceMatchesProduct,
+  pendingOrderForCheckout,
+  reusableCheckoutURL,
+  stripeModeForSecret,
+} from '../api/checkout.js';
 
 const validProduct = {
   price_cents: 4800,
@@ -45,6 +51,41 @@ test('accepts only an active one-time Stripe price matching the configured pack'
   }
 });
 
+test('keeps test and live Stripe objects in the same payment environment', () => {
+  assert.equal(stripeModeForSecret('sk_test_example'), 'test');
+  assert.equal(stripeModeForSecret('rk_live_example'), 'live');
+  assert.equal(stripeModeForSecret('secret-value'), 'unknown');
+  assert.doesNotThrow(() => assertStripePriceMatchesProduct(
+    productWithStripePrice,
+    { ...matchingStripePrice, livemode: true },
+    true,
+  ));
+  assert.throws(() => assertStripePriceMatchesProduct(
+    productWithStripePrice,
+    { ...matchingStripePrice, livemode: false },
+    true,
+  ), /does not match/i);
+});
+
+test('reuses only the same member pack and amount from an open unpaid Checkout session', () => {
+  const user = { id: 'member-xert' };
+  const product = { id: 'product-xert', ...validProduct };
+  const checkout = {
+    status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_test_xert',
+    amount_total: 4800, currency: 'aud',
+    metadata: { user_id: user.id, product_id: product.id },
+  };
+  assert.equal(reusableCheckoutURL(checkout, user, product), checkout.url);
+  for (const invalid of [
+    { ...checkout, status: 'complete' },
+    { ...checkout, payment_status: 'paid' },
+    { ...checkout, amount_total: 4900 },
+    { ...checkout, url: 'javascript:alert(1)' },
+    { ...checkout, metadata: { ...checkout.metadata, user_id: 'another-member' } },
+    { ...checkout, metadata: { ...checkout.metadata, product_id: 'another-product' } },
+  ]) assert.equal(reusableCheckoutURL(invalid, user, product), null);
+});
+
 test('rejects invalid pricing, credits, expiry, and currency before Checkout', () => {
   for (const product of [
     { ...validProduct, price_cents: 0 },
@@ -76,6 +117,10 @@ test('records a member-bound pending order before handing off to Stripe', async 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
   assert.match(source, /from\('orders'\)[\s\S]*upsert\(pendingOrderForCheckout/);
   assert.match(source, /catch \{[\s\S]*checkout\.sessions\.expire\(session\.id\)/);
+  assert.match(source, /findReusableCheckout/);
+  assert.match(source, /stripeMode === 'live' && !product\.stripe_price_id/);
+  assert.match(source, /customer_creation: 'always'/);
+  assert.match(source, /payment_intent_data:/);
   assert.throws(
     () => pendingOrderForCheckout(
       { id: 'cs_xert', amount_total: 4700, currency: 'aud' },

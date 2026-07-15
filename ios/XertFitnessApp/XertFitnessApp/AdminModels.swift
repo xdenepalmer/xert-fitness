@@ -856,11 +856,35 @@ struct AdminEnvironmentHealth: Codable, Hashable {
 }
 
 struct AdminCommerceHealth: Codable, Hashable {
+    struct Issue: Codable, Hashable {
+        let slug: String
+        let reason: String
+    }
+
+    struct Webhook: Codable, Hashable {
+        let ready: Bool
+        let missing_events: [String]
+        let issue: String?
+    }
+
+    struct StripeAccount: Codable, Hashable {
+        let ready: Bool
+        let charges_enabled: Bool?
+        let payouts_enabled: Bool?
+        let details_submitted: Bool?
+        let country: String?
+        let default_currency: String?
+    }
+
     let ready: Bool
     let active_product_count: Int
     let stripe_price_count: Int
     let dynamic_price_count: Int
     let environment: AdminEnvironmentHealth
+    let mode: String?
+    let account: StripeAccount?
+    let webhook: Webhook?
+    let issues: [Issue]?
 }
 
 struct AdminPushHealth: Codable, Hashable {

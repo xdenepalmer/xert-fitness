@@ -1307,12 +1307,12 @@ export async function getOperationsHealth() {
       const result = await getCommerceConfigurationHealth();
       if (!result.ready) {
         const missing = result.environment?.missing || [];
-        const affected = [...new Set((result.issues || [])
-          .map(issue => issue.slug)
-          .filter(slug => slug && slug !== 'server'))];
+        const issueReasons = [...new Set((result.issues || [])
+          .map(issue => String(issue.reason || '').trim())
+          .filter(Boolean))];
         const problems = [
           missing.length > 0 ? `Missing server settings: ${missing.join(', ')}.` : '',
-          affected.length > 0 ? `Checkout configuration needs attention for: ${affected.join(', ')}.` : '',
+          issueReasons.slice(0, 3).join(' '),
         ].filter(Boolean);
         return {
           status: 'attention',
@@ -1320,12 +1320,12 @@ export async function getOperationsHealth() {
           detail: problems.join(' ') || 'No active checkout products are configured.',
           action: missing.length > 0
             ? 'Set the missing values in Vercel, redeploy, then refresh this check.'
-            : 'Review the affected records in Session Packs and Stripe.'
+            : 'Resolve each item in Stripe and Session Packs, redeploy if settings changed, then refresh this check.'
         };
       }
       return {
         count: result.active_product_count,
-        detail: `${result.stripe_price_count} Stripe-linked and ${result.dynamic_price_count} dynamic-price pack${result.active_product_count === 1 ? '' : 's'} verified.`
+        detail: `${String(result.mode || 'unknown').toUpperCase()} mode: ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`
       };
     }),
 
