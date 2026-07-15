@@ -13,6 +13,7 @@ with required (capability, migration) as (
     ('product_update_guard', 'supabase/migrations/20260713010000_product_update_guard.sql'),
     ('stripe_refund_reconciliation', 'supabase/migrations/20260713020000_stripe_refund_reconciliation.sql'),
     ('checkout_reconciliation', 'supabase/migrations/20260713030000_checkout_reconciliation.sql'),
+    ('stripe_payment_fulfillment', 'supabase/migrations/20260715010000_stripe_payment_fulfillment.sql'),
     ('member_announcements', 'supabase/migrations/20260713040000_member_announcements.sql'),
     ('announcement_receipts', 'supabase/migrations/20260713050000_announcement_receipts.sql'),
     ('announcement_actions', 'supabase/migrations/20260714000000_announcement_actions.sql'),

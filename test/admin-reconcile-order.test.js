@@ -65,19 +65,16 @@ test('Stripe fulfilment must match the complete pending order identity', () => {
 test('admin recovery reuses idempotent fulfilment and saves its actor audit', async () => {
   const calls = [];
   const admin = {
+    async rpc(name, payload) {
+      calls.push({ action: 'rpc', name, payload });
+      return { data: [{ fulfilled_order_id: ORDER_ID, final_status: 'paid', credit_created: true }], error: null };
+    },
     from(table) {
       return {
         select() {
           return {
             eq() { return { async single() { return { data: order, error: null }; } }; },
           };
-        },
-        upsert(record, options) {
-          calls.push({ action: 'upsert', table, record, options });
-          if (table === 'orders') {
-            return { select() { return { async single() { return { data: { id: ORDER_ID }, error: null }; } }; } };
-          }
-          return Promise.resolve({ error: null });
         },
         update(payload) {
           calls.push({ action: 'update', table, payload });
@@ -94,9 +91,29 @@ test('admin recovery reuses idempotent fulfilment and saves its actor audit', as
   assert.equal(result.status, 'paid');
   assert.equal(result.credits_granted, 4);
   assert.deepEqual(stripeCalls[0], { id: 'cs_xert', options: { expand: ['payment_intent.latest_charge'] } });
-  assert.equal(calls.filter(call => call.action === 'upsert' && call.table === 'credit_batches').length, 1);
+  assert.equal(calls.filter(call => call.action === 'rpc' && call.name === 'fulfill_stripe_checkout').length, 1);
   assert.equal(calls.find(call => call.action === 'update').payload.reconciled_by, 'admin-xert');
   assert.equal(calls.find(call => call.action === 'update').payload.reconciled_at, NOW.toISOString());
+});
+
+test('admin recovery cannot report paid when a concurrent refund wins the order lock', async () => {
+  const admin = {
+    async rpc() {
+      return { data: [{ fulfilled_order_id: ORDER_ID, final_status: 'refunded', credit_created: false }], error: null };
+    },
+    from() {
+      return {
+        select() {
+          return { eq() { return { async single() { return { data: order, error: null }; } }; } };
+        },
+      };
+    },
+  };
+  const stripe = { checkout: { sessions: { async retrieve() { return checkout; } } } };
+  await assert.rejects(
+    reconcileCheckoutOrder({ admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW }),
+    /ORDER_ALREADY_REFUNDED/
+  );
 });
 
 test('fresh and upgrade schemas retain a durable manual reconciliation marker', () => {

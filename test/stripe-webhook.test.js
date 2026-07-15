@@ -106,38 +106,24 @@ test('ignores non-payment Checkout events and rejects malformed metadata', () =>
   );
 });
 
-test('persists the order first and makes the credit grant idempotent', async () => {
+test('settles the order and credit grant through one database transaction', async () => {
   const calls = [];
   const admin = {
-    from(table) {
-      return {
-        upsert(record, options) {
-          calls.push({ table, record, options });
-          if (table === 'orders') {
-            return {
-              select() {
-                return {
-                  async single() {
-                    return { data: { id: 'order-xert' }, error: null };
-                  },
-                };
-              },
-            };
-          }
-          return Promise.resolve({ error: null });
-        },
-      };
+    async rpc(name, payload) {
+      calls.push({ name, payload });
+      return { data: [{ fulfilled_order_id: 'order-xert', final_status: 'paid', credit_created: true }], error: null };
     },
   };
 
-  await persistCheckoutFulfillment(admin, checkoutFulfillmentForEvent(checkoutEvent(), NOW));
+  const result = await persistCheckoutFulfillment(admin, checkoutFulfillmentForEvent(checkoutEvent(), NOW));
 
-  assert.equal(calls[0].table, 'orders');
-  assert.equal(calls[0].options.onConflict, 'stripe_checkout_session_id');
-  assert.equal(calls[1].table, 'credit_batches');
-  assert.equal(calls[1].record.order_id, 'order-xert');
-  assert.equal(calls[1].options.onConflict, 'order_id');
-  assert.equal(calls[1].options.ignoreDuplicates, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'fulfill_stripe_checkout');
+  assert.equal(calls[0].payload.p_checkout_session_id, 'cs_test_xert');
+  assert.equal(calls[0].payload.p_payment_intent_id, 'pi_test_xert');
+  assert.equal(calls[0].payload.p_credit_total, 4);
+  assert.equal(calls[0].payload.p_amount_cents, 4800);
+  assert.equal(result.final_status, 'paid');
 });
 
 test('expired and delayed-failed checkouts close only their pending order', async () => {

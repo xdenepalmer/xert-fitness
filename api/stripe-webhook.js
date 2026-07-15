@@ -159,23 +159,32 @@ export async function persistStripeRefund(admin, refund) {
  * Both tables are keyed by Stripe/session order IDs. Retried or concurrent
  * webhook deliveries can safely resume a failed grant without duplicating it.
  */
-export async function persistCheckoutFulfillment(admin, fulfillment) {
-  const { data: order, error: orderError } = await admin
-    .from('orders')
-    .upsert(fulfillment.order, { onConflict: 'stripe_checkout_session_id' })
-    .select('id')
-    .single();
-  if (orderError || !order) {
-    throw orderError || new Error('Could not record the paid order.');
-  }
+export function checkoutFulfillmentRPCPayload(fulfillment) {
+  return {
+    p_checkout_session_id: fulfillment.order.stripe_checkout_session_id,
+    p_user_id: fulfillment.order.user_id,
+    p_product_id: fulfillment.order.product_id,
+    p_email: fulfillment.order.email,
+    p_amount_cents: fulfillment.order.amount_cents,
+    p_currency: fulfillment.order.currency,
+    p_payment_intent_id: fulfillment.order.stripe_payment_intent_id,
+    p_paid_at: fulfillment.order.paid_at,
+    p_credit_total: fulfillment.credit.total,
+    p_expires_at: fulfillment.credit.expires_at,
+  };
+}
 
-  const { error: creditError } = await admin
-    .from('credit_batches')
-    .upsert(
-      { ...fulfillment.credit, order_id: order.id },
-      { onConflict: 'order_id', ignoreDuplicates: true }
-    );
-  if (creditError) throw creditError;
+export async function persistCheckoutFulfillment(admin, fulfillment) {
+  const { data, error } = await admin.rpc(
+    'fulfill_stripe_checkout',
+    checkoutFulfillmentRPCPayload(fulfillment)
+  );
+  if (error) throw error;
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result?.fulfilled_order_id || !['paid', 'refunded'].includes(result.final_status)) {
+    throw new Error('Stripe fulfillment transaction returned an invalid result.');
+  }
+  return result;
 }
 
 export function checkoutFailureForEvent(event) {

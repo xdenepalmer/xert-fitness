@@ -910,7 +910,7 @@ enum AdminSchemaReadiness {
         "admin_role_safety", "audited_credit_grants", "booking_waitlist_withdrawal",
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
         "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
-        "checkout_reconciliation", "member_announcements", "announcement_receipts",
+        "checkout_reconciliation", "stripe_payment_fulfillment", "member_announcements", "announcement_receipts",
         "announcement_actions", "announcement_archival", "booking_time_conflict_guard",
         "admin_member_notes", "schedule_blackout_guard", "database_security_hardening",
         "rls_policy_performance", "request_status_audit", "member_push_notifications",

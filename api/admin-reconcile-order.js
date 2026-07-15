@@ -45,7 +45,8 @@ export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, n
   });
   const fulfillment = checkoutFulfillmentForSession(checkout, now);
   assertFulfillmentMatchesOrder(order, fulfillment);
-  await persistCheckoutFulfillment(admin, fulfillment);
+  const settlement = await persistCheckoutFulfillment(admin, fulfillment);
+  if (settlement.final_status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
 
   const { error: auditError } = await admin
     .from('orders')
