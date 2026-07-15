@@ -4,11 +4,15 @@ import { readFile } from 'node:fs/promises';
 import {
   assertCheckoutProduct,
   assertStripePriceMatchesProduct,
+  checkoutIdempotencyKey,
+  normalizeCheckoutAttemptID,
   pendingOrderForCheckout,
   paymentFulfillmentIsReady,
   reusableCheckoutURL,
   stripeModeForSecret,
 } from '../api/checkout.js';
+
+const checkoutAttemptID = '7b464e63-6e3f-4f7d-94be-d8ef4231d589';
 
 const validProduct = {
   price_cents: 4800,
@@ -58,6 +62,21 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
 
 test('accepts a valid product before creating Stripe Checkout', () => {
   assert.doesNotThrow(() => assertCheckoutProduct(validProduct));
+});
+
+test('scopes Stripe idempotency to one member pack target and checkout attempt', () => {
+  const base = {
+    attemptID: checkoutAttemptID,
+    userID: 'member-xert',
+    productID: 'product-xert',
+    returnTarget: 'web',
+  };
+  assert.equal(normalizeCheckoutAttemptID(checkoutAttemptID.toUpperCase()), checkoutAttemptID);
+  assert.equal(checkoutIdempotencyKey(base), checkoutIdempotencyKey(base));
+  assert.notEqual(checkoutIdempotencyKey(base), checkoutIdempotencyKey({ ...base, userID: 'another-member' }));
+  assert.notEqual(checkoutIdempotencyKey(base), checkoutIdempotencyKey({ ...base, productID: 'another-product' }));
+  assert.notEqual(checkoutIdempotencyKey(base), checkoutIdempotencyKey({ ...base, returnTarget: 'ios' }));
+  assert.throws(() => normalizeCheckoutAttemptID('shared-or-guessable'), /identifier is invalid/i);
 });
 
 test('accepts only an active one-time Stripe price matching the configured pack', () => {
@@ -148,6 +167,8 @@ test('records a member-bound pending order before handing off to Stripe', async 
   assert.match(source, /stripeMode === 'live' && !product\.stripe_price_id/);
   assert.match(source, /customer_creation: 'always'/);
   assert.match(source, /payment_intent_data:/);
+  assert.match(source, /checkout\.sessions\.create\(checkoutParameters, \{[\s\S]*idempotencyKey:/);
+  assert.match(source, /xert_checkout_attempt_id: checkoutAttemptID/);
   assert.throws(
     () => pendingOrderForCheckout(
       { id: 'cs_xert', amount_total: 4700, currency: 'aud' },

@@ -621,7 +621,7 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func checkoutURL(for product: Product) async -> URL? {
+    func checkoutURL(for product: Product, attemptID: UUID) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
         do {
             let authSession = try await validAuthSession()
@@ -634,7 +634,11 @@ final class XertStore: ObservableObject {
                 baselineOrderIDs: Set(orders.map(\.id)),
                 startedAt: Date()
             )
-            let url = try await api.checkout(session: authSession, productSlug: product.slug)
+            let url = try await api.checkout(
+                session: authSession,
+                productSlug: product.slug,
+                attemptID: attemptID
+            )
             guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
             PendingCheckoutStore.save(pendingCheckout)
             isCheckoutConfirmationPending = true

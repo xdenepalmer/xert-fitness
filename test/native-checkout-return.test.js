@@ -19,7 +19,16 @@ const [api, deepLink, info, root, store, pendingStore, booking, browser, swiftTe
 test('native checkout requests the bounded iOS return target', () => {
   const checkout = api.slice(api.indexOf('func checkout('), api.indexOf('func requestPrivateSession'));
   assert.match(checkout, /"return_target": "ios"/);
+  assert.match(checkout, /attemptID: UUID/);
+  assert.match(checkout, /"checkout_attempt_id": attemptID\.uuidString\.lowercased\(\)/);
   assert.doesNotMatch(checkout, /success_url|cancel_url/);
+});
+
+test('native checkout reuses an attempt after API failure and clears it after handoff', () => {
+  assert.match(booking, /@State private var checkoutAttemptIDs: \[String: UUID\] = \[:\]/);
+  assert.match(booking, /checkoutAttemptIDs\[product\.id\] \?\? UUID\(\)/);
+  assert.match(booking, /checkoutURL\(for: product, attemptID: checkoutAttemptID\)/);
+  assert.match(booking, /if let url[\s\S]*checkoutAttemptIDs\[product\.id\] = nil[\s\S]*checkoutBrowser\.start/);
 });
 
 test('native checkout stays inside a trusted authenticated browser session', () => {

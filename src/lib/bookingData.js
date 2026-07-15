@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
+import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkoutAttempt';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -22,13 +23,17 @@ export async function startCheckout(productSlug) {
   } = await supabase.auth.getSession();
   if (!session) throw new Error('Please sign in before purchasing a pack.');
 
+  const checkoutAttemptID = getOrCreateCheckoutAttemptID(productSlug);
   const res = await fetch('/api/checkout', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`
     },
-    body: JSON.stringify({ product_slug: productSlug })
+    body: JSON.stringify({
+      product_slug: productSlug,
+      checkout_attempt_id: checkoutAttemptID
+    })
   });
 
   if (!res.ok) {
@@ -37,6 +42,7 @@ export async function startCheckout(productSlug) {
   }
   const { url } = await res.json();
   if (!url) throw new Error('Checkout session did not return a URL.');
+  clearCheckoutAttemptID(productSlug);
   window.location.href = url;
 }
 

@@ -10,6 +10,7 @@ struct BookingView: View {
     @State private var classDateWindow: ClassSessionDateWindow = .all
     @State private var classFit: ClassSessionFit = .all
     @State private var checkoutProductID: String?
+    @State private var checkoutAttemptIDs: [String: UUID] = [:]
     @State private var checkoutErrorMessage: String?
     let onNavigate: (XertPrimaryDestination) -> Void
 
@@ -162,8 +163,11 @@ struct BookingView: View {
                     }
                     guard checkoutProductID == nil, !checkoutBrowser.isPresenting else { return }
                     checkoutProductID = product.id
+                    let checkoutAttemptID = checkoutAttemptIDs[product.id] ?? UUID()
+                    checkoutAttemptIDs[product.id] = checkoutAttemptID
                     Task {
-                        if let url = await store.checkoutURL(for: product) {
+                        if let url = await store.checkoutURL(for: product, attemptID: checkoutAttemptID) {
+                            checkoutAttemptIDs[product.id] = nil
                             checkoutBrowser.start(url: url) { result in
                                 checkoutProductID = nil
                                 switch result {

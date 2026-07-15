@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { requestHeader, requestJson, sendJson } from './http.js';
 
 // Vercel serverless function using the default Node request/response signature.
@@ -10,6 +11,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
+const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function stripeModeForSecret(secret = '') {
   const value = String(secret).trim();
@@ -57,6 +59,25 @@ export function resolveCheckoutReturnURLs(origin, returnTarget = 'web') {
     };
   }
   throw new Error('Unsupported checkout return target.');
+}
+
+export function normalizeCheckoutAttemptID(value) {
+  const attemptID = String(value || '').trim().toLowerCase();
+  if (!CHECKOUT_ATTEMPT_PATTERN.test(attemptID)) {
+    throw new Error('Checkout attempt identifier is invalid.');
+  }
+  return attemptID;
+}
+
+/**
+ * The member, pack and return target scope prevent one client-provided attempt
+ * identifier from colliding with another purchase. Replaying the same request
+ * returns Stripe's original Checkout Session, including after a function stops
+ * between Stripe creation and the pending-order write.
+ */
+export function checkoutIdempotencyKey({ attemptID, userID, productID, returnTarget }) {
+  const normalizedAttemptID = normalizeCheckoutAttemptID(attemptID);
+  return `xert-checkout:${userID}:${productID}:${returnTarget}:${normalizedAttemptID}`;
 }
 
 function isPositiveInteger(value) {
@@ -197,8 +218,20 @@ export default async function handler(request, response) {
     }
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const { product_slug, return_target = 'web' } = await requestJson(request);
+    const {
+      product_slug,
+      return_target = 'web',
+      checkout_attempt_id: suppliedAttemptID,
+    } = await requestJson(request);
     if (!product_slug) return json({ error: 'Missing product.' }, 400);
+    let checkoutAttemptID;
+    try {
+      // Older installed clients remain compatible; updated clients keep this
+      // value stable if their network layer retries the same purchase action.
+      checkoutAttemptID = normalizeCheckoutAttemptID(suppliedAttemptID || randomUUID());
+    } catch (error) {
+      return json({ error: error.message }, 400);
+    }
     let returnURLs;
     try {
       returnURLs = resolveCheckoutReturnURLs(
@@ -247,7 +280,7 @@ export default async function handler(request, response) {
       };
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const checkoutParameters = {
       mode: 'payment',
       customer_creation: 'always',
       billing_address_collection: 'auto',
@@ -265,6 +298,7 @@ export default async function handler(request, response) {
           xert_user_id: user.id,
           xert_product_id: product.id,
           xert_product_slug: product.slug,
+          xert_checkout_attempt_id: checkoutAttemptID,
         },
       },
       metadata: {
@@ -274,7 +308,16 @@ export default async function handler(request, response) {
         sessions_count: String(product.sessions_count),
         validity_days: String(product.validity_days),
         return_target,
+        checkout_attempt_id: checkoutAttemptID,
       },
+    };
+    const session = await stripe.checkout.sessions.create(checkoutParameters, {
+      idempotencyKey: checkoutIdempotencyKey({
+        attemptID: checkoutAttemptID,
+        userID: user.id,
+        productID: product.id,
+        returnTarget: return_target,
+      }),
     });
 
     try {

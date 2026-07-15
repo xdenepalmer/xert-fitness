@@ -1542,10 +1542,14 @@ final class XertAPI {
         )
     }
 
-    func checkout(session auth: AuthSession, productSlug: String) async throws -> URL {
+    func checkout(session auth: AuthSession, productSlug: String, attemptID: UUID) async throws -> URL {
         let response: CheckoutResponse = try await vercelRequest(
             path: "/api/checkout",
-            body: ["product_slug": productSlug, "return_target": "ios"],
+            body: [
+                "product_slug": productSlug,
+                "return_target": "ios",
+                "checkout_attempt_id": attemptID.uuidString.lowercased()
+            ],
             auth: auth
         )
         return response.url
