@@ -33,6 +33,10 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>com.xertfitness.app.member-task</string>
+    </array>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>SUPABASE_URL</key>

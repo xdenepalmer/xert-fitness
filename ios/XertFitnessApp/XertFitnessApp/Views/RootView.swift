@@ -53,6 +53,13 @@ struct RootView: View {
             lockAndAuthenticate()
         }
         .onOpenURL(perform: handleOpenURL)
+        .userActivity(XertRouteUserActivity.activityType, isActive: !isPrivacyLocked) { activity in
+            XertRouteUserActivity.configure(activity, route: navigation.route)
+        }
+        .onContinueUserActivity(XertRouteUserActivity.activityType) { activity in
+            guard let route = XertRouteUserActivity.route(from: activity) else { return }
+            navigation.open(route, source: .handoff)
+        }
         .onAppear {
             navigation.restore(
                 workspaceValue: restoredMemberWorkspace,

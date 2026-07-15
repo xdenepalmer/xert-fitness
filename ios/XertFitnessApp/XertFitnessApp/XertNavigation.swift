@@ -216,6 +216,50 @@ enum XertNavigationSource: String, Equatable {
     case pushNotification
     case checkout
     case commandPalette
+    case handoff
+}
+
+enum XertRouteUserActivity {
+    static let activityType = "com.xertfitness.app.member-task"
+    private static let routeKey = "xert.memberRoute"
+    private static let versionKey = "xert.routeVersion"
+    private static let currentVersion = 1
+
+    static func configure(_ activity: NSUserActivity, route: XertMemberRoute) {
+        activity.title = "Continue \(route.navigationTitle) in XERT"
+        activity.webpageURL = route.webURL
+        activity.userInfo = [
+            routeKey: route.restorationValue,
+            versionKey: currentVersion
+        ]
+        activity.requiredUserInfoKeys = [routeKey, versionKey]
+        activity.isEligibleForHandoff = true
+        activity.isEligibleForSearch = !route.isContextualTask
+        activity.isEligibleForPrediction = !route.isContextualTask
+        activity.isEligibleForPublicIndexing = false
+    }
+
+    static func route(from activity: NSUserActivity) -> XertMemberRoute? {
+        guard activity.activityType == activityType else { return nil }
+
+        var restoredRoute: XertMemberRoute?
+        if let userInfo = activity.userInfo {
+            guard
+                let version = userInfo[versionKey] as? NSNumber,
+                version.intValue == currentVersion,
+                let routeValue = userInfo[routeKey] as? String,
+                let route = XertMemberRoute.restore(routeValue)
+            else { return nil }
+            restoredRoute = route
+        }
+
+        let webRoute = activity.webpageURL.flatMap { XertMemberRoute.route(for: $0) }
+
+        if let restoredRoute, let webRoute, restoredRoute != webRoute {
+            return nil
+        }
+        return restoredRoute ?? webRoute
+    }
 }
 
 enum XertNavigationDirection: Equatable {

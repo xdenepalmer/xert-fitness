@@ -57,6 +57,54 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/admin"))))
     }
 
+    func testRouteUserActivityRoundTripsExactTasksWithoutIndexingPrivateContext() throws {
+        let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
+        let route = XertMemberRoute.upcomingBookings(bookingID)
+        let activity = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+
+        XertRouteUserActivity.configure(activity, route: route)
+
+        XCTAssertEqual(XertRouteUserActivity.route(from: activity), route)
+        XCTAssertEqual(activity.webpageURL, route.webURL)
+        XCTAssertTrue(activity.isEligibleForHandoff)
+        XCTAssertFalse(activity.isEligibleForSearch)
+        XCTAssertFalse(activity.isEligibleForPrediction)
+        XCTAssertFalse(activity.isEligibleForPublicIndexing)
+    }
+
+    func testRouteUserActivityAllowsPrivateSearchOnlyForPrimaryWorkspaces() {
+        let activity = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+
+        XertRouteUserActivity.configure(activity, route: .events)
+
+        XCTAssertTrue(activity.isEligibleForSearch)
+        XCTAssertTrue(activity.isEligibleForPrediction)
+        XCTAssertFalse(activity.isEligibleForPublicIndexing)
+    }
+
+    func testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads() throws {
+        let wrongType = NSUserActivity(activityType: "com.example.other")
+        XertRouteUserActivity.configure(wrongType, route: .booking)
+        XCTAssertNil(XertRouteUserActivity.route(from: wrongType))
+
+        let future = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+        future.userInfo = ["xert.memberRoute": "booking", "xert.routeVersion": 2]
+        XCTAssertNil(XertRouteUserActivity.route(from: future))
+
+        let unversioned = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+        unversioned.userInfo = ["xert.memberRoute": "booking"]
+        XCTAssertNil(XertRouteUserActivity.route(from: unversioned))
+
+        let untrusted = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+        untrusted.webpageURL = try XCTUnwrap(URL(string: "https://example.com/open/booking"))
+        XCTAssertNil(XertRouteUserActivity.route(from: untrusted))
+
+        let conflicting = NSUserActivity(activityType: XertRouteUserActivity.activityType)
+        conflicting.userInfo = ["xert.memberRoute": "booking", "xert.routeVersion": 1]
+        conflicting.webpageURL = XertMemberRoute.events.webURL
+        XCTAssertNil(XertRouteUserActivity.route(from: conflicting))
+    }
+
     func testNavigationCoordinatorTracksSourcesHistoryReselectionAndAdjacentTabs() {
         let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 3)
 
