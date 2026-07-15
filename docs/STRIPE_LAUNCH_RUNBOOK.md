@@ -33,6 +33,22 @@ VITE_SUPABASE_URL=https://ugmkwoapjcpiucsrxwzt.supabase.co
 The secret-key mode and every Stripe Price mode must match. Live checkout is
 deliberately blocked when an active pack has no stable Stripe Price ID.
 
+The repository includes an idempotent catalog linker so this does not need to
+be a manual copy-and-paste operation. It reads active packs, reuses matching
+Stripe Products and one-time Prices, and compare-and-set links each Price ID in
+Supabase. It defaults to a read-only dry run:
+
+```bash
+npm run stripe:catalog:live
+npm run stripe:catalog:live:apply
+```
+
+Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `STRIPE_SECRET_KEY` in the
+operator shell first. The script requires the canonical XERT Supabase project
+and a Stripe key matching the explicit mode. If replacing existing test Price
+IDs during live cutover, review the dry run and then run
+`npm run stripe:catalog:live:replace`. The script never prints secret values.
+
 ## 3. Register The Webhook
 
 Create this endpoint in the same Stripe mode as the secret key:
