@@ -175,10 +175,8 @@ export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
-  if (!process.env.STRIPE_SECRET_KEY) return json({ error: 'Stripe is not configured.' }, 500);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   try {
@@ -194,6 +192,11 @@ export default async function handler(request, response) {
         error: 'Checkout is temporarily unavailable while payment services are being upgraded.',
       }, 503);
     }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return json({ error: 'Stripe is not configured.' }, 500);
+    }
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     const { product_slug, return_target = 'web' } = await requestJson(request);
     if (!product_slug) return json({ error: 'Missing product.' }, 400);

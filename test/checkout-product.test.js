@@ -46,8 +46,12 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
   assert.equal(await paymentFulfillmentIsReady({ from() { return query; } }), false);
 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const authenticationGate = source.indexOf("if (!token) return json({ error: 'Not authenticated.' }, 401)");
   const gate = source.indexOf('paymentFulfillmentIsReady(admin)');
+  const stripeConfigurationGate = source.indexOf('if (!process.env.STRIPE_SECRET_KEY)');
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(authenticationGate >= 0 && stripeConfigurationGate > authenticationGate);
+  assert.ok(gate >= 0 && stripeConfigurationGate > gate);
   assert.ok(gate >= 0 && sessionCreation > gate);
   assert.match(source, /payment services are being upgraded[\s\S]*503/);
 });
