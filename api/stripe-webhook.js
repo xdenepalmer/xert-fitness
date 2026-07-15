@@ -19,6 +19,27 @@ const FAILURE_EVENT_TYPES = new Set([
   'checkout.session.async_payment_failed',
 ]);
 
+export function stripeModeForSecret(secretKey) {
+  if (/^sk_live_/.test(secretKey || '')) return 'live';
+  if (/^sk_test_/.test(secretKey || '')) return 'test';
+  return 'unknown';
+}
+
+export function assertStripeEventMode(event, secretKey) {
+  const keyMode = stripeModeForSecret(secretKey);
+  if (keyMode === 'unknown') {
+    throw new Error('Stripe secret key mode could not be verified.');
+  }
+  if (typeof event?.livemode !== 'boolean') {
+    throw new Error('Stripe event mode is missing.');
+  }
+  const eventMode = event.livemode ? 'live' : 'test';
+  if (eventMode !== keyMode) {
+    throw new Error(`Stripe ${eventMode} event does not match the ${keyMode} secret key.`);
+  }
+  return keyMode;
+}
+
 function parseNonNegativeInteger(value) {
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);
@@ -65,7 +86,10 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
     !metadata.user_id ||
     !metadata.product_id ||
     !sessions ||
-    validityDays === null
+    validityDays === null ||
+    !Number.isSafeInteger(checkout.amount_total) ||
+    checkout.amount_total <= 0 ||
+    String(checkout.currency || '').toLowerCase() !== 'aud'
   ) {
     throw new Error('Checkout metadata is incomplete or invalid.');
   }
@@ -198,6 +222,7 @@ export default async function handler(request, response) {
   }
 
   try {
+    assertStripeEventMode(event, process.env.STRIPE_SECRET_KEY);
     const fulfillment = checkoutFulfillmentForEvent(event);
     if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
     const failure = checkoutFailureForEvent(event);

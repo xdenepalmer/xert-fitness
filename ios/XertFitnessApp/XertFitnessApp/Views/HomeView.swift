@@ -6,7 +6,7 @@ struct HomeView: View {
     @Environment(\.openURL) private var openURL
     let announcementID: UUID?
     let announcementNavigationRequest: Int
-    let onNavigate: (Int) -> Void
+    let onNavigate: (XertPrimaryDestination) -> Void
     @State private var showingNoticeCenter = false
     @State private var highlightedAnnouncementID: UUID?
     @State private var lastHandledAnnouncementRequest = 0
@@ -19,8 +19,8 @@ struct HomeView: View {
                         content: store.publicContent(for: .hero),
                         isSignedIn: store.isSignedIn,
                         noticeCount: store.announcements.count,
-                        onBook: { onNavigate(1) },
-                        onEvents: { onNavigate(2) },
+                        onBook: { onNavigate(.booking) },
+                        onEvents: { onNavigate(.events) },
                         onNotices: openNoticeCenter,
                         onRefresh: { Task { await store.refresh() } }
                     )
@@ -33,7 +33,7 @@ struct HomeView: View {
                         StaleMemberDataNotice()
                         DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
                         announcementsSection
-                        NativeTrainingIdentity(onExplore: { onNavigate(4) })
+                        NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
                         todayTrainingSection
                         creditExpirySection
                         nextUpSection
@@ -140,7 +140,7 @@ struct HomeView: View {
                         .font(.caption)
                         .foregroundStyle(Color.xertPale)
                     Button("Book A Class") {
-                        onNavigate(1)
+                        onNavigate(.booking)
                     }
                     .buttonStyle(.xertPrimary)
                 }
@@ -169,13 +169,13 @@ struct HomeView: View {
     @ViewBuilder
     private var quickActionCards: some View {
         QuickActionCard(icon: "calendar.badge.plus", title: "Book") {
-            onNavigate(1)
+            onNavigate(.booking)
         }
         QuickActionCard(icon: "trophy", title: "Events") {
-            onNavigate(2)
+            onNavigate(.events)
         }
         QuickActionCard(icon: "person.crop.circle", title: "Account") {
-            onNavigate(3)
+            onNavigate(.account)
         }
     }
 
@@ -231,7 +231,7 @@ struct HomeView: View {
                             .foregroundStyle(Color.xertMuted)
                     }
                     Button("View bookings") {
-                        onNavigate(3)
+                        onNavigate(.account)
                     }
                     .buttonStyle(.xertGhost)
                 }
@@ -239,13 +239,13 @@ struct HomeView: View {
                 EmptyAction(
                     message: "No class booked yet.",
                     actionTitle: "Browse classes",
-                    action: { onNavigate(1) }
+                    action: { onNavigate(.booking) }
                 )
             } else {
                 EmptyAction(
                     message: "Sign in to manage bookings and credits.",
                     actionTitle: "Sign in",
-                    action: { onNavigate(3) }
+                    action: { onNavigate(.account) }
                 )
             }
         }
@@ -283,7 +283,7 @@ struct HomeView: View {
                         .xertCardStyle()
                     }
                     Button("Manage today's bookings") {
-                        onNavigate(3)
+                        onNavigate(.account)
                     }
                     .buttonStyle(.xertPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -308,7 +308,7 @@ struct HomeView: View {
                             .foregroundStyle(Color.xertMuted)
                     }
                     Button("View event calendar") {
-                        onNavigate(2)
+                        onNavigate(.events)
                     }
                     .buttonStyle(.xertGhost)
                 }
@@ -340,7 +340,7 @@ struct HomeView: View {
                 .padding(.vertical, 6)
             }
             Button("View session packs") {
-                onNavigate(1)
+                onNavigate(.booking)
             }
             .buttonStyle(.xertGhost)
         }

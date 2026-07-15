@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertStripeEventMode,
   checkoutFailureForEvent,
   checkoutFulfillmentForEvent,
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
   stripeRefundForEvent,
+  stripeModeForSecret,
 } from '../api/stripe-webhook.js';
 
 const NOW = new Date('2026-07-12T00:00:00.000Z');
 
 function checkoutEvent({ type = 'checkout.session.completed', paymentStatus = 'paid', metadata = {} } = {}) {
   return {
+    livemode: false,
     type,
     data: {
       object: {
@@ -34,6 +37,21 @@ function checkoutEvent({ type = 'checkout.session.completed', paymentStatus = 'p
     },
   };
 }
+
+test('fails closed when Stripe event and secret-key modes do not match', () => {
+  assert.equal(stripeModeForSecret('sk_test_xert'), 'test');
+  assert.equal(stripeModeForSecret('sk_live_xert'), 'live');
+  assert.equal(assertStripeEventMode(checkoutEvent(), 'sk_test_xert'), 'test');
+  assert.throws(
+    () => assertStripeEventMode({ ...checkoutEvent(), livemode: true }, 'sk_test_xert'),
+    /does not match/i
+  );
+  assert.throws(() => assertStripeEventMode(checkoutEvent(), 'invalid'), /could not be verified/i);
+  assert.throws(
+    () => assertStripeEventMode({ ...checkoutEvent(), livemode: undefined }, 'sk_test_xert'),
+    /mode is missing/i
+  );
+});
 
 test('creates one durable fulfilment record for a paid checkout', () => {
   const fulfilment = checkoutFulfillmentForEvent(checkoutEvent(), NOW);
@@ -77,6 +95,13 @@ test('ignores non-payment Checkout events and rejects malformed metadata', () =>
 
   assert.throws(
     () => checkoutFulfillmentForEvent(checkoutEvent({ metadata: { sessions_count: '0' } }), NOW),
+    /metadata is incomplete or invalid/i
+  );
+  assert.throws(
+    () => checkoutFulfillmentForEvent({
+      ...checkoutEvent(),
+      data: { object: { ...checkoutEvent().data.object, currency: 'usd' } },
+    }, NOW),
     /metadata is incomplete or invalid/i
   );
 });

@@ -5,7 +5,7 @@ struct RootView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
-    @State private var selectedTab = 0
+    @SceneStorage("xert.primaryDestination") private var selectedDestinationRawValue = XertPrimaryDestination.home.rawValue
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
@@ -79,34 +79,34 @@ struct RootView: View {
     }
 
     private var memberTabs: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: selectedDestinationBinding) {
             HomeView(
                 announcementID: announcementID,
                 announcementNavigationRequest: announcementNavigationRequest,
-                onNavigate: { selectedTab = $0 }
+                onNavigate: navigate
             )
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
-                .tag(0)
+                .tag(XertPrimaryDestination.home)
 
-            BookingView(onNavigate: { selectedTab = $0 })
+            BookingView(onNavigate: navigate)
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
-                .tag(1)
+                .tag(XertPrimaryDestination.booking)
 
-            EventsView(onNavigate: { selectedTab = $0 })
+            EventsView(onNavigate: navigate)
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
-                .tag(2)
+                .tag(XertPrimaryDestination.events)
 
-            ExploreView(onNavigate: { selectedTab = $0 })
+            ExploreView(onNavigate: navigate)
                 .tabItem {
                     Label("Explore", systemImage: "safari")
                 }
-                .tag(4)
+                .tag(XertPrimaryDestination.explore)
 
             AccountView(
                 reminderBookingID: reminderBookingID,
@@ -115,17 +115,18 @@ struct RootView: View {
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
                 }
-                .tag(3)
+                .tag(XertPrimaryDestination.account)
         }
         .toolbar(.hidden, for: .tabBar)
         .tint(.xertSteel)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             XertNavigationDock(
-                selection: $selectedTab,
+                selection: selectedDestinationBinding,
                 isAdmin: store.profile?.isAdmin == true,
                 noticeCount: store.announcements.count,
                 bookingCount: activeBookingCount,
-                onOpenAdmin: { showingAdminCommandCentre = true }
+                onOpenAdmin: { showingAdminCommandCentre = true },
+                onReselect: handleReselection
             )
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
@@ -155,6 +156,22 @@ struct RootView: View {
 
     private var activeBookingCount: Int {
         store.bookings.filter { $0.isActiveClassPlace && $0.start_time >= Date() }.count
+    }
+
+    private var selectedDestinationBinding: Binding<XertPrimaryDestination> {
+        Binding(
+            get: { XertPrimaryDestination(rawValue: selectedDestinationRawValue) ?? .home },
+            set: navigate
+        )
+    }
+
+    private func navigate(to destination: XertPrimaryDestination) {
+        selectedDestinationRawValue = destination.rawValue
+    }
+
+    private func handleReselection(_: XertPrimaryDestination) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Task { await store.refresh() }
     }
 
     private var isPrivacyLocked: Bool {
@@ -220,7 +237,7 @@ struct RootView: View {
     private func handleOpenURL(_ url: URL) {
         guard let status = CheckoutDeepLink.status(from: url) else { return }
         checkoutReturnStatus = status
-        selectedTab = 1
+        navigate(to: .booking)
         Task {
             if status == .success {
                 await store.reconcileCheckout()
@@ -235,7 +252,7 @@ struct RootView: View {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
         announcementID = pendingAnnouncementID
         announcementNavigationRequest += 1
-        selectedTab = 0
+        navigate(to: .home)
         Task { await store.refresh() }
     }
 
@@ -243,33 +260,21 @@ struct RootView: View {
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
         reminderBookingID = bookingID
         reminderNavigationRequest += 1
-        selectedTab = 3
+        navigate(to: .account)
     }
-}
-
-private struct XertNavigationItem: Identifiable {
-    let id: Int
-    let title: String
-    let icon: String
-    let selectedIcon: String
 }
 
 private struct XertNavigationDock: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Binding var selection: Int
+    @Binding var selection: XertPrimaryDestination
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
     let onOpenAdmin: () -> Void
+    let onReselect: (XertPrimaryDestination) -> Void
     @Namespace private var selectionNamespace
 
-    private let items = [
-        XertNavigationItem(id: 0, title: "Home", icon: "house", selectedIcon: "house.fill"),
-        XertNavigationItem(id: 1, title: "Book", icon: "calendar.badge.plus", selectedIcon: "calendar.badge.plus"),
-        XertNavigationItem(id: 2, title: "Events", icon: "trophy", selectedIcon: "trophy.fill"),
-        XertNavigationItem(id: 4, title: "Explore", icon: "safari", selectedIcon: "safari.fill"),
-        XertNavigationItem(id: 3, title: "Account", icon: "person.crop.circle", selectedIcon: "person.crop.circle.fill"),
-    ]
+    private let items = XertPrimaryDestination.dockOrder
 
     var body: some View {
         VStack(spacing: 0) {
@@ -335,25 +340,28 @@ private struct XertNavigationDock: View {
         .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
     }
 
-    private func navigationButton(_ item: XertNavigationItem) -> some View {
-        let selected = selection == item.id
-        let badge = item.id == 0 ? noticeCount : item.id == 1 ? bookingCount : 0
+    private func navigationButton(_ item: XertPrimaryDestination) -> some View {
+        let selected = selection == item
+        let badge = item == .home ? noticeCount : item == .booking ? bookingCount : 0
         return Button {
-            guard selection != item.id else { return }
+            guard selection != item else {
+                onReselect(item)
+                return
+            }
             UISelectionFeedbackGenerator().selectionChanged()
-            withAnimation(.easeOut(duration: 0.2)) { selection = item.id }
+            withAnimation(.easeOut(duration: 0.2)) { selection = item }
         } label: {
             VStack(spacing: 4) {
                 ZStack {
-                    if item.id == 1 {
+                    if item == .booking {
                         Rectangle()
                             .fill(selected ? Color.xertPale : Color.xertSteel)
                             .frame(width: 38, height: 34)
                             .overlay(Rectangle().stroke(Color.xertOffWhite.opacity(0.32), lineWidth: 1))
                     }
                     Image(systemName: selected ? item.selectedIcon : item.icon)
-                        .font(.system(size: item.id == 1 ? 17 : 18, weight: .semibold))
-                        .foregroundStyle(item.id == 1 ? Color.xertNavy : selected ? Color.xertSteel : Color.xertPale.opacity(0.62))
+                        .font(.system(size: item == .booking ? 17 : 18, weight: .semibold))
+                        .foregroundStyle(item == .booking ? Color.xertNavy : selected ? Color.xertSteel : Color.xertPale.opacity(0.62))
                         .frame(width: 38, height: 34)
 
                     if badge > 0 {
@@ -380,7 +388,7 @@ private struct XertNavigationDock: View {
                 if selected {
                     Rectangle()
                         .fill(Color.xertSteel)
-                        .frame(width: item.id == 1 ? 42 : 28, height: 2)
+                        .frame(width: item == .booking ? 42 : 28, height: 2)
                         .matchedGeometryEffect(id: "primary-navigation-selection", in: selectionNamespace)
                 }
             }
@@ -389,7 +397,7 @@ private struct XertNavigationDock: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
-        .accessibilityHint(item.id == 1 && bookingCount > 0 ? "\(bookingCount) upcoming bookings" : "")
+        .accessibilityHint(item == .booking && bookingCount > 0 ? "\(bookingCount) upcoming bookings" : "")
     }
 }
 

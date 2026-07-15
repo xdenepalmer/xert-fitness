@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ExploreView: View {
     @EnvironmentObject private var store: XertStore
-    let onNavigate: (Int) -> Void
+    let onNavigate: (XertPrimaryDestination) -> Void
 
     private var about: AdminSiteContentData { store.publicContent(for: .about) }
     private var contact: AdminSiteContentData { store.publicContent(for: .contact) }
@@ -37,7 +37,7 @@ struct ExploreView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .listRowBackground(Color.xertInk)
                     }
-                    Button("Book your first session") { onNavigate(1) }
+                    Button("Book your first session") { onNavigate(.booking) }
                         .foregroundStyle(Color.xertSteel)
                         .listRowBackground(Color.xertInk)
                 }

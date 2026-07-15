@@ -6,7 +6,7 @@ struct EventsView: View {
     @State private var showCompleted = false
     @State private var addingToCalendarID: String?
     @State private var calendarNotice: CalendarNotice?
-    let onNavigate: (Int) -> Void
+    let onNavigate: (XertPrimaryDestination) -> Void
 
     var body: some View {
         NavigationStack {
@@ -252,7 +252,7 @@ struct EventsView: View {
                 .disabled(store.updatingEventGoalID == eventID)
             } else {
                 Button {
-                    onNavigate(3)
+                    onNavigate(.account)
                 } label: {
                     Label("Sign in to train for this", systemImage: "person.crop.circle")
                 }

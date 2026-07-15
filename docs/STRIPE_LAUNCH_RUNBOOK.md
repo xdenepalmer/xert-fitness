@@ -47,6 +47,11 @@ charge.refunded
 ```
 
 Copy that endpoint's `whsec_...` signing secret to Vercel and redeploy.
+XERT rejects a signed test event when `STRIPE_SECRET_KEY` is live, and rejects
+a signed live event when the key is test. A `500` delivery mentioning an event
+mode mismatch means the Vercel key and webhook endpoint were created in
+different Stripe modes; correct the environment instead of replaying it across
+modes.
 
 ## 4. Verify In XERT
 

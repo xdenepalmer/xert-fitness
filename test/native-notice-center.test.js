@@ -10,7 +10,7 @@ test('push navigation carries the exact notice into Home', () => {
   assert.match(root, /@State private var announcementID: UUID\?/);
   assert.match(root, /@State private var announcementNavigationRequest = 0/);
   assert.match(root, /HomeView\([\s\S]*announcementID: announcementID[\s\S]*announcementNavigationRequest: announcementNavigationRequest/);
-  assert.match(root, /consumePendingAnnouncementID\(\)[\s\S]*announcementID = pendingAnnouncementID[\s\S]*announcementNavigationRequest \+= 1[\s\S]*selectedTab = 0/);
+  assert.match(root, /consumePendingAnnouncementID\(\)[\s\S]*announcementID = pendingAnnouncementID[\s\S]*announcementNavigationRequest \+= 1[\s\S]*navigate\(to: \.home\)/);
 });
 
 test('native Home exposes a stable notice badge and bounded preview', () => {

@@ -26,7 +26,7 @@ test('the app delegate and root route reminder taps into the matching account ro
   assert.match(app, /@UIApplicationDelegateAdaptor\(XertAppDelegate\.self\)/);
   assert.match(root, /consumePendingBookingID\(\)/);
   assert.match(root, /reminderBookingID = bookingID/);
-  assert.match(root, /selectedTab = 3/);
+  assert.match(root, /navigate\(to: \.account\)/);
   assert.match(account, /ScrollViewReader/);
   assert.match(account, /store\.bookings\.contains\(where: \{ \$0\.id == reminderBookingID \}\)/);
   assert.match(account, /proxy\.scrollTo\(target, anchor: \.center\)/);

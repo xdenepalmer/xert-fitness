@@ -48,14 +48,7 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
         }
         if destination.hasPrefix("/"), !destination.hasPrefix("//") {
             let path = URLComponents(string: destination)?.path ?? destination
-            let nativeTab: Int?
-            switch path {
-            case "/", "/home": nativeTab = 0
-            case "/booking": nativeTab = 1
-            case "/events": nativeTab = 2
-            case "/account": nativeTab = 3
-            default: nativeTab = nil
-            }
+            let nativeTab = XertPrimaryDestination.destination(for: path)
             guard let url = URL(string: destination, relativeTo: AppConfig.vercelBaseURL)?.absoluteURL else {
                 return nil
             }
@@ -74,7 +67,7 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
 struct MemberAnnouncementAction: Equatable {
     let label: String
     let url: URL
-    let nativeTab: Int?
+    let nativeTab: XertPrimaryDestination?
 }
 
 struct Product: Identifiable, Codable, Hashable {

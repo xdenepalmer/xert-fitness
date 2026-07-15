@@ -40,7 +40,7 @@ test('web and native member homes expose an actionable expiry warning', () => {
   assert.match(account, /Book A Class/);
   assert.match(home, /creditExpirySection/);
   assert.match(home, /Credits Expiring Soon/);
-  assert.match(home, /onNavigate\(1\)/);
+  assert.match(home, /onNavigate\(\.booking\)/);
   assert.match(models, /expirySummary\([\s\S]*windowDays: Int = 7/);
 });
 

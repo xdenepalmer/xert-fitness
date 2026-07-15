@@ -188,7 +188,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(announcement.priorityLabel, "Action requested")
         XCTAssertNotNil(announcement.expires_at)
         XCTAssertEqual(announcement.action?.label, "Book A Class")
-        XCTAssertEqual(announcement.action?.nativeTab, 1)
+        XCTAssertEqual(announcement.action?.nativeTab, .booking)
     }
 
     func testMemberAnnouncementActionsRouteNativeTabsAndRejectUnsafeLinks() throws {
@@ -211,8 +211,8 @@ final class ModelsTests: XCTestCase {
             return try decoder.decode(MemberAnnouncement.self, from: data)
         }
 
-        XCTAssertEqual(try announcement(url: "/events").action?.nativeTab, 2)
-        XCTAssertEqual(try announcement(url: "/account").action?.nativeTab, 3)
+        XCTAssertEqual(try announcement(url: "/events").action?.nativeTab, .events)
+        XCTAssertEqual(try announcement(url: "/account").action?.nativeTab, .account)
         XCTAssertEqual(try announcement(url: "https://events.example.com/register").action?.url.host, "events.example.com")
         XCTAssertNil(try announcement(url: "http://events.example.com").action)
         XCTAssertNil(try announcement(url: "//events.example.com").action)

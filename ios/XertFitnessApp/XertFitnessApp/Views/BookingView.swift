@@ -11,7 +11,7 @@ struct BookingView: View {
     @State private var classFit: ClassSessionFit = .all
     @State private var checkoutProductID: UUID?
     @State private var checkoutErrorMessage: String?
-    let onNavigate: (Int) -> Void
+    let onNavigate: (XertPrimaryDestination) -> Void
 
     var body: some View {
         NavigationStack {
@@ -139,7 +139,7 @@ struct BookingView: View {
                     Text("Sign in to book classes and buy packs.")
                         .foregroundStyle(Color.xertMuted)
                     Button("Sign in or create an account") {
-                        onNavigate(3)
+                        onNavigate(.account)
                     }
                     .buttonStyle(.xertPrimary)
                 }
@@ -157,7 +157,7 @@ struct BookingView: View {
             ForEach(store.products) { product in
                 Button {
                     guard store.isSignedIn else {
-                        onNavigate(3)
+                        onNavigate(.account)
                         return
                     }
                     guard checkoutProductID == nil, !checkoutBrowser.isPresenting else { return }
@@ -461,7 +461,7 @@ struct BookingView: View {
                 if store.isSignedIn {
                     Task { await store.joinWaitlist(session) }
                 } else {
-                    onNavigate(3)
+                    onNavigate(.account)
                 }
             } label: {
                 Label(store.isSignedIn ? "Join waitlist" : "Sign in to join waitlist", systemImage: "person.2.badge.plus")
@@ -477,7 +477,7 @@ struct BookingView: View {
                 if store.isSignedIn {
                     Task { await store.book(session) }
                 } else {
-                    onNavigate(3)
+                    onNavigate(.account)
                 }
             } label: {
                 Label(
