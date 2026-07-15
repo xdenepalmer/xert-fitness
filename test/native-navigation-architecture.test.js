@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const rootURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url);
 const navigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift', import.meta.url);
+const viewURL = name => new URL(`../ios/XertFitnessApp/XertFitnessApp/Views/${name}.swift`, import.meta.url);
 
 test('native navigation uses five stable primary destinations without iOS More overflow', async () => {
   const root = await readFile(rootURL, 'utf8');
@@ -43,30 +44,67 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
   assert.equal((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length, 5);
 });
 
-test('primary routing is typed, restorable, and owns native deep-link mapping', async () => {
+test('member routing is typed, task-restorable, and owns native deep-link mapping', async () => {
   const [root, navigation] = await Promise.all([
     readFile(rootURL, 'utf8'),
     readFile(navigationURL, 'utf8'),
   ]);
-  assert.match(root, /@SceneStorage\("xert\.primaryDestination"\)/);
+  assert.match(root, /@SceneStorage\("xert\.memberRoute"\)/);
   assert.match(root, /Binding<XertPrimaryDestination>/);
   assert.match(root, /@StateObject private var navigation = XertNavigationCoordinator\(\)/);
-  assert.match(root, /navigation\.restore\(rawValue: selectedDestinationRawValue\)/);
+  assert.match(root, /navigation\.restore\(routeValue: restoredMemberRoute\)/);
+  assert.match(root, /restoredMemberRoute = route\.restorationValue/);
   assert.match(root, /private func navigate\(to destination: XertPrimaryDestination\)/);
-  assert.match(root, /XertPrimaryDestination\.destination\(for: url\)/);
+  assert.match(root, /XertMemberRoute\.route\(for: url\)/);
+  assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
   assert.doesNotMatch(root, /selectedTab\s*=\s*\d/);
   for (const path of ['/booking', '/events', '/account', '/explore']) {
     assert.match(navigation, new RegExp(`"${path.replace('/', '\\/')}"`));
   }
   assert.match(navigation, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
-  assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil/);
+  assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil[\s\S]*url\.query == nil[\s\S]*url\.fragment == nil/);
+  assert.match(navigation, /enum XertMemberRoute: Hashable/);
+  assert.match(navigation, /case notices\(UUID\?\)/);
+  assert.match(navigation, /case upcomingBookings\(UUID\?\)/);
+  assert.match(navigation, /case sessionPacks/);
+  assert.match(navigation, /case purchaseConfirmation/);
+  assert.match(navigation, /case eventGoals/);
+  assert.match(navigation, /var restorationValue: String/);
+  assert.match(navigation, /static func restore\(_ value: String\)/);
   assert.match(navigation, /final class XertNavigationCoordinator: ObservableObject/);
+  assert.match(navigation, /@Published private\(set\) var route: XertMemberRoute/);
+  assert.match(navigation, /func open\(_ targetRoute: XertMemberRoute/);
   assert.match(navigation, /private\(set\) var history: \[XertPrimaryDestination\]/);
   assert.match(navigation, /func returnToPrevious\(source: XertNavigationSource/);
   assert.match(navigation, /history\.count > historyLimit[\s\S]*history\.removeFirst/);
   for (const source of ['restoration', 'dock', 'dockSwipe', 'history', 'content', 'deepLink', 'pushNotification', 'checkout', 'commandPalette']) {
     assert.match(navigation, new RegExp(`case ${source}`));
   }
+});
+
+test('contextual member routes focus the exact native task instead of only its tab', async () => {
+  const [root, home, booking, events, account] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(viewURL('HomeView'), 'utf8'),
+    readFile(viewURL('BookingView'), 'utf8'),
+    readFile(viewURL('EventsView'), 'utf8'),
+    readFile(viewURL('AccountView'), 'utf8'),
+  ]);
+  assert.match(root, /navigation\.open\(\.notices\(nil\), source: \.commandPalette\)/);
+  assert.match(root, /navigation\.open\(\.upcomingBookings\(nil\), source: \.commandPalette\)/);
+  assert.match(root, /navigation\.open\(\.eventGoals, source: \.commandPalette\)/);
+  assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.commandPalette\)/);
+  assert.match(root, /navigation\.open\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
+  assert.match(root, /navigation\.open\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
+  for (const view of [home, booking, events, account]) {
+    assert.match(view, /let route: XertMemberRoute/);
+    assert.match(view, /let routeSequence: UInt/);
+  }
+  assert.match(home, /case \.notices\(let announcementID\) = route[\s\S]*showingNoticeCenter = true/);
+  assert.match(booking, /case \.sessionPacks: target = \.packs/);
+  assert.match(booking, /case \.purchaseConfirmation: target = \.credits/);
+  assert.match(events, /route == \.eventGoals[\s\S]*proxy\.scrollTo\(ScrollTarget\.goals/);
+  assert.match(account, /case \.upcomingBookings\(let bookingID\) = route[\s\S]*proxy\.scrollTo\(target/);
 });
 
 test('native navigation exposes a searchable contextual command switcher', async () => {
@@ -134,7 +172,7 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /withAnimation\(reduceMotion \? nil : \.easeOut/);
   assert.match(root, /active member notices/);
   assert.match(root, /Refreshes this workspace/);
-  assert.match(root, /navigation\.select\(\.booking, source: \.checkout\)/);
-  assert.match(root, /navigation\.select\(destination, source: \.deepLink\)/);
+  assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.checkout\)/);
+  assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
   assert.match(root, /source: \.pushNotification/);
 });

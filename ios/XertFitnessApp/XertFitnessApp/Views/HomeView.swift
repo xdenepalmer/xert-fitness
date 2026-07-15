@@ -4,12 +4,12 @@ struct HomeView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
-    let announcementID: UUID?
-    let announcementNavigationRequest: Int
+    let route: XertMemberRoute
+    let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
     @State private var showingNoticeCenter = false
     @State private var highlightedAnnouncementID: UUID?
-    @State private var lastHandledAnnouncementRequest = 0
+    @State private var lastHandledRouteSequence: UInt = 0
 
     var body: some View {
         NavigationStack {
@@ -67,11 +67,11 @@ struct HomeView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
-            .onChange(of: announcementNavigationRequest) { request in
-                handleAnnouncementNavigation(request)
+            .onChange(of: routeSequence) { sequence in
+                handleRoute(sequence)
             }
             .onAppear {
-                handleAnnouncementNavigation(announcementNavigationRequest)
+                handleRoute(routeSequence)
             }
         }
     }
@@ -105,9 +105,9 @@ struct HomeView: View {
         showingNoticeCenter = true
     }
 
-    private func handleAnnouncementNavigation(_ request: Int) {
-        guard request > lastHandledAnnouncementRequest else { return }
-        lastHandledAnnouncementRequest = request
+    private func handleRoute(_ sequence: UInt) {
+        guard sequence > lastHandledRouteSequence, case .notices(let announcementID) = route else { return }
+        lastHandledRouteSequence = sequence
         highlightedAnnouncementID = announcementID
         showingNoticeCenter = true
     }

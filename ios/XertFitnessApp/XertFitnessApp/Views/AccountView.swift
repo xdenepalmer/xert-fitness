@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct AccountView: View {
-    let reminderBookingID: UUID?
-    let reminderNavigationRequest: Int
+    let route: XertMemberRoute
+    let routeSequence: UInt
 
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -24,7 +24,7 @@ struct AccountView: View {
     @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
-    @State private var handledReminderNavigationRequest = 0
+    @State private var handledRouteSequence: UInt = 0
     @FocusState private var focusedProfileField: ProfileField?
 
     private enum ProfileField {
@@ -73,19 +73,19 @@ struct AccountView: View {
                 .onAppear(perform: syncProfileForm)
                 .onAppear {
                     authenticationSupport = DeviceAuthenticator.support()
-                    scrollToReminderBooking(using: proxy)
+                    focusRoute(using: proxy)
                 }
-                .onChange(of: reminderNavigationRequest) { _ in
-                    scrollToReminderBooking(using: proxy)
+                .onChange(of: routeSequence) { _ in
+                    focusRoute(using: proxy)
                 }
                 .onChange(of: store.isSignedIn) { _ in
-                    scrollToReminderBooking(using: proxy)
+                    focusRoute(using: proxy)
                 }
                 .onChange(of: store.isLoading) { _ in
-                    scrollToReminderBooking(using: proxy)
+                    focusRoute(using: proxy)
                 }
                 .onChange(of: store.bookings) { _ in
-                    scrollToReminderBooking(using: proxy)
+                    focusRoute(using: proxy)
                 }
                 .onChange(of: store.profile) { _ in
                     syncProfileForm()
@@ -131,10 +131,11 @@ struct AccountView: View {
         }
     }
 
-    private func scrollToReminderBooking(using proxy: ScrollViewProxy) {
+    private func focusRoute(using proxy: ScrollViewProxy) {
         guard
-            reminderNavigationRequest > 0,
-            reminderNavigationRequest != handledReminderNavigationRequest,
+            routeSequence > 0,
+            routeSequence != handledRouteSequence,
+            case .upcomingBookings(let bookingID) = route,
             store.isSignedIn,
             !store.isLoading
         else {
@@ -143,12 +144,12 @@ struct AccountView: View {
         Task { @MainActor in
             await Task.yield()
             let target: AnyHashable
-            if let reminderBookingID, store.bookings.contains(where: { $0.id == reminderBookingID }) {
-                target = reminderBookingID
+            if let bookingID, store.bookings.contains(where: { $0.id == bookingID }) {
+                target = bookingID
             } else {
                 target = ScrollTarget.bookings
             }
-            handledReminderNavigationRequest = reminderNavigationRequest
+            handledRouteSequence = routeSequence
             withAnimation {
                 proxy.scrollTo(target, anchor: .center)
             }

@@ -6,16 +6,12 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
-    @SceneStorage("xert.primaryDestination") private var selectedDestinationRawValue = XertPrimaryDestination.home.rawValue
+    @SceneStorage("xert.memberRoute") private var restoredMemberRoute = XertMemberRoute.home.restorationValue
     @StateObject private var navigation = XertNavigationCoordinator()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
     @State private var privacyLockError: String?
-    @State private var reminderBookingID: UUID?
-    @State private var reminderNavigationRequest = 0
-    @State private var announcementID: UUID?
-    @State private var announcementNavigationRequest = 0
     @State private var showingAdminCommandCentre = false
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
@@ -57,12 +53,12 @@ struct RootView: View {
         }
         .onOpenURL(perform: handleOpenURL)
         .onAppear {
-            navigation.restore(rawValue: selectedDestinationRawValue)
+            navigation.restore(routeValue: restoredMemberRoute)
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
         }
-        .onChange(of: navigation.selection) { destination in
-            selectedDestinationRawValue = destination.rawValue
+        .onChange(of: navigation.route) { route in
+            restoredMemberRoute = route.restorationValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
@@ -89,8 +85,8 @@ struct RootView: View {
     private var memberTabs: some View {
         TabView(selection: selectedDestinationBinding) {
             HomeView(
-                announcementID: announcementID,
-                announcementNavigationRequest: announcementNavigationRequest,
+                route: navigation.route,
+                routeSequence: navigation.routeSequence,
                 onNavigate: navigate
             )
                 .tabItem {
@@ -98,13 +94,13 @@ struct RootView: View {
                 }
                 .tag(XertPrimaryDestination.home)
 
-            BookingView(onNavigate: navigate)
+            BookingView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
                 .tag(XertPrimaryDestination.booking)
 
-            EventsView(onNavigate: navigate)
+            EventsView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
@@ -117,8 +113,8 @@ struct RootView: View {
                 .tag(XertPrimaryDestination.explore)
 
             AccountView(
-                reminderBookingID: reminderBookingID,
-                reminderNavigationRequest: reminderNavigationRequest
+                route: navigation.route,
+                routeSequence: navigation.routeSequence
             )
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
@@ -268,13 +264,13 @@ struct RootView: View {
     private func executeNavigationActivity(_ activity: XertNavigationActivity) {
         switch activity {
         case .notices:
-            navigation.select(.home, source: .commandPalette)
+            navigation.open(.notices(nil), source: .commandPalette)
         case .upcomingBookings:
-            navigation.select(.account, source: .commandPalette)
+            navigation.open(.upcomingBookings(nil), source: .commandPalette)
         case .eventGoals:
-            navigation.select(.events, source: .commandPalette)
+            navigation.open(.eventGoals, source: .commandPalette)
         case .pendingCheckout:
-            navigation.select(.booking, source: .commandPalette)
+            navigation.open(.purchaseConfirmation, source: .commandPalette)
             Task { await store.reconcilePendingCheckout() }
         }
     }
@@ -349,7 +345,7 @@ struct RootView: View {
     private func handleOpenURL(_ url: URL) {
         if let status = CheckoutDeepLink.status(from: url) {
             checkoutReturnStatus = status
-            navigation.select(.booking, source: .checkout)
+            navigation.open(.purchaseConfirmation, source: .checkout)
             Task {
                 if status == .success {
                     await store.reconcileCheckout()
@@ -360,23 +356,19 @@ struct RootView: View {
             }
             return
         }
-        guard let destination = XertPrimaryDestination.destination(for: url) else { return }
-        navigation.select(destination, source: .deepLink)
+        guard let route = XertMemberRoute.route(for: url) else { return }
+        navigation.open(route, source: .deepLink)
     }
 
     private func consumePendingAnnouncementRoute() {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
-        announcementID = pendingAnnouncementID
-        announcementNavigationRequest += 1
-        navigation.select(.home, source: .pushNotification)
+        navigation.open(.notices(pendingAnnouncementID), source: .pushNotification)
         Task { await store.refresh() }
     }
 
     private func consumePendingReminderRoute() {
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
-        reminderBookingID = bookingID
-        reminderNavigationRequest += 1
-        navigation.select(.account, source: .pushNotification)
+        navigation.open(.upcomingBookings(bookingID), source: .pushNotification)
     }
 }
 

@@ -54,13 +54,97 @@ enum XertPrimaryDestination: Int, CaseIterable, Identifiable, Hashable {
     }
 
     static func destination(for url: URL) -> Self? {
+        XertMemberRoute.route(for: url)?.destination
+    }
+}
+
+enum XertMemberRoute: Hashable {
+    case home
+    case notices(UUID?)
+    case booking
+    case sessionPacks
+    case purchaseConfirmation
+    case events
+    case eventGoals
+    case explore
+    case account
+    case upcomingBookings(UUID?)
+
+    var destination: XertPrimaryDestination {
+        switch self {
+        case .home, .notices(_): return .home
+        case .booking, .sessionPacks, .purchaseConfirmation: return .booking
+        case .events, .eventGoals: return .events
+        case .explore: return .explore
+        case .account, .upcomingBookings(_): return .account
+        }
+    }
+
+    static func primary(_ destination: XertPrimaryDestination) -> Self {
+        switch destination {
+        case .home: return .home
+        case .booking: return .booking
+        case .events: return .events
+        case .explore: return .explore
+        case .account: return .account
+        }
+    }
+
+    var restorationValue: String {
+        switch self {
+        case .home: return "home"
+        case .notices(let id): return ["home", "notices", id?.uuidString.lowercased()].compactMap { $0 }.joined(separator: "/")
+        case .booking: return "booking"
+        case .sessionPacks: return "booking/packs"
+        case .purchaseConfirmation: return "booking/purchase-confirmation"
+        case .events: return "events"
+        case .eventGoals: return "events/goals"
+        case .explore: return "explore"
+        case .account: return "account"
+        case .upcomingBookings(let id): return ["account", "bookings", id?.uuidString.lowercased()].compactMap { $0 }.joined(separator: "/")
+        }
+    }
+
+    static func restore(_ value: String) -> Self? {
+        route(forPath: "/\(value.trimmingCharacters(in: CharacterSet(charactersIn: "/")))")
+    }
+
+    static func route(for url: URL) -> Self? {
         guard url.scheme?.lowercased() == "xertfitness",
               url.user == nil,
-              url.password == nil else { return nil }
+              url.password == nil,
+              url.query == nil,
+              url.fragment == nil else { return nil }
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased()
-        let route = host.isEmpty ? path : "/\(host)\(path)"
-        return destination(for: route.isEmpty ? "/" : route)
+        let routePath = host.isEmpty ? path : "/\(host)\(path)"
+        return route(forPath: routePath.isEmpty ? "/" : routePath)
+    }
+
+    private static func route(forPath path: String) -> Self? {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        switch parts.joined(separator: "/") {
+        case "", "home": return .home
+        case "home/notices": return .notices(nil)
+        case "booking": return .booking
+        case "booking/packs": return .sessionPacks
+        case "booking/purchase-confirmation": return .purchaseConfirmation
+        case "events": return .events
+        case "events/goals": return .eventGoals
+        case "explore": return .explore
+        case "account": return .account
+        case "account/bookings": return .upcomingBookings(nil)
+        default:
+            if parts.count == 3, parts[0] == "home", parts[1] == "notices",
+               let id = UUID(uuidString: parts[2]) {
+                return .notices(id)
+            }
+            if parts.count == 3, parts[0] == "account", parts[1] == "bookings",
+               let id = UUID(uuidString: parts[2]) {
+                return .upcomingBookings(id)
+            }
+            return nil
+        }
     }
 }
 
@@ -154,6 +238,8 @@ struct XertNavigationCommand: Identifiable, Hashable {
 
 final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var selection: XertPrimaryDestination
+    @Published private(set) var route: XertMemberRoute
+    @Published private(set) var routeSequence: UInt = 0
     @Published private(set) var lastTransition: XertNavigationTransition?
     @Published private(set) var reselectionSequence: UInt = 0
     private(set) var history: [XertPrimaryDestination]
@@ -163,6 +249,7 @@ final class XertNavigationCoordinator: ObservableObject {
 
     init(initial: XertPrimaryDestination = .home, historyLimit: Int = 12) {
         selection = initial
+        route = .primary(initial)
         history = [initial]
         self.historyLimit = max(2, historyLimit)
     }
@@ -253,6 +340,23 @@ final class XertNavigationCoordinator: ObservableObject {
         let destination = XertPrimaryDestination(rawValue: rawValue) ?? .home
         let previous = selection
         selection = destination
+        route = .primary(destination)
+        routeSequence &+= 1
+        history = [destination]
+        if previous == destination {
+            lastTransition = nil
+        } else {
+            recordTransition(from: previous, to: destination, source: .restoration)
+        }
+    }
+
+    func restore(routeValue: String) {
+        let restoredRoute = XertMemberRoute.restore(routeValue) ?? .home
+        let destination = restoredRoute.destination
+        let previous = selection
+        selection = destination
+        route = restoredRoute
+        routeSequence &+= 1
         history = [destination]
         if previous == destination {
             lastTransition = nil
@@ -263,16 +367,26 @@ final class XertNavigationCoordinator: ObservableObject {
 
     @discardableResult
     func select(_ destination: XertPrimaryDestination, source: XertNavigationSource) -> Bool {
-        guard destination != selection else {
+        open(.primary(destination), source: source)
+    }
+
+    @discardableResult
+    func open(_ targetRoute: XertMemberRoute, source: XertNavigationSource) -> Bool {
+        let destination = targetRoute.destination
+        if destination == selection, targetRoute == route {
             reselect(destination)
             return false
         }
 
         let previous = selection
         selection = destination
-        history.append(destination)
-        if history.count > historyLimit {
-            history.removeFirst(history.count - historyLimit)
+        route = targetRoute
+        routeSequence &+= 1
+        if destination != previous {
+            history.append(destination)
+            if history.count > historyLimit {
+                history.removeFirst(history.count - historyLimit)
+            }
         }
         recordTransition(from: previous, to: destination, source: source)
         return true
@@ -293,6 +407,8 @@ final class XertNavigationCoordinator: ObservableObject {
         history.removeLast()
         guard let destination = history.last else { return false }
         selection = destination
+        route = .primary(destination)
+        routeSequence &+= 1
         recordTransition(from: previous, to: destination, source: source)
         return true
     }

@@ -50,7 +50,7 @@ test('native app accepts only the XERT checkout callback and refreshes member da
   assert.match(deepLink, /CheckoutReturnStatus\(rawValue: value\)/);
   assert.match(root, /\.onOpenURL/);
   assert.match(root, /CheckoutDeepLink\.status\(from: url\)/);
-  assert.match(root, /navigation\.select\(\.booking, source: \.checkout\)/);
+  assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.checkout\)/);
   assert.match(root, /status == \.success[\s\S]*store\.reconcileCheckout\(\)/);
 });
 

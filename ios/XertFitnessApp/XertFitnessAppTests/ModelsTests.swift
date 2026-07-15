@@ -11,6 +11,27 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://checkout?status=success"))))
     }
 
+    func testMemberSubroutesRoundTripAndRejectAmbiguousDeepLinks() throws {
+        let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000021"))
+        let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000022"))
+        let routes: [XertMemberRoute] = [
+            .home, .notices(nil), .notices(announcementID), .booking, .sessionPacks,
+            .purchaseConfirmation, .events, .eventGoals, .explore, .account,
+            .upcomingBookings(nil), .upcomingBookings(bookingID),
+        ]
+
+        for route in routes {
+            XCTAssertEqual(XertMemberRoute.restore(route.restorationValue), route)
+        }
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/packs"))), .sessionPacks)
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://events/goals"))), .eventGoals)
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://account/bookings/\(bookingID.uuidString)"))), .upcomingBookings(bookingID))
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://home/notices/\(announcementID.uuidString)"))), .notices(announcementID))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://account/bookings/not-a-uuid"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/packs?source=unknown"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://user:pass@booking/packs"))))
+    }
+
     func testNavigationCoordinatorTracksSourcesHistoryReselectionAndAdjacentTabs() {
         let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 3)
 
@@ -35,6 +56,29 @@ final class ModelsTests: XCTestCase {
 
         navigation.restore(rawValue: XertPrimaryDestination.account.rawValue)
         XCTAssertEqual(navigation.selection, .account)
+        XCTAssertEqual(navigation.history, [.account])
+        XCTAssertEqual(navigation.lastTransition?.source, .restoration)
+    }
+
+    func testNavigationCoordinatorTracksAndRestoresExactMemberTasks() {
+        let navigation = XertNavigationCoordinator(initial: .booking)
+        let initialSequence = navigation.routeSequence
+
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .commandPalette))
+        XCTAssertEqual(navigation.selection, .booking)
+        XCTAssertEqual(navigation.route, .sessionPacks)
+        XCTAssertGreaterThan(navigation.routeSequence, initialSequence)
+        XCTAssertEqual(navigation.history, [.booking])
+        XCTAssertEqual(navigation.lastTransition?.from, .booking)
+        XCTAssertEqual(navigation.lastTransition?.to, .booking)
+
+        XCTAssertTrue(navigation.open(.eventGoals, source: .deepLink))
+        XCTAssertEqual(navigation.selection, .events)
+        XCTAssertEqual(navigation.history, [.booking, .events])
+
+        navigation.restore(routeValue: XertMemberRoute.upcomingBookings(nil).restorationValue)
+        XCTAssertEqual(navigation.selection, .account)
+        XCTAssertEqual(navigation.route, .upcomingBookings(nil))
         XCTAssertEqual(navigation.history, [.account])
         XCTAssertEqual(navigation.lastTransition?.source, .restoration)
     }

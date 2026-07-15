@@ -6,11 +6,17 @@ struct EventsView: View {
     @State private var showCompleted = false
     @State private var addingToCalendarID: String?
     @State private var calendarNotice: CalendarNotice?
+    @State private var handledRouteSequence: UInt = 0
+    let route: XertMemberRoute
+    let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+
+    private enum ScrollTarget: Hashable { case goals }
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollViewReader { proxy in
+              List {
                 Section {
                     XertPageHero(
                         imageName: "EventsHero",
@@ -67,6 +73,7 @@ struct EventsView: View {
                         Text("Your Training Goals")
                             .xertEyebrow()
                     }
+                    .id(ScrollTarget.goals)
                 }
 
                 Section {
@@ -96,21 +103,35 @@ struct EventsView: View {
                         }
                     }
                 }
+              }
+              .xertListBackground()
+              .listStyle(.plain)
+              .navigationTitle("Events")
+              .navigationBarTitleDisplayMode(.inline)
+              .refreshable { await store.refresh() }
+              .onAppear { focusRoute(using: proxy) }
+              .onChange(of: routeSequence) { _ in focusRoute(using: proxy) }
+              .onChange(of: store.eventGoalIDs) { _ in focusRoute(using: proxy) }
+              .alert(item: $calendarNotice) { notice in
+                  Alert(
+                      title: Text(notice.title),
+                      message: Text(notice.message),
+                      dismissButton: .default(Text("OK"))
+                  )
+              }
             }
-            .xertListBackground()
-            .listStyle(.plain)
-            .navigationTitle("Events")
-            .navigationBarTitleDisplayMode(.inline)
-            .refreshable {
-                await store.refresh()
-            }
-            .alert(item: $calendarNotice) { notice in
-                Alert(
-                    title: Text(notice.title),
-                    message: Text(notice.message),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
+        }
+    }
+
+    private func focusRoute(using proxy: ScrollViewProxy) {
+        guard routeSequence > 0,
+              routeSequence != handledRouteSequence,
+              route == .eventGoals,
+              !trainingGoals.isEmpty else { return }
+        handledRouteSequence = routeSequence
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation { proxy.scrollTo(ScrollTarget.goals, anchor: .top) }
         }
     }
 

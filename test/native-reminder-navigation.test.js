@@ -25,10 +25,10 @@ test('class reminder taps validate and persist the exact booking route', () => {
 test('the app delegate and root route reminder taps into the matching account row', () => {
   assert.match(app, /@UIApplicationDelegateAdaptor\(XertAppDelegate\.self\)/);
   assert.match(root, /consumePendingBookingID\(\)/);
-  assert.match(root, /reminderBookingID = bookingID/);
-  assert.match(root, /navigation\.select\(\.account, source: \.pushNotification\)/);
+  assert.match(root, /navigation\.open\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
   assert.match(account, /ScrollViewReader/);
-  assert.match(account, /store\.bookings\.contains\(where: \{ \$0\.id == reminderBookingID \}\)/);
+  assert.match(account, /case \.upcomingBookings\(let bookingID\) = route/);
+  assert.match(account, /store\.bookings\.contains\(where: \{ \$0\.id == bookingID \}\)/);
   assert.match(account, /proxy\.scrollTo\(target, anchor: \.center\)/);
   assert.match(account, /\.id\(booking\.id\)/);
 });

@@ -12,75 +12,101 @@ struct BookingView: View {
     @State private var checkoutProductID: String?
     @State private var checkoutAttemptIDs: [String: UUID] = [:]
     @State private var checkoutErrorMessage: String?
+    @State private var handledRouteSequence: UInt = 0
+    let route: XertMemberRoute
+    let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+
+    private enum ScrollTarget: Hashable {
+        case credits, packs
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    XertPageHero(
-                        imageName: "BookHero",
-                        eyebrow: "XERT Classes",
-                        title: "Train. Book. Repeat.",
-                        subtitle: store.publicContent(for: .booking).intro
-                            ?? "Choose the session that matches your goal, reserve your place and arrive ready to work.",
-                        badge: store.isSignedIn
-                            ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
-                            : "Your first coached session starts here"
-                    )
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+            ScrollViewReader { proxy in
+                List {
+                    Section {
+                        XertPageHero(
+                            imageName: "BookHero",
+                            eyebrow: "XERT Classes",
+                            title: "Train. Book. Repeat.",
+                            subtitle: store.publicContent(for: .booking).intro
+                                ?? "Choose the session that matches your goal, reserve your place and arrive ready to work.",
+                            badge: store.isSignedIn
+                                ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
+                                : "Your first coached session starts here"
+                        )
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
 
-                noticeSections
-                creditsSection
-                packsSection
-                classDiscoverySection
-                classesSection
-                personalTrainingSection
-            }
-            .tint(.xertSteel)
-            .xertListBackground()
-            .listStyle(.plain)
-            .navigationTitle("Book")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $classSearch,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Class, coach or location"
-            )
-            .refreshable {
-                await store.refresh()
-                await store.reconcilePendingCheckout()
-            }
-            .sheet(item: $activeSheet) { sheet in
-                switch sheet {
-                case .privateSession:
-                    PrivateSessionRequestView(
-                        initialName: initialName,
-                        initialEmail: initialEmail,
-                        initialPhone: initialPhone
-                    )
-                    .environmentObject(store)
-                case .classInterest(let session):
-                    ClassInterestRequestView(
-                        session: session,
-                        initialName: initialName,
-                        initialEmail: initialEmail,
-                        initialPhone: initialPhone
-                    )
-                    .environmentObject(store)
+                    noticeSections
+                    creditsSection
+                    packsSection
+                    classDiscoverySection
+                    classesSection
+                    personalTrainingSection
                 }
-            }
-            .alert("Secure Checkout", isPresented: Binding(
+                .tint(.xertSteel)
+                .xertListBackground()
+                .listStyle(.plain)
+                .navigationTitle("Book")
+                .navigationBarTitleDisplayMode(.inline)
+                .searchable(
+                    text: $classSearch,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Class, coach or location"
+                )
+                .refreshable {
+                    await store.refresh()
+                    await store.reconcilePendingCheckout()
+                }
+                .onAppear { focusRoute(using: proxy) }
+                .onChange(of: routeSequence) { _ in focusRoute(using: proxy) }
+                .sheet(item: $activeSheet) { sheet in
+                    switch sheet {
+                    case .privateSession:
+                        PrivateSessionRequestView(
+                            initialName: initialName,
+                            initialEmail: initialEmail,
+                            initialPhone: initialPhone
+                        )
+                        .environmentObject(store)
+                    case .classInterest(let session):
+                        ClassInterestRequestView(
+                            session: session,
+                            initialName: initialName,
+                            initialEmail: initialEmail,
+                            initialPhone: initialPhone
+                        )
+                        .environmentObject(store)
+                    }
+                }
+                .alert("Secure Checkout", isPresented: Binding(
                 get: { checkoutErrorMessage != nil },
                 set: { if !$0 { checkoutErrorMessage = nil } }
-            )) {
+                )) {
                 Button("OK") { checkoutErrorMessage = nil }
-            } message: {
+                } message: {
                 Text(checkoutErrorMessage ?? "")
+                }
             }
+        }
+    }
+
+    private func focusRoute(using proxy: ScrollViewProxy) {
+        guard routeSequence > 0, routeSequence != handledRouteSequence else { return }
+        let target: ScrollTarget
+        switch route {
+        case .sessionPacks: target = .packs
+        case .purchaseConfirmation: target = .credits
+        default: return
+        }
+        handledRouteSequence = routeSequence
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation { proxy.scrollTo(target, anchor: .top) }
         }
     }
 
@@ -149,6 +175,7 @@ struct BookingView: View {
         } header: {
             Text("Credits").xertEyebrow()
         }
+        .id(ScrollTarget.credits)
         .listRowBackground(Color.xertInk)
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
     }
@@ -199,6 +226,7 @@ struct BookingView: View {
         } header: {
             Text("Buy Session Packs").xertEyebrow()
         }
+        .id(ScrollTarget.packs)
         .listRowBackground(Color.xertInk)
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
     }
