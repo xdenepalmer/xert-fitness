@@ -28,10 +28,13 @@ test('primary routing is typed, restorable, and owns native deep-link mapping', 
   assert.match(root, /@SceneStorage\("xert\.primaryDestination"\)/);
   assert.match(root, /Binding<XertPrimaryDestination>/);
   assert.match(root, /private func navigate\(to destination: XertPrimaryDestination\)/);
+  assert.match(root, /XertPrimaryDestination\.destination\(for: url\)/);
   assert.doesNotMatch(root, /selectedTab\s*=\s*\d/);
   for (const path of ['/booking', '/events', '/account', '/explore']) {
     assert.match(navigation, new RegExp(`"${path.replace('/', '\\/')}"`));
   }
+  assert.match(navigation, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
+  assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil/);
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {

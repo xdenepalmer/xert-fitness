@@ -51,4 +51,14 @@ enum XertPrimaryDestination: Int, CaseIterable, Identifiable, Hashable {
         default: return nil
         }
     }
+
+    static func destination(for url: URL) -> Self? {
+        guard url.scheme?.lowercased() == "xertfitness",
+              url.user == nil,
+              url.password == nil else { return nil }
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.lowercased()
+        let route = host.isEmpty ? path : "/\(host)\(path)"
+        return destination(for: route.isEmpty ? "/" : route)
+    }
 }

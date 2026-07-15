@@ -235,17 +235,21 @@ struct RootView: View {
     }
 
     private func handleOpenURL(_ url: URL) {
-        guard let status = CheckoutDeepLink.status(from: url) else { return }
-        checkoutReturnStatus = status
-        navigate(to: .booking)
-        Task {
-            if status == .success {
-                await store.reconcileCheckout()
-            } else {
-                store.cancelPendingCheckout()
-                await store.refresh()
+        if let status = CheckoutDeepLink.status(from: url) {
+            checkoutReturnStatus = status
+            navigate(to: .booking)
+            Task {
+                if status == .success {
+                    await store.reconcileCheckout()
+                } else {
+                    store.cancelPendingCheckout()
+                    await store.refresh()
+                }
             }
+            return
         }
+        guard let destination = XertPrimaryDestination.destination(for: url) else { return }
+        navigate(to: destination)
     }
 
     private func consumePendingAnnouncementRoute() {

@@ -2,6 +2,15 @@ import XCTest
 @testable import XertFitness
 
 final class ModelsTests: XCTestCase {
+    func testPrimaryNavigationDeepLinksUseTheTypedRouteContract() throws {
+        XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://booking"))), .booking)
+        XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://events"))), .events)
+        XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness:///explore"))), .explore)
+        XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://account"))), .account)
+        XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/booking"))))
+        XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://checkout?status=success"))))
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
