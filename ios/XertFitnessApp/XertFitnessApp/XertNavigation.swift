@@ -95,6 +95,15 @@ enum XertMemberRoute: Hashable {
         }
     }
 
+    var isContextualTask: Bool {
+        switch self {
+        case .notices(_), .sessionPacks, .purchaseConfirmation, .eventGoals, .upcomingBookings(_):
+            return true
+        case .home, .booking, .events, .explore, .account:
+            return false
+        }
+    }
+
     static func primary(_ destination: XertPrimaryDestination) -> Self {
         switch destination {
         case .home: return .home
@@ -198,6 +207,7 @@ struct XertNavigationTransition: Equatable {
 
 enum XertNavigationCommandAction: Hashable {
     case destination(XertPrimaryDestination)
+    case route(XertMemberRoute)
     case activity(XertNavigationActivity)
     case previous
     case refresh
@@ -213,6 +223,7 @@ enum XertNavigationActivity: Hashable {
 
 enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     case now = "Now"
+    case recent = "Recent"
     case navigate = "Navigate"
     case system = "System"
 
@@ -304,6 +315,7 @@ final class XertNavigationCoordinator: ObservableObject {
             }
 
         commands.insert(contentsOf: activityCommands(context: context), at: 0)
+        commands.append(contentsOf: recentTaskCommands())
 
         commands.append(XertNavigationCommand(
             id: "refresh-\(selection.rawValue)",
@@ -506,6 +518,29 @@ final class XertNavigationCoordinator: ObservableObject {
             ))
         }
         return commands
+    }
+
+    private func recentTaskCommands(limit: Int = 3) -> [XertNavigationCommand] {
+        var seenTasks: Set<String> = []
+        return routeHistory
+            .dropLast()
+            .reversed()
+            .compactMap { recentRoute -> XertNavigationCommand? in
+                guard recentRoute != route, recentRoute.isContextualTask else { return nil }
+                let taskKey = recentRoute.navigationTitle.lowercased()
+                guard seenTasks.insert(taskKey).inserted else { return nil }
+                return XertNavigationCommand(
+                    id: "recent-\(recentRoute.restorationValue)",
+                    title: recentRoute.navigationTitle,
+                    subtitle: "Reopen this recent XERT task",
+                    icon: recentRoute.destination.icon,
+                    keywords: ["recent", "history", recentRoute.navigationTitle],
+                    section: .recent,
+                    action: .route(recentRoute)
+                )
+            }
+            .prefix(max(0, limit))
+            .map { $0 }
     }
 
     private func commandSubtitle(

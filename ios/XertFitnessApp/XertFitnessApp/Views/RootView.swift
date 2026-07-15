@@ -249,6 +249,8 @@ struct RootView: View {
         switch command.action {
         case .destination(let destination):
             navigation.select(destination, source: .commandPalette)
+        case .route(let route):
+            navigation.open(route, source: .commandPalette)
         case .activity(let activity):
             executeNavigationActivity(activity)
         case .previous:

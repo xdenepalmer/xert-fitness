@@ -182,6 +182,34 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testNavigationCommandPaletteOffersBoundedUniqueRecentTasks() throws {
+        let firstNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000041"))
+        let latestNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000042"))
+        let navigation = XertNavigationCoordinator(initial: .home)
+
+        XCTAssertTrue(navigation.open(.notices(firstNoticeID), source: .pushNotification))
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.eventGoals, source: .commandPalette))
+        XCTAssertTrue(navigation.open(.notices(latestNoticeID), source: .pushNotification))
+        XCTAssertTrue(navigation.open(.purchaseConfirmation, source: .checkout))
+
+        let commands = navigation.commandPaletteCommands(isAdmin: false)
+        XCTAssertEqual(
+            commands.filter { $0.section == .recent }.map(\.action),
+            [
+                .route(.notices(latestNoticeID)),
+                .route(.eventGoals),
+                .route(.sessionPacks),
+            ]
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(commands, query: "recent session").map(\.action),
+            [.route(.sessionPacks)]
+        )
+        XCTAssertFalse(commands.contains { $0.action == .route(.notices(firstNoticeID)) })
+        XCTAssertFalse(commands.contains { $0.action == .route(.purchaseConfirmation) })
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

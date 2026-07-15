@@ -116,6 +116,7 @@ test('native navigation exposes a searchable contextual command switcher', async
     readFile(new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url), 'utf8'),
   ]);
   assert.match(navigation, /enum XertNavigationCommandAction: Hashable/);
+  assert.match(navigation, /case route\(XertMemberRoute\)/);
   assert.match(navigation, /struct XertNavigationContext: Equatable/);
   assert.match(navigation, /enum XertNavigationActivity: Hashable/);
   assert.match(navigation, /enum XertNavigationCommandSection: String, CaseIterable, Identifiable/);
@@ -132,12 +133,30 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /accessibilityAction\(named: "Open XERT quick switcher"/);
   assert.match(root, /Label\("Quick switcher", systemImage: "magnifyingglass"\)/);
   assert.match(root, /navigation\.select\(destination, source: \.commandPalette\)/);
+  assert.match(root, /navigation\.open\(route, source: \.commandPalette\)/);
   assert.match(root, /guard store\.profile\?\.isAdmin == true else \{ return \}/);
   assert.match(root, /\.sheet\(isPresented: \$showingNavigationCommands, onDismiss: completeCommandDismissal\)/);
   assert.match(root, /opensAdminAfterCommandDismissal = true[\s\S]*completeCommandDismissal/);
   assert.match(root, /executeNavigationActivity[\s\S]*case \.pendingCheckout:[\s\S]*store\.reconcilePendingCheckout\(\)/);
   assert.match(modelsTests, /testNavigationCommandPaletteIsContextualRoleAwareAndSearchable/);
   assert.match(modelsTests, /testNavigationCommandPalettePromotesLiveMemberActivity/);
+  assert.match(modelsTests, /testNavigationCommandPaletteOffersBoundedUniqueRecentTasks/);
+});
+
+test('quick switcher offers bounded unique recent contextual tasks', async () => {
+  const [navigation, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /case recent = "Recent"/);
+  assert.match(navigation, /var isContextualTask: Bool/);
+  assert.match(navigation, /private func recentTaskCommands\(limit: Int = 3\)/);
+  assert.match(navigation, /routeHistory[\s\S]*\.dropLast\(\)[\s\S]*\.reversed\(\)/);
+  assert.match(navigation, /guard recentRoute != route, recentRoute\.isContextualTask/);
+  assert.match(navigation, /guard seenTasks\.insert\(taskKey\)\.inserted/);
+  assert.match(navigation, /\.prefix\(max\(0, limit\)\)/);
+  assert.match(navigation, /section: \.recent,[\s\S]*action: \.route\(recentRoute\)/);
+  assert.match(modelsTests, /\.route\(\.notices\(latestNoticeID\)\)[\s\S]*\.route\(\.eventGoals\)[\s\S]*\.route\(\.sessionPacks\)/);
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
