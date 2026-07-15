@@ -3,9 +3,9 @@ import test from 'node:test';
 import { inspectStripeReadiness } from '../scripts/check-stripe-readiness.mjs';
 
 const environment = {
-  VERCEL_BASE_URL: 'https://xert.example.com',
-  SUPABASE_URL: 'https://xert.supabase.co',
-  SUPABASE_ANON_KEY: 'anon-test-key',
+  VERCEL_BASE_URL: 'https://xert-fitness.vercel.app',
+  SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+  SUPABASE_ANON_KEY: `sb_publishable_${'a'.repeat(24)}`,
 };
 
 function response(status, body = '') {
@@ -39,16 +39,25 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.equal(report.ready, false);
   assert.equal(report.checks.find(check => check.key === 'webhook').ready, false);
   assert.match(report.checks.find(check => check.key === 'fulfillment').detail, /is missing/);
-  assert.doesNotMatch(JSON.stringify(report), /anon-test-key/);
+  assert.match(report.checks.find(check => check.key === 'webhook').remediation, /STRIPE_WEBHOOK_SECRET/);
+  assert.match(report.checks.find(check => check.key === 'fulfillment').remediation, /20260715010000_stripe_payment_fulfillment\.sql/);
+  assert.doesNotMatch(JSON.stringify(report), /sb_publishable_/);
 });
 
 test('Stripe readiness rejects unsafe endpoints and malformed keys before network access', async () => {
   await assert.rejects(
-    inspectStripeReadiness({ environment: { ...environment, VERCEL_BASE_URL: 'http://xert.example.com' }, fetchImpl: readinessFetch() }),
-    /HTTPS URL/,
+    inspectStripeReadiness({ environment: { ...environment, VERCEL_BASE_URL: 'https://attacker.example' }, fetchImpl: readinessFetch() }),
+    /canonical XERT service origin/,
   );
   await assert.rejects(
     inspectStripeReadiness({ environment: { ...environment, SUPABASE_ANON_KEY: 'bad key' }, fetchImpl: readinessFetch() }),
-    /one line/,
+    /uninterrupted public key|publishable key/,
+  );
+  await assert.rejects(
+    inspectStripeReadiness({
+      environment: { ...environment, SUPABASE_ANON_KEY: `sb_secret_${'s'.repeat(24)}` },
+      fetchImpl: readinessFetch(),
+    }),
+    /must never be embedded/,
   );
 });

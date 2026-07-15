@@ -1,21 +1,14 @@
 import { pathToFileURL } from 'node:url';
+import {
+  validateCanonicalServiceURL,
+  validateSupabasePublicKey,
+  XERT_SUPABASE_HOST,
+  XERT_VERCEL_HOST,
+} from '../src/lib/publicRuntimeConfig.js';
 
 const DEFAULT_VERCEL_BASE_URL = 'https://xert-fitness.vercel.app';
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const RESPONSE_PREVIEW_LIMIT = 180;
-
-function httpsURL(value, name) {
-  let url;
-  try {
-    url = new URL(String(value || '').trim());
-  } catch {
-    throw new Error(`${name} must be a valid HTTPS URL.`);
-  }
-  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) {
-    throw new Error(`${name} must be a credential-free HTTPS URL.`);
-  }
-  return url.origin;
-}
 
 async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, ...options }) {
   try {
@@ -30,7 +23,7 @@ async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, .
   }
 }
 
-function statusCheck(key, label, result, expectedStatus) {
+function statusCheck(key, label, result, expectedStatus, remediation) {
   return {
     key,
     label,
@@ -38,16 +31,25 @@ function statusCheck(key, label, result, expectedStatus) {
     detail: result.status === expectedStatus
       ? `HTTP ${expectedStatus}`
       : `Expected HTTP ${expectedStatus}; received ${result.status || 'no response'}${result.body ? `: ${result.body}` : ''}`,
+    remediation: result.status === expectedStatus ? null : remediation,
   };
 }
 
 export async function inspectStripeReadiness({ environment = process.env, fetchImpl = fetch } = {}) {
-  const vercelBaseURL = httpsURL(environment.VERCEL_BASE_URL || DEFAULT_VERCEL_BASE_URL, 'VERCEL_BASE_URL');
-  const supabaseURL = httpsURL(environment.SUPABASE_URL || environment.VITE_SUPABASE_URL, 'SUPABASE_URL');
-  const anonKey = String(environment.SUPABASE_ANON_KEY || environment.VITE_SUPABASE_ANON_KEY || '').trim();
-  if (!anonKey || /\s/.test(anonKey)) {
-    throw new Error('SUPABASE_ANON_KEY must be configured as one line.');
-  }
+  const expectedVercelHost = environment.EXPECTED_VERCEL_HOST || XERT_VERCEL_HOST;
+  const expectedSupabaseHost = environment.EXPECTED_SUPABASE_HOST || XERT_SUPABASE_HOST;
+  const vercelBaseURL = validateCanonicalServiceURL(
+    environment.VERCEL_BASE_URL || DEFAULT_VERCEL_BASE_URL,
+    'VERCEL_BASE_URL',
+    expectedVercelHost
+  );
+  const supabaseURL = validateCanonicalServiceURL(
+    environment.SUPABASE_URL || environment.VITE_SUPABASE_URL,
+    'SUPABASE_URL',
+    expectedSupabaseHost
+  );
+  const anonKey = String(environment.SUPABASE_ANON_KEY || environment.VITE_SUPABASE_ANON_KEY || '');
+  validateSupabasePublicKey(anonKey);
 
   const jsonHeaders = { 'Content-Type': 'application/json' };
   const [checkout, refund, reconciliation, webhook, capabilities] = await Promise.all([
@@ -76,10 +78,34 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   ]);
 
   const checks = [
-    statusCheck('checkout', 'Authenticated checkout boundary', checkout, 401),
-    statusCheck('refund', 'Authenticated refund boundary', refund, 401),
-    statusCheck('reconciliation', 'Authenticated reconciliation boundary', reconciliation, 401),
-    statusCheck('webhook', 'Stripe webhook signature verification', webhook, 400),
+    statusCheck(
+      'checkout',
+      'Authenticated checkout boundary',
+      checkout,
+      401,
+      "Add SUPABASE_SERVICE_ROLE_KEY to Vercel Production, then redeploy."
+    ),
+    statusCheck(
+      'refund',
+      'Authenticated refund boundary',
+      refund,
+      401,
+      "Verify the protected admin refund function is deployed from main."
+    ),
+    statusCheck(
+      'reconciliation',
+      'Authenticated reconciliation boundary',
+      reconciliation,
+      401,
+      "Verify the protected admin reconciliation function is deployed from main."
+    ),
+    statusCheck(
+      'webhook',
+      'Stripe webhook signature verification',
+      webhook,
+      400,
+      "Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to Vercel Production, then redeploy."
+    ),
   ];
 
   let capabilityReady = false;
@@ -103,6 +129,9 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     label: 'Atomic Stripe fulfillment contract',
     ready: capabilityReady,
     detail: capabilityDetail,
+    remediation: capabilityReady
+      ? null
+      : 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql to the XERT Supabase project.',
   });
 
   return { ready: checks.every(check => check.ready), checks };
@@ -111,6 +140,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
 function printReport(report) {
   for (const check of report.checks) {
     console.log(`${check.ready ? 'PASS' : 'FAIL'}  ${check.label}: ${check.detail}`);
+    if (!check.ready && check.remediation) console.log(`      NEXT: ${check.remediation}`);
   }
   console.log(report.ready ? 'Stripe production boundary is ready.' : 'Stripe production boundary is not ready.');
 }
