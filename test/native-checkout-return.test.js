@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [api, deepLink, info, root, store, pendingStore, booking, swiftTests, app, page] = await Promise.all([
+const [api, deepLink, info, root, store, pendingStore, booking, browser, swiftTests, app, page] = await Promise.all([
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/CheckoutDeepLink.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Info.plist', import.meta.url), 'utf8'),
@@ -10,6 +10,7 @@ const [api, deepLink, info, root, store, pendingStore, booking, swiftTests, app,
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/PendingCheckoutStore.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift', import.meta.url), 'utf8'),
+  readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/CheckoutBrowser.swift', import.meta.url), 'utf8'),
   readFile(new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url), 'utf8'),
   readFile(new URL('../src/App.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/CheckoutReturn.jsx', import.meta.url), 'utf8'),
@@ -19,6 +20,17 @@ test('native checkout requests the bounded iOS return target', () => {
   const checkout = api.slice(api.indexOf('func checkout('), api.indexOf('func requestPrivateSession'));
   assert.match(checkout, /"return_target": "ios"/);
   assert.doesNotMatch(checkout, /success_url|cancel_url/);
+});
+
+test('native checkout stays inside a trusted authenticated browser session', () => {
+  assert.match(browser, /ASWebAuthenticationSession/);
+  assert.match(browser, /callbackURLScheme: "xertfitness"/);
+  assert.match(browser, /CheckoutDeepLink\.status\(from: callbackURL\) != nil/);
+  assert.match(browser, /prefersEphemeralWebBrowserSession = false/);
+  assert.match(booking, /@StateObject private var checkoutBrowser = CheckoutBrowser\(\)/);
+  assert.match(booking, /checkoutBrowser\.start\(url: url\)/);
+  assert.doesNotMatch(booking, /openURL\(url\)/);
+  assert.match(root, /publisher\(for: \.xertCheckoutCallback\)[\s\S]*handleOpenURL\(url\)/);
 });
 
 test('native app accepts only the XERT checkout callback and refreshes member data', () => {

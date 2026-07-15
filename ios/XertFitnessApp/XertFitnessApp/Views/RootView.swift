@@ -72,6 +72,10 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .xertRefreshAnnouncements)) { _ in
             Task { await store.refresh() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .xertCheckoutCallback)) { notification in
+            guard let url = notification.object as? URL else { return }
+            handleOpenURL(url)
+        }
     }
 
     private var memberTabs: some View {

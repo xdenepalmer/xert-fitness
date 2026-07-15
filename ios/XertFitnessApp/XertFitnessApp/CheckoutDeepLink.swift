@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let xertCheckoutCallback = Notification.Name("xert.checkout.callback")
+}
+
 enum CheckoutReturnStatus: String, Identifiable {
     case success
     case cancelled

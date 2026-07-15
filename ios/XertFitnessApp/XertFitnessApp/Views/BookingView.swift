@@ -2,13 +2,15 @@ import SwiftUI
 
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
-    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @StateObject private var checkoutBrowser = CheckoutBrowser()
     @State private var activeSheet: BookingSheet?
     @State private var expandedSessionIDs: Set<UUID> = []
     @State private var classSearch = ""
     @State private var classDateWindow: ClassSessionDateWindow = .all
     @State private var classFit: ClassSessionFit = .all
+    @State private var checkoutProductID: UUID?
+    @State private var checkoutErrorMessage: String?
     let onNavigate: (Int) -> Void
 
     var body: some View {
@@ -69,6 +71,14 @@ struct BookingView: View {
                     )
                     .environmentObject(store)
                 }
+            }
+            .alert("Secure Checkout", isPresented: Binding(
+                get: { checkoutErrorMessage != nil },
+                set: { if !$0 { checkoutErrorMessage = nil } }
+            )) {
+                Button("OK") { checkoutErrorMessage = nil }
+            } message: {
+                Text(checkoutErrorMessage ?? "")
             }
         }
     }
@@ -150,14 +160,37 @@ struct BookingView: View {
                         onNavigate(3)
                         return
                     }
+                    guard checkoutProductID == nil, !checkoutBrowser.isPresenting else { return }
+                    checkoutProductID = product.id
                     Task {
                         if let url = await store.checkoutURL(for: product) {
-                            openURL(url)
+                            checkoutBrowser.start(url: url) { result in
+                                checkoutProductID = nil
+                                switch result {
+                                case .success(let callbackURL):
+                                    NotificationCenter.default.post(name: .xertCheckoutCallback, object: callbackURL)
+                                case .failure(.cancelled):
+                                    Task { await store.reconcilePendingCheckout() }
+                                case .failure(let error):
+                                    checkoutErrorMessage = error.localizedDescription
+                                    Task { await store.reconcilePendingCheckout() }
+                                }
+                            }
+                        } else {
+                            checkoutProductID = nil
                         }
                     }
                 } label: {
-                    productSummary(product)
+                    ZStack(alignment: .trailing) {
+                        productSummary(product)
+                        if checkoutProductID == product.id {
+                            ProgressView()
+                                .tint(Color.xertSteel)
+                                .accessibilityLabel("Opening secure checkout")
+                        }
+                    }
                 }
+                .disabled(checkoutProductID != nil || checkoutBrowser.isPresenting)
             }
         } header: {
             Text("Buy Session Packs").xertEyebrow()
