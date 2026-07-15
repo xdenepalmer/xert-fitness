@@ -28,6 +28,7 @@ test('native checkout stays inside a trusted authenticated browser session', () 
   assert.match(browser, /CheckoutDeepLink\.status\(from: callbackURL\) != nil/);
   assert.match(browser, /prefersEphemeralWebBrowserSession = false/);
   assert.match(booking, /@StateObject private var checkoutBrowser = CheckoutBrowser\(\)/);
+  assert.match(booking, /@State private var checkoutProductID: String\?/);
   assert.match(booking, /checkoutBrowser\.start\(url: url\)/);
   assert.doesNotMatch(booking, /openURL\(url\)/);
   assert.match(root, /publisher\(for: \.xertCheckoutCallback\)[\s\S]*handleOpenURL\(url\)/);
@@ -40,7 +41,7 @@ test('native app accepts only the XERT checkout callback and refreshes member da
   assert.match(deepLink, /CheckoutReturnStatus\(rawValue: value\)/);
   assert.match(root, /\.onOpenURL/);
   assert.match(root, /CheckoutDeepLink\.status\(from: url\)/);
-  assert.match(root, /navigate\(to: \.booking\)/);
+  assert.match(root, /navigation\.select\(\.booking, source: \.checkout\)/);
   assert.match(root, /status == \.success[\s\S]*store\.reconcileCheckout\(\)/);
 });
 

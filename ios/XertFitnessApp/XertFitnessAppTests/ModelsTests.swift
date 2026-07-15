@@ -11,6 +11,33 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://checkout?status=success"))))
     }
 
+    func testNavigationCoordinatorTracksSourcesHistoryReselectionAndAdjacentTabs() {
+        let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 3)
+
+        XCTAssertTrue(navigation.select(.booking, source: .content))
+        XCTAssertEqual(navigation.selection, .booking)
+        XCTAssertEqual(navigation.previousDestination, .home)
+        XCTAssertEqual(navigation.lastTransition?.source, .content)
+
+        XCTAssertFalse(navigation.select(.booking, source: .dock))
+        XCTAssertEqual(navigation.reselectionSequence, 1)
+
+        XCTAssertTrue(navigation.step(.next))
+        XCTAssertEqual(navigation.selection, .events)
+        XCTAssertEqual(navigation.lastTransition?.source, .dockSwipe)
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertEqual(navigation.selection, .booking)
+
+        XCTAssertTrue(navigation.select(.events, source: .deepLink))
+        XCTAssertTrue(navigation.select(.explore, source: .pushNotification))
+        XCTAssertEqual(navigation.history, [.booking, .events, .explore])
+
+        navigation.restore(rawValue: XertPrimaryDestination.account.rawValue)
+        XCTAssertEqual(navigation.selection, .account)
+        XCTAssertEqual(navigation.history, [.account])
+        XCTAssertEqual(navigation.lastTransition?.source, .restoration)
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

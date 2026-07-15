@@ -9,7 +9,7 @@ struct BookingView: View {
     @State private var classSearch = ""
     @State private var classDateWindow: ClassSessionDateWindow = .all
     @State private var classFit: ClassSessionFit = .all
-    @State private var checkoutProductID: UUID?
+    @State private var checkoutProductID: String?
     @State private var checkoutErrorMessage: String?
     let onNavigate: (XertPrimaryDestination) -> Void
 

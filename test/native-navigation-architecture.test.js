@@ -27,6 +27,8 @@ test('primary routing is typed, restorable, and owns native deep-link mapping', 
   ]);
   assert.match(root, /@SceneStorage\("xert\.primaryDestination"\)/);
   assert.match(root, /Binding<XertPrimaryDestination>/);
+  assert.match(root, /@StateObject private var navigation = XertNavigationCoordinator\(\)/);
+  assert.match(root, /navigation\.restore\(rawValue: selectedDestinationRawValue\)/);
   assert.match(root, /private func navigate\(to destination: XertPrimaryDestination\)/);
   assert.match(root, /XertPrimaryDestination\.destination\(for: url\)/);
   assert.doesNotMatch(root, /selectedTab\s*=\s*\d/);
@@ -35,6 +37,13 @@ test('primary routing is typed, restorable, and owns native deep-link mapping', 
   }
   assert.match(navigation, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
   assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil/);
+  assert.match(navigation, /final class XertNavigationCoordinator: ObservableObject/);
+  assert.match(navigation, /private\(set\) var history: \[XertPrimaryDestination\]/);
+  assert.match(navigation, /func returnToPrevious\(source: XertNavigationSource/);
+  assert.match(navigation, /history\.count > historyLimit[\s\S]*history\.removeFirst/);
+  for (const source of ['restoration', 'dock', 'dockSwipe', 'content', 'deepLink', 'pushNotification', 'checkout']) {
+    assert.match(navigation, new RegExp(`case ${source}`));
+  }
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
@@ -55,4 +64,14 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /activeBookingCount[\s\S]*isActiveClassPlace[\s\S]*start_time >= Date\(\)/);
   assert.match(root, /guard selection != item else \{[\s\S]*onReselect\(item\)/);
   assert.match(root, /handleReselection[\s\S]*store\.refresh\(\)/);
+  assert.match(root, /DragGesture\(minimumDistance: 36\)/);
+  assert.match(root, /abs\(horizontal\) > 44[\s\S]*abs\(vertical\) \* 1\.35/);
+  assert.match(root, /navigation\.step\(direction\)/);
+  assert.match(root, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
+  assert.match(root, /withAnimation\(reduceMotion \? nil : \.easeOut/);
+  assert.match(root, /active member notices/);
+  assert.match(root, /Refreshes this workspace/);
+  assert.match(root, /navigation\.select\(\.booking, source: \.checkout\)/);
+  assert.match(root, /navigation\.select\(destination, source: \.deepLink\)/);
+  assert.match(root, /source: \.pushNotification/);
 });

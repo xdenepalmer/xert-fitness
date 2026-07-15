@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @SceneStorage("xert.primaryDestination") private var selectedDestinationRawValue = XertPrimaryDestination.home.rawValue
+    @StateObject private var navigation = XertNavigationCoordinator()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
@@ -53,8 +54,12 @@ struct RootView: View {
         }
         .onOpenURL(perform: handleOpenURL)
         .onAppear {
+            navigation.restore(rawValue: selectedDestinationRawValue)
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
+        }
+        .onChange(of: navigation.selection) { destination in
+            selectedDestinationRawValue = destination.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
@@ -126,7 +131,8 @@ struct RootView: View {
                 noticeCount: store.announcements.count,
                 bookingCount: activeBookingCount,
                 onOpenAdmin: { showingAdminCommandCentre = true },
-                onReselect: handleReselection
+                onReselect: handleReselection,
+                onStep: handleNavigationStep
             )
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
@@ -160,18 +166,24 @@ struct RootView: View {
 
     private var selectedDestinationBinding: Binding<XertPrimaryDestination> {
         Binding(
-            get: { XertPrimaryDestination(rawValue: selectedDestinationRawValue) ?? .home },
-            set: navigate
+            get: { navigation.selection },
+            set: { navigation.select($0, source: .dock) }
         )
     }
 
     private func navigate(to destination: XertPrimaryDestination) {
-        selectedDestinationRawValue = destination.rawValue
+        navigation.select(destination, source: .content)
     }
 
-    private func handleReselection(_: XertPrimaryDestination) {
+    private func handleReselection(_ destination: XertPrimaryDestination) {
+        navigation.reselect(destination)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task { await store.refresh() }
+    }
+
+    private func handleNavigationStep(_ direction: XertNavigationDirection) {
+        guard navigation.step(direction) else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
     }
 
     private var isPrivacyLocked: Bool {
@@ -237,7 +249,7 @@ struct RootView: View {
     private func handleOpenURL(_ url: URL) {
         if let status = CheckoutDeepLink.status(from: url) {
             checkoutReturnStatus = status
-            navigate(to: .booking)
+            navigation.select(.booking, source: .checkout)
             Task {
                 if status == .success {
                     await store.reconcileCheckout()
@@ -249,14 +261,14 @@ struct RootView: View {
             return
         }
         guard let destination = XertPrimaryDestination.destination(for: url) else { return }
-        navigate(to: destination)
+        navigation.select(destination, source: .deepLink)
     }
 
     private func consumePendingAnnouncementRoute() {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
         announcementID = pendingAnnouncementID
         announcementNavigationRequest += 1
-        navigate(to: .home)
+        navigation.select(.home, source: .pushNotification)
         Task { await store.refresh() }
     }
 
@@ -264,18 +276,20 @@ struct RootView: View {
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
         reminderBookingID = bookingID
         reminderNavigationRequest += 1
-        navigate(to: .account)
+        navigation.select(.account, source: .pushNotification)
     }
 }
 
 private struct XertNavigationDock: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: XertPrimaryDestination
     let isAdmin: Bool
     let noticeCount: Int
     let bookingCount: Int
     let onOpenAdmin: () -> Void
     let onReselect: (XertPrimaryDestination) -> Void
+    let onStep: (XertNavigationDirection) -> Void
     @Namespace private var selectionNamespace
 
     private let items = XertPrimaryDestination.dockOrder
@@ -340,6 +354,15 @@ private struct XertNavigationDock: View {
             .overlay(alignment: .top) {
                 Rectangle().fill(Color.xertSteel.opacity(0.24)).frame(height: 1)
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 36)
+                    .onEnded { value in
+                        let horizontal = value.translation.width
+                        let vertical = value.translation.height
+                        guard abs(horizontal) > 44, abs(horizontal) > abs(vertical) * 1.35 else { return }
+                        onStep(horizontal < 0 ? .next : .previous)
+                    }
+            )
         }
         .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
     }
@@ -353,7 +376,7 @@ private struct XertNavigationDock: View {
                 return
             }
             UISelectionFeedbackGenerator().selectionChanged()
-            withAnimation(.easeOut(duration: 0.2)) { selection = item }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { selection = item }
         } label: {
             VStack(spacing: 4) {
                 ZStack {
@@ -401,7 +424,22 @@ private struct XertNavigationDock: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
-        .accessibilityHint(item == .booking && bookingCount > 0 ? "\(bookingCount) upcoming bookings" : "")
+        .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+    }
+
+    private func accessibilityHint(
+        for item: XertPrimaryDestination,
+        badge: Int,
+        selected: Bool
+    ) -> String {
+        var details: [String] = []
+        if badge > 0 {
+            details.append(item == .home
+                ? "\(badge) active member notices"
+                : "\(badge) upcoming bookings")
+        }
+        details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
+        return details.joined(separator: ". ")
     }
 }
 
