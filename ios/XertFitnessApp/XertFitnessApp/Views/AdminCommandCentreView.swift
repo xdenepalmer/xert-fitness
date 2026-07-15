@@ -3391,7 +3391,7 @@ private struct AdminAnnouncementComposer: View {
     let isPublishing: Bool
     let onPublish: (String, String, String) -> Void
     @State private var title = ""
-    @State private var body = ""
+    @State private var noticeBody = ""
     @State private var tone = "info"
     @State private var confirming = false
 
@@ -3400,8 +3400,8 @@ private struct AdminAnnouncementComposer: View {
             Form {
                 Section("Member notice") {
                     TextField("Title", text: $title)
-                    TextEditor(text: $body).frame(minHeight: 180)
-                    Text("\(body.count)/2000").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: $noticeBody).frame(minHeight: 180)
+                    Text("\(noticeBody.count)/2000").font(.caption).foregroundStyle(.secondary)
                     Picker("Priority", selection: $tone) {
                         Text("Information").tag("info")
                         Text("Action requested").tag("action")
@@ -3419,11 +3419,11 @@ private struct AdminAnnouncementComposer: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isPublishing) }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isPublishing ? "Publishing..." : "Publish") { confirming = true }
-                        .disabled(isPublishing || title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 || body.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                        .disabled(isPublishing || title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 || noticeBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
                 }
             }
             .confirmationDialog("Publish this member notice now?", isPresented: $confirming, titleVisibility: .visible) {
-                Button("Publish to members") { onPublish(title, String(body.prefix(2_000)), tone) }
+                Button("Publish to members") { onPublish(title, String(noticeBody.prefix(2_000)), tone) }
                 Button("Keep editing", role: .cancel) {}
             } message: {
                 Text("The notice becomes live on the website and iOS app, and push delivery starts immediately.")
