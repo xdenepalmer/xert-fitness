@@ -396,9 +396,12 @@ export async function deleteBlackoutPeriod(id, expectedUpdatedAt) {
 // ─── Admin Settings ───────────────────────────────────────────────────────────
 
 export async function getSoftLaunchSettings() {
-  const { data, error } = await supabase.from('admin_settings').select('*').limit(1).single();
-  if (error && error.code !== 'PGRST116') throw new Error(error.message);
-  return data || getDefaultSettings();
+  const { data, error } = await supabase.from('admin_settings').select('*').limit(2);
+  if (error) throw new Error(error.message);
+  if ((data || []).length > 1) {
+    throw new Error('Platform settings integrity check failed. Checkout remains paused until the duplicate settings are repaired.');
+  }
+  return data?.[0] || getDefaultSettings();
 }
 
 export function getDefaultSettings() {

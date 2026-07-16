@@ -143,10 +143,10 @@ final class XertAPI {
             path: "/rest/v1/admin_settings",
             queryItems: [
                 URLQueryItem(name: "select", value: "payments_enabled"),
-                URLQueryItem(name: "limit", value: "1")
+                URLQueryItem(name: "limit", value: "2")
             ]
         )
-        return settings.first
+        return settings.count == 1 ? settings[0] : nil
     }
 
     func sessions() async throws -> [ClassSession] {
@@ -632,10 +632,13 @@ final class XertAPI {
             path: "/rest/v1/admin_settings",
             queryItems: [
                 URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,announcement_banner_text,announcement_banner_enabled,updated_at"),
-                URLQueryItem(name: "limit", value: "1")
+                URLQueryItem(name: "limit", value: "2")
             ],
             auth: auth
         )
+        if settings.count > 1 {
+            throw APIError(message: "Platform settings integrity check failed. Checkout remains paused until the duplicate settings are repaired.")
+        }
         return settings.first
     }
 

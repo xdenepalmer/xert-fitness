@@ -16,6 +16,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
+const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
@@ -102,14 +103,23 @@ export async function paymentFulfillmentIsReady(admin) {
   return data?.capability === PAYMENT_FULFILLMENT_CAPABILITY;
 }
 
+export async function adminSettingsContractIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', ADMIN_SETTINGS_SINGLETON_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === ADMIN_SETTINGS_SINGLETON_CAPABILITY;
+}
+
 export async function sessionPackPaymentsAreEnabled(admin) {
   const { data, error } = await admin
     .from('admin_settings')
     .select('payments_enabled')
-    .limit(1)
-    .maybeSingle();
+    .limit(2);
   if (error) return false;
-  return data?.payments_enabled === true;
+  return data?.length === 1 && data[0]?.payments_enabled === true;
 }
 
 /**
@@ -243,24 +253,30 @@ export function assertStripePriceMatchesProduct(product, stripePrice, expectedLi
   }
 }
 
-export function reusableCheckoutURL(checkout, user, product) {
+export function reusableCheckoutURL(checkout, user, product, options = {}) {
   const metadata = checkout?.metadata || {};
+  const expectedLivemode = options.stripeMode === 'live';
   const url = (() => {
     try { return new URL(checkout?.url || ''); } catch { return null; }
   })();
   if (
     checkout?.status !== 'open'
     || checkout?.payment_status !== 'unpaid'
+    || checkout?.livemode !== expectedLivemode
     || !url || url.protocol !== 'https:'
     || metadata.user_id !== user?.id
     || metadata.product_id !== product?.id
+    || metadata.product_slug !== product?.slug
+    || metadata.sessions_count !== String(product?.sessions_count)
+    || metadata.validity_days !== String(product?.validity_days)
+    || metadata.return_target !== options.returnTarget
     || checkout.amount_total !== product?.price_cents
     || String(checkout.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
   ) return null;
   return url.toString();
 }
 
-async function findReusableCheckout({ admin, stripe, user, product, now = new Date() }) {
+async function findReusableCheckout({ admin, stripe, user, product, returnTarget, stripeMode, now = new Date() }) {
   const cutoff = new Date(now.getTime() - REUSABLE_CHECKOUT_WINDOW_MS).toISOString();
   const { data, error } = await admin
     .from('orders')
@@ -276,7 +292,7 @@ async function findReusableCheckout({ admin, stripe, user, product, now = new Da
     if (!order.stripe_checkout_session_id) continue;
     try {
       const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
-      const url = reusableCheckoutURL(checkout, user, product);
+      const url = reusableCheckoutURL(checkout, user, product, { returnTarget, stripeMode });
       if (url) return url;
     } catch {
       // A missing or expired Stripe session is not reusable; create a clean one.
@@ -335,6 +351,12 @@ export default async function handler(request, response) {
       }, 503);
     }
 
+    if (!await adminSettingsContractIsReady(admin)) {
+      return json({
+        error: 'Checkout is temporarily unavailable while platform settings are being upgraded.',
+      }, 503);
+    }
+
     if (!await sessionPackPaymentsAreEnabled(admin)) {
       return json({
         error: 'Session pack purchases are temporarily unavailable.',
@@ -390,7 +412,9 @@ export default async function handler(request, response) {
       return json({ error: 'This pack is not linked to a live Stripe Price yet.' }, 409);
     }
 
-    const reusableURL = await findReusableCheckout({ admin, stripe, user, product });
+    const reusableURL = await findReusableCheckout({
+      admin, stripe, user, product, returnTarget, stripeMode,
+    });
     if (reusableURL) return json({ url: reusableURL, reused: true });
 
     let lineItem;

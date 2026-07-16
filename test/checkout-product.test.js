@@ -65,20 +65,20 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {
+  let result = { data: [{ payments_enabled: true }], error: null };
   const query = {
     select() { return query; },
-    limit() { return query; },
-    async maybeSingle() {
-      return { data: { payments_enabled: true }, error: null };
-    },
+    async limit() { return result; },
   };
   assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), true);
 
-  query.maybeSingle = async () => ({ data: { payments_enabled: false }, error: null });
+  result = { data: [{ payments_enabled: false }], error: null };
   assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
-  query.maybeSingle = async () => ({ data: null, error: null });
+  result = { data: [], error: null };
   assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
-  query.maybeSingle = async () => ({ data: null, error: new Error('settings unavailable') });
+  result = { data: [{ payments_enabled: true }, { payments_enabled: true }], error: null };
+  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
+  result = { data: null, error: new Error('settings unavailable') };
   assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
@@ -228,23 +228,36 @@ test('keeps test and live Stripe objects in the same payment environment', () =>
   ), /does not match/i);
 });
 
-test('reuses only the same member pack and amount from an open unpaid Checkout session', () => {
+test('reuses only the current same-platform pack snapshot from an open unpaid Checkout session', () => {
   const user = { id: 'member-xert' };
   const product = { id: 'product-xert', ...validProduct };
   const checkout = {
     status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_test_xert',
-    amount_total: 4800, currency: 'aud',
-    metadata: { user_id: user.id, product_id: product.id },
+    amount_total: 4800, currency: 'aud', livemode: false,
+    metadata: {
+      user_id: user.id,
+      product_id: product.id,
+      product_slug: product.slug,
+      sessions_count: String(product.sessions_count),
+      validity_days: String(product.validity_days),
+      return_target: 'ios',
+    },
   };
-  assert.equal(reusableCheckoutURL(checkout, user, product), checkout.url);
+  const options = { returnTarget: 'ios', stripeMode: 'test' };
+  assert.equal(reusableCheckoutURL(checkout, user, product, options), checkout.url);
   for (const invalid of [
     { ...checkout, status: 'complete' },
     { ...checkout, payment_status: 'paid' },
+    { ...checkout, livemode: true },
     { ...checkout, amount_total: 4900 },
     { ...checkout, url: 'javascript:alert(1)' },
     { ...checkout, metadata: { ...checkout.metadata, user_id: 'another-member' } },
     { ...checkout, metadata: { ...checkout.metadata, product_id: 'another-product' } },
-  ]) assert.equal(reusableCheckoutURL(invalid, user, product), null);
+    { ...checkout, metadata: { ...checkout.metadata, product_slug: 'another-pack' } },
+    { ...checkout, metadata: { ...checkout.metadata, sessions_count: '99' } },
+    { ...checkout, metadata: { ...checkout.metadata, validity_days: '365' } },
+    { ...checkout, metadata: { ...checkout.metadata, return_target: 'web' } },
+  ]) assert.equal(reusableCheckoutURL(invalid, user, product, options), null);
 });
 
 test('rejects invalid pricing, credits, expiry, and currency before Checkout', () => {

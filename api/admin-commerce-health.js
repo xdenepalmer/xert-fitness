@@ -10,6 +10,7 @@ import {
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
+const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
@@ -204,13 +205,15 @@ export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
 export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient }) {
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(runtimeEnvironment);
-  const [fulfillmentReady, activationGuardReady] = await Promise.all([
+  const [fulfillmentReady, activationGuardReady, settingsContractReady] = await Promise.all([
     paymentFulfillmentIsReady(admin),
     schemaCapabilityIsReady(admin, PAYMENT_ACTIVATION_CAPABILITY),
+    schemaCapabilityIsReady(admin, ADMIN_SETTINGS_SINGLETON_CAPABILITY),
   ]);
   const databaseIssues = [
     ...(fulfillmentReady ? [] : [{ slug: 'database', reason: 'Atomic Stripe payment fulfillment is not installed.' }]),
     ...(activationGuardReady ? [] : [{ slug: 'database', reason: 'Guarded payment activation is not installed.' }]),
+    ...(settingsContractReady ? [] : [{ slug: 'database', reason: 'Versioned singleton platform settings are not installed.' }]),
   ];
   if (environment.missing.includes('STRIPE_SECRET_KEY')) {
     return {
@@ -222,6 +225,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       environment,
       fulfillment_ready: fulfillmentReady,
       activation_guard_ready: activationGuardReady,
+      settings_contract_ready: settingsContractReady,
     };
   }
 
@@ -247,7 +251,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       && accountHealth.ready
       && environment.ready
       && fulfillmentReady
-      && activationGuardReady,
+      && activationGuardReady
+      && settingsContractReady,
     mode: stripeMode,
     account: accountHealth,
     issues: [
@@ -261,6 +266,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     environment,
     fulfillment_ready: fulfillmentReady,
     activation_guard_ready: activationGuardReady,
+    settings_contract_ready: settingsContractReady,
     webhook: webhookHealth,
   };
 }

@@ -884,6 +884,7 @@ struct AdminCommerceHealth: Codable, Hashable {
     let environment: AdminEnvironmentHealth
     let fulfillment_ready: Bool?
     let activation_guard_ready: Bool?
+    let settings_contract_ready: Bool?
     let mode: String?
     let account: StripeAccount?
     let webhook: Webhook?
@@ -914,6 +915,7 @@ enum AdminSchemaReadiness {
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
         "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
         "checkout_reconciliation", "stripe_payment_fulfillment", "guarded_payment_activation",
+        "admin_settings_singleton",
         "member_announcements", "announcement_receipts",
         "announcement_actions", "announcement_archival", "booking_time_conflict_guard",
         "admin_member_notes", "schedule_blackout_guard", "database_security_hardening",

@@ -14,11 +14,14 @@ the iOS project, or Codemagic build logs.
 2. Apply `supabase/migrations/20260716010000_guarded_payment_activation.sql`.
    This forces every paused-to-enabled payment transition through the protected
    server preflight while preserving immediate owner shutdown from either admin app.
-3. Complete the Australian business profile, bank account and identity checks.
-4. Confirm that **Charges enabled** and **Payouts enabled** are both true.
-5. Create one one-time Stripe Price in AUD for every active XERT session pack.
-6. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
-7. Do not change the amount or currency of a linked pack. Create a new Stripe
+3. Apply `supabase/migrations/20260716020000_admin_settings_singleton.sql`.
+   This repairs the settings version timestamp and guarantees checkout, web and
+   iOS all observe one authoritative owner payment switch.
+4. Complete the Australian business profile, bank account and identity checks.
+5. Confirm that **Charges enabled** and **Payouts enabled** are both true.
+6. Create one one-time Stripe Price in AUD for every active XERT session pack.
+7. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
+8. Do not change the amount or currency of a linked pack. Create a new Stripe
    Price and update the pack instead.
 
 ## 2. Configure Vercel
@@ -98,12 +101,13 @@ The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
 Vercel payment settings are present; HTTP `503` reveals no values and prevents
 a false-green release audit.
 
-The command must report seven `PASS` results. A webhook `503` means the Vercel
+The command must report eight `PASS` results. A webhook `503` means the Vercel
 Stripe service is unavailable, normally because its private secrets are absent;
 a missing fulfillment contract means the migration in step 1 has not been
 installed. A missing activation guard means the guarded activation migration in
 step 2 has not been installed. Keep **Session pack payments** disabled until all
-seven checks pass.
+eight checks pass. A missing settings contract means the migration in step 3
+has not repaired the versioned singleton platform settings.
 
 Open **iOS Admin > Operations Health** and require all of the following:
 

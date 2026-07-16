@@ -165,7 +165,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   };
   const products = [validProduct];
   const complete = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton'])),
     products,
     environment,
     stripe: readyStripe(),
@@ -173,6 +173,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(complete.ready, true);
   assert.equal(complete.fulfillment_ready, true);
   assert.equal(complete.activation_guard_ready, true);
+  assert.equal(complete.settings_contract_ready, true);
 
   const missingGuard = await inspectCommerceHealth({
     admin: capabilityAdmin(new Set(['stripe_payment_fulfillment'])),
@@ -183,6 +184,19 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(missingGuard.ready, false);
   assert.equal(missingGuard.activation_guard_ready, false);
   assert.match(missingGuard.issues.find(issue => issue.reason.includes('Guarded'))?.reason || '', /not installed/);
+
+  const missingSettingsContract = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation'])),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingSettingsContract.ready, false);
+  assert.equal(missingSettingsContract.settings_contract_ready, false);
+  assert.match(
+    missingSettingsContract.issues.find(issue => issue.reason.includes('singleton'))?.reason || '',
+    /not installed/,
+  );
 });
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {

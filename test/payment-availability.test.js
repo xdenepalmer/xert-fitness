@@ -28,7 +28,8 @@ test('web and native purchase surfaces fail closed before checkout', async () =>
     readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(webData, /admin_settings[\s\S]*select\('payments_enabled'\)[\s\S]*maybeSingle/);
+  assert.match(webData, /admin_settings[\s\S]*select\('payments_enabled'\)[\s\S]*limit\(2\)/);
+  assert.match(webData, /data\?\.length === 1/);
   assert.match(webBooking, /getSessionPackPaymentAvailability\(\)/);
   assert.match(webBooking, /disabled=\{!paymentsEnabled \|\| buyingSlug === pack\.slug\}/);
   assert.match(webBooking, /Pack purchases are paused/);
@@ -55,6 +56,7 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(commerceAPI, /&& fulfillmentReady/);
   assert.match(commerceAPI, /Atomic Stripe payment fulfillment is not installed/);
   assert.match(commerceAPI, /Guarded payment activation is not installed/);
+  assert.match(commerceAPI, /Versioned singleton platform settings are not installed/);
   assert.match(commerceAPI, /request\.method === 'POST'/);
   assert.match(commerceAPI, /if \(!health\.ready\)/);
   assert.match(commerceAPI, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);

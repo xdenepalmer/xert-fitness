@@ -15,10 +15,9 @@ export async function getSessionPackPaymentAvailability() {
   const { data, error } = await supabase
     .from('admin_settings')
     .select('payments_enabled')
-    .limit(1)
-    .maybeSingle();
+    .limit(2);
   if (error) throw new Error(error.message);
-  return sessionPackPaymentsEnabled(data);
+  return data?.length === 1 && sessionPackPaymentsEnabled(data[0]);
 }
 
 // ─── Checkout (Stripe via Vercel serverless) ──────────────────────────────────
