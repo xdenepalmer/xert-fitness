@@ -35,6 +35,7 @@ function checkoutEvent({ type = 'checkout.session.completed', paymentStatus = 'p
         metadata: {
           user_id: 'C5747DAD-2E89-4D55-AD63-5732D8D67A60',
           product_id: '6C7BC779-4E22-4F38-88AF-C15F2F94EE5A',
+          xert_checkout_attempt_id: 'E8C03884-4C1B-4A96-97C1-B0A33F2095B3',
           sessions_count: '4',
           validity_days: '28',
           ...metadata,
@@ -245,6 +246,7 @@ test('accepts only a complete full charge refund for reconciliation', () => {
     data: { object: {
       id: 'ch_xert', payment_intent: 'pi_test_xert', amount: 4800,
       amount_refunded: 4800, currency: 'aud', refunded: true,
+      metadata: { xert_checkout_attempt_id: 'E8C03884-4C1B-4A96-97C1-B0A33F2095B3' },
       refunds: { data: [{ id: 're_xert', status: 'succeeded', created: 1783814400 }] },
     } },
   };
@@ -253,6 +255,10 @@ test('accepts only a complete full charge refund for reconciliation', () => {
   assert.equal(refund.p_amount_cents, 4800);
   assert.equal(refund.p_payment_intent_id, 'pi_test_xert');
   assert.equal(stripeRefundForEvent({ ...event, type: 'charge.updated' }, NOW), null);
+  assert.equal(stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, metadata: {} } },
+  }, NOW), null);
   assert.equal(stripeRefundForEvent({
     ...event,
     data: { object: { ...event.data.object, amount_refunded: 2400, refunded: false } },

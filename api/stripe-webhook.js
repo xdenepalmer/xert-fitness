@@ -19,6 +19,7 @@ const FAILURE_EVENT_TYPES = new Set([
   'checkout.session.async_payment_failed',
 ]);
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function validStripeSignatureHeader(value) {
   const header = String(value || '').trim();
@@ -111,6 +112,7 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
 
   if (
     !checkout.id ||
+    !UUID_PATTERN.test(metadata.xert_checkout_attempt_id || '') ||
     !metadata.user_id ||
     !metadata.product_id ||
     !sessions ||
@@ -154,6 +156,8 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
 export function stripeRefundForEvent(event, now = new Date()) {
   if (event?.type !== 'charge.refunded') return null;
   const charge = event.data?.object;
+  const metadata = charge?.metadata || {};
+  if (!UUID_PATTERN.test(metadata.xert_checkout_attempt_id || '')) return null;
   const paymentIntentId = typeof charge?.payment_intent === 'string'
     ? charge.payment_intent
     : charge?.payment_intent?.id;

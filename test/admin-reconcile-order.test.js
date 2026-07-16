@@ -31,6 +31,7 @@ const checkout = {
   customer_email: 'member@example.com',
   payment_intent: 'pi_xert',
   metadata: {
+    xert_checkout_attempt_id: 'e8c03884-4c1b-4a96-97c1-b0a33f2095b3',
     user_id: USER_ID,
     product_id: PRODUCT_ID,
     sessions_count: '4',

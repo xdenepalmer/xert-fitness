@@ -373,7 +373,11 @@ test('records a member-bound pending order before handing off to Stripe', async 
   assert.match(source, /customer_creation: 'always'/);
   assert.match(source, /payment_intent_data:/);
   assert.match(source, /checkout\.sessions\.create\(checkoutParameters, \{[\s\S]*idempotencyKey:/);
-  assert.match(source, /xert_checkout_attempt_id: checkoutAttemptID/);
+  assert.equal(
+    (source.match(/xert_checkout_attempt_id: checkoutAttemptID/g) || []).length,
+    2,
+    'Checkout Session and PaymentIntent must carry the XERT attempt identity',
+  );
   assert.throws(
     () => pendingOrderForCheckout(
       { id: 'cs_xert', amount_total: 4700, currency: 'aud' },

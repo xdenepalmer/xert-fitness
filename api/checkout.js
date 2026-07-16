@@ -526,6 +526,7 @@ export default async function handler(request, response) {
         },
       },
       metadata: {
+        xert_checkout_attempt_id: checkoutAttemptID,
         user_id: user.id,
         product_id: product.id,
         product_slug: product.slug,
