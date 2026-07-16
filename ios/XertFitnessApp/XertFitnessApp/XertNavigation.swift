@@ -394,6 +394,72 @@ struct XertPinnedWorkspaceSnapshot: Codable, Equatable {
     }
 }
 
+struct XertWorkspaceOrderSnapshot: Codable, Equatable {
+    static let currentVersion = 1
+    static let maximumEncodedLength = 256
+
+    let version: Int
+    let destinationRawValues: [Int]
+
+    init(destinations: [XertPrimaryDestination]) {
+        version = Self.currentVersion
+        destinationRawValues = destinations.map(\.rawValue)
+    }
+}
+
+enum XertWorkspaceOrderStore {
+    private static let keyPrefix = "xert.navigation.workspace-order.v1."
+
+    static func load(
+        for userID: UUID?,
+        defaults: UserDefaults = .standard
+    ) -> [XertPrimaryDestination] {
+        guard
+            let userID,
+            let data = defaults.data(forKey: storageKey(for: userID)),
+            data.count <= XertWorkspaceOrderSnapshot.maximumEncodedLength,
+            let snapshot = try? JSONDecoder().decode(XertWorkspaceOrderSnapshot.self, from: data),
+            snapshot.version == XertWorkspaceOrderSnapshot.currentVersion,
+            snapshot.destinationRawValues.count == XertPrimaryDestination.dockOrder.count
+        else { return XertPrimaryDestination.dockOrder }
+
+        let destinations = snapshot.destinationRawValues.compactMap(XertPrimaryDestination.init(rawValue:))
+        guard isCompletePermutation(destinations) else { return XertPrimaryDestination.dockOrder }
+        return destinations
+    }
+
+    @discardableResult
+    static func save(
+        _ destinations: [XertPrimaryDestination],
+        for userID: UUID,
+        defaults: UserDefaults = .standard
+    ) -> [XertPrimaryDestination] {
+        let normalized = normalized(destinations)
+        let snapshot = XertWorkspaceOrderSnapshot(destinations: normalized)
+        guard
+            let data = try? JSONEncoder().encode(snapshot),
+            data.count <= XertWorkspaceOrderSnapshot.maximumEncodedLength
+        else { return load(for: userID, defaults: defaults) }
+        defaults.set(data, forKey: storageKey(for: userID))
+        return normalized
+    }
+
+    static func normalized(_ destinations: [XertPrimaryDestination]) -> [XertPrimaryDestination] {
+        var seen = Set<XertPrimaryDestination>()
+        let uniqueKnown = destinations.filter { seen.insert($0).inserted }
+        return uniqueKnown + XertPrimaryDestination.dockOrder.filter { seen.insert($0).inserted }
+    }
+
+    private static func isCompletePermutation(_ destinations: [XertPrimaryDestination]) -> Bool {
+        destinations.count == XertPrimaryDestination.dockOrder.count
+            && Set(destinations) == Set(XertPrimaryDestination.dockOrder)
+    }
+
+    private static func storageKey(for userID: UUID) -> String {
+        keyPrefix + userID.uuidString.lowercased()
+    }
+}
+
 enum XertPinnedWorkspaceStore {
     private static let keyPrefix = "xert.navigation.pins.v1."
 
@@ -738,9 +804,10 @@ final class XertNavigationCoordinator: ObservableObject {
     func commandPaletteCommands(
         isAdmin: Bool,
         context: XertNavigationContext = .empty,
-        pinnedRoutes: [XertMemberRoute] = []
+        pinnedRoutes: [XertMemberRoute] = [],
+        orderedDestinations: [XertPrimaryDestination] = XertPrimaryDestination.dockOrder
     ) -> [XertNavigationCommand] {
-        var commands = XertPrimaryDestination.dockOrder
+        var commands = XertWorkspaceOrderStore.normalized(orderedDestinations)
             .filter { $0 != selection }
             .map { destination in
                 XertNavigationCommand(
@@ -966,11 +1033,16 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func step(_ direction: XertNavigationDirection, source: XertNavigationSource = .dockSwipe) -> Bool {
-        guard let index = XertPrimaryDestination.dockOrder.firstIndex(of: selection) else { return false }
+    func step(
+        _ direction: XertNavigationDirection,
+        order: [XertPrimaryDestination] = XertPrimaryDestination.dockOrder,
+        source: XertNavigationSource = .dockSwipe
+    ) -> Bool {
+        let destinations = XertWorkspaceOrderStore.normalized(order)
+        guard let index = destinations.firstIndex(of: selection) else { return false }
         let targetIndex = direction == .next ? index + 1 : index - 1
-        guard XertPrimaryDestination.dockOrder.indices.contains(targetIndex) else { return false }
-        return select(XertPrimaryDestination.dockOrder[targetIndex], source: source)
+        guard destinations.indices.contains(targetIndex) else { return false }
+        return select(destinations[targetIndex], source: source)
     }
 
     @discardableResult

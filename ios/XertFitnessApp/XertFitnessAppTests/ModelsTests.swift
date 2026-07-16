@@ -468,6 +468,50 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testWorkspaceOrderIsCompleteAccountScopedAndDrivesNavigation() throws {
+        let suiteName = "XertWorkspaceOrderStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstUser = UUID()
+        let secondUser = UUID()
+        let preferred: [XertPrimaryDestination] = [.booking, .events, .home, .account, .explore]
+
+        XCTAssertEqual(XertWorkspaceOrderStore.load(for: nil, defaults: defaults), XertPrimaryDestination.dockOrder)
+        XCTAssertEqual(XertWorkspaceOrderStore.save(preferred, for: firstUser, defaults: defaults), preferred)
+        XCTAssertEqual(XertWorkspaceOrderStore.load(for: firstUser, defaults: defaults), preferred)
+        XCTAssertEqual(XertWorkspaceOrderStore.load(for: secondUser, defaults: defaults), XertPrimaryDestination.dockOrder)
+        XCTAssertEqual(
+            XertWorkspaceOrderStore.normalized([.events, .events, .home]),
+            [.events, .home, .booking, .explore, .account]
+        )
+
+        let malformed = Data("{\"version\":1,\"destinationRawValues\":[0,0,1,2,4]}".utf8)
+        defaults.set(
+            malformed,
+            forKey: "xert.navigation.workspace-order.v1.\(firstUser.uuidString.lowercased())"
+        )
+        XCTAssertEqual(XertWorkspaceOrderStore.load(for: firstUser, defaults: defaults), XertPrimaryDestination.dockOrder)
+
+        let navigation = XertNavigationCoordinator(initial: .booking)
+        XCTAssertTrue(navigation.step(.next, order: preferred))
+        XCTAssertEqual(navigation.selection, .events)
+        XCTAssertTrue(navigation.step(.previous, order: preferred))
+        XCTAssertEqual(navigation.selection, .booking)
+        XCTAssertFalse(navigation.step(.previous, order: preferred))
+
+        let commands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            orderedDestinations: preferred
+        )
+        XCTAssertEqual(
+            commands.compactMap { command -> XertPrimaryDestination? in
+                guard case .destination(let destination) = command.action else { return nil }
+                return destination
+            },
+            [.events, .home, .account, .explore]
+        )
+    }
+
     func testNavigationCommandPaletteIsContextualRoleAwareAndSearchable() {
         let navigation = XertNavigationCoordinator(initial: .home)
         XCTAssertTrue(navigation.select(.booking, source: .content))

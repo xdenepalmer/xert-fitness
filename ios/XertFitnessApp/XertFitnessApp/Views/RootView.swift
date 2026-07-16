@@ -20,6 +20,7 @@ struct RootView: View {
     @State private var hasRestoredMemberWorkspace = false
     @State private var hasExplicitMemberNavigation = false
     @State private var pinnedMemberRoutes: [XertMemberRoute] = []
+    @State private var memberWorkspaceOrder = XertPrimaryDestination.dockOrder
 
     var body: some View {
         Group {
@@ -39,6 +40,7 @@ struct RootView: View {
         .onChange(of: store.isSignedIn) { isSignedIn in
             guard isSignedIn else {
                 pinnedMemberRoutes = []
+                memberWorkspaceOrder = XertPrimaryDestination.dockOrder
                 isPrivacyUnlocked = true
                 privacyLockError = nil
                 resetMemberNavigationAfterSignOut(clearPendingIntent: true)
@@ -80,6 +82,7 @@ struct RootView: View {
         }
         .onAppear {
             reloadPinnedMemberRoutes()
+            reloadMemberWorkspaceOrder()
             restoreMemberWorkspaceWhenReady()
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
@@ -91,6 +94,7 @@ struct RootView: View {
         }
         .onChange(of: store.authSession?.user?.id) { _ in
             reloadPinnedMemberRoutes()
+            reloadMemberWorkspaceOrder()
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
@@ -181,11 +185,15 @@ struct RootView: View {
                 commands: navigation.commandPaletteCommands(
                     isAdmin: store.profile?.isAdmin == true,
                     context: navigationContext,
-                    pinnedRoutes: pinnedMemberRoutes
+                    pinnedRoutes: pinnedMemberRoutes,
+                    orderedDestinations: memberWorkspaceOrder
                 ),
                 workspace: navigation.workspaceOverview,
                 pinnedRoutes: pinnedMemberRoutes,
+                workspaceOrder: memberWorkspaceOrder,
+                canCustomizeWorkspaceOrder: store.isSignedIn,
                 onTogglePin: togglePinnedMemberRoute,
+                onSaveWorkspaceOrder: saveMemberWorkspaceOrder,
                 onSelect: executeNavigationCommand
             )
             .presentationDetents([.medium, .large])
@@ -252,6 +260,7 @@ struct RootView: View {
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
+            items: memberWorkspaceOrder,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
@@ -272,6 +281,7 @@ struct RootView: View {
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
+            items: memberWorkspaceOrder,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
             onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
@@ -310,7 +320,7 @@ struct RootView: View {
     }
 
     private func handleNavigationStep(_ direction: XertNavigationDirection) {
-        guard navigation.step(direction) else { return }
+        guard navigation.step(direction, order: memberWorkspaceOrder) else { return }
         claimMemberNavigation()
         cancelPendingProtectedNavigation()
         UISelectionFeedbackGenerator().selectionChanged()
@@ -383,6 +393,18 @@ struct RootView: View {
         pinnedMemberRoutes = XertPinnedWorkspaceStore.load(
             for: store.authSession?.user?.id
         )
+    }
+
+    private func reloadMemberWorkspaceOrder() {
+        memberWorkspaceOrder = XertWorkspaceOrderStore.load(
+            for: store.authSession?.user?.id
+        )
+    }
+
+    private func saveMemberWorkspaceOrder(_ destinations: [XertPrimaryDestination]) {
+        guard let userID = store.authSession?.user?.id else { return }
+        memberWorkspaceOrder = XertWorkspaceOrderStore.save(destinations, for: userID)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func togglePinnedMemberRoute(_ route: XertMemberRoute) {
@@ -594,6 +616,7 @@ private struct XertNavigationRail: View {
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
+    let items: [XertPrimaryDestination]
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onOpenPinned: (XertMemberRoute) -> Void
@@ -602,8 +625,6 @@ private struct XertNavigationRail: View {
     let onReturnPrevious: () -> Void
     let onReturnNext: () -> Void
     @Namespace private var selectionNamespace
-
-    private let items = XertPrimaryDestination.dockOrder
 
     var body: some View {
         VStack(spacing: 0) {
@@ -861,6 +882,7 @@ private struct XertNavigationDock: View {
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
+    let items: [XertPrimaryDestination]
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
     let onOpenPinned: (XertMemberRoute) -> Void
@@ -870,8 +892,6 @@ private struct XertNavigationDock: View {
     let onReturnPrevious: () -> Void
     let onReturnNext: () -> Void
     @Namespace private var selectionNamespace
-
-    private let items = XertPrimaryDestination.dockOrder
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1340,11 +1360,15 @@ private struct XertPinnedWorkspaceBadge: View {
 private struct XertNavigationCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    @State private var showingWorkspaceOrderEditor = false
     @FocusState private var searchFocused: Bool
     let commands: [XertNavigationCommand]
     let workspace: XertNavigationWorkspaceOverview
     let pinnedRoutes: [XertMemberRoute]
+    let workspaceOrder: [XertPrimaryDestination]
+    let canCustomizeWorkspaceOrder: Bool
     let onTogglePin: (XertMemberRoute) -> Void
+    let onSaveWorkspaceOrder: ([XertPrimaryDestination]) -> Void
     let onSelect: (XertNavigationCommand) -> Void
 
     private var filteredCommands: [XertNavigationCommand] {
@@ -1395,12 +1419,29 @@ private struct XertNavigationCommandPalette: View {
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search XERT")
             .focused($searchFocused)
             .toolbar {
+                if canCustomizeWorkspaceOrder {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: { showingWorkspaceOrderEditor = true }) {
+                            Image(systemName: "slider.horizontal.3")
+                        }
+                        .accessibilityLabel("Customize navigation layout")
+                        .accessibilityHint("Changes the order of your XERT workspaces")
+                        .accessibilityIdentifier("xert-navigation-customize")
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                         .foregroundStyle(Color.xertSteel)
                 }
             }
             .onAppear { searchFocused = true }
+            .sheet(isPresented: $showingWorkspaceOrderEditor) {
+                XertWorkspaceOrderEditor(
+                    destinations: workspaceOrder,
+                    onSave: onSaveWorkspaceOrder
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
         .tint(Color.xertSteel)
         .preferredColorScheme(.dark)
@@ -1531,6 +1572,79 @@ private struct XertNavigationCommandPalette: View {
                 }
             }
         }
+    }
+}
+
+private struct XertWorkspaceOrderEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var destinations: [XertPrimaryDestination]
+    let onSave: ([XertPrimaryDestination]) -> Void
+
+    init(
+        destinations: [XertPrimaryDestination],
+        onSave: @escaping ([XertPrimaryDestination]) -> Void
+    ) {
+        _destinations = State(initialValue: XertWorkspaceOrderStore.normalized(destinations))
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(destinations) { destination in
+                        HStack(spacing: 14) {
+                            Image(systemName: destination.selectedIcon)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color.xertSteel)
+                                .frame(width: 32, height: 32)
+                                .background(Color.xertSteel.opacity(0.1))
+                            Text(destination.title)
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Spacer()
+                        }
+                        .frame(minHeight: 48)
+                        .listRowBackground(Color.xertInk)
+                        .accessibilityLabel("\(destination.title) workspace")
+                    }
+                    .onMove(perform: moveDestinations)
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .scrollContentBackground(.hidden)
+            .background(Color.xertNavy.ignoresSafeArea())
+            .navigationTitle("Navigation Layout")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button(action: resetDestinations) {
+                        Label("Reset", systemImage: "arrow.counterclockwise")
+                    }
+                    .disabled(destinations == XertPrimaryDestination.dockOrder)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(destinations)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .tint(Color.xertSteel)
+        .preferredColorScheme(.dark)
+    }
+
+    private func moveDestinations(from source: IndexSet, to destination: Int) {
+        destinations.move(fromOffsets: source, toOffset: destination)
+    }
+
+    private func resetDestinations() {
+        withAnimation { destinations = XertPrimaryDestination.dockOrder }
     }
 }
 

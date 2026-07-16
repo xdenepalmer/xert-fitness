@@ -211,7 +211,7 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /handleReselection[\s\S]*store\.refresh\(\)/);
   assert.match(root, /DragGesture\(minimumDistance: 36\)/);
   assert.match(root, /abs\(horizontal\) > 44[\s\S]*abs\(vertical\) \* 1\.35/);
-  assert.match(root, /navigation\.step\(direction\)/);
+  assert.match(root, /navigation\.step\(direction, order: memberWorkspaceOrder\)/);
   assert.match(root, /previousRoute: navigation\.previousRoute/);
   assert.match(root, /navigation\.returnToPrevious\(\)/);
   assert.match(root, /\.accessibilityActions \{/);
@@ -332,7 +332,7 @@ test('external native navigation defers private member tasks until authenticatio
   assert.match(root, /if canReconcile \{ await store\.reconcileCheckout\(\) \}/);
   assert.match(root, /AccountView\([\s\S]*pendingNavigationTitle: pendingProtectedNavigation\?\.route\.navigationTitle/);
   assert.match(root, /private func selectMemberDestination\([\s\S]*guard navigation\.select\(destination, source: source\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
-  assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\(direction\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\(direction, order: memberWorkspaceOrder\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
   assert.match(root, /returnToPreviousNavigationDestination[\s\S]*guard navigation\.returnToPrevious\(\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
   assert.match(root, /case \.destination\(let destination\):[\s\S]*selectMemberDestination\(destination, source: \.keyboard\)/);
   assert.match(account, /let pendingNavigationTitle: String\?/);
@@ -415,4 +415,28 @@ test('native task history supports bounded back and forward traversal', async ()
   assert.match(root, /xert-navigation-forward-history/);
   assert.match(modelsTests, /testNavigationHistorySupportsForwardTraversalAndClearsAfterBranching/);
   assert.match(modelsTests, /testNavigationWorkspaceRestoresExactForwardTaskHistory/);
+});
+
+test('members can persist and operate a bounded account-scoped workspace order', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /struct XertWorkspaceOrderSnapshot: Codable, Equatable/);
+  assert.match(navigation, /maximumEncodedLength = 256/);
+  assert.match(navigation, /enum XertWorkspaceOrderStore/);
+  assert.match(navigation, /keyPrefix = "xert\.navigation\.workspace-order\.v1\."/);
+  assert.match(navigation, /snapshot\.destinationRawValues\.count == XertPrimaryDestination\.dockOrder\.count/);
+  assert.match(navigation, /Set\(destinations\) == Set\(XertPrimaryDestination\.dockOrder\)/);
+  assert.match(navigation, /func step\([\s\S]*order: \[XertPrimaryDestination\] = XertPrimaryDestination\.dockOrder/);
+  assert.match(navigation, /XertWorkspaceOrderStore\.normalized\(orderedDestinations\)/);
+  assert.match(root, /@State private var memberWorkspaceOrder = XertPrimaryDestination\.dockOrder/);
+  assert.ok((root.match(/items: memberWorkspaceOrder/g) || []).length === 2);
+  assert.match(root, /reloadMemberWorkspaceOrder\(\)/);
+  assert.match(root, /XertWorkspaceOrderStore\.save\(destinations, for: userID\)/);
+  assert.match(root, /private struct XertWorkspaceOrderEditor: View/);
+  assert.match(root, /\.onMove\(perform: moveDestinations\)/);
+  assert.match(root, /xert-navigation-customize/);
+  assert.match(modelsTests, /testWorkspaceOrderIsCompleteAccountScopedAndDrivesNavigation/);
 });
