@@ -147,7 +147,11 @@ enum XertMemberRoute: Hashable {
         if url.scheme?.lowercased() == "https" {
             return webRoute(for: url)
         }
-        guard url.scheme?.lowercased() == "xertfitness", url.fragment == nil else { return nil }
+        guard
+            url.scheme?.lowercased() == "xertfitness",
+            url.port == nil,
+            url.fragment == nil
+        else { return nil }
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased()
         let routePath = host.isEmpty ? path : "/\(host)\(path)"
@@ -155,7 +159,10 @@ enum XertMemberRoute: Hashable {
     }
 
     private static func webRoute(for url: URL) -> Self? {
-        guard url.host?.lowercased() == canonicalWebHost else { return nil }
+        guard
+            url.host?.lowercased() == canonicalWebHost,
+            url.port == nil || url.port == 443
+        else { return nil }
         let path = url.path.lowercased()
         let fragment = url.fragment?.lowercased()
 

@@ -37,6 +37,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://account/bookings/not-a-uuid"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/packs?source=unknown"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://user:pass@booking/packs"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking:444/packs"))))
     }
 
     func testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins() throws {
@@ -59,6 +60,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/coaches"))), .explore)
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "http://xert-fitness.vercel.app/booking"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://example.com/open/booking/packs"))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app:444/open/booking/packs"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/booking/packs?source=email"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://user:pass@xert-fitness.vercel.app/open/booking"))))
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/admin"))))

@@ -77,6 +77,8 @@ test('member routing is typed, task-restorable, and owns native deep-link mappin
     assert.match(navigation, new RegExp(`"${path.replace('/', '\\/')}"`));
   }
   assert.match(navigation, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
+  assert.match(navigation, /url\.scheme\?\.lowercased\(\) == "xertfitness",[\s\S]*url\.port == nil/);
+  assert.match(navigation, /url\.host\?\.lowercased\(\) == canonicalWebHost,[\s\S]*url\.port == nil \|\| url\.port == 443/);
   assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil[\s\S]*url\.query == nil[\s\S]*url\.fragment == nil/);
   assert.match(navigation, /enum XertMemberRoute: Hashable/);
   assert.match(navigation, /case notices\(UUID\?\)/);
