@@ -90,6 +90,7 @@ checkout.session.async_payment_succeeded
 checkout.session.expired
 checkout.session.async_payment_failed
 charge.refunded
+charge.dispute.created
 ```
 
 Copy that endpoint's `whsec_...` signing secret to Vercel and redeploy.
@@ -141,10 +142,12 @@ the live Stripe and Supabase secrets:
 npm run stripe:launch:check
 ```
 
-This reruns the thirteen deployed boundary and payment-contract checks and inspects every active pack
-against live Stripe. It passes only when all packs already have exact, active,
+This reruns the thirteen deployed boundary and payment-contract checks, inspects
+every active pack against live Stripe, and queries Stripe for the canonical
+webhook's enabled events. It passes only when all packs already have exact, active,
 one-time AUD Prices bound to their current XERT product identity, session count
-and validity. A dry-run `PLAN` is a release failure: review it, run
+and validity, and the webhook includes refund and dispute delivery. A dry-run
+`PLAN` is a release failure: review it, run
 `npm run stripe:catalog:live:apply`, and rerun the combined gate until it reports
 zero planned changes. The command is read-only and never prints private keys.
 
@@ -158,6 +161,10 @@ zero planned changes. The command is read-only and never prints private keys.
 6. Refund the test order from **Admin > Finance**.
 7. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
 8. Confirm Operations Health remains green.
+9. In Stripe test mode, create a dispute test event for the XERT payment and
+   confirm **Operations Health > Unresolved Stripe incidents** shows it.
+10. Open the matching Stripe dispute, record the evidence or response outside
+    XERT, then use **Mark handled** only after the owner has completed that work.
 
 ## 6. Live Cutover
 

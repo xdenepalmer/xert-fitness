@@ -212,16 +212,19 @@ test('launch preflight requires explicit mode and valid private operator configu
 
   let boundaryCalls = 0;
   let catalogCalls = 0;
+  let webhookCalls = 0;
   const report = await inspectStripeLaunchPreflight({
     mode: 'live',
     environment: {},
     inspectBoundary: async () => { boundaryCalls += 1; },
     catalogInspector: async () => { catalogCalls += 1; },
+    webhookInspector: async () => { webhookCalls += 1; },
   });
   assert.equal(report.ready, false);
   assert.ok(report.environmentIssues.length >= 3);
   assert.equal(boundaryCalls, 0);
   assert.equal(catalogCalls, 0);
+  assert.equal(webhookCalls, 0);
 });
 
 test('launch preflight passes only when deployed boundaries and every catalog link are verified', async () => {
@@ -229,8 +232,10 @@ test('launch preflight passes only when deployed boundaries and every catalog li
     SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: `sb_secret_${'s'.repeat(32)}`,
     STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(32)}`,
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
   };
   const boundary = { ready: true, checks: [] };
+  const webhook = { ready: true, missing_events: [], issue: null };
   const ready = await inspectStripeLaunchPreflight({
     environment,
     mode: 'live',
@@ -239,6 +244,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
       log('PASS starter-4: linked price verified.');
       return { productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0 };
     },
+    webhookInspector: async () => webhook,
   });
   assert.equal(ready.ready, true);
   assert.equal(ready.catalog.ready, true);
@@ -251,6 +257,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
     catalogInspector: async () => ({
       productCount: 1, applied: false, verifiedCount: 0, linkedCount: 0, plannedCount: 1,
     }),
+    webhookInspector: async () => webhook,
   });
   assert.equal(planned.ready, false);
   assert.equal(planned.catalog.ready, false);
@@ -262,8 +269,25 @@ test('launch preflight passes only when deployed boundaries and every catalog li
     catalogInspector: async () => ({
       productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0,
     }),
+    webhookInspector: async () => webhook,
   });
   assert.equal(brokenBoundary.ready, false);
+
+  const missingDisputeDelivery = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    inspectBoundary: async () => boundary,
+    catalogInspector: async () => ({
+      productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0,
+    }),
+    webhookInspector: async () => ({
+      ready: false,
+      missing_events: ['charge.dispute.created'],
+      issue: 'The Stripe webhook is missing: charge.dispute.created.',
+    }),
+  });
+  assert.equal(missingDisputeDelivery.ready, false);
+  assert.deepEqual(missingDisputeDelivery.webhook.missing_events, ['charge.dispute.created']);
 });
 
 function catalogSupabase(products) {

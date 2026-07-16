@@ -52,8 +52,8 @@ build has them. The serverless functions reuse `VITE_SUPABASE_URL` if
 After deploying, create a Stripe webhook endpoint pointing at
 `https://<your-domain>/api/stripe-webhook` for both
 `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
-`checkout.session.expired`, `checkout.session.async_payment_failed`, and
-`charge.refunded`,
+`checkout.session.expired`, `checkout.session.async_payment_failed`,
+`charge.refunded`, and `charge.dispute.created`,
 then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the

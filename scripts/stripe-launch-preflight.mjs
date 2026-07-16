@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { inspectStripeReadiness, printReport } from './check-stripe-readiness.mjs';
 import { inspectCatalogLinkEnvironment, linkStripeCatalog } from './link-stripe-catalog.mjs';
+import { inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
 
 export function parseStripeLaunchArgs(args) {
   const modeArg = args.find(arg => arg.startsWith('--mode='));
@@ -20,6 +21,7 @@ export async function inspectStripeLaunchPreflight({
   mode,
   inspectBoundary = inspectStripeReadiness,
   catalogInspector,
+  webhookInspector,
 } = {}) {
   if (!['test', 'live'].includes(mode)) throw new Error('Stripe launch mode is required.');
   const privateEnvironment = inspectCatalogLinkEnvironment(environment, mode);
@@ -30,6 +32,7 @@ export async function inspectStripeLaunchPreflight({
       environmentIssues: privateEnvironment.issues,
       boundary: null,
       catalog: null,
+      webhook: null,
       catalogMessages: [],
     };
   }
@@ -41,21 +44,28 @@ export async function inspectStripeLaunchPreflight({
     });
     return linkStripeCatalog({ stripe, supabase, mode, apply: false, replaceExisting: false, log });
   });
+  const inspectWebhook = webhookInspector || (async () => {
+    const stripe = new Stripe(privateEnvironment.stripeSecretKey, { maxNetworkRetries: 2, timeout: 20_000 });
+    const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
+    return inspectStripeWebhookEndpoints(endpoints.data, environment.APP_BASE_URL || '');
+  });
   const catalogMessages = [];
-  const [boundary, catalog] = await Promise.all([
+  const [boundary, catalog, webhook] = await Promise.all([
     inspectBoundary({ environment }),
     inspectCatalog({ environment, mode, log: message => catalogMessages.push(message) }),
+    inspectWebhook({ environment, mode }),
   ]);
   const catalogReady = catalog.productCount > 0
     && catalog.verifiedCount === catalog.productCount
     && catalog.plannedCount === 0;
 
   return {
-    ready: boundary.ready && catalogReady,
+    ready: boundary.ready && catalogReady && webhook.ready,
     mode,
     environmentIssues: [],
     boundary,
     catalog: { ...catalog, ready: catalogReady },
+    webhook,
     catalogMessages,
   };
 }
@@ -76,6 +86,12 @@ export function printStripeLaunchPreflight(report) {
   );
   if (!catalog.ready) {
     console.log(`      NEXT: Review the plan, run npm run stripe:catalog:${report.mode}:apply, then rerun this preflight.`);
+  }
+  console.log(
+    `${report.webhook.ready ? 'PASS' : 'FAIL'}  Stripe webhook registration: ${report.webhook.issue || 'canonical endpoint enabled with every required event.'}`
+  );
+  if (!report.webhook.ready) {
+    console.log('      NEXT: Enable the canonical /api/stripe-webhook endpoint and every event in docs/STRIPE_LAUNCH_RUNBOOK.md.');
   }
   console.log(report.ready ? 'Stripe launch preflight is ready.' : 'Stripe launch preflight is not ready.');
 }
