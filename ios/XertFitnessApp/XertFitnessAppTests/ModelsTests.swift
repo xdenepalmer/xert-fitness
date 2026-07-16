@@ -451,7 +451,8 @@ final class ModelsTests: XCTestCase {
         let pending = PendingCheckout(
             userID: userID,
             baselineOrderIDs: orderIDs,
-            startedAt: startedAt
+            startedAt: startedAt,
+            checkoutSessionID: "cs_test_exact"
         )
 
         PendingCheckoutStore.save(pending, defaults: defaults)
@@ -472,10 +473,11 @@ final class ModelsTests: XCTestCase {
             startedAt: startedAt
         )
         defaults.set(try JSONEncoder().encode(legacy), forKey: PendingCheckoutStore.storageKey)
-        XCTAssertEqual(
-            PendingCheckoutStore.load(for: userID, now: startedAt, defaults: defaults),
-            pending
-        )
+        let migrated = PendingCheckoutStore.load(for: userID, now: startedAt, defaults: defaults)
+        XCTAssertEqual(migrated?.userID, pending.userID)
+        XCTAssertEqual(migrated?.baselineOrderIDs, pending.baselineOrderIDs)
+        XCTAssertEqual(migrated?.startedAt, pending.startedAt)
+        XCTAssertNil(migrated?.checkoutSessionID)
     }
 
     func testPendingCheckoutRejectsAnotherUserAndExpires() throws {
@@ -823,6 +825,38 @@ final class ModelsTests: XCTestCase {
             credits: consumedFulfillmentBatch,
             orders: [paidOrder]
         ))
+    }
+
+    func testCheckoutReconciliationUsesTheExactStripeSessionAndClosesTerminalStates() {
+        let expectedOrderID = UUID()
+        let unrelatedOrderID = UUID()
+        let pending = PendingCheckout(
+            userID: UUID(),
+            baselineOrderIDs: [],
+            startedAt: Date(),
+            checkoutSessionID: "cs_test_exact"
+        )
+
+        XCTAssertEqual(CheckoutReconciliation.settlement(
+            pendingCheckout: pending,
+            credits: [creditBatch(remaining: 4, orderID: unrelatedOrderID)],
+            orders: [order(id: unrelatedOrderID, status: "paid", checkoutSessionID: "cs_test_other")]
+        ), .pending)
+        XCTAssertEqual(CheckoutReconciliation.settlement(
+            pendingCheckout: pending,
+            credits: [creditBatch(remaining: 0, orderID: expectedOrderID)],
+            orders: [order(id: expectedOrderID, status: "paid", checkoutSessionID: "cs_test_exact")]
+        ), .confirmed)
+        XCTAssertEqual(CheckoutReconciliation.settlement(
+            pendingCheckout: pending,
+            credits: [],
+            orders: [order(id: expectedOrderID, status: "failed", checkoutSessionID: "cs_test_exact")]
+        ), .failed)
+        XCTAssertEqual(CheckoutReconciliation.settlement(
+            pendingCheckout: pending,
+            credits: [],
+            orders: [order(id: expectedOrderID, status: "refunded", checkoutSessionID: "cs_test_exact")]
+        ), .refunded)
     }
 
     func testOrderDecodesPurchaseHistoryAndFormatsMemberFacingValues() throws {
@@ -1844,7 +1878,7 @@ final class ModelsTests: XCTestCase {
         )
     }
 
-    private func order(id: UUID, status: String) -> OrderItem {
+    private func order(id: UUID, status: String, checkoutSessionID: String? = nil) -> OrderItem {
         OrderItem(
             id: id,
             user_id: nil,
@@ -1855,7 +1889,7 @@ final class ModelsTests: XCTestCase {
             currency: "aud",
             credit_total: 10,
             credit_validity_days: 90,
-            stripe_checkout_session_id: status == "failed" ? "cs_test_recover" : nil,
+            stripe_checkout_session_id: checkoutSessionID ?? (status == "failed" ? "cs_test_recover" : nil),
             stripe_payment_intent_id: status == "paid" ? "pi_test_paid" : nil,
             created_at: Date(),
             paid_at: status == "paid" ? Date() : nil,

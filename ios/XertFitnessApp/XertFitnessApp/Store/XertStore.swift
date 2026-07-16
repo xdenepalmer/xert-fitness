@@ -647,20 +647,20 @@ final class XertStore: ObservableObject {
             guard let userID = authSession.user?.id else {
                 throw APIError(message: "Your XERT session needs you to sign in again.")
             }
-            let pendingCheckout = PendingCheckout(
-                userID: userID,
-                baselineOrderIDs: Set(orders.map(\.id)),
-                startedAt: Date()
-            )
-            let url = try await api.checkout(
+            let checkout = try await api.checkout(
                 session: authSession,
                 productSlug: product.slug,
                 attemptID: attemptID
             )
             guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
-            PendingCheckoutStore.save(pendingCheckout)
+            PendingCheckoutStore.save(PendingCheckout(
+                userID: userID,
+                baselineOrderIDs: Set(orders.map(\.id)),
+                startedAt: Date(),
+                checkoutSessionID: checkout.checkout_session_id
+            ))
             isCheckoutConfirmationPending = true
-            return url
+            return checkout.url
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return nil }
             errorMessage = error.localizedDescription
@@ -675,7 +675,6 @@ final class XertStore: ObservableObject {
         else { return }
         let memberVersion = memberStateVersion.snapshot
         let pendingCheckout = PendingCheckoutStore.load(for: userID)
-        let baselineOrderIDs = pendingCheckout?.baselineOrderIDs ?? Set(orders.map(\.id))
         isCheckoutConfirmationPending = pendingCheckout != nil
         isReconcilingCheckout = true
         defer {
@@ -705,13 +704,20 @@ final class XertStore: ObservableObject {
                 unavailableDataSources.subtract([.credits, .orders])
                 memberDataUpdatedAt = Date()
 
-                if CheckoutReconciliation.hasSettled(
-                    baselineOrderIDs: baselineOrderIDs,
+                guard let pendingCheckout else { return }
+                let settlement = CheckoutReconciliation.settlement(
+                    pendingCheckout: pendingCheckout,
                     credits: loadedCredits,
                     orders: loadedOrders
-                ) {
+                )
+                if settlement != .pending {
                     PendingCheckoutStore.clear()
                     isCheckoutConfirmationPending = false
+                    if settlement == .failed {
+                        errorMessage = "Checkout did not complete. No session pack was activated."
+                    } else if settlement == .refunded {
+                        errorMessage = "This payment was refunded. No purchased credits remain on the order."
+                    }
                     return
                 }
             } catch {

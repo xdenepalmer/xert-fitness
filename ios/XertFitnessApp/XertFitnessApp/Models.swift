@@ -799,6 +799,7 @@ private enum InterestValidation {
 
 struct CheckoutResponse: Codable {
     let url: URL
+    let checkout_session_id: String
 }
 
 struct PrivateSessionRequest: Encodable, Equatable {

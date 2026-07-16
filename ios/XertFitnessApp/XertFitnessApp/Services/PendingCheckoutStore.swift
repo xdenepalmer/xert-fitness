@@ -4,6 +4,19 @@ struct PendingCheckout: Codable, Equatable {
     let userID: UUID
     let baselineOrderIDs: Set<UUID>
     let startedAt: Date
+    let checkoutSessionID: String?
+
+    init(
+        userID: UUID,
+        baselineOrderIDs: Set<UUID>,
+        startedAt: Date,
+        checkoutSessionID: String? = nil
+    ) {
+        self.userID = userID
+        self.baselineOrderIDs = baselineOrderIDs
+        self.startedAt = startedAt
+        self.checkoutSessionID = checkoutSessionID
+    }
 }
 
 enum PendingCheckoutStore {

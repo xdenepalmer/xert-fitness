@@ -1591,7 +1591,7 @@ final class XertAPI {
         )
     }
 
-    func checkout(session auth: AuthSession, productSlug: String, attemptID: UUID) async throws -> URL {
+    func checkout(session auth: AuthSession, productSlug: String, attemptID: UUID) async throws -> CheckoutResponse {
         let response: CheckoutResponse = try await vercelRequest(
             path: "/api/checkout",
             body: [
@@ -1601,7 +1601,7 @@ final class XertAPI {
             ],
             auth: auth
         )
-        return response.url
+        return response
     }
 
     func requestPrivateSession(_ requestBody: PrivateSessionRequest, auth: AuthSession? = nil) async throws {

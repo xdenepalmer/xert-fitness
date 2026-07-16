@@ -42,6 +42,42 @@ enum CheckoutReconciliation {
     // Immediate check, then 2s, 5s and 10s after returning from Stripe.
     static let retryDelaysNanoseconds: [UInt64] = [0, 2_000_000_000, 3_000_000_000, 5_000_000_000]
 
+    enum Settlement: Equatable {
+        case pending
+        case confirmed
+        case failed
+        case refunded
+    }
+
+    static func settlement(
+        pendingCheckout: PendingCheckout,
+        credits: [CreditBatch],
+        orders: [OrderItem]
+    ) -> Settlement {
+        guard let checkoutSessionID = pendingCheckout.checkoutSessionID else {
+            return hasSettled(
+                baselineOrderIDs: pendingCheckout.baselineOrderIDs,
+                credits: credits,
+                orders: orders
+            ) ? .confirmed : .pending
+        }
+
+        guard let order = orders.first(where: {
+            $0.stripe_checkout_session_id == checkoutSessionID
+        }) else { return .pending }
+
+        switch order.status.lowercased() {
+        case "paid":
+            return credits.contains(where: { $0.order_id == order.id }) ? .confirmed : .pending
+        case "failed", "cancelled", "expired":
+            return .failed
+        case "refunded":
+            return .refunded
+        default:
+            return .pending
+        }
+    }
+
     static func hasSettled(
         baselineOrderIDs: Set<UUID>,
         credits: [CreditBatch],
