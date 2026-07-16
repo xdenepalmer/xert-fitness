@@ -24,13 +24,24 @@ test('revenue summaries include paid orders only and expose currency scope', () 
   assert.deepEqual(summary.currencies, ['aud']);
 });
 
-test('exports human currency amounts and Stripe reconciliation identifiers', () => {
-  const [row] = orderCsvRows([{ ...orders[0], reconciled_at: '2026-07-13T03:00:00Z', reconciled_by: 'admin-xert' }]);
+test('exports human currency amounts, purchased terms and Stripe reconciliation identifiers', () => {
+  const [row] = orderCsvRows([{
+    ...orders[0], credit_total: 4, credit_validity_days: 28,
+    reconciled_at: '2026-07-13T03:00:00Z', reconciled_by: 'admin-xert',
+  }]);
   assert.equal(row.amount, '48.00');
   assert.equal(row.currency, 'AUD');
+  assert.equal(row.credit_total, 4);
+  assert.equal(row.credit_validity_days, 28);
   assert.equal(row.checkout_session, 'cs_alex');
   assert.equal(row.reconciled_at, '2026-07-13T03:00:00Z');
   assert.equal(row.reconciled_by, 'admin-xert');
+});
+
+test('leaves unavailable legacy purchased terms blank in exports', () => {
+  const [row] = orderCsvRows([{ ...orders[1], credit_total: null, credit_validity_days: null }]);
+  assert.equal(row.credit_total, '');
+  assert.equal(row.credit_validity_days, '');
 });
 
 test('exports the durable refund and credit reconciliation ledger', () => {

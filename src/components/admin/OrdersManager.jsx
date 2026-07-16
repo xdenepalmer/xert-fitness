@@ -15,6 +15,15 @@ const STATUS_COLORS = {
 };
 const PAGE_SIZE = 50;
 
+function purchasedTerms(order) {
+  const credits = Number(order?.credit_total);
+  const validity = Number(order?.credit_validity_days);
+  if (!Number.isSafeInteger(credits) || credits <= 0 || !Number.isSafeInteger(validity) || validity <= 0) {
+    return 'Legacy order - purchased terms not recorded';
+  }
+  return `${credits} session credit${credits === 1 ? '' : 's'} · ${validity} days validity`;
+}
+
 export default function OrdersManager() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +136,8 @@ export default function OrdersManager() {
               { key: 'created_at', label: 'Created' }, { key: 'paid_at', label: 'Paid' },
               { key: 'product', label: 'Product' }, { key: 'email', label: 'Email' },
               { key: 'amount', label: 'Amount' }, { key: 'currency', label: 'Currency' },
+              { key: 'credit_total', label: 'Purchased session credits' },
+              { key: 'credit_validity_days', label: 'Purchased validity days' },
               { key: 'status', label: 'Status' }, { key: 'checkout_session', label: 'Stripe Checkout Session' },
               { key: 'payment_intent', label: 'Stripe Payment Intent' },
               { key: 'reconciled_at', label: 'Admin reconciled' }, { key: 'reconciled_by', label: 'Reconciled by admin ID' },
@@ -219,6 +230,7 @@ export default function OrdersManager() {
               </span>
               <div className="flex-1 min-w-[12rem]">
                 <p className="font-body text-sm text-xert-offwhite">{o.products?.name || 'Session pack'}</p>
+                <p className="font-body text-xs text-xert-steel/70">{purchasedTerms(o)}</p>
                 <p className="font-body text-xs text-xert-concrete/50">{o.email || 'unknown buyer'}</p>
               </div>
               <p className="font-body text-xs text-xert-concrete/40 shrink-0">
@@ -259,6 +271,7 @@ export default function OrdersManager() {
             <dl className="space-y-4 font-body text-sm">
               <div><dt className="text-xs uppercase text-xert-concrete/40">Buyer</dt><dd className="text-xert-offwhite mt-1">{selectedOrder.email ? <a href={`mailto:${selectedOrder.email}`} className="hover:text-xert-steel">{selectedOrder.email}</a> : 'Anonymized buyer'}</dd></div>
               <div><dt className="text-xs uppercase text-xert-concrete/40">Amount</dt><dd className="text-xert-offwhite mt-1">{formatPackPrice(selectedOrder.amount_cents, selectedOrder.currency)} · {selectedOrder.status}</dd></div>
+              <div><dt className="text-xs uppercase text-xert-concrete/40">Purchased terms</dt><dd className="text-xert-offwhite mt-1">{purchasedTerms(selectedOrder)}</dd></div>
               <Identifier label="Stripe checkout session" value={selectedOrder.stripe_checkout_session_id} onCopy={copyIdentifier} />
               <Identifier label="Stripe payment intent" value={selectedOrder.stripe_payment_intent_id} onCopy={copyIdentifier} />
               <Identifier label="XERT order ID" value={selectedOrder.id} onCopy={copyIdentifier} />
@@ -273,7 +286,7 @@ export default function OrdersManager() {
               <div className="mt-6 border-t border-xert-orange/30 pt-5 space-y-3">
                 <div className="flex items-center gap-2 text-xert-orange"><RefreshCw className="w-4 h-4" /><h4 className="font-display text-sm uppercase">Payment recovery</h4></div>
                 <p className="font-body text-sm leading-relaxed text-xert-concrete/70">
-                  Ask Stripe whether this checkout was paid. Credits are granted only when the customer, product, amount and currency all match this order.
+                  Ask Stripe whether this checkout was paid. Credits are granted only when the customer, product, amount, currency and purchased terms all match this order.
                 </p>
                 <button type="button" onClick={() => void submitReconciliation()} disabled={reconciling} className="w-full min-h-11 inline-flex items-center justify-center gap-2 border border-xert-orange/50 px-4 font-display text-sm uppercase text-xert-orange disabled:opacity-40">
                   <RefreshCw className={`w-4 h-4 ${reconciling ? 'animate-spin' : ''}`} /> {reconciling ? 'Checking Stripe...' : 'Check and Reconcile Payment'}

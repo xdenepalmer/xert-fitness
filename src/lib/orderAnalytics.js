@@ -77,6 +77,8 @@ export function orderCsvRows(orders) {
       email: order.email || '',
       amount: ((Number(order.amount_cents) || 0) / 100).toFixed(2),
       currency: String(order.currency || 'aud').toUpperCase(),
+      credit_total: Number.isSafeInteger(Number(order.credit_total)) && Number(order.credit_total) > 0 ? Number(order.credit_total) : '',
+      credit_validity_days: Number.isSafeInteger(Number(order.credit_validity_days)) && Number(order.credit_validity_days) > 0 ? Number(order.credit_validity_days) : '',
       status: order.status,
       checkout_session: order.stripe_checkout_session_id || '',
       payment_intent: order.stripe_payment_intent_id || '',

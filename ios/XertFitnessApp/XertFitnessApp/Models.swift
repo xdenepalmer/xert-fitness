@@ -281,6 +281,8 @@ struct OrderItem: Identifiable, Codable, Hashable {
     let status: String
     let amount_cents: Int?
     let currency: String?
+    let credit_total: Int?
+    let credit_validity_days: Int?
     let stripe_checkout_session_id: String?
     let stripe_payment_intent_id: String?
     let created_at: Date
@@ -300,6 +302,14 @@ struct OrderItem: Identifiable, Codable, Hashable {
 
     var displayStatus: String {
         status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var purchasedTerms: String {
+        guard let credits = credit_total, credits > 0,
+              let validityDays = credit_validity_days, validityDays > 0 else {
+            return "Legacy order - purchased terms not recorded"
+        }
+        return "\(credits) session credit\(credits == 1 ? "" : "s") · \(validityDays) days validity"
     }
 
     var refundedAmount: String? {

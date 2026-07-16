@@ -1268,6 +1268,7 @@ private struct AdminOrderDetailView: View {
                 orderValue("Buyer", (order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
                 orderValue("Amount", order.displayAmount)
                 orderValue("Status", order.displayStatus)
+                orderValue("Purchased terms", order.purchasedTerms)
                 orderValue("Created", order.created_at.formatted(date: .abbreviated, time: .shortened))
                 if let paidAt = order.paid_at { orderValue("Paid", paidAt.formatted(date: .abbreviated, time: .shortened)) }
                 identifier("XERT order", order.id.uuidString)
@@ -1281,7 +1282,7 @@ private struct AdminOrderDetailView: View {
 
             if order.isRecoverable {
                 Section("Payment recovery") {
-                    Text("Ask Stripe whether this checkout was paid. Credits are granted only when the member, product, amount and currency match this order.")
+                    Text("Ask Stripe whether this checkout was paid. Credits are granted only when the member, product, amount, currency and purchased terms match this order.")
                         .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.7))
                     Button { confirmingReconciliation = true } label: {
                         Label(isOperating ? "Checking Stripe..." : "Check and reconcile payment", systemImage: "arrow.triangle.2.circlepath")

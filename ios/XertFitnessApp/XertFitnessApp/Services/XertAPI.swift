@@ -229,7 +229,7 @@ final class XertAPI {
         try await restRequest(
             path: "/rest/v1/orders",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
                 URLQueryItem(name: "order", value: "created_at.desc")
             ],
             auth: auth
@@ -244,7 +244,7 @@ final class XertAPI {
             let page: [OrderItem] = try await restRequest(
                 path: "/rest/v1/orders",
                 queryItems: [
-                    URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                    URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
                     URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
                     URLQueryItem(name: "limit", value: String(pageSize)),
                     URLQueryItem(name: "offset", value: String(offset))
