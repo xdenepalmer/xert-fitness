@@ -971,49 +971,7 @@ private struct AdminScheduleView: View {
         List {
             if rows.isEmpty { Text("No matching classes.").listRowBackground(Color.xertInk) }
             ForEach(rows) { item in
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(spacing: 2) {
-                        Text(classDay(item))
-                            .font(.title3.weight(.bold))
-                        Text(classMonth(item))
-                            .font(.caption2.weight(.bold))
-                    }
-                    .frame(width: 42)
-                    .foregroundStyle(Color.xertSteel)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        NavigationLink {
-                            AdminClassEditor(admin: admin, session: session, classSession: item)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title).font(.headline)
-                                Text(classSummary(item))
-                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                            }
-                        }
-                        HStack {
-                            Text(item.status.uppercased()).foregroundStyle(classStatusColour(item.status))
-                            if item.public_visible { Text("PUBLIC").foregroundStyle(.green) }
-                            Spacer()
-                            Menu {
-                                Button {
-                                    Task { _ = await admin.duplicateClass(session: session, classSession: item) }
-                                } label: { Label("Duplicate as draft", systemImage: "plus.square.on.square") }
-                                if !["cancelled", "completed"].contains(item.status) {
-                                    Button(role: .destructive) { pendingCancellation = item } label: {
-                                        Label("Cancel class", systemImage: "calendar.badge.minus")
-                                    }
-                                }
-                            } label: { Image(systemName: "ellipsis.circle") }
-                                .disabled(admin.savingClassID != nil || admin.cancellingClassID != nil)
-                                .accessibilityLabel("Manage \(item.title)")
-                        }
-                        .font(.caption2.weight(.bold))
-                    }
-                    .foregroundStyle(Color.xertOffWhite)
-                }
-                .padding(.vertical, 6)
-                .listRowBackground(Color.xertInk)
+                classRow(item)
             }
         }
         .scrollContentBackground(.hidden)
@@ -1044,6 +1002,66 @@ private struct AdminScheduleView: View {
         } message: { _ in
             Text("Every active booking is cancelled, reserved credits are returned, and affected members receive a cancellation notice.")
         }
+    }
+
+    private func classRow(_ item: AdminClassSession) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            classDateBadge(item)
+            classInformation(item)
+        }
+        .padding(.vertical, 6)
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func classDateBadge(_ item: AdminClassSession) -> some View {
+        VStack(spacing: 2) {
+            Text(classDay(item)).font(.title3.weight(.bold))
+            Text(classMonth(item)).font(.caption2.weight(.bold))
+        }
+        .frame(width: 42)
+        .foregroundStyle(Color.xertSteel)
+    }
+
+    private func classInformation(_ item: AdminClassSession) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            NavigationLink {
+                AdminClassEditor(admin: admin, session: session, classSession: item)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title).font(.headline)
+                    Text(classSummary(item))
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.6))
+                }
+            }
+            classStatusActions(item)
+        }
+        .foregroundStyle(Color.xertOffWhite)
+    }
+
+    private func classStatusActions(_ item: AdminClassSession) -> some View {
+        HStack {
+            Text(item.status.uppercased()).foregroundStyle(classStatusColour(item.status))
+            if item.public_visible { Text("PUBLIC").foregroundStyle(.green) }
+            Spacer()
+            Menu {
+                Button {
+                    Task { _ = await admin.duplicateClass(session: session, classSession: item) }
+                } label: {
+                    Label("Duplicate as draft", systemImage: "plus.square.on.square")
+                }
+                if !["cancelled", "completed"].contains(item.status) {
+                    Button(role: .destructive) { pendingCancellation = item } label: {
+                        Label("Cancel class", systemImage: "calendar.badge.minus")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .disabled(admin.savingClassID != nil || admin.cancellingClassID != nil)
+            .accessibilityLabel("Manage \(item.title)")
+        }
+        .font(.caption2.weight(.bold))
     }
 
     private func classStatusColour(_ status: String) -> Color {
