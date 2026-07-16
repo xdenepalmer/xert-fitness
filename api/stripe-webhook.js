@@ -75,6 +75,15 @@ function parseNonNegativeInteger(value) {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
+export function hasXertCheckoutIdentity(metadata) {
+  const attemptID = String(metadata?.xert_checkout_attempt_id || '').trim();
+  if (!attemptID) return false;
+  if (!UUID_PATTERN.test(attemptID)) {
+    throw new Error('XERT checkout identity is invalid.');
+  }
+  return true;
+}
+
 /**
  * Returns the durable order and credit records for a Stripe event, or null
  * when the event does not represent a completed XERT payment.
@@ -100,6 +109,7 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
   }
 
   const metadata = checkout.metadata || {};
+  if (!hasXertCheckoutIdentity(metadata)) return null;
   const sessions = parseNonNegativeInteger(metadata.sessions_count);
   const validityDays = parseNonNegativeInteger(metadata.validity_days);
   const latestCharge = typeof checkout.payment_intent === 'object'
@@ -112,7 +122,6 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
 
   if (
     !checkout.id ||
-    !UUID_PATTERN.test(metadata.xert_checkout_attempt_id || '') ||
     !metadata.user_id ||
     !metadata.product_id ||
     !sessions ||
@@ -157,7 +166,7 @@ export function stripeRefundForEvent(event, now = new Date()) {
   if (event?.type !== 'charge.refunded') return null;
   const charge = event.data?.object;
   const metadata = charge?.metadata || {};
-  if (!UUID_PATTERN.test(metadata.xert_checkout_attempt_id || '')) return null;
+  if (!hasXertCheckoutIdentity(metadata)) return null;
   const paymentIntentId = typeof charge?.payment_intent === 'string'
     ? charge.payment_intent
     : charge?.payment_intent?.id;
@@ -260,6 +269,7 @@ export async function persistCheckoutFulfillment(admin, fulfillment) {
 export function checkoutFailureForEvent(event) {
   if (!FAILURE_EVENT_TYPES.has(event?.type)) return null;
   const checkout = event.data?.object;
+  if (!hasXertCheckoutIdentity(checkout?.metadata)) return null;
   if (!checkout?.id || checkout.mode !== 'payment') {
     throw new Error('Failed Checkout Session data is incomplete or invalid.');
   }

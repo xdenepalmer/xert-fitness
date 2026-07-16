@@ -6,6 +6,7 @@ import {
   beginStripeWebhookEvent,
   checkoutFailureForEvent,
   checkoutFulfillmentForEvent,
+  hasXertCheckoutIdentity,
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
@@ -57,6 +58,18 @@ test('fails closed when Stripe event and secret-key modes do not match', () => {
   assert.throws(
     () => assertStripeEventMode({ ...checkoutEvent(), livemode: undefined }, 'sk_test_xert'),
     /mode is missing/i
+  );
+});
+
+test('classifies Stripe metadata as unrelated, valid XERT, or malformed XERT', () => {
+  assert.equal(hasXertCheckoutIdentity(undefined), false);
+  assert.equal(hasXertCheckoutIdentity({}), false);
+  assert.equal(hasXertCheckoutIdentity({
+    xert_checkout_attempt_id: 'E8C03884-4C1B-4A96-97C1-B0A33F2095B3',
+  }), true);
+  assert.throws(
+    () => hasXertCheckoutIdentity({ xert_checkout_attempt_id: 'not-a-uuid' }),
+    /identity is invalid/i,
   );
 });
 
@@ -141,6 +154,10 @@ test('ignores non-payment Checkout events and rejects malformed metadata', () =>
     checkoutFulfillmentForEvent(checkoutEvent({ type: 'checkout.session.expired' }), NOW),
     null
   );
+  assert.equal(
+    checkoutFulfillmentForEvent(checkoutEvent({ metadata: { xert_checkout_attempt_id: '' } }), NOW),
+    null
+  );
 
   assert.throws(
     () => checkoutFulfillmentForEvent(checkoutEvent({ metadata: { sessions_count: '0' } }), NOW),
@@ -220,6 +237,14 @@ test('expired and delayed-failed checkouts close only their pending order', asyn
     });
   }
   assert.equal(checkoutFailureForEvent(checkoutEvent()), null);
+  assert.equal(checkoutFailureForEvent(checkoutEvent({
+    type: 'checkout.session.expired',
+    metadata: { xert_checkout_attempt_id: '' },
+  })), null);
+  assert.throws(() => checkoutFailureForEvent(checkoutEvent({
+    type: 'checkout.session.expired',
+    metadata: { xert_checkout_attempt_id: 'not-a-uuid' },
+  })), /identity is invalid/i);
 
   const calls = [];
   const query = {
@@ -259,6 +284,10 @@ test('accepts only a complete full charge refund for reconciliation', () => {
     ...event,
     data: { object: { ...event.data.object, metadata: {} } },
   }, NOW), null);
+  assert.throws(() => stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, metadata: { xert_checkout_attempt_id: 'not-a-uuid' } } },
+  }, NOW), /identity is invalid/i);
   assert.equal(stripeRefundForEvent({
     ...event,
     data: { object: { ...event.data.object, amount_refunded: 2400, refunded: false } },
