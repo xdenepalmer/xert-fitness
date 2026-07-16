@@ -8,7 +8,7 @@ const home = read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift');
 
 test('push navigation carries the exact notice into Home', () => {
   assert.match(root, /HomeView\([\s\S]*route: navigation\.route[\s\S]*routeSequence: navigation\.routeSequence/);
-  assert.match(root, /consumePendingAnnouncementID\(\)[\s\S]*navigation\.open\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
+  assert.match(root, /consumePendingAnnouncementID\(\)[\s\S]*openMemberRoute\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
   assert.match(home, /case \.notices\(let announcementID\) = route/);
   assert.match(home, /highlightedAnnouncementID = announcementID/);
 });

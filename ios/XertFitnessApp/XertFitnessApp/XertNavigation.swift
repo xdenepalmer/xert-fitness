@@ -106,6 +106,15 @@ enum XertMemberRoute: Hashable {
         }
     }
 
+    var requiresAuthentication: Bool {
+        switch self {
+        case .notices(_), .purchaseConfirmation, .eventGoals, .upcomingBookings(_):
+            return true
+        case .home, .booking, .sessionPacks, .events, .explore, .account:
+            return false
+        }
+    }
+
     static func primary(_ destination: XertPrimaryDestination) -> Self {
         switch destination {
         case .home: return .home
@@ -226,6 +235,20 @@ enum XertNavigationSource: String, Equatable {
     case handoff
     case quickAction
     case keyboard
+}
+
+enum XertNavigationIntentDisposition: Equatable {
+    case open
+    case requireAuthentication
+}
+
+struct XertNavigationIntent: Equatable {
+    let route: XertMemberRoute
+    let source: XertNavigationSource
+
+    func disposition(isSignedIn: Bool) -> XertNavigationIntentDisposition {
+        route.requiresAuthentication && !isSignedIn ? .requireAuthentication : .open
+    }
 }
 
 enum XertRouteUserActivity {

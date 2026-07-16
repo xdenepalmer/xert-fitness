@@ -71,7 +71,7 @@ test('member routing is typed, task-restorable, and owns native deep-link mappin
   assert.match(root, /restoredMemberRoute = route\.restorationValue/);
   assert.match(root, /private func navigate\(to destination: XertPrimaryDestination\)/);
   assert.match(root, /XertMemberRoute\.route\(for: url\)/);
-  assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
+  assert.match(root, /openMemberRoute\(route, source: \.deepLink\)/);
   assert.doesNotMatch(root, /selectedTab\s*=\s*\d/);
   for (const path of ['/booking', '/events', '/account', '/explore']) {
     assert.match(navigation, new RegExp(`"${path.replace('/', '\\/')}"`));
@@ -108,12 +108,12 @@ test('contextual member routes focus the exact native task instead of only its t
     readFile(viewURL('EventsView'), 'utf8'),
     readFile(viewURL('AccountView'), 'utf8'),
   ]);
-  assert.match(root, /navigation\.open\(\.notices\(nil\), source: \.commandPalette\)/);
-  assert.match(root, /navigation\.open\(\.upcomingBookings\(nil\), source: \.commandPalette\)/);
-  assert.match(root, /navigation\.open\(\.eventGoals, source: \.commandPalette\)/);
-  assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.commandPalette\)/);
-  assert.match(root, /navigation\.open\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
-  assert.match(root, /navigation\.open\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
+  assert.match(root, /openMemberRoute\(\.notices\(nil\), source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(\.upcomingBookings\(nil\), source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(\.eventGoals, source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(\.purchaseConfirmation, source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
+  assert.match(root, /openMemberRoute\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
   for (const view of [home, booking, events, account]) {
     assert.match(view, /let route: XertMemberRoute/);
     assert.match(view, /let routeSequence: UInt/);
@@ -149,7 +149,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /accessibilityAction\(named: "Open XERT quick switcher"/);
   assert.match(root, /Label\("Quick switcher", systemImage: "magnifyingglass"\)/);
   assert.match(root, /navigation\.select\(destination, source: \.commandPalette\)/);
-  assert.match(root, /navigation\.open\(route, source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(route, source: \.commandPalette\)/);
   assert.match(root, /guard store\.profile\?\.isAdmin == true else \{ return \}/);
   assert.match(root, /\.sheet\(isPresented: \$showingNavigationCommands, onDismiss: completeCommandDismissal\)/);
   assert.match(root, /opensAdminAfterCommandDismissal = true[\s\S]*completeCommandDismissal/);
@@ -222,8 +222,8 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /XertNavigationStatusBadge\(status: status\)/);
   assert.match(root, /status\.kind == \.attention \? Color\.orange : Color\.xertPale/);
   assert.match(modelsTests, /testNavigationStatusSignalsRouteToTheirOwningWorkspaces/);
-  assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.checkout\)/);
-  assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
+  assert.match(root, /openMemberRoute\(\.purchaseConfirmation, source: \.checkout\)/);
+  assert.match(root, /openMemberRoute\(route, source: \.deepLink\)/);
   assert.match(root, /source: \.pushNotification/);
 });
 
@@ -252,11 +252,32 @@ test('sign-out clears exact-task history before another member can inherit it', 
   assert.match(navigation, /var containsContextualHistory: Bool/);
   assert.match(navigation, /routeHistory\.contains \{ \$0\.isContextualTask \}/);
   assert.match(navigation, /forwardRouteHistory\.contains \{ \$0\.isContextualTask \}/);
-  assert.match(root, /if !isSignedIn \{[\s\S]*resetMemberNavigationAfterSignOut\(\)/);
+  assert.match(root, /guard isSignedIn else \{[\s\S]*resetMemberNavigationAfterSignOut\(clearPendingIntent: true\)/);
   assert.match(root, /hasBootstrapped, !store\.isSignedIn, navigation\.containsContextualHistory/);
-  assert.match(root, /resetMemberNavigationAfterSignOut[\s\S]*navigation\.restore\(routeValue: home\.restorationValue\)/);
+  assert.match(root, /resetMemberNavigationAfterSignOut\(clearPendingIntent: true\)/);
+  assert.match(root, /resetMemberNavigationAfterSignOut\(clearPendingIntent: Bool\)[\s\S]*navigation\.restore\(routeValue: home\.restorationValue\)/);
   assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
   assert.match(modelsTests, /testNavigationIdentifiesPrivateContextAcrossBackAndForwardHistory/);
+});
+
+test('external native navigation defers private member tasks until authentication', async () => {
+  const [root, navigation, modelsTests] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /var requiresAuthentication: Bool/);
+  assert.match(navigation, /case \.notices\(_\), \.purchaseConfirmation, \.eventGoals, \.upcomingBookings\(_\):[\s\S]*return true/);
+  assert.match(navigation, /struct XertNavigationIntent: Equatable/);
+  assert.match(navigation, /route\.requiresAuthentication && !isSignedIn \? \.requireAuthentication : \.open/);
+  assert.match(root, /@State private var pendingProtectedNavigation: XertNavigationIntent\?/);
+  assert.match(root, /private func openMemberRoute\([\s\S]*intent\.disposition\(isSignedIn: store\.isSignedIn\) == \.open/);
+  assert.match(root, /pendingProtectedNavigation = intent[\s\S]*navigation\.open\(\.account, source: source\)/);
+  assert.match(root, /resumePendingProtectedNavigation\(\)[\s\S]*lockAndAuthenticate\(\)/);
+  assert.match(root, /onContinueUserActivity[\s\S]*openMemberRoute\(route, source: \.handoff\)/);
+  assert.match(root, /consumePendingQuickActionRoute[\s\S]*openMemberRoute\(route, source: \.quickAction\)/);
+  assert.match(root, /if canReconcile \{ await store\.reconcileCheckout\(\) \}/);
+  assert.match(modelsTests, /testNavigationIntentsDeferOnlyMemberPrivateRoutesUntilAuthentication/);
 });
 
 test('scene restoration preserves a bounded versioned exact-task workspace', async () => {

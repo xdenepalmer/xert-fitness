@@ -29,7 +29,7 @@ test('native exact-task routes participate in privacy-safe Handoff continuation'
   assert.match(root, /\.userActivity\(XertRouteUserActivity\.activityType, isActive: shouldAdvertiseCurrentRoute\)/);
   assert.match(root, /XertRouteUserActivity\.shouldAdvertise\([\s\S]*isSignedIn: store\.isSignedIn,[\s\S]*isPrivacyLocked: isPrivacyLocked/);
   assert.match(root, /\.onContinueUserActivity\(XertRouteUserActivity\.activityType\)/);
-  assert.match(root, /navigation\.open\(route, source: \.handoff\)/);
+  assert.match(root, /openMemberRoute\(route, source: \.handoff\)/);
   assert.match(modelsTests, /testRouteUserActivityRoundTripsExactTasksWithoutIndexingPrivateContext/);
   assert.match(modelsTests, /testRouteUserActivityAdvertisingProtectsSignedOutAndLockedMemberContext/);
   assert.match(modelsTests, /testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads/);

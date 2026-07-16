@@ -114,6 +114,28 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testNavigationIntentsDeferOnlyMemberPrivateRoutesUntilAuthentication() {
+        let publicRoutes: [XertMemberRoute] = [
+            .home, .booking, .sessionPacks, .events, .explore, .account
+        ]
+        let protectedRoutes: [XertMemberRoute] = [
+            .notices(nil), .purchaseConfirmation, .eventGoals, .upcomingBookings(nil)
+        ]
+
+        for route in publicRoutes {
+            let intent = XertNavigationIntent(route: route, source: .deepLink)
+            XCTAssertFalse(route.requiresAuthentication)
+            XCTAssertEqual(intent.disposition(isSignedIn: false), .open)
+        }
+        for route in protectedRoutes {
+            let intent = XertNavigationIntent(route: route, source: .pushNotification)
+            XCTAssertTrue(route.requiresAuthentication)
+            XCTAssertEqual(intent.disposition(isSignedIn: false), .requireAuthentication)
+            XCTAssertEqual(intent.disposition(isSignedIn: true), .open)
+            XCTAssertEqual(intent.source, .pushNotification)
+        }
+    }
+
     func testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads() throws {
         let wrongType = NSUserActivity(activityType: "com.example.other")
         XertRouteUserActivity.configure(wrongType, route: .booking)

@@ -40,7 +40,7 @@ test('Home Screen quick actions restore allowlisted exact native tasks on cold a
   assert.doesNotMatch(appDelegate, /application\([\s\S]{0,120}performActionFor shortcutItem/);
   assert.match(root, /consumePendingQuickActionRoute\(\)/);
   assert.match(root, /publisher\(for: \.xertOpenQuickAction\)/);
-  assert.match(root, /navigation\.open\(route, source: \.quickAction\)/);
+  assert.match(root, /openMemberRoute\(route, source: \.quickAction\)/);
   assert.match(navigation, /case quickAction/);
   assert.match(modelsTests, /testQuickActionsMapToTypedRoutesAndSurviveColdLaunchOnce/);
 });

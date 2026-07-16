@@ -25,7 +25,7 @@ test('class reminder taps validate and persist the exact booking route', () => {
 test('the app delegate and root route reminder taps into the matching account row', () => {
   assert.match(app, /@UIApplicationDelegateAdaptor\(XertAppDelegate\.self\)/);
   assert.match(root, /consumePendingBookingID\(\)/);
-  assert.match(root, /navigation\.open\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
+  assert.match(root, /openMemberRoute\(\.upcomingBookings\(bookingID\), source: \.pushNotification\)/);
   assert.match(account, /ScrollViewReader/);
   assert.match(account, /case \.upcomingBookings\(let bookingID\) = route/);
   assert.match(account, /store\.bookings\.contains\(where: \{ \$0\.id == bookingID \}\)/);

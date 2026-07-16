@@ -16,6 +16,7 @@ struct RootView: View {
     @State private var showingAdminCommandCentre = false
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
+    @State private var pendingProtectedNavigation: XertNavigationIntent?
 
     var body: some View {
         Group {
@@ -33,19 +34,23 @@ struct RootView: View {
         .focusedSceneValue(\.xertNavigationCommandContext, navigationCommandContext)
         .onChange(of: scenePhase, perform: handleScenePhase)
         .onChange(of: store.isSignedIn) { isSignedIn in
-            guard isSignedIn, privacyLockEnabled else {
+            guard isSignedIn else {
                 isPrivacyUnlocked = true
                 privacyLockError = nil
-                if !isSignedIn {
-                    resetMemberNavigationAfterSignOut()
-                }
+                resetMemberNavigationAfterSignOut(clearPendingIntent: true)
+                return
+            }
+            resumePendingProtectedNavigation()
+            guard privacyLockEnabled else {
+                isPrivacyUnlocked = true
+                privacyLockError = nil
                 return
             }
             lockAndAuthenticate()
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
             if hasBootstrapped, !store.isSignedIn, navigation.containsContextualHistory {
-                resetMemberNavigationAfterSignOut()
+                resetMemberNavigationAfterSignOut(clearPendingIntent: false)
             }
             if hasBootstrapped, isPrivacyLocked, privacyLockError == nil {
                 Task { await unlockApp() }
@@ -65,7 +70,7 @@ struct RootView: View {
         }
         .onContinueUserActivity(XertRouteUserActivity.activityType) { activity in
             guard let route = XertRouteUserActivity.route(from: activity) else { return }
-            navigation.open(route, source: .handoff)
+            openMemberRoute(route, source: .handoff)
         }
         .onAppear {
             navigation.restore(
@@ -296,7 +301,7 @@ struct RootView: View {
         case .destination(let destination):
             navigation.select(destination, source: .commandPalette)
         case .route(let route):
-            navigation.open(route, source: .commandPalette)
+            openMemberRoute(route, source: .commandPalette)
         case .activity(let activity):
             executeNavigationActivity(activity)
         case .previous:
@@ -314,14 +319,15 @@ struct RootView: View {
     private func executeNavigationActivity(_ activity: XertNavigationActivity) {
         switch activity {
         case .notices:
-            navigation.open(.notices(nil), source: .commandPalette)
+            openMemberRoute(.notices(nil), source: .commandPalette)
         case .upcomingBookings:
-            navigation.open(.upcomingBookings(nil), source: .commandPalette)
+            openMemberRoute(.upcomingBookings(nil), source: .commandPalette)
         case .eventGoals:
-            navigation.open(.eventGoals, source: .commandPalette)
+            openMemberRoute(.eventGoals, source: .commandPalette)
         case .pendingCheckout:
-            navigation.open(.purchaseConfirmation, source: .commandPalette)
-            Task { await store.reconcilePendingCheckout() }
+            if openMemberRoute(.purchaseConfirmation, source: .commandPalette) {
+                Task { await store.reconcilePendingCheckout() }
+            }
         }
     }
 
@@ -421,7 +427,7 @@ struct RootView: View {
         privacyLockError = nil
     }
 
-    private func resetMemberNavigationAfterSignOut() {
+    private func resetMemberNavigationAfterSignOut(clearPendingIntent: Bool) {
         let home = XertMemberRoute.home
         navigation.restore(routeValue: home.restorationValue)
         restoredMemberRoute = home.restorationValue
@@ -429,15 +435,43 @@ struct RootView: View {
         showingNavigationCommands = false
         showingAdminCommandCentre = false
         opensAdminAfterCommandDismissal = false
+        if clearPendingIntent {
+            pendingProtectedNavigation = nil
+        }
+    }
+
+    @discardableResult
+    private func openMemberRoute(
+        _ route: XertMemberRoute,
+        source: XertNavigationSource
+    ) -> Bool {
+        let intent = XertNavigationIntent(route: route, source: source)
+        guard intent.disposition(isSignedIn: store.isSignedIn) == .open else {
+            pendingProtectedNavigation = intent
+            navigation.open(.account, source: source)
+            return false
+        }
+        pendingProtectedNavigation = nil
+        navigation.open(route, source: source)
+        return true
+    }
+
+    private func resumePendingProtectedNavigation() {
+        guard store.isSignedIn, let intent = pendingProtectedNavigation else { return }
+        pendingProtectedNavigation = nil
+        navigation.open(intent.route, source: intent.source)
+        if intent.route == .purchaseConfirmation {
+            Task { await store.reconcilePendingCheckout() }
+        }
     }
 
     private func handleOpenURL(_ url: URL) {
         if let status = CheckoutDeepLink.status(from: url) {
             checkoutReturnStatus = status
-            navigation.open(.purchaseConfirmation, source: .checkout)
+            let canReconcile = openMemberRoute(.purchaseConfirmation, source: .checkout)
             Task {
                 if status == .success {
-                    await store.reconcileCheckout()
+                    if canReconcile { await store.reconcileCheckout() }
                 } else {
                     store.cancelPendingCheckout()
                     await store.refresh()
@@ -446,23 +480,24 @@ struct RootView: View {
             return
         }
         guard let route = XertMemberRoute.route(for: url) else { return }
-        navigation.open(route, source: .deepLink)
+        openMemberRoute(route, source: .deepLink)
     }
 
     private func consumePendingAnnouncementRoute() {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
-        navigation.open(.notices(pendingAnnouncementID), source: .pushNotification)
-        Task { await store.refresh() }
+        if openMemberRoute(.notices(pendingAnnouncementID), source: .pushNotification) {
+            Task { await store.refresh() }
+        }
     }
 
     private func consumePendingReminderRoute() {
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
-        navigation.open(.upcomingBookings(bookingID), source: .pushNotification)
+        openMemberRoute(.upcomingBookings(bookingID), source: .pushNotification)
     }
 
     private func consumePendingQuickActionRoute() {
         guard let route = XertQuickActionNavigation.consumePendingRoute() else { return }
-        navigation.open(route, source: .quickAction)
+        openMemberRoute(route, source: .quickAction)
     }
 }
 
