@@ -44,4 +44,5 @@ test('operations health exposes bounded Stripe incidents with an accessible copy
   assert.match(monitor, /Unresolved Stripe webhook incidents/);
   assert.match(monitor, /navigator\.clipboard\.writeText\(eventId\)/);
   assert.match(monitor, /Copy Stripe Event ID/);
+  assert.match(monitor, /incident\.resolution/);
 });

@@ -167,12 +167,22 @@ export function stripeRefundForEvent(event, now = new Date()) {
   const charge = event.data?.object;
   const metadata = charge?.metadata || {};
   if (!hasXertCheckoutIdentity(metadata)) return null;
+  const operatorReview = stripeOperatorReviewForEvent(event);
+  if (operatorReview) {
+    const error = new Error('A partial XERT refund requires operator review.');
+    error.code = operatorReview.errorCode;
+    throw error;
+  }
   const paymentIntentId = typeof charge?.payment_intent === 'string'
     ? charge.payment_intent
     : charge?.payment_intent?.id;
   const refunds = charge?.refunds?.data || [];
-  const refund = refunds.find(item => item?.status === 'succeeded') || refunds[0];
-  if (charge?.refunded !== true || charge?.amount_refunded !== charge?.amount) return null;
+  const refund = refunds
+    .filter(item => item?.status === 'succeeded')
+    .sort((left, right) => Number(right?.created || 0) - Number(left?.created || 0))[0];
+  if (charge?.refunded !== true || charge?.amount_refunded !== charge?.amount) {
+    throw new Error('Full refund status is incomplete or invalid.');
+  }
   if (
     !event.id || !charge?.id
     || !Number.isSafeInteger(charge.amount) || charge.amount <= 0
@@ -190,6 +200,44 @@ export function stripeRefundForEvent(event, now = new Date()) {
     p_currency: charge.currency,
     p_refunded_at: new Date((refund.created || event.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString(),
   };
+}
+
+export function stripeOperatorReviewForEvent(event) {
+  if (event?.type !== 'charge.refunded') return null;
+  const charge = event.data?.object;
+  if (!hasXertCheckoutIdentity(charge?.metadata)) return null;
+  if (
+    !Number.isSafeInteger(charge?.amount) || charge.amount <= 0
+    || !Number.isSafeInteger(charge?.amount_refunded)
+    || charge.amount_refunded < 0 || charge.amount_refunded > charge.amount
+  ) {
+    throw new Error('Refund amount data is incomplete or invalid.');
+  }
+  if (charge.amount_refunded === 0 || charge.amount_refunded === charge.amount) return null;
+
+  const paymentIntentId = typeof charge.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge.payment_intent?.id;
+  if (!charge.id || !paymentIntentId || !/^[a-z]{3}$/i.test(String(charge.currency || ''))) {
+    throw new Error('Partial refund data is incomplete or invalid.');
+  }
+  return {
+    errorCode: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+    paymentIntentId,
+  };
+}
+
+export async function findStripeOrderForReview(admin, paymentIntentId) {
+  const { data, error } = await admin
+    .from('orders')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.id && !UUID_PATTERN.test(data.id)) {
+    throw new Error('Stripe order lookup returned an invalid result.');
+  }
+  return data?.id || null;
 }
 
 export async function persistStripeRefund(admin, refund) {
@@ -342,6 +390,17 @@ export default async function handler(request, response) {
     if (failure) {
       await persistCheckoutFailure(admin, failure);
       handled = true;
+    }
+    const operatorReview = stripeOperatorReviewForEvent(event);
+    if (operatorReview) {
+      orderId = await findStripeOrderForReview(admin, operatorReview.paymentIntentId);
+      await finishStripeWebhookEvent(admin, {
+        eventId: event.id,
+        status: 'failed',
+        orderId,
+        errorCode: operatorReview.errorCode,
+      });
+      return sendJson(response, { received: true, requires_review: true });
     }
     const refund = stripeRefundForEvent(event);
     if (refund) {

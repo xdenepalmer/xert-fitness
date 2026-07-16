@@ -6,12 +6,14 @@ import {
   beginStripeWebhookEvent,
   checkoutFailureForEvent,
   checkoutFulfillmentForEvent,
+  findStripeOrderForReview,
   hasXertCheckoutIdentity,
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
   finishStripeWebhookEvent,
   stripeRefundForEvent,
+  stripeOperatorReviewForEvent,
   stripeModeForSecret,
   stripeWebhookErrorCode,
   validStripeSignatureHeader,
@@ -112,6 +114,8 @@ test('webhook public failures never echo Stripe or database exception messages',
   assert.match(source, /beginStripeWebhookEvent\(admin, event\)[\s\S]*persistCheckoutFulfillment/);
   assert.match(source, /finishStripeWebhookEvent\(admin,[\s\S]*status: handled \? 'processed' : 'ignored'/);
   assert.match(source, /ledgerStarted[\s\S]*status: 'failed'[\s\S]*stripeWebhookErrorCode\(e\)/);
+  assert.match(source, /stripeOperatorReviewForEvent\(event\)[\s\S]*PARTIAL_REFUND_REQUIRES_REVIEW|operatorReview\.errorCode/);
+  assert.match(source, /status: 'failed'[\s\S]*requires_review: true/);
 });
 
 test('creates one durable fulfilment record for a paid checkout', () => {
@@ -263,7 +267,7 @@ test('expired and delayed-failed checkouts close only their pending order', asyn
   ]);
 });
 
-test('accepts only a complete full charge refund for reconciliation', () => {
+test('reconciles full refunds and escalates partial refunds for operator review', () => {
   const event = {
     id: 'evt_refund_xert',
     type: 'charge.refunded',
@@ -279,6 +283,18 @@ test('accepts only a complete full charge refund for reconciliation', () => {
   assert.equal(refund.p_refund_id, 're_xert');
   assert.equal(refund.p_amount_cents, 4800);
   assert.equal(refund.p_payment_intent_id, 'pi_test_xert');
+  const stagedRefund = stripeRefundForEvent({
+    ...event,
+    data: { object: {
+      ...event.data.object,
+      refunds: { data: [
+        { id: 're_older', status: 'succeeded', created: 1783814300 },
+        { id: 're_failed', status: 'failed', created: 1783814500 },
+        { id: 're_newest', status: 'succeeded', created: 1783814400 },
+      ] },
+    } },
+  }, NOW);
+  assert.equal(stagedRefund.p_refund_id, 're_newest');
   assert.equal(stripeRefundForEvent({ ...event, type: 'charge.updated' }, NOW), null);
   assert.equal(stripeRefundForEvent({
     ...event,
@@ -288,10 +304,54 @@ test('accepts only a complete full charge refund for reconciliation', () => {
     ...event,
     data: { object: { ...event.data.object, metadata: { xert_checkout_attempt_id: 'not-a-uuid' } } },
   }, NOW), /identity is invalid/i);
-  assert.equal(stripeRefundForEvent({
+  const partialEvent = {
     ...event,
     data: { object: { ...event.data.object, amount_refunded: 2400, refunded: false } },
-  }, NOW), null);
+  };
+  assert.deepEqual(stripeOperatorReviewForEvent(partialEvent), {
+    errorCode: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+    paymentIntentId: 'pi_test_xert',
+  });
+  assert.throws(
+    () => stripeRefundForEvent(partialEvent, NOW),
+    error => error?.code === 'PARTIAL_REFUND_REQUIRES_REVIEW',
+  );
+  assert.equal(stripeOperatorReviewForEvent(event), null);
+  assert.equal(stripeOperatorReviewForEvent({
+    ...event,
+    data: { object: { ...event.data.object, metadata: {} } },
+  }), null);
+  assert.throws(() => stripeOperatorReviewForEvent({
+    ...partialEvent,
+    data: { object: { ...partialEvent.data.object, amount_refunded: 5000 } },
+  }), /amount data is incomplete or invalid/i);
+  assert.throws(() => stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, refunded: false } },
+  }, NOW), /status is incomplete or invalid/i);
+  assert.throws(() => stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, refunds: { data: [] } } },
+  }, NOW), /data is incomplete or invalid/i);
+});
+
+test('links an exceptional Stripe event to its XERT order without exposing member data', async () => {
+  const calls = [];
+  const orderId = '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2';
+  const query = {
+    select(columns) { calls.push(['select', columns]); return query; },
+    eq(column, value) { calls.push(['eq', column, value]); return query; },
+    async maybeSingle() { return { data: { id: orderId }, error: null }; },
+  };
+  const result = await findStripeOrderForReview({
+    from(table) { calls.push(['from', table]); return query; },
+  }, 'pi_test_xert');
+  assert.equal(result, orderId);
+  assert.deepEqual(calls, [
+    ['from', 'orders'],
+    ['select', 'id'],
+    ['eq', 'stripe_payment_intent_id', 'pi_test_xert'],
+  ]);
 });
 
 test('persists refund recovery through the service-role reconciliation RPC', async () => {

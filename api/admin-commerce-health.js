@@ -207,6 +207,13 @@ export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
   };
 }
 
+export function stripeIncidentResolution(errorCode) {
+  if (errorCode === 'PARTIAL_REFUND_REQUIRES_REVIEW') {
+    return 'Review the refund in Stripe, then adjust or revoke the member credits from the linked order.';
+  }
+  return null;
+}
+
 export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const staleBefore = now.getTime() - 10 * 60 * 1000;
@@ -235,17 +242,22 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore)
     ))
     .slice(0, 10)
-    .map(row => ({
-      event_id: String(row.event_id || '').slice(0, 255),
-      event_type: String(row.event_type || '').slice(0, 160),
-      status: row.status === 'failed' ? 'failed' : 'stalled',
-      attempts: Math.max(1, Math.min(1_000, Number(row.attempts || 1))),
-      order_id: UUID_PATTERN.test(String(row.order_id || '')) ? row.order_id : null,
-      last_received_at: Number.isFinite(Date.parse(row.last_received_at)) ? row.last_received_at : null,
-      error_code: row.status === 'failed'
+    .map(row => {
+      const errorCode = row.status === 'failed'
         ? String(row.last_error_code || 'WEBHOOK_PROCESSING_FAILED').slice(0, 120)
-        : null,
-    }));
+        : null;
+      const resolution = stripeIncidentResolution(errorCode);
+      return {
+        event_id: String(row.event_id || '').slice(0, 255),
+        event_type: String(row.event_type || '').slice(0, 160),
+        status: row.status === 'failed' ? 'failed' : 'stalled',
+        attempts: Math.max(1, Math.min(1_000, Number(row.attempts || 1))),
+        order_id: UUID_PATTERN.test(String(row.order_id || '')) ? row.order_id : null,
+        last_received_at: Number.isFinite(Date.parse(row.last_received_at)) ? row.last_received_at : null,
+        error_code: errorCode,
+        ...(resolution ? { resolution } : {}),
+      };
+    });
   const truncated = rows.length === 500;
   const ready = failed === 0 && staleProcessing === 0 && !truncated;
   return {

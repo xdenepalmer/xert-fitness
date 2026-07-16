@@ -3150,6 +3150,12 @@ private struct AdminOperationsHealthView: View {
                                 }
                                 .font(.caption2)
                                 .foregroundStyle(Color.xertPale.opacity(0.45))
+                                if let resolution = incident.resolution {
+                                    Label(resolution, systemImage: "person.crop.circle.badge.exclamationmark")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                             .padding(.vertical, 4)
                             .listRowBackground(Color.xertInk)

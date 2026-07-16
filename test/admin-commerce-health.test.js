@@ -10,6 +10,7 @@ import adminCommerceHealthHandler, {
   inspectStripeWebhookEndpoints,
   inspectWebhookDeliveryHealth,
   normalizePaymentActivationRequest,
+  stripeIncidentResolution,
 } from '../api/admin-commerce-health.js';
 
 const validProduct = {
@@ -339,6 +340,17 @@ test('webhook delivery health reports retries, failures and stalled processing',
   }))), now);
   assert.equal(bounded.incidents.length, 10);
   assert.equal(bounded.incidents[0].error_code.length, 120);
+});
+
+test('partial-refund incidents give owners a concrete recovery instruction', async () => {
+  assert.match(stripeIncidentResolution('PARTIAL_REFUND_REQUIRES_REVIEW'), /adjust or revoke the member credits/i);
+  assert.equal(stripeIncidentResolution('DATABASE_TIMEOUT'), null);
+  const result = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [{
+    event_id: 'evt_partial_refund', event_type: 'charge.refunded', status: 'failed', attempts: 1,
+    order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2', last_received_at: '2026-07-16T05:59:00.000Z',
+    last_error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+  }]), new Date('2026-07-16T06:00:00.000Z'));
+  assert.match(result.incidents[0].resolution, /linked order/i);
 });
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {

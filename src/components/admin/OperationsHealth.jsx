@@ -261,6 +261,11 @@ export default function OperationsHealth({ onNavigate }) {
                             </time>
                           )}
                         </div>
+                        {incident.resolution && (
+                          <p className="mt-3 font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
+                            {incident.resolution}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

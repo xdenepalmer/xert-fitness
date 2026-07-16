@@ -886,6 +886,7 @@ struct AdminCommerceHealth: Codable, Hashable {
             let order_id: UUID?
             let last_received_at: Date?
             let error_code: String?
+            let resolution: String?
 
             var id: String { event_id }
         }
