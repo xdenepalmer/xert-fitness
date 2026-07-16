@@ -3,6 +3,8 @@ import SwiftUI
 struct AccountView: View {
     let route: XertMemberRoute
     let routeSequence: UInt
+    let pendingNavigationTitle: String?
+    let onCancelPendingNavigation: () -> Void
 
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -597,6 +599,13 @@ struct AccountView: View {
         // isolate their tap target inside a list row, so sharing a row would let
         // taps on the logo/headline/padding trigger the primary auth action.
         Section {
+            if let pendingNavigationTitle {
+                pendingNavigationPrompt(pendingNavigationTitle)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 4, trailing: 0))
+                    .listRowSeparator(.hidden)
+            }
+
             memberAccessHero
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
@@ -635,6 +644,42 @@ struct AccountView: View {
         }
 
         legalSection
+    }
+
+    private func pendingNavigationPrompt(_ title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.open.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 36, height: 36)
+                .background(Color.orange.opacity(0.1))
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Sign in to continue")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.xertPale)
+            }
+            Spacer(minLength: 8)
+            Button(action: onCancelPendingNavigation) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.xertPale)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel opening \(title)")
+        }
+        .padding(14)
+        .background(Color.xertInk)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.orange).frame(width: 3)
+        }
     }
 
     private var memberAccessHero: some View {

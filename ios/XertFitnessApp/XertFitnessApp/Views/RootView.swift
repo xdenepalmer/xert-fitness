@@ -142,7 +142,9 @@ struct RootView: View {
 
             AccountView(
                 route: navigation.route,
-                routeSequence: navigation.routeSequence
+                routeSequence: navigation.routeSequence,
+                pendingNavigationTitle: pendingProtectedNavigation?.route.navigationTitle,
+                onCancelPendingNavigation: cancelPendingProtectedNavigation
             )
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
@@ -266,12 +268,20 @@ struct RootView: View {
     private var selectedDestinationBinding: Binding<XertPrimaryDestination> {
         Binding(
             get: { navigation.selection },
-            set: { navigation.select($0, source: .dock) }
+            set: { selectMemberDestination($0, source: .dock) }
         )
     }
 
     private func navigate(to destination: XertPrimaryDestination) {
-        navigation.select(destination, source: .content)
+        selectMemberDestination(destination, source: .content)
+    }
+
+    private func selectMemberDestination(
+        _ destination: XertPrimaryDestination,
+        source: XertNavigationSource
+    ) {
+        guard navigation.select(destination, source: source) else { return }
+        cancelPendingProtectedNavigation()
     }
 
     private func handleReselection(_ destination: XertPrimaryDestination) {
@@ -282,16 +292,19 @@ struct RootView: View {
 
     private func handleNavigationStep(_ direction: XertNavigationDirection) {
         guard navigation.step(direction) else { return }
+        cancelPendingProtectedNavigation()
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
     private func returnToPreviousNavigationDestination() {
         guard navigation.returnToPrevious() else { return }
+        cancelPendingProtectedNavigation()
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     private func returnToNextNavigationDestination() {
         guard navigation.returnToNext() else { return }
+        cancelPendingProtectedNavigation()
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
@@ -299,7 +312,7 @@ struct RootView: View {
         showingNavigationCommands = false
         switch command.action {
         case .destination(let destination):
-            navigation.select(destination, source: .commandPalette)
+            selectMemberDestination(destination, source: .commandPalette)
         case .route(let route):
             openMemberRoute(route, source: .commandPalette)
         case .activity(let activity):
@@ -343,7 +356,7 @@ struct RootView: View {
 
         switch command {
         case .destination(let destination):
-            navigation.select(destination, source: .keyboard)
+            selectMemberDestination(destination, source: .keyboard)
         case .previous:
             returnToPreviousNavigationDestination()
         case .next:
@@ -463,6 +476,10 @@ struct RootView: View {
         if intent.route == .purchaseConfirmation {
             Task { await store.reconcilePendingCheckout() }
         }
+    }
+
+    private func cancelPendingProtectedNavigation() {
+        pendingProtectedNavigation = nil
     }
 
     private func handleOpenURL(_ url: URL) {

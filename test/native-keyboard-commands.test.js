@@ -47,6 +47,6 @@ test('iPad scene commands share typed navigation and preserve root authorization
   assert.match(root, /selection: isAvailable \? navigation\.selection : \.home/);
   assert.match(root, /previousRoute: isAvailable \? navigation\.previousRoute : nil/);
   assert.match(root, /isAdmin: isAvailable && store\.profile\?\.isAdmin == true/);
-  assert.match(root, /navigation\.select\(destination, source: \.keyboard\)/);
+  assert.match(root, /selectMemberDestination\(destination, source: \.keyboard\)/);
   assert.match(root, /guard store\.profile\?\.isAdmin == true, !showingNavigationCommands else \{ return \}/);
 });

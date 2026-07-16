@@ -148,7 +148,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /keyboardShortcut\("k", modifiers: \.command\)/);
   assert.match(root, /accessibilityAction\(named: "Open XERT quick switcher"/);
   assert.match(root, /Label\("Quick switcher", systemImage: "magnifyingglass"\)/);
-  assert.match(root, /navigation\.select\(destination, source: \.commandPalette\)/);
+  assert.match(root, /selectMemberDestination\(destination, source: \.commandPalette\)/);
   assert.match(root, /openMemberRoute\(route, source: \.commandPalette\)/);
   assert.match(root, /guard store\.profile\?\.isAdmin == true else \{ return \}/);
   assert.match(root, /\.sheet\(isPresented: \$showingNavigationCommands, onDismiss: completeCommandDismissal\)/);
@@ -261,9 +261,10 @@ test('sign-out clears exact-task history before another member can inherit it', 
 });
 
 test('external native navigation defers private member tasks until authentication', async () => {
-  const [root, navigation, modelsTests] = await Promise.all([
+  const [root, navigation, account, modelsTests] = await Promise.all([
     readFile(rootURL, 'utf8'),
     readFile(navigationURL, 'utf8'),
+    readFile(viewURL('AccountView'), 'utf8'),
     readFile(modelsTestsURL, 'utf8'),
   ]);
   assert.match(navigation, /var requiresAuthentication: Bool/);
@@ -277,6 +278,16 @@ test('external native navigation defers private member tasks until authenticatio
   assert.match(root, /onContinueUserActivity[\s\S]*openMemberRoute\(route, source: \.handoff\)/);
   assert.match(root, /consumePendingQuickActionRoute[\s\S]*openMemberRoute\(route, source: \.quickAction\)/);
   assert.match(root, /if canReconcile \{ await store\.reconcileCheckout\(\) \}/);
+  assert.match(root, /AccountView\([\s\S]*pendingNavigationTitle: pendingProtectedNavigation\?\.route\.navigationTitle/);
+  assert.match(root, /private func selectMemberDestination\([\s\S]*guard navigation\.select\(destination, source: source\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\(direction\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /returnToPreviousNavigationDestination[\s\S]*guard navigation\.returnToPrevious\(\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /case \.destination\(let destination\):[\s\S]*selectMemberDestination\(destination, source: \.keyboard\)/);
+  assert.match(account, /let pendingNavigationTitle: String\?/);
+  assert.match(account, /if let pendingNavigationTitle[\s\S]*pendingNavigationPrompt\(pendingNavigationTitle\)/);
+  assert.match(account, /Text\("Sign in to continue"\)/);
+  assert.match(account, /Button\(action: onCancelPendingNavigation\)/);
+  assert.ok(account.includes('accessibilityLabel("Cancel opening \\(title)")'));
   assert.match(modelsTests, /testNavigationIntentsDeferOnlyMemberPrivateRoutesUntilAuthentication/);
 });
 
