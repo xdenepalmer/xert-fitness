@@ -611,6 +611,69 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(commands.contains { $0.action == .timeline(5) })
     }
 
+    func testPinnedWorkspacesAreBoundedNormalizedAndAccountScoped() throws {
+        let suiteName = "XertPinnedWorkspaceStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstUser = UUID()
+        let secondUser = UUID()
+        let noticeID = UUID()
+        let bookingID = UUID()
+
+        XCTAssertEqual(
+            XertPinnedWorkspaceStore.toggle(.notices(noticeID), for: firstUser, defaults: defaults),
+            [.notices(nil)]
+        )
+        XCTAssertEqual(
+            XertPinnedWorkspaceStore.toggle(.upcomingBookings(bookingID), for: firstUser, defaults: defaults),
+            [.upcomingBookings(nil), .notices(nil)]
+        )
+        XCTAssertEqual(
+            XertPinnedWorkspaceStore.toggle(.purchaseConfirmation, for: firstUser, defaults: defaults),
+            [.upcomingBookings(nil), .notices(nil)]
+        )
+        XCTAssertTrue(XertPinnedWorkspaceStore.load(for: secondUser, defaults: defaults).isEmpty)
+        XCTAssertTrue(XertPinnedWorkspaceStore.load(for: nil, defaults: defaults).isEmpty)
+
+        for route in [XertMemberRoute.home, .booking, .sessionPacks, .events, .eventGoals, .explore, .account] {
+            _ = XertPinnedWorkspaceStore.toggle(route, for: firstUser, defaults: defaults)
+        }
+        let bounded = XertPinnedWorkspaceStore.load(for: firstUser, defaults: defaults)
+        XCTAssertEqual(bounded.count, XertPinnedWorkspaceSnapshot.maximumRouteCount)
+        XCTAssertEqual(bounded.first, .account)
+        XCTAssertFalse(bounded.contains(.notices(nil)))
+    }
+
+    func testPinnedWorkspaceCommandsAreDirectAndAuthorizationAware() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        let pins: [XertMemberRoute] = [.eventGoals, .sessionPacks, .eventGoals]
+
+        let signedOut = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: .empty,
+            pinnedRoutes: pins
+        )
+        XCTAssertFalse(signedOut.contains { $0.action == .pinned(.eventGoals) })
+        XCTAssertTrue(signedOut.contains { $0.action == .pinned(.sessionPacks) })
+
+        let signedIn = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: XertNavigationContext(
+                isSignedIn: true,
+                noticeCount: 0,
+                bookingCount: 0,
+                creditCount: 0,
+                eventGoalCount: 0,
+                hasPendingCheckout: false
+            ),
+            pinnedRoutes: pins
+        )
+        XCTAssertEqual(
+            signedIn.filter { $0.section == .pinned }.map(\.action),
+            [.pinned(.eventGoals), .pinned(.sessionPacks)]
+        )
+    }
+
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

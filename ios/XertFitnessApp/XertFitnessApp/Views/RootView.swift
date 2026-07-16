@@ -19,6 +19,7 @@ struct RootView: View {
     @State private var pendingProtectedNavigation: XertNavigationIntent?
     @State private var hasRestoredMemberWorkspace = false
     @State private var hasExplicitMemberNavigation = false
+    @State private var pinnedMemberRoutes: [XertMemberRoute] = []
 
     var body: some View {
         Group {
@@ -37,6 +38,7 @@ struct RootView: View {
         .onChange(of: scenePhase, perform: handleScenePhase)
         .onChange(of: store.isSignedIn) { isSignedIn in
             guard isSignedIn else {
+                pinnedMemberRoutes = []
                 isPrivacyUnlocked = true
                 privacyLockError = nil
                 resetMemberNavigationAfterSignOut(clearPendingIntent: true)
@@ -77,6 +79,7 @@ struct RootView: View {
             openMemberRoute(route, source: .handoff)
         }
         .onAppear {
+            reloadPinnedMemberRoutes()
             restoreMemberWorkspaceWhenReady()
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
@@ -85,6 +88,9 @@ struct RootView: View {
         .onChange(of: navigation.route) { route in
             restoredMemberRoute = route.restorationValue
             restoredMemberWorkspace = navigation.workspaceRestorationValue
+        }
+        .onChange(of: store.authSession?.user?.id) { _ in
+            reloadPinnedMemberRoutes()
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertOpenBookings)) { _ in
             consumePendingReminderRoute()
@@ -174,9 +180,12 @@ struct RootView: View {
             XertNavigationCommandPalette(
                 commands: navigation.commandPaletteCommands(
                     isAdmin: store.profile?.isAdmin == true,
-                    context: navigationContext
+                    context: navigationContext,
+                    pinnedRoutes: pinnedMemberRoutes
                 ),
                 workspace: navigation.workspaceOverview,
+                pinnedRoutes: pinnedMemberRoutes,
+                onTogglePin: togglePinnedMemberRoute,
                 onSelect: executeNavigationCommand
             )
             .presentationDetents([.medium, .large])
@@ -242,8 +251,10 @@ struct RootView: View {
             statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
+            pinnedRoutes: pinnedMemberRoutes,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
+            onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
             onOpenStatus: executeNavigationStatus,
             onReselect: handleReselection,
             onStep: handleNavigationStep,
@@ -260,8 +271,10 @@ struct RootView: View {
             statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
+            pinnedRoutes: pinnedMemberRoutes,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
+            onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
             onOpenStatus: executeNavigationStatus,
             onReselect: handleReselection,
             onReturnPrevious: returnToPreviousNavigationDestination,
@@ -322,6 +335,8 @@ struct RootView: View {
         switch command.action {
         case .destination(let destination):
             selectMemberDestination(destination, source: .commandPalette)
+        case .pinned(let route):
+            openMemberRoute(route, source: .commandPalette)
         case .timeline(let index):
             guard navigation.jump(
                 toTimelineIndex: index,
@@ -362,6 +377,18 @@ struct RootView: View {
 
     private func executeNavigationStatus(_ status: XertNavigationStatus) {
         executeNavigationActivity(status.activity)
+    }
+
+    private func reloadPinnedMemberRoutes() {
+        pinnedMemberRoutes = XertPinnedWorkspaceStore.load(
+            for: store.authSession?.user?.id
+        )
+    }
+
+    private func togglePinnedMemberRoute(_ route: XertMemberRoute) {
+        guard let userID = store.authSession?.user?.id else { return }
+        pinnedMemberRoutes = XertPinnedWorkspaceStore.toggle(route, for: userID)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func completeCommandDismissal() {
@@ -566,8 +593,10 @@ private struct XertNavigationRail: View {
     let statusSnapshot: XertNavigationStatusSnapshot
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
+    let pinnedRoutes: [XertMemberRoute]
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
+    let onOpenPinned: (XertMemberRoute) -> Void
     let onOpenStatus: (XertNavigationStatus) -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onReturnPrevious: () -> Void
@@ -584,8 +613,12 @@ private struct XertNavigationRail: View {
 
             Button(action: onOpenCommands) {
                 VStack(spacing: 5) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
+                    ZStack {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 16, weight: .semibold))
+                        XertPinnedWorkspaceBadge(count: pinnedRoutes.count)
+                            .offset(x: 15, y: -9)
+                    }
                     Text("Switch")
                         .font(.caption2.weight(.bold))
                         .textCase(.uppercase)
@@ -598,9 +631,10 @@ private struct XertNavigationRail: View {
             .buttonStyle(.plain)
             .keyboardShortcut("k", modifiers: .command)
             .hoverEffect(.highlight)
-            .accessibilityLabel("XERT quick switcher")
+            .accessibilityLabel(quickSwitcherAccessibilityLabel)
             .accessibilityHint("Searches workspaces and available actions")
             .accessibilityIdentifier("xert-navigation-commands")
+            .contextMenu { pinnedWorkspaceMenu }
 
             XertNavigationShareControl(route: currentRoute, layout: .rail)
 
@@ -780,6 +814,21 @@ private struct XertNavigationRail: View {
         }
     }
 
+    private var quickSwitcherAccessibilityLabel: String {
+        pinnedRoutes.isEmpty
+            ? "XERT quick switcher"
+            : "XERT quick switcher, \(pinnedRoutes.count) pinned \(pinnedRoutes.count == 1 ? "workspace" : "workspaces")"
+    }
+
+    @ViewBuilder
+    private var pinnedWorkspaceMenu: some View {
+        ForEach(pinnedRoutes, id: \.restorationValue) { route in
+            Button(action: { onOpenPinned(route) }) {
+                Label(route.navigationTitle, systemImage: "pin.fill")
+            }
+        }
+    }
+
     private func accessibilityHint(
         for item: XertPrimaryDestination,
         status: XertNavigationStatus?,
@@ -811,8 +860,10 @@ private struct XertNavigationDock: View {
     let statusSnapshot: XertNavigationStatusSnapshot
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
+    let pinnedRoutes: [XertMemberRoute]
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
+    let onOpenPinned: (XertMemberRoute) -> Void
     let onOpenStatus: (XertNavigationStatus) -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onStep: (XertNavigationDirection) -> Void
@@ -958,17 +1009,22 @@ private struct XertNavigationDock: View {
             )
 
             Button(action: onOpenCommands) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.xertPale)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                ZStack {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 16, weight: .semibold))
+                    XertPinnedWorkspaceBadge(count: pinnedRoutes.count)
+                        .offset(x: 15, y: -12)
+                }
+                .foregroundStyle(Color.xertPale)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .keyboardShortcut("k", modifiers: .command)
-            .accessibilityLabel("XERT quick switcher")
+            .accessibilityLabel(quickSwitcherAccessibilityLabel)
             .accessibilityHint("Searches workspaces, recent tasks and available actions")
             .accessibilityIdentifier("xert-navigation-commands")
+            .contextMenu { pinnedWorkspaceMenu }
         }
         .padding(.horizontal, 8)
         .frame(height: dynamicTypeSize.isAccessibilitySize ? 58 : 46)
@@ -1060,6 +1116,21 @@ private struct XertNavigationDock: View {
                         Label("Return to \(previousRoute.navigationTitle)", systemImage: "arrow.uturn.backward")
                     }
                 }
+            }
+        }
+    }
+
+    private var quickSwitcherAccessibilityLabel: String {
+        pinnedRoutes.isEmpty
+            ? "XERT quick switcher"
+            : "XERT quick switcher, \(pinnedRoutes.count) pinned \(pinnedRoutes.count == 1 ? "workspace" : "workspaces")"
+    }
+
+    @ViewBuilder
+    private var pinnedWorkspaceMenu: some View {
+        ForEach(pinnedRoutes, id: \.restorationValue) { route in
+            Button(action: { onOpenPinned(route) }) {
+                Label(route.navigationTitle, systemImage: "pin.fill")
             }
         }
     }
@@ -1250,12 +1321,30 @@ private struct XertNavigationStatusBadge: View {
     }
 }
 
+private struct XertPinnedWorkspaceBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(String(min(count, XertPinnedWorkspaceSnapshot.maximumRouteCount)))
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Color.xertNavy)
+                .frame(minWidth: 16, minHeight: 16)
+                .background(Color.xertSteel)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 private struct XertNavigationCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @FocusState private var searchFocused: Bool
     let commands: [XertNavigationCommand]
     let workspace: XertNavigationWorkspaceOverview
+    let pinnedRoutes: [XertMemberRoute]
+    let onTogglePin: (XertMemberRoute) -> Void
     let onSelect: (XertNavigationCommand) -> Void
 
     private var filteredCommands: [XertNavigationCommand] {
@@ -1322,11 +1411,15 @@ private struct XertNavigationCommandPalette: View {
             HStack(spacing: 12) {
                 workspaceIdentity
                 Spacer(minLength: 8)
+                pinControl
                 workspaceCounts
             }
             VStack(alignment: .leading, spacing: 8) {
                 workspaceIdentity
-                workspaceCounts
+                HStack(spacing: 12) {
+                    pinControl
+                    workspaceCounts
+                }
             }
         }
         .font(.caption.weight(.bold))
@@ -1373,6 +1466,23 @@ private struct XertNavigationCommandPalette: View {
         }
     }
 
+    @ViewBuilder
+    private var pinControl: some View {
+        if let route = workspace.currentRoute.pinnableRoute {
+            let isPinned = pinnedRoutes.contains(route)
+            Button(action: { onTogglePin(route) }) {
+                Image(systemName: isPinned ? "pin.fill" : "pin")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .background(Color.xertSteel.opacity(isPinned ? 0.22 : 0.1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isPinned ? "Unpin current workspace" : "Pin current workspace")
+            .accessibilityHint("Updates your saved XERT workspaces")
+            .accessibilityIdentifier("xert-navigation-pin-current")
+        }
+    }
+
     private func commandRow(_ command: XertNavigationCommand) -> some View {
         Button {
             dismiss()
@@ -1404,6 +1514,23 @@ private struct XertNavigationCommandPalette: View {
         .buttonStyle(.plain)
         .listRowBackground(Color.xertInk)
         .listRowSeparatorTint(Color.xertSteel.opacity(0.16))
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if case .pinned(let route) = command.action {
+                Button(role: .destructive) {
+                    onTogglePin(route)
+                } label: {
+                    Label("Unpin", systemImage: "pin.slash")
+                }
+                .tint(Color.xertRed)
+            }
+        }
+        .contextMenu {
+            if case .pinned(let route) = command.action {
+                Button(action: { onTogglePin(route) }) {
+                    Label("Unpin workspace", systemImage: "pin.slash")
+                }
+            }
+        }
     }
 }
 

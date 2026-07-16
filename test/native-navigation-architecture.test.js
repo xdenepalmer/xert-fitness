@@ -248,6 +248,34 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /source: \.pushNotification/);
 });
 
+test('quick switcher persists bounded account-scoped pinned workspaces without transient identities', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /struct XertPinnedWorkspaceSnapshot: Codable, Equatable/);
+  assert.match(navigation, /static let maximumRouteCount = 6/);
+  assert.match(navigation, /enum XertPinnedWorkspaceStore/);
+  assert.match(navigation, /keyPrefix = "xert\.navigation\.pins\.v1\."/);
+  assert.match(navigation, /case \.notices\(_\): return \.notices\(nil\)/);
+  assert.match(navigation, /case \.upcomingBookings\(_\): return \.upcomingBookings\(nil\)/);
+  assert.match(navigation, /case \.purchaseConfirmation: return nil/);
+  assert.match(navigation, /case pinned\(XertMemberRoute\)/);
+  assert.match(navigation, /case pinned = "Pinned Workspaces"/);
+  assert.match(navigation, /allowsProtectedRoutes \|\| !\$0\.requiresAuthentication/);
+  assert.match(root, /pinnedRoutes: pinnedMemberRoutes/);
+  assert.match(root, /case \.pinned\(let route\):[\s\S]*openMemberRoute\(route, source: \.commandPalette\)/);
+  assert.match(root, /xert-navigation-pin-current/);
+  assert.match(root, /Label\("Unpin", systemImage: "pin\.slash"\)/);
+  assert.ok((root.match(/pinnedRoutes: pinnedMemberRoutes/g) || []).length >= 3);
+  assert.match(root, /private struct XertPinnedWorkspaceBadge: View/);
+  assert.ok((root.match(/contextMenu \{ pinnedWorkspaceMenu \}/g) || []).length === 2);
+  assert.match(root, /Button\(action: \{ onOpenPinned\(route\) \}\)/);
+  assert.match(modelsTests, /testPinnedWorkspacesAreBoundedNormalizedAndAccountScoped/);
+  assert.match(modelsTests, /testPinnedWorkspaceCommandsAreDirectAndAuthorizationAware/);
+});
+
 test('navigation history preserves exact member tasks instead of flattening them to tabs', async () => {
   const [navigation, root, modelsTests] = await Promise.all([
     readFile(navigationURL, 'utf8'),

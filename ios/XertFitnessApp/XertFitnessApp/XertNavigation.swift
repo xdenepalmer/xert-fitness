@@ -115,6 +115,16 @@ enum XertMemberRoute: Hashable {
         }
     }
 
+    var pinnableRoute: Self? {
+        switch self {
+        case .notices(_): return .notices(nil)
+        case .upcomingBookings(_): return .upcomingBookings(nil)
+        case .purchaseConfirmation: return nil
+        case .home, .booking, .sessionPacks, .events, .eventGoals, .explore, .account:
+            return self
+        }
+    }
+
     static func primary(_ destination: XertPrimaryDestination) -> Self {
         switch destination {
         case .home: return .home
@@ -370,8 +380,89 @@ struct XertNavigationWorkspaceSnapshot: Codable, Equatable {
     }
 }
 
+struct XertPinnedWorkspaceSnapshot: Codable, Equatable {
+    static let currentVersion = 1
+    static let maximumRouteCount = 6
+    static let maximumEncodedLength = 1_024
+
+    let version: Int
+    let routeValues: [String]
+
+    init(routes: [XertMemberRoute]) {
+        version = Self.currentVersion
+        routeValues = routes.map(\.restorationValue)
+    }
+}
+
+enum XertPinnedWorkspaceStore {
+    private static let keyPrefix = "xert.navigation.pins.v1."
+
+    static func load(
+        for userID: UUID?,
+        defaults: UserDefaults = .standard
+    ) -> [XertMemberRoute] {
+        guard
+            let userID,
+            let data = defaults.data(forKey: storageKey(for: userID)),
+            data.count <= XertPinnedWorkspaceSnapshot.maximumEncodedLength,
+            let snapshot = try? JSONDecoder().decode(XertPinnedWorkspaceSnapshot.self, from: data),
+            snapshot.version == XertPinnedWorkspaceSnapshot.currentVersion,
+            snapshot.routeValues.count <= XertPinnedWorkspaceSnapshot.maximumRouteCount
+        else { return [] }
+
+        let routes = snapshot.routeValues.compactMap { value in
+            XertMemberRoute.restore(value)?.pinnableRoute
+        }
+        guard routes.count == snapshot.routeValues.count else { return [] }
+        return deduplicated(routes)
+    }
+
+    @discardableResult
+    static func toggle(
+        _ route: XertMemberRoute,
+        for userID: UUID,
+        defaults: UserDefaults = .standard
+    ) -> [XertMemberRoute] {
+        guard let normalizedRoute = route.pinnableRoute else {
+            return load(for: userID, defaults: defaults)
+        }
+        var routes = load(for: userID, defaults: defaults)
+        if let index = routes.firstIndex(of: normalizedRoute) {
+            routes.remove(at: index)
+        } else {
+            routes.insert(normalizedRoute, at: 0)
+            routes = Array(routes.prefix(XertPinnedWorkspaceSnapshot.maximumRouteCount))
+        }
+        save(routes, for: userID, defaults: defaults)
+        return routes
+    }
+
+    private static func save(
+        _ routes: [XertMemberRoute],
+        for userID: UUID,
+        defaults: UserDefaults
+    ) {
+        let snapshot = XertPinnedWorkspaceSnapshot(routes: routes)
+        guard
+            let data = try? JSONEncoder().encode(snapshot),
+            data.count <= XertPinnedWorkspaceSnapshot.maximumEncodedLength
+        else { return }
+        defaults.set(data, forKey: storageKey(for: userID))
+    }
+
+    private static func storageKey(for userID: UUID) -> String {
+        keyPrefix + userID.uuidString.lowercased()
+    }
+
+    private static func deduplicated(_ routes: [XertMemberRoute]) -> [XertMemberRoute] {
+        var seen = Set<XertMemberRoute>()
+        return routes.filter { seen.insert($0).inserted }
+    }
+}
+
 enum XertNavigationCommandAction: Hashable {
     case destination(XertPrimaryDestination)
+    case pinned(XertMemberRoute)
     case timeline(Int)
     case activity(XertNavigationActivity)
     case previous
@@ -389,6 +480,7 @@ enum XertNavigationActivity: Hashable {
 
 enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     case now = "Now"
+    case pinned = "Pinned Workspaces"
     case recent = "Workspace History"
     case navigate = "Navigate"
     case system = "System"
@@ -645,7 +737,8 @@ final class XertNavigationCoordinator: ObservableObject {
 
     func commandPaletteCommands(
         isAdmin: Bool,
-        context: XertNavigationContext = .empty
+        context: XertNavigationContext = .empty,
+        pinnedRoutes: [XertMemberRoute] = []
     ) -> [XertNavigationCommand] {
         var commands = XertPrimaryDestination.dockOrder
             .filter { $0 != selection }
@@ -661,6 +754,10 @@ final class XertNavigationCoordinator: ObservableObject {
                 )
             }
 
+        commands.insert(contentsOf: pinnedCommands(
+            routes: pinnedRoutes,
+            allowsProtectedRoutes: context.isSignedIn
+        ), at: 0)
         commands.insert(contentsOf: activityCommands(context: context), at: 0)
         commands.append(contentsOf: timelineCommands(
             allowsProtectedRoutes: context.isSignedIn
@@ -996,6 +1093,29 @@ final class XertNavigationCoordinator: ObservableObject {
             ))
         }
         return commands
+    }
+
+    private func pinnedCommands(
+        routes: [XertMemberRoute],
+        allowsProtectedRoutes: Bool
+    ) -> [XertNavigationCommand] {
+        var seen = Set<XertMemberRoute>()
+        return routes
+            .compactMap(\.pinnableRoute)
+            .filter { seen.insert($0).inserted }
+            .filter { allowsProtectedRoutes || !$0.requiresAuthentication }
+            .prefix(XertPinnedWorkspaceSnapshot.maximumRouteCount)
+            .map { route in
+                XertNavigationCommand(
+                    id: "pinned-\(route.restorationValue)",
+                    title: route.navigationTitle,
+                    subtitle: "Open this saved XERT workspace",
+                    icon: "pin.fill",
+                    keywords: ["pin", "saved", "favourite", "favorite", "workspace", route.navigationTitle],
+                    section: .pinned,
+                    action: .pinned(route)
+                )
+            }
     }
 
     private func timelineCommands(
