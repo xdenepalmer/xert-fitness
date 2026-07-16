@@ -362,6 +362,67 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(navigation.returnToNext())
     }
 
+    func testNavigationTimelineJumpsDirectlyWithoutDiscardingForwardTasks() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.eventGoals, source: .content))
+        XCTAssertTrue(navigation.open(.explore, source: .content))
+        XCTAssertTrue(navigation.returnToPrevious())
+
+        XCTAssertEqual(navigation.workspaceOverview, XertNavigationWorkspaceOverview(
+            currentRoute: .eventGoals,
+            backCount: 2,
+            forwardCount: 1
+        ))
+        XCTAssertEqual(navigation.timeline.map(\.route), [.home, .sessionPacks, .eventGoals, .explore])
+        XCTAssertEqual(navigation.timeline.map(\.offset), [-2, -1, 0, 1])
+
+        XCTAssertTrue(navigation.jump(toTimelineIndex: 0, source: .commandPalette))
+        XCTAssertEqual(navigation.route, .home)
+        XCTAssertEqual(navigation.routeHistory, [.home])
+        XCTAssertEqual(navigation.forwardRouteHistory, [.sessionPacks, .eventGoals, .explore])
+
+        XCTAssertTrue(navigation.jump(toTimelineIndex: 2, source: .commandPalette))
+        XCTAssertEqual(navigation.route, .eventGoals)
+        XCTAssertEqual(navigation.previousRoute, .sessionPacks)
+        XCTAssertEqual(navigation.nextRoute, .explore)
+        XCTAssertEqual(navigation.lastTransition?.source, .commandPalette)
+
+        XCTAssertFalse(navigation.jump(toTimelineIndex: 2))
+        XCTAssertFalse(navigation.jump(toTimelineIndex: 99))
+    }
+
+    func testNavigationTimelineRejectsProtectedJumpsAndCommandsWhenSignedOut() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000061"))
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(navigation.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+
+        XCTAssertFalse(navigation.jump(
+            toTimelineIndex: 1,
+            source: .commandPalette,
+            allowsProtectedRoutes: false
+        ))
+        let signedOutCommands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: .empty
+        )
+        XCTAssertFalse(signedOutCommands.contains { $0.action == .timeline(1) })
+
+        let signedInCommands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: XertNavigationContext(
+                isSignedIn: true,
+                noticeCount: 0,
+                bookingCount: 0,
+                creditCount: 0,
+                eventGoalCount: 0,
+                hasPendingCheckout: false
+            )
+        )
+        XCTAssertTrue(signedInCommands.contains { $0.action == .timeline(1) })
+    }
+
     func testNavigationIdentifiesPrivateContextAcrossBackAndForwardHistory() {
         let navigation = XertNavigationCoordinator(initial: .home)
         XCTAssertFalse(navigation.containsContextualHistory)
@@ -504,7 +565,7 @@ final class ModelsTests: XCTestCase {
         }
     }
 
-    func testNavigationCommandPaletteOffersBoundedUniqueRecentTasks() throws {
+    func testNavigationCommandPaletteOffersBoundedDirectWorkspaceTimeline() throws {
         let firstNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000041"))
         let latestNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000042"))
         let navigation = XertNavigationCoordinator(initial: .home)
@@ -515,21 +576,33 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(navigation.open(.notices(latestNoticeID), source: .pushNotification))
         XCTAssertTrue(navigation.open(.purchaseConfirmation, source: .checkout))
 
-        let commands = navigation.commandPaletteCommands(isAdmin: false)
+        let commands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: XertNavigationContext(
+                isSignedIn: true,
+                noticeCount: 0,
+                bookingCount: 0,
+                creditCount: 0,
+                eventGoalCount: 0,
+                hasPendingCheckout: false
+            )
+        )
         XCTAssertEqual(
             commands.filter { $0.section == .recent }.map(\.action),
             [
-                .route(.notices(latestNoticeID)),
-                .route(.eventGoals),
-                .route(.sessionPacks),
+                .timeline(4),
+                .timeline(3),
+                .timeline(2),
+                .timeline(1),
+                .timeline(0),
             ]
         )
         XCTAssertEqual(
             XertNavigationCoordinator.filteredCommands(commands, query: "recent session").map(\.action),
-            [.route(.sessionPacks)]
+            [.timeline(2)]
         )
-        XCTAssertFalse(commands.contains { $0.action == .route(.notices(firstNoticeID)) })
-        XCTAssertFalse(commands.contains { $0.action == .route(.purchaseConfirmation) })
+        XCTAssertTrue(commands.contains { $0.action == .timeline(1) })
+        XCTAssertFalse(commands.contains { $0.action == .timeline(5) })
     }
 
     func testAdminRoleAndOperationalModelsDecodeFromSupabase() throws {

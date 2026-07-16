@@ -372,7 +372,7 @@ struct XertNavigationWorkspaceSnapshot: Codable, Equatable {
 
 enum XertNavigationCommandAction: Hashable {
     case destination(XertPrimaryDestination)
-    case route(XertMemberRoute)
+    case timeline(Int)
     case activity(XertNavigationActivity)
     case previous
     case next
@@ -389,7 +389,7 @@ enum XertNavigationActivity: Hashable {
 
 enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     case now = "Now"
-    case recent = "Recent"
+    case recent = "Workspace History"
     case navigate = "Navigate"
     case system = "System"
 
@@ -511,6 +511,22 @@ struct XertNavigationCommand: Identifiable, Hashable {
     }
 }
 
+struct XertNavigationTimelineItem: Identifiable, Equatable {
+    let index: Int
+    let route: XertMemberRoute
+    let offset: Int
+
+    var id: Int { index }
+    var isCurrent: Bool { offset == 0 }
+    var distance: Int { abs(offset) }
+}
+
+struct XertNavigationWorkspaceOverview: Equatable {
+    let currentRoute: XertMemberRoute
+    let backCount: Int
+    let forwardCount: Int
+}
+
 final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var selection: XertPrimaryDestination
     @Published private(set) var route: XertMemberRoute
@@ -551,6 +567,25 @@ final class XertNavigationCoordinator: ObservableObject {
 
     var nextRoute: XertMemberRoute? {
         forwardRouteHistory.first
+    }
+
+    var timeline: [XertNavigationTimelineItem] {
+        let currentIndex = routeHistory.count - 1
+        return (routeHistory + forwardRouteHistory).enumerated().map { index, route in
+            XertNavigationTimelineItem(
+                index: index,
+                route: route,
+                offset: index - currentIndex
+            )
+        }
+    }
+
+    var workspaceOverview: XertNavigationWorkspaceOverview {
+        XertNavigationWorkspaceOverview(
+            currentRoute: route,
+            backCount: max(0, routeHistory.count - 1),
+            forwardCount: forwardRouteHistory.count
+        )
     }
 
     var containsContextualHistory: Bool {
@@ -595,7 +630,9 @@ final class XertNavigationCoordinator: ObservableObject {
             }
 
         commands.insert(contentsOf: activityCommands(context: context), at: 0)
-        commands.append(contentsOf: recentTaskCommands())
+        commands.append(contentsOf: timelineCommands(
+            allowsProtectedRoutes: context.isSignedIn
+        ))
 
         commands.append(XertNavigationCommand(
             id: "refresh-\(selection.rawValue)",
@@ -834,6 +871,31 @@ final class XertNavigationCoordinator: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func jump(
+        toTimelineIndex index: Int,
+        source: XertNavigationSource = .history,
+        allowsProtectedRoutes: Bool = true
+    ) -> Bool {
+        let routes = routeHistory + forwardRouteHistory
+        let currentIndex = routeHistory.count - 1
+        guard
+            routes.indices.contains(index),
+            index != currentIndex,
+            allowsProtectedRoutes || !routes[index].requiresAuthentication
+        else { return false }
+
+        let previous = selection
+        let targetRoute = routes[index]
+        routeHistory = Array(routes.prefix(index + 1))
+        forwardRouteHistory = Array(routes.dropFirst(index + 1))
+        selection = targetRoute.destination
+        route = targetRoute
+        routeSequence &+= 1
+        recordTransition(from: previous, to: targetRoute.destination, source: source)
+        return true
+    }
+
     func reselect(_ destination: XertPrimaryDestination) {
         guard destination == selection else { return }
         reselectionSequence &+= 1
@@ -904,27 +966,31 @@ final class XertNavigationCoordinator: ObservableObject {
         return commands
     }
 
-    private func recentTaskCommands(limit: Int = 3) -> [XertNavigationCommand] {
-        var seenTasks: Set<String> = []
-        return routeHistory
-            .dropLast()
-            .reversed()
-            .compactMap { recentRoute -> XertNavigationCommand? in
-                guard recentRoute != route, recentRoute.isContextualTask else { return nil }
-                let taskKey = recentRoute.navigationTitle.lowercased()
-                guard seenTasks.insert(taskKey).inserted else { return nil }
-                return XertNavigationCommand(
-                    id: "recent-\(recentRoute.restorationValue)",
-                    title: recentRoute.navigationTitle,
-                    subtitle: "Reopen this recent XERT task",
-                    icon: recentRoute.destination.icon,
-                    keywords: ["recent", "history", recentRoute.navigationTitle],
-                    section: .recent,
-                    action: .route(recentRoute)
-                )
+    private func timelineCommands(
+        limit: Int = 6,
+        allowsProtectedRoutes: Bool
+    ) -> [XertNavigationCommand] {
+        timeline
+            .filter { !$0.isCurrent }
+            .filter { allowsProtectedRoutes || !$0.route.requiresAuthentication }
+            .sorted { lhs, rhs in
+                if lhs.distance != rhs.distance { return lhs.distance < rhs.distance }
+                return lhs.offset < rhs.offset
             }
             .prefix(max(0, limit))
-            .map { $0 }
+            .map { item in
+                let direction = item.offset < 0 ? "Back" : "Forward"
+                let stepLabel = noun(item.distance, singular: "task", plural: "tasks")
+                return XertNavigationCommand(
+                    id: "timeline-\(item.index)-\(item.route.restorationValue)",
+                    title: "\(direction) to \(item.route.navigationTitle)",
+                    subtitle: "\(item.distance) \(stepLabel) \(item.offset < 0 ? "back" : "forward") in this workspace",
+                    icon: item.offset < 0 ? "arrow.uturn.backward" : "arrow.uturn.forward",
+                    keywords: ["recent", "history", "timeline", "workspace", item.route.navigationTitle],
+                    section: .recent,
+                    action: .timeline(item.index)
+                )
+            }
     }
 
     private func commandSubtitle(

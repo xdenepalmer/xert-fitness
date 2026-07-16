@@ -176,6 +176,7 @@ struct RootView: View {
                     isAdmin: store.profile?.isAdmin == true,
                     context: navigationContext
                 ),
+                workspace: navigation.workspaceOverview,
                 onSelect: executeNavigationCommand
             )
             .presentationDetents([.medium, .large])
@@ -319,8 +320,15 @@ struct RootView: View {
         switch command.action {
         case .destination(let destination):
             selectMemberDestination(destination, source: .commandPalette)
-        case .route(let route):
-            openMemberRoute(route, source: .commandPalette)
+        case .timeline(let index):
+            guard navigation.jump(
+                toTimelineIndex: index,
+                source: .commandPalette,
+                allowsProtectedRoutes: store.isSignedIn
+            ) else { return }
+            claimMemberNavigation()
+            cancelPendingProtectedNavigation()
+            UISelectionFeedbackGenerator().selectionChanged()
         case .activity(let activity):
             executeNavigationActivity(activity)
         case .previous:
@@ -1130,6 +1138,7 @@ private struct XertNavigationCommandPalette: View {
     @State private var query = ""
     @FocusState private var searchFocused: Bool
     let commands: [XertNavigationCommand]
+    let workspace: XertNavigationWorkspaceOverview
     let onSelect: (XertNavigationCommand) -> Void
 
     private var filteredCommands: [XertNavigationCommand] {
@@ -1138,37 +1147,40 @@ private struct XertNavigationCommandPalette: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if filteredCommands.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(Color.xertSteel)
-                        Text("No matching XERT actions")
-                            .font(.headline)
-                            .foregroundStyle(Color.xertOffWhite)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(XertNavigationCommandSection.allCases) { section in
-                            let sectionCommands = filteredCommands.filter { $0.section == section }
-                            if !sectionCommands.isEmpty {
-                                Section {
-                                    ForEach(sectionCommands) { command in
-                                        commandRow(command)
+            VStack(spacing: 0) {
+                workspaceHeader
+                Group {
+                    if filteredCommands.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundStyle(Color.xertSteel)
+                            Text("No matching XERT actions")
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            ForEach(XertNavigationCommandSection.allCases) { section in
+                                let sectionCommands = filteredCommands.filter { $0.section == section }
+                                if !sectionCommands.isEmpty {
+                                    Section {
+                                        ForEach(sectionCommands) { command in
+                                            commandRow(command)
+                                        }
+                                    } header: {
+                                        Text(section.rawValue)
+                                            .font(.caption2.weight(.bold))
+                                            .textCase(.uppercase)
+                                            .foregroundStyle(Color.xertSteel)
                                     }
-                                } header: {
-                                    Text(section.rawValue)
-                                        .font(.caption2.weight(.bold))
-                                        .textCase(.uppercase)
-                                        .foregroundStyle(Color.xertSteel)
                                 }
                             }
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .background(Color.xertNavy.ignoresSafeArea())
@@ -1186,6 +1198,62 @@ private struct XertNavigationCommandPalette: View {
         }
         .tint(Color.xertSteel)
         .preferredColorScheme(.dark)
+    }
+
+    private var workspaceHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                workspaceIdentity
+                Spacer(minLength: 8)
+                workspaceCounts
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                workspaceIdentity
+                workspaceCounts
+            }
+        }
+        .font(.caption.weight(.bold))
+        .foregroundStyle(Color.xertSteel)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(minHeight: 58)
+        .background(Color.xertDeep.opacity(0.96))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.xertSteel.opacity(0.2)).frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Current task \(workspace.currentRoute.navigationTitle), \(workspace.backCount) back, \(workspace.forwardCount) forward"
+        )
+        .accessibilityIdentifier("xert-navigation-workspace-overview")
+    }
+
+    private var workspaceIdentity: some View {
+        HStack(spacing: 12) {
+            Image(systemName: workspace.currentRoute.destination.selectedIcon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 36, height: 36)
+                .background(Color.xertSteel.opacity(0.1))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workspace.currentRoute.navigationTitle)
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text("Current workspace task")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.xertPale.opacity(0.55))
+            }
+        }
+    }
+
+    private var workspaceCounts: some View {
+        HStack(spacing: 12) {
+            Label("\(workspace.backCount)", systemImage: "arrow.uturn.backward")
+            Label("\(workspace.forwardCount)", systemImage: "arrow.uturn.forward")
+        }
     }
 
     private func commandRow(_ command: XertNavigationCommand) -> some View {
