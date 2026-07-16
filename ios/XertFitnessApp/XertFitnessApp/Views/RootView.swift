@@ -244,6 +244,7 @@ struct RootView: View {
             nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
+            onOpenStatus: executeNavigationStatus,
             onReselect: handleReselection,
             onStep: handleNavigationStep,
             onReturnPrevious: returnToPreviousNavigationDestination,
@@ -261,6 +262,7 @@ struct RootView: View {
             nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
             onOpenCommands: { showingNavigationCommands = true },
+            onOpenStatus: executeNavigationStatus,
             onReselect: handleReselection,
             onReturnPrevious: returnToPreviousNavigationDestination,
             onReturnNext: returnToNextNavigationDestination
@@ -356,6 +358,10 @@ struct RootView: View {
                 Task { await store.reconcilePendingCheckout() }
             }
         }
+    }
+
+    private func executeNavigationStatus(_ status: XertNavigationStatus) {
+        executeNavigationActivity(status.activity)
     }
 
     private func completeCommandDismissal() {
@@ -562,6 +568,7 @@ private struct XertNavigationRail: View {
     let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
+    let onOpenStatus: (XertNavigationStatus) -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onReturnPrevious: () -> Void
     let onReturnNext: () -> Void
@@ -596,6 +603,12 @@ private struct XertNavigationRail: View {
             .accessibilityIdentifier("xert-navigation-commands")
 
             XertNavigationShareControl(route: currentRoute, layout: .rail)
+
+            XertNavigationStatusControl(
+                status: statusSnapshot.priorityStatus,
+                layout: .rail,
+                onOpen: onOpenStatus
+            )
 
             if let previousRoute {
                 Button(action: onReturnPrevious) {
@@ -738,6 +751,9 @@ private struct XertNavigationRail: View {
         .accessibilityHint(accessibilityHint(for: item, status: status, selected: selected))
         .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
         .accessibilityActions {
+            if let status {
+                Button(status.actionTitle) { onOpenStatus(status) }
+            }
             if selected {
                 Button("Refresh \(item.title)") { onReselect(item) }
                 if let previousRoute {
@@ -746,6 +762,11 @@ private struct XertNavigationRail: View {
             }
         }
         .contextMenu {
+            if let status {
+                Button(action: { onOpenStatus(status) }) {
+                    Label(status.actionTitle, systemImage: status.icon)
+                }
+            }
             if selected {
                 Button(action: { onReselect(item) }) {
                     Label("Refresh \(item.title)", systemImage: "arrow.clockwise")
@@ -792,6 +813,7 @@ private struct XertNavigationDock: View {
     let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
     let onOpenCommands: () -> Void
+    let onOpenStatus: (XertNavigationStatus) -> Void
     let onReselect: (XertPrimaryDestination) -> Void
     let onStep: (XertNavigationDirection) -> Void
     let onReturnPrevious: () -> Void
@@ -929,6 +951,12 @@ private struct XertNavigationDock: View {
 
             XertNavigationShareControl(route: currentRoute, layout: .compact)
 
+            XertNavigationStatusControl(
+                status: statusSnapshot.priorityStatus,
+                layout: .compact,
+                onOpen: onOpenStatus
+            )
+
             Button(action: onOpenCommands) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .semibold))
@@ -1004,6 +1032,9 @@ private struct XertNavigationDock: View {
         .accessibilityHint(accessibilityHint(for: item, status: status, selected: selected))
         .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
         .accessibilityActions {
+            if let status {
+                Button(status.actionTitle) { onOpenStatus(status) }
+            }
             if selected {
                 Button("Refresh \(item.title)") { onReselect(item) }
                 if let previousRoute {
@@ -1014,6 +1045,11 @@ private struct XertNavigationDock: View {
         .contextMenu {
             Button(action: onOpenCommands) {
                 Label("Quick switcher", systemImage: "magnifyingglass")
+            }
+            if let status {
+                Button(action: { onOpenStatus(status) }) {
+                    Label(status.actionTitle, systemImage: status.icon)
+                }
             }
             if selected {
                 Button(action: { onReselect(item) }) {
@@ -1040,14 +1076,95 @@ private struct XertNavigationDock: View {
     }
 }
 
-private enum XertNavigationShareLayout {
+private enum XertNavigationUtilityLayout {
     case rail
     case compact
 }
 
+private struct XertNavigationStatusControl: View {
+    let status: XertNavigationStatus?
+    let layout: XertNavigationUtilityLayout
+    let onOpen: (XertNavigationStatus) -> Void
+
+    var body: some View {
+        Group {
+            if let status {
+                Button(action: { onOpen(status) }) {
+                    statusLabel(status)
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel(status.actionTitle)
+                .accessibilityValue(status.accessibilityLabel)
+                .accessibilityHint("Opens the exact XERT task")
+                .accessibilityIdentifier("xert-navigation-priority-status")
+            } else {
+                placeholder
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusLabel(_ status: XertNavigationStatus) -> some View {
+        switch layout {
+        case .rail:
+            VStack(spacing: 5) {
+                ZStack {
+                    Image(systemName: status.icon)
+                        .font(.system(size: 16, weight: .semibold))
+                    XertNavigationStatusBadge(status: status)
+                        .offset(x: 16, y: -9)
+                }
+                Text(status.shortTitle)
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(status.kind == .attention ? Color.orange : Color.xertPale)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .contentShape(Rectangle())
+        case .compact:
+            ZStack {
+                Image(systemName: status.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(status.kind == .attention ? Color.orange : Color.xertPale)
+                XertNavigationStatusBadge(status: status)
+                    .offset(x: 15, y: -12)
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        switch layout {
+        case .rail:
+            VStack(spacing: 5) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Clear")
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+            }
+            .foregroundStyle(Color.xertConcrete.opacity(0.42))
+            .frame(maxWidth: .infinity, minHeight: 48)
+        case .compact:
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.xertConcrete.opacity(0.42))
+                .frame(width: 44, height: 44)
+        }
+    }
+}
+
 private struct XertNavigationShareControl: View {
     let route: XertMemberRoute
-    let layout: XertNavigationShareLayout
+    let layout: XertNavigationUtilityLayout
 
     var body: some View {
         Group {

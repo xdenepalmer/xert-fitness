@@ -424,6 +424,10 @@ struct XertNavigationStatus: Identifiable, Equatable {
     let kind: XertNavigationStatusKind
     let count: Int?
     let accessibilityLabel: String
+    let activity: XertNavigationActivity
+    let actionTitle: String
+    let shortTitle: String
+    let icon: String
 
     var id: XertPrimaryDestination { destination }
     var badgeText: String {
@@ -447,7 +451,11 @@ struct XertNavigationStatusSnapshot: Equatable {
                 destination: .home,
                 count: context.noticeCount,
                 singular: "active member notice",
-                plural: "active member notices"
+                plural: "active member notices",
+                activity: .notices,
+                actionTitle: "Review member notices",
+                shortTitle: "Notices",
+                icon: "bell.badge"
             ))
         }
         if context.hasPendingCheckout {
@@ -455,7 +463,11 @@ struct XertNavigationStatusSnapshot: Equatable {
                 destination: .booking,
                 kind: .attention,
                 count: nil,
-                accessibilityLabel: "Purchase confirmation needs attention"
+                accessibilityLabel: "Purchase confirmation needs attention",
+                activity: .pendingCheckout,
+                actionTitle: "Check purchase confirmation",
+                shortTitle: "Purchase",
+                icon: "clock.arrow.circlepath"
             ))
         }
         if context.eventGoalCount > 0 {
@@ -463,7 +475,11 @@ struct XertNavigationStatusSnapshot: Equatable {
                 destination: .events,
                 count: context.eventGoalCount,
                 singular: "selected event goal",
-                plural: "selected event goals"
+                plural: "selected event goals",
+                activity: .eventGoals,
+                actionTitle: "Review event goals",
+                shortTitle: "Goals",
+                icon: "target"
             ))
         }
         if context.bookingCount > 0 {
@@ -471,7 +487,11 @@ struct XertNavigationStatusSnapshot: Equatable {
                 destination: .account,
                 count: context.bookingCount,
                 singular: "upcoming booking",
-                plural: "upcoming bookings"
+                plural: "upcoming bookings",
+                activity: .upcomingBookings,
+                actionTitle: "View upcoming bookings",
+                shortTitle: "Bookings",
+                icon: "calendar.badge.clock"
             ))
         }
         statuses = current
@@ -481,18 +501,30 @@ struct XertNavigationStatusSnapshot: Equatable {
         statuses.first { $0.destination == destination }
     }
 
+    var priorityStatus: XertNavigationStatus? {
+        statuses.first { $0.kind == .attention } ?? statuses.first
+    }
+
     private static func activity(
         destination: XertPrimaryDestination,
         count: Int,
         singular: String,
-        plural: String
+        plural: String,
+        activity: XertNavigationActivity,
+        actionTitle: String,
+        shortTitle: String,
+        icon: String
     ) -> XertNavigationStatus {
         let boundedCount = max(1, count)
         return XertNavigationStatus(
             destination: destination,
             kind: .activity,
             count: boundedCount,
-            accessibilityLabel: "\(boundedCount) \(boundedCount == 1 ? singular : plural)"
+            accessibilityLabel: "\(boundedCount) \(boundedCount == 1 ? singular : plural)",
+            activity: activity,
+            actionTitle: actionTitle,
+            shortTitle: shortTitle,
+            icon: icon
         )
     }
 }

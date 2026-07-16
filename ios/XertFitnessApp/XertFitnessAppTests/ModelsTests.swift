@@ -546,10 +546,15 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertEqual(snapshot.status(for: .home)?.badgeText, "99+")
         XCTAssertEqual(snapshot.status(for: .home)?.accessibilityLabel, "120 active member notices")
+        XCTAssertEqual(snapshot.status(for: .home)?.activity, .notices)
         XCTAssertEqual(snapshot.status(for: .booking)?.kind, .attention)
         XCTAssertEqual(snapshot.status(for: .booking)?.accessibilityLabel, "Purchase confirmation needs attention")
+        XCTAssertEqual(snapshot.status(for: .booking)?.activity, .pendingCheckout)
+        XCTAssertEqual(snapshot.priorityStatus?.destination, .booking)
         XCTAssertEqual(snapshot.status(for: .events)?.badgeText, "3")
+        XCTAssertEqual(snapshot.status(for: .events)?.activity, .eventGoals)
         XCTAssertEqual(snapshot.status(for: .account)?.accessibilityLabel, "2 upcoming bookings")
+        XCTAssertEqual(snapshot.status(for: .account)?.activity, .upcomingBookings)
         XCTAssertNil(snapshot.status(for: .explore))
 
         let signedOut = XertNavigationStatusSnapshot(context: XertNavigationContext(
@@ -563,6 +568,7 @@ final class ModelsTests: XCTestCase {
         for destination in XertPrimaryDestination.allCases {
             XCTAssertNil(signedOut.status(for: destination))
         }
+        XCTAssertNil(signedOut.priorityStatus)
     }
 
     func testNavigationCommandPaletteOffersBoundedDirectWorkspaceTimeline() throws {
