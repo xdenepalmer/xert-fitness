@@ -208,3 +208,13 @@ test('native request notes can omit a workflow status exactly like the RPC contr
   assert.match(api, /private struct AdminRequestUpdate: Encodable \{[\s\S]*let p_status: String\?/);
   assert.match(api, /adminUpdateLegacyBookingNotes[\s\S]*p_status: nil[\s\S]*p_update_admin_notes: true/);
 });
+
+test('native campaign attribution keeps form origin separate from marketing source', async () => {
+  const models = await read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift');
+  const summary = models.slice(models.indexOf('struct AdminCampaignSummary'), models.indexOf('enum AdminSiteContentSection'));
+
+  assert.match(summary, /sources = Self\.breakdown\(rows: filteredRows, fallback: "Direct \/ unknown"\) \{\s*Self\.clean\(\$0\.utm_source\)\s*\}/);
+  assert.match(summary, /Self\.clean\(row\.utm_source\) \?\? "Direct \/ unknown"/);
+  assert.match(summary, /Self\.clean\(row\.source\) \?\? ""/);
+  assert.doesNotMatch(summary, /utm_source\) \?\? Self\.clean\([^\n]*source/);
+});

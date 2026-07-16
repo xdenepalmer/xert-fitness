@@ -426,7 +426,7 @@ struct AdminCampaignSummary {
             Self.clean($0.utm_source) != nil || Self.clean($0.utm_medium) != nil || Self.clean($0.utm_campaign) != nil
         }.count
         sources = Self.breakdown(rows: filteredRows, fallback: "Direct / unknown") {
-            Self.clean($0.utm_source) ?? Self.clean($0.source)
+            Self.clean($0.utm_source)
         }
         mediums = Self.breakdown(rows: filteredRows, fallback: "Unspecified") { Self.clean($0.utm_medium) }
         campaigns = Self.breakdown(rows: filteredRows) { Self.clean($0.utm_campaign) }
@@ -449,7 +449,7 @@ struct AdminCampaignSummary {
             [
                 ISO8601DateFormatter().string(from: row.created_at),
                 Self.dateKey(row.created_at, calendar: EventItem.calendar) ?? "",
-                Self.clean(row.utm_source) ?? Self.clean(row.source) ?? "Direct / unknown",
+                Self.clean(row.utm_source) ?? "Direct / unknown",
                 Self.clean(row.utm_medium) ?? "",
                 Self.clean(row.utm_campaign) ?? "",
                 Self.clean(row.source) ?? ""
