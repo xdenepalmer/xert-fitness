@@ -6,6 +6,10 @@ const sqlURLs = [
   new URL('../src/supabase/guarded_payment_activation_upgrade.sql', import.meta.url),
   new URL('../supabase/migrations/20260716010000_guarded_payment_activation.sql', import.meta.url),
 ];
+const driftSQLURLs = [
+  new URL('../src/supabase/payment_activation_drift_guard_upgrade.sql', import.meta.url),
+  new URL('../supabase/migrations/20260716060000_payment_activation_drift_guard.sql', import.meta.url),
+];
 
 test('fresh and upgrade SQL force payment activation through the trusted server', async () => {
   for (const sql of await Promise.all(sqlURLs.map(url => readFile(url, 'utf8')))) {
@@ -29,8 +33,18 @@ test('fresh and upgrade SQL force payment activation through the trusted server'
   }
 });
 
+test('live platform settings require an explicit payment pause before mutation', async () => {
+  for (const sql of await Promise.all(driftSQLURLs.map(url => readFile(url, 'utf8')))) {
+    assert.match(sql, /old\.payments_enabled is true[\s\S]*new\.payments_enabled is true/i);
+    assert.match(sql, /to_jsonb\(new\) - 'updated_at'[\s\S]*is distinct from[\s\S]*to_jsonb\(old\) - 'updated_at'/i);
+    assert.match(sql, /PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/i);
+    assert.match(sql, /values \('payment_activation_drift_guard'\)/i);
+    assert.doesNotMatch(sql, /new\.payments_enabled is false[\s\S]*PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/i);
+  }
+});
+
 test('release gates require guarded payment activation everywhere', async () => {
-  const [capabilities, readiness, codemagic, runbook, nativeModels, packageSource, preflight] = await Promise.all([
+  const [capabilities, readiness, codemagic, runbook, nativeModels, packageSource, preflight, checkout, activation] = await Promise.all([
     readFile(new URL('../src/lib/schemaCapabilities.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8'),
     readFile(new URL('../codemagic.yaml', import.meta.url), 'utf8'),
@@ -38,12 +52,15 @@ test('release gates require guarded payment activation everywhere', async () => 
     readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift', import.meta.url), 'utf8'),
     readFile(new URL('../package.json', import.meta.url), 'utf8'),
     readFile(new URL('../scripts/stripe-launch-preflight.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../api/checkout.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/lib/paymentActivation.js', import.meta.url), 'utf8'),
   ]);
   for (const source of [capabilities, readiness, codemagic, nativeModels]) {
     assert.match(source, /guarded_payment_activation/);
   }
   assert.match(runbook, /20260716010000_guarded_payment_activation\.sql/);
-  assert.match(runbook, /thirteen `PASS` results/);
+  assert.match(runbook, /fourteen `PASS` results/);
+  assert.match(runbook, /20260716060000_payment_activation_drift_guard\.sql/);
   assert.match(runbook, /stripe:launch:check[\s\S]*payment switch is still \*\*PAUSED\*\*/);
   assert.match(runbook, /stripe:launch:verify[\s\S]*payment switch to be \*\*ENABLED\*\*/);
   assert.match(runbook, /Do not run a real card[\s\S]*until this command passes/);
@@ -56,4 +73,11 @@ test('release gates require guarded payment activation everywhere', async () => 
   assert.match(preflight, /Immutable activation receipt/);
   assert.match(preflight, /boundary\.ready && catalogReady && webhook\.ready && paymentSwitch\.ready/);
   assert.match(preflight, /const \[boundary, catalog, webhook\] = await Promise\.all[\s\S]*const paymentSwitch = await inspectSwitch/);
+  assert.match(checkout, /loadPaymentActivationHealth\(admin\)/);
+  assert.match(checkout, /paymentActivationAllowsCheckout\(activation\)/);
+  assert.match(checkout, /payment activation could not be verified/);
+  assert.match(activation, /previous_snapshot\?\.payments_enabled === false/);
+  assert.match(activation, /new_snapshot\?\.payments_enabled === true/);
+  assert.match(activation, /activation\.payment_switch\.state === 'enabled'/);
+  assert.match(activation, /activation\.activation_receipt\.actor_recorded === true/);
 });

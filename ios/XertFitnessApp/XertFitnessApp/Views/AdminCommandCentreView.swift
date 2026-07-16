@@ -3102,6 +3102,10 @@ private struct AdminOperationsHealthView: View {
                             : "Activation receipt (when enabled)",
                         ready: commerce.activation_receipt?.ready == true
                     )
+                    HealthCheckRow(
+                        label: "Live settings immutable",
+                        ready: commerce.activation_drift_guard_ready == true
+                    )
                     if let activatedAt = commerce.activation_receipt?.activated_at {
                         HealthValueRow(
                             label: "Activated",

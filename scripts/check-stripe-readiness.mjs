@@ -11,6 +11,7 @@ const REFUND_RECONCILIATION_CAPABILITY = 'stripe_refund_reconciliation';
 const CHECKOUT_RECONCILIATION_CAPABILITY = 'checkout_reconciliation';
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const GUARDED_PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
+const PAYMENT_ACTIVATION_DRIFT_CAPABILITY = 'payment_activation_drift_guard';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
@@ -127,6 +128,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   let refundReconciliationReady = false;
   let checkoutReconciliationReady = false;
   let activationGuardReady = false;
+  let activationDriftGuardReady = false;
   let settingsContractReady = false;
   let pendingOrderGuardReady = false;
   let orderTermsReady = false;
@@ -135,6 +137,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   let refundReconciliationDetail;
   let checkoutReconciliationDetail;
   let activationGuardDetail;
+  let activationDriftGuardDetail;
   let settingsContractDetail;
   let pendingOrderGuardDetail;
   let orderTermsDetail;
@@ -144,6 +147,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     refundReconciliationDetail = capabilityDetail;
     checkoutReconciliationDetail = capabilityDetail;
     activationGuardDetail = capabilityDetail;
+    activationDriftGuardDetail = capabilityDetail;
     settingsContractDetail = capabilityDetail;
     pendingOrderGuardDetail = capabilityDetail;
     orderTermsDetail = capabilityDetail;
@@ -156,6 +160,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       refundReconciliationReady = installed.has(REFUND_RECONCILIATION_CAPABILITY);
       checkoutReconciliationReady = installed.has(CHECKOUT_RECONCILIATION_CAPABILITY);
       activationGuardReady = installed.has(GUARDED_PAYMENT_ACTIVATION_CAPABILITY);
+      activationDriftGuardReady = installed.has(PAYMENT_ACTIVATION_DRIFT_CAPABILITY);
       settingsContractReady = installed.has(ADMIN_SETTINGS_SINGLETON_CAPABILITY);
       pendingOrderGuardReady = installed.has(STRIPE_PENDING_ORDER_CAPABILITY);
       orderTermsReady = installed.has(STRIPE_ORDER_TERMS_CAPABILITY);
@@ -172,6 +177,9 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       activationGuardDetail = activationGuardReady
         ? `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} installed`
         : `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} is missing`;
+      activationDriftGuardDetail = activationDriftGuardReady
+        ? `${PAYMENT_ACTIVATION_DRIFT_CAPABILITY} installed`
+        : `${PAYMENT_ACTIVATION_DRIFT_CAPABILITY} is missing`;
       settingsContractDetail = settingsContractReady
         ? `${ADMIN_SETTINGS_SINGLETON_CAPABILITY} installed`
         : `${ADMIN_SETTINGS_SINGLETON_CAPABILITY} is missing`;
@@ -189,6 +197,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       refundReconciliationDetail = capabilityDetail;
       checkoutReconciliationDetail = capabilityDetail;
       activationGuardDetail = capabilityDetail;
+      activationDriftGuardDetail = capabilityDetail;
       settingsContractDetail = capabilityDetail;
       pendingOrderGuardDetail = capabilityDetail;
       orderTermsDetail = capabilityDetail;
@@ -239,6 +248,15 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     remediation: activationGuardReady
       ? null
       : 'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql to the XERT Supabase project.',
+  });
+  checks.push({
+    key: 'activation-drift-guard',
+    label: 'Immutable live payment settings',
+    ready: activationDriftGuardReady,
+    detail: activationDriftGuardDetail,
+    remediation: activationDriftGuardReady
+      ? null
+      : 'Apply supabase/migrations/20260716060000_payment_activation_drift_guard.sql to the XERT Supabase project.',
   });
   checks.push({
     key: 'settings-contract',

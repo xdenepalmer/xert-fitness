@@ -13,6 +13,7 @@ import {
   normalizeCheckoutRequest,
   pendingOrderForCheckout,
   paymentFulfillmentIsReady,
+  paymentActivationDriftGuardIsReady,
   publicCheckoutFailure,
   reusableCheckoutURL,
   sessionPackPaymentsAreEnabled,
@@ -136,31 +137,86 @@ test('checkout fails closed until Stripe delivery monitoring is installed', asyn
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {
-  let result = { data: [{ payments_enabled: true }], error: null };
-  const query = {
-    select() { return query; },
-    async limit() { return result; },
+  const settingsId = '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2';
+  const actorId = '9bb45f52-9022-4b5b-933f-d8998dbe659f';
+  const updatedAt = '2026-07-16T03:05:00.000Z';
+  const settings = { id: settingsId, payments_enabled: true, updated_at: updatedAt };
+  const receipt = {
+    resource_id: settingsId,
+    action: 'updated',
+    changed_by: actorId,
+    previous_snapshot: { payments_enabled: false },
+    new_snapshot: { payments_enabled: true, updated_at: updatedAt },
+    created_at: '2026-07-16T03:05:00.100Z',
   };
-  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), true);
+  const activationAdmin = ({ settingsRows = [settings], auditRows = [receipt], settingsError = null, auditError = null } = {}) => ({
+    from(table) {
+      const query = {
+        select() { return query; },
+        eq() { return query; },
+        order() { return query; },
+        async limit() {
+          return table === 'admin_settings'
+            ? { data: settingsRows, error: settingsError }
+            : { data: auditRows, error: auditError };
+        },
+      };
+      return query;
+    },
+  });
 
-  result = { data: [{ payments_enabled: false }], error: null };
-  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
-  result = { data: [], error: null };
-  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
-  result = { data: [{ payments_enabled: true }, { payments_enabled: true }], error: null };
-  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
-  result = { data: null, error: new Error('settings unavailable') };
-  assert.equal(await sessionPackPaymentsAreEnabled({ from() { return query; } }), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin()), true);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    settingsRows: [{ ...settings, payments_enabled: false }],
+  })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({ settingsRows: [] })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({ settingsRows: [settings, settings] })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    settingsError: new Error('settings unavailable'),
+  })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    auditRows: [{ ...receipt, changed_by: null }],
+  })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    auditRows: [{
+      ...receipt,
+      new_snapshot: { ...receipt.new_snapshot, updated_at: '2026-07-16T03:04:00.000Z' },
+    }],
+  })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    auditError: new Error('audit unavailable'),
+  })), false);
 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
   const authenticationGate = source.indexOf("if (!token) return json({ error: 'Not authenticated.' }, 401)");
-  const paymentGate = source.indexOf('if (!await sessionPackPaymentsAreEnabled(admin))');
+  const paymentGate = source.indexOf('sessionPackPaymentsAreEnabled(admin)', authenticationGate);
   const stripeConfigurationGate = source.indexOf('if (!process.env.STRIPE_SECRET_KEY)');
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
   assert.ok(paymentGate > authenticationGate);
   assert.ok(stripeConfigurationGate > paymentGate);
   assert.ok(sessionCreation > paymentGate);
-  assert.match(source, /Session pack purchases are temporarily unavailable[\s\S]*503/);
+  assert.match(source, /payment activation could not be verified[\s\S]*503/);
+  assert.match(source, /Promise\.all\(\[[\s\S]*sessionPackPaymentsAreEnabled\(admin\)/);
+});
+
+test('checkout requires the database live-settings drift guard', async () => {
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() {
+      return { data: { capability: 'payment_activation_drift_guard' }, error: null };
+    },
+  };
+  assert.equal(await paymentActivationDriftGuardIsReady({ from() { return query; } }), true);
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await paymentActivationDriftGuardIsReady({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const guard = source.indexOf('paymentActivationDriftGuardIsReady(admin)');
+  const activation = source.indexOf('sessionPackPaymentsAreEnabled(admin)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(guard >= 0 && activation > guard && sessionCreation > activation);
+  assert.match(source, /live payment settings are being secured[\s\S]*503/);
 });
 
 test('checkout exposes a value-free gate for the complete canonical payment environment', () => {

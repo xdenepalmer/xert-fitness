@@ -11,6 +11,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   checkout_reconciliation: 'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
   stripe_payment_fulfillment: 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql in Supabase.',
   guarded_payment_activation: 'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql in Supabase.',
+  payment_activation_drift_guard: 'Apply supabase/migrations/20260716060000_payment_activation_drift_guard.sql in Supabase.',
   admin_settings_singleton: 'Apply supabase/migrations/20260716020000_admin_settings_singleton.sql in Supabase.',
   stripe_pending_order_guard: 'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql in Supabase.',
   stripe_order_terms_snapshot: 'Apply supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql in Supabase.',

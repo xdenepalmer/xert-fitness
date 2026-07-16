@@ -925,6 +925,7 @@ struct AdminCommerceHealth: Codable, Hashable {
     let checkout_reconciliation_ready: Bool?
     let activation_guard_ready: Bool?
     let settings_contract_ready: Bool?
+    let activation_drift_guard_ready: Bool?
     let pending_order_guard_ready: Bool?
     let order_terms_ready: Bool?
     let webhook_ledger_ready: Bool?
@@ -961,6 +962,7 @@ enum AdminSchemaReadiness {
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
         "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
         "checkout_reconciliation", "stripe_payment_fulfillment", "guarded_payment_activation",
+        "payment_activation_drift_guard",
         "admin_settings_singleton",
         "stripe_pending_order_guard",
         "stripe_order_terms_snapshot",

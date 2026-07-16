@@ -26,11 +26,14 @@ the iOS project, or Codemagic build logs.
 6. Apply `supabase/migrations/20260716050000_stripe_webhook_ledger.sql`.
    This records every verified delivery attempt, retry, terminal outcome and
    linked order for owner-visible payment operations health.
-7. Complete the Australian business profile, bank account and identity checks.
-8. Confirm that **Charges enabled** and **Payouts enabled** are both true.
-9. Create one one-time Stripe Price in AUD for every active XERT session pack.
-10. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
-11. Do not change the amount or currency of a linked pack. Create a new Stripe
+7. Apply `supabase/migrations/20260716060000_payment_activation_drift_guard.sql`.
+   This binds live settings to the immutable activation receipt. Pause payments
+   before changing any platform setting, then run the guarded activation again.
+8. Complete the Australian business profile, bank account and identity checks.
+9. Confirm that **Charges enabled** and **Payouts enabled** are both true.
+10. Create one one-time Stripe Price in AUD for every active XERT session pack.
+11. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
+12. Do not change the amount or currency of a linked pack. Create a new Stripe
    Price and update the pack instead.
 
 ## 2. Configure Vercel
@@ -114,18 +117,22 @@ The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
 Vercel payment settings are present; HTTP `503` reveals no values and prevents
 a false-green release audit.
 
-The command must report thirteen `PASS` results. A webhook `503` means the Vercel
+The command must report fourteen `PASS` results. A webhook `503` means the Vercel
 Stripe service is unavailable, normally because its private secrets are absent;
 a missing fulfillment contract means the migration in step 1 has not been
 installed. A missing activation guard means the guarded activation migration in
 step 2 has not been installed. Keep **Session pack payments** disabled until all
-thirteen checks pass. A missing settings contract means the migration in step 3
+fourteen checks pass. A missing settings contract means the migration in step 3
 has not repaired the versioned singleton platform settings. A missing recorded-
 order guard means the migration in step 4 has not hardened webhook fulfillment.
 A missing purchased-terms snapshot means the migration in step 5 has not bound
 the credit quantity and validity to the order recorded before payment.
 A missing delivery ledger means the migration in step 6 has not installed
 durable webhook attempt and outcome tracking.
+A missing live-settings drift guard means the migration in step 7 has not made
+the exact activation receipt authoritative at checkout. Once payments are live,
+pause them before editing countdown, booking or announcement settings; a fresh
+server preflight is required to enable payments again.
 
 Open **iOS Admin > Operations Health** and require all of the following:
 
@@ -142,7 +149,7 @@ the live Stripe and Supabase secrets:
 npm run stripe:launch:check
 ```
 
-This reruns the thirteen deployed boundary and payment-contract checks, inspects
+This reruns the fourteen deployed boundary and payment-contract checks, inspects
 every active pack against live Stripe, and queries Stripe for the canonical
 webhook's enabled events. It passes only when all packs already have exact, active,
 one-time AUD Prices bound to their current XERT product identity, session count

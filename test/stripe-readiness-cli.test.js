@@ -21,6 +21,7 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
   { capability: 'checkout_reconciliation' },
   { capability: 'stripe_payment_fulfillment' },
   { capability: 'guarded_payment_activation' },
+  { capability: 'payment_activation_drift_guard' },
   { capability: 'admin_settings_singleton' },
   { capability: 'stripe_pending_order_guard' },
   { capability: 'stripe_order_terms_snapshot' },
@@ -41,7 +42,7 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
 test('Stripe readiness requires every safe production boundary and database activation guard', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 13);
+  assert.equal(report.checks.length, 14);
   assert.ok(report.checks.every(check => check.ready));
 });
 
@@ -70,6 +71,7 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.match(report.checks.find(check => check.key === 'refund-reconciliation-contract').remediation, /20260713020000_stripe_refund_reconciliation\.sql/);
   assert.match(report.checks.find(check => check.key === 'checkout-reconciliation-contract').remediation, /20260713030000_checkout_reconciliation\.sql/);
   assert.match(report.checks.find(check => check.key === 'activation-guard').remediation, /20260716010000_guarded_payment_activation\.sql/);
+  assert.match(report.checks.find(check => check.key === 'activation-drift-guard').remediation, /20260716060000_payment_activation_drift_guard\.sql/);
   assert.match(report.checks.find(check => check.key === 'settings-contract').remediation, /20260716020000_admin_settings_singleton\.sql/);
   assert.match(report.checks.find(check => check.key === 'pending-order-guard').remediation, /20260716030000_stripe_pending_order_guard\.sql/);
   assert.match(report.checks.find(check => check.key === 'order-terms').remediation, /20260716040000_stripe_order_terms_snapshot\.sql/);

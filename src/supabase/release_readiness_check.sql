@@ -15,6 +15,7 @@ with required (capability, migration) as (
     ('checkout_reconciliation', 'supabase/migrations/20260713030000_checkout_reconciliation.sql'),
     ('stripe_payment_fulfillment', 'supabase/migrations/20260715010000_stripe_payment_fulfillment.sql'),
     ('guarded_payment_activation', 'supabase/migrations/20260716010000_guarded_payment_activation.sql'),
+    ('payment_activation_drift_guard', 'supabase/migrations/20260716060000_payment_activation_drift_guard.sql'),
     ('admin_settings_singleton', 'supabase/migrations/20260716020000_admin_settings_singleton.sql'),
     ('stripe_pending_order_guard', 'supabase/migrations/20260716030000_stripe_pending_order_guard.sql'),
     ('stripe_order_terms_snapshot', 'supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql'),

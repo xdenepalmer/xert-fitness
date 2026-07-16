@@ -7,6 +7,10 @@ import {
   XERT_SUPABASE_HOST,
   XERT_VERCEL_HOST,
 } from '../src/lib/publicRuntimeConfig.js';
+import {
+  loadPaymentActivationHealth,
+  paymentActivationAllowsCheckout,
+} from '../src/lib/paymentActivation.js';
 
 // Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
@@ -20,6 +24,7 @@ const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
+const PAYMENT_ACTIVATION_DRIFT_CAPABILITY = 'payment_activation_drift_guard';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
@@ -116,6 +121,16 @@ export async function adminSettingsContractIsReady(admin) {
   return data?.capability === ADMIN_SETTINGS_SINGLETON_CAPABILITY;
 }
 
+export async function paymentActivationDriftGuardIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', PAYMENT_ACTIVATION_DRIFT_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === PAYMENT_ACTIVATION_DRIFT_CAPABILITY;
+}
+
 export async function stripePendingOrderGuardIsReady(admin) {
   const { data, error } = await admin
     .from('xert_schema_capabilities')
@@ -147,12 +162,8 @@ export async function stripeWebhookLedgerIsReady(admin) {
 }
 
 export async function sessionPackPaymentsAreEnabled(admin) {
-  const { data, error } = await admin
-    .from('admin_settings')
-    .select('payments_enabled')
-    .limit(2);
-  if (error) return false;
-  return data?.length === 1 && data[0]?.payments_enabled === true;
+  const activation = await loadPaymentActivationHealth(admin);
+  return paymentActivationAllowsCheckout(activation);
 }
 
 /**
@@ -389,39 +400,63 @@ export default async function handler(request, response) {
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: 'Invalid or expired session.' }, 401);
 
-    if (!await paymentFulfillmentIsReady(admin)) {
+    const [
+      fulfillmentReady,
+      pendingOrderGuardReady,
+      orderTermsReady,
+      webhookLedgerReady,
+      settingsContractReady,
+      activationDriftGuardReady,
+      paymentActivationReady,
+    ] = await Promise.all([
+      paymentFulfillmentIsReady(admin),
+      stripePendingOrderGuardIsReady(admin),
+      stripeOrderTermsSnapshotIsReady(admin),
+      stripeWebhookLedgerIsReady(admin),
+      adminSettingsContractIsReady(admin),
+      paymentActivationDriftGuardIsReady(admin),
+      sessionPackPaymentsAreEnabled(admin),
+    ]);
+
+    if (!fulfillmentReady) {
       return json({
         error: 'Checkout is temporarily unavailable while payment services are being upgraded.',
       }, 503);
     }
 
-    if (!await stripePendingOrderGuardIsReady(admin)) {
+    if (!pendingOrderGuardReady) {
       return json({
         error: 'Checkout is temporarily unavailable while payment order safeguards are being upgraded.',
       }, 503);
     }
 
-    if (!await stripeOrderTermsSnapshotIsReady(admin)) {
+    if (!orderTermsReady) {
       return json({
         error: 'Checkout is temporarily unavailable while purchased pack terms are being secured.',
       }, 503);
     }
 
-    if (!await stripeWebhookLedgerIsReady(admin)) {
+    if (!webhookLedgerReady) {
       return json({
         error: 'Checkout is temporarily unavailable while payment delivery monitoring is being installed.',
       }, 503);
     }
 
-    if (!await adminSettingsContractIsReady(admin)) {
+    if (!settingsContractReady) {
       return json({
         error: 'Checkout is temporarily unavailable while platform settings are being upgraded.',
       }, 503);
     }
 
-    if (!await sessionPackPaymentsAreEnabled(admin)) {
+    if (!activationDriftGuardReady) {
       return json({
-        error: 'Session pack purchases are temporarily unavailable.',
+        error: 'Checkout is temporarily unavailable while live payment settings are being secured.',
+      }, 503);
+    }
+
+    if (!paymentActivationReady) {
+      return json({
+        error: 'Session pack purchases are temporarily unavailable because payment activation could not be verified.',
       }, 503);
     }
 

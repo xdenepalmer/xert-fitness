@@ -29,7 +29,7 @@ const validProduct = {
 const completeCommerceCapabilities = new Set([
   'stripe_refund_reconciliation', 'checkout_reconciliation',
   'stripe_payment_fulfillment', 'guarded_payment_activation',
-  'admin_settings_singleton', 'stripe_pending_order_guard',
+  'admin_settings_singleton', 'payment_activation_drift_guard', 'stripe_pending_order_guard',
   'stripe_order_terms_snapshot', 'stripe_webhook_ledger',
 ]);
 
@@ -262,6 +262,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(complete.checkout_reconciliation_ready, true);
   assert.equal(complete.activation_guard_ready, true);
   assert.equal(complete.settings_contract_ready, true);
+  assert.equal(complete.activation_drift_guard_ready, true);
   assert.equal(complete.pending_order_guard_ready, true);
   assert.equal(complete.order_terms_ready, true);
   assert.equal(complete.webhook_ledger_ready, true);
@@ -337,8 +338,21 @@ test('commerce readiness cannot pass without the guarded activation capability',
     /not installed/,
   );
 
+  const missingDriftGuard = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set([...completeCommerceCapabilities].filter(capability => capability !== 'payment_activation_drift_guard'))),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingDriftGuard.ready, false);
+  assert.equal(missingDriftGuard.activation_drift_guard_ready, false);
+  assert.match(
+    missingDriftGuard.issues.find(issue => issue.reason.includes('drift protection'))?.reason || '',
+    /not installed/,
+  );
+
   const missingPendingOrderGuard = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'payment_activation_drift_guard'])),
     products,
     environment,
     stripe: readyStripe(),
@@ -351,7 +365,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   );
 
   const missingOrderTerms = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'payment_activation_drift_guard', 'stripe_pending_order_guard'])),
     products,
     environment,
     stripe: readyStripe(),
@@ -364,7 +378,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   );
 
   const missingWebhookLedger = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'payment_activation_drift_guard', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot'])),
     products,
     environment,
     stripe: readyStripe(),
