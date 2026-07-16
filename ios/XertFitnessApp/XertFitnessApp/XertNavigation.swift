@@ -1168,7 +1168,9 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     private static var defaultWorkspaceRoutes: [XertPrimaryDestination: XertMemberRoute] {
-        Dictionary(uniqueKeysWithValues: XertPrimaryDestination.allCases.map { ($0, .primary($0)) })
+        Dictionary(uniqueKeysWithValues: XertPrimaryDestination.allCases.map { destination in
+            (destination, XertMemberRoute.primary(destination))
+        })
     }
 
     private func remember(_ route: XertMemberRoute) {
