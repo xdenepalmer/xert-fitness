@@ -10,6 +10,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   stripe_refund_reconciliation: 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
   checkout_reconciliation: 'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
   stripe_payment_fulfillment: 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql in Supabase.',
+  guarded_payment_activation: 'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql in Supabase.',
   member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   announcement_receipts: 'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
   announcement_actions: 'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',

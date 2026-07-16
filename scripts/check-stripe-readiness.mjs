@@ -8,6 +8,7 @@ import {
 
 const DEFAULT_VERCEL_BASE_URL = 'https://xert-fitness.vercel.app';
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
+const GUARDED_PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const RESPONSE_PREVIEW_LIMIT = 180;
 
 async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, ...options }) {
@@ -117,19 +118,27 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   ];
 
   let capabilityReady = false;
+  let activationGuardReady = false;
   let capabilityDetail;
+  let activationGuardDetail;
   if (capabilities.status !== 200) {
     capabilityDetail = `Capability RPC returned HTTP ${capabilities.status || 'no response'}${capabilities.body ? `: ${capabilities.body}` : ''}`;
+    activationGuardDetail = capabilityDetail;
   } else {
     try {
       const rows = JSON.parse(capabilities.body || '[]');
-      capabilityReady = Array.isArray(rows)
-        && rows.some(row => row?.capability === PAYMENT_FULFILLMENT_CAPABILITY);
+      const installed = new Set(Array.isArray(rows) ? rows.map(row => row?.capability) : []);
+      capabilityReady = installed.has(PAYMENT_FULFILLMENT_CAPABILITY);
+      activationGuardReady = installed.has(GUARDED_PAYMENT_ACTIVATION_CAPABILITY);
       capabilityDetail = capabilityReady
         ? `${PAYMENT_FULFILLMENT_CAPABILITY} installed`
         : `${PAYMENT_FULFILLMENT_CAPABILITY} is missing`;
+      activationGuardDetail = activationGuardReady
+        ? `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} installed`
+        : `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} is missing`;
     } catch {
       capabilityDetail = 'Capability RPC returned malformed JSON.';
+      activationGuardDetail = capabilityDetail;
     }
   }
   checks.push({
@@ -140,6 +149,15 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     remediation: capabilityReady
       ? null
       : 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql to the XERT Supabase project.',
+  });
+  checks.push({
+    key: 'activation-guard',
+    label: 'Server-authoritative payment activation',
+    ready: activationGuardReady,
+    detail: activationGuardDetail,
+    remediation: activationGuardReady
+      ? null
+      : 'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql to the XERT Supabase project.',
   });
 
   return { ready: checks.every(check => check.ready), checks };

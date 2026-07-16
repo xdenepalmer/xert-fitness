@@ -292,6 +292,7 @@ workflows:
               "stripe_refund_reconciliation",
               "checkout_reconciliation",
               "stripe_payment_fulfillment",
+              "guarded_payment_activation",
               "member_announcements",
               "announcement_receipts",
               "announcement_actions",

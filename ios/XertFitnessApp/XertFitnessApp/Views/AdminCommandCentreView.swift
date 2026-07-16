@@ -2681,12 +2681,11 @@ private struct AdminPlatformView: View {
                 guard let draft else { return }
                 save(draft)
             }
-            .disabled(admin.commerceHealth?.ready != true)
             Button("Keep payments paused", role: .cancel) {}
         } message: {
             Text(admin.commerceHealth?.ready == true
-                ? "Stripe launch checks are passing. Members will be able to start real purchases on the website and iOS app."
-                : "Stripe launch checks are not passing. Open Operations Health and resolve every issue before activation.")
+                ? "Stripe launch checks passed recently. XERT will run them again on the server before enabling purchases."
+                : "XERT will run every Stripe launch check on the server. Payments remain paused if any check fails.")
         }
     }
 

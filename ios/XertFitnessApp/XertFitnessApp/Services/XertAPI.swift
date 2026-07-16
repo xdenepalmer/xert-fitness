@@ -1459,6 +1459,41 @@ final class XertAPI {
         return updated
     }
 
+    func adminActivatePlatformPayments(
+        session auth: AuthSession,
+        settings: AdminPlatformSettings
+    ) async throws -> AdminPlatformSettings {
+        guard settings.payments_enabled else {
+            throw APIError(message: "Payment activation requires an enabled payment draft.")
+        }
+        let banner = settings.announcementText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.announcement_banner_enabled && banner.isEmpty {
+            throw APIError(message: "Add announcement text before enabling the banner.")
+        }
+        guard settings.target_launch_date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
+            throw APIError(message: "Enter the launch date as YYYY-MM-DD.")
+        }
+
+        return try await vercelRequest(
+            path: "/api/admin-commerce-health",
+            body: AdminPaymentActivationRequest(
+                action: "activate_payments",
+                confirmation: "ENABLE PAYMENTS",
+                settings_id: settings.id,
+                expected_updated_at: settings.updated_at,
+                settings: AdminPaymentActivationSettings(
+                    target_launch_date: settings.target_launch_date,
+                    countdown_enabled: settings.countdown_enabled,
+                    bookings_enabled: settings.bookings_enabled,
+                    payments_enabled: true,
+                    announcement_banner_text: banner.isEmpty ? nil : banner,
+                    announcement_banner_enabled: settings.announcement_banner_enabled
+                )
+            ),
+            auth: auth
+        )
+    }
+
     @discardableResult
     func adminPromoteNextWaitlisted(session auth: AuthSession, classSessionID: UUID) async throws -> UUID {
         try await rpc(
@@ -1875,6 +1910,21 @@ private struct AdminSettingsUpdate: Encodable {
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
     let updated_at: String
+}
+private struct AdminPaymentActivationSettings: Encodable {
+    let target_launch_date: String
+    let countdown_enabled: Bool
+    let bookings_enabled: Bool
+    let payments_enabled: Bool
+    let announcement_banner_text: String?
+    let announcement_banner_enabled: Bool
+}
+private struct AdminPaymentActivationRequest: Encodable {
+    let action: String
+    let confirmation: String
+    let settings_id: UUID
+    let expected_updated_at: String
+    let settings: AdminPaymentActivationSettings
 }
 private struct AdminRequestUpdate: Encodable {
     let p_request_type: String

@@ -444,6 +444,34 @@ export async function updateSoftLaunchSettings(updates, baseline) {
   return data;
 }
 
+export async function activateSessionPackPayments(settings, baseline) {
+  if (!baseline?.id || !baseline?.updated_at) {
+    throw new Error('Save the platform settings once before enabling payments.');
+  }
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-commerce-health', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'activate_payments',
+      confirmation: 'ENABLE PAYMENTS',
+      settings_id: baseline.id,
+      expected_updated_at: baseline.updated_at,
+      settings,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Payment activation failed. Payments remain paused.');
+  if (body?.payments_enabled !== true || body?.id !== baseline.id) {
+    throw new Error('Payment activation could not be confirmed. Payments remain paused.');
+  }
+  return body;
+}
+
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 
 export async function getDashboardStats() {

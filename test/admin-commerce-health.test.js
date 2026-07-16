@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import adminCommerceHealthHandler, {
+  activateSessionPackPayments,
   inspectCommerceEnvironment,
+  inspectCommerceHealth,
   inspectCommerceProducts,
   inspectStripeAccount,
   inspectStripeWebhookEndpoints,
+  normalizePaymentActivationRequest,
 } from '../api/admin-commerce-health.js';
 
 const validProduct = {
@@ -16,6 +19,171 @@ const validProduct = {
   validity_days: 28,
   stripe_price_id: 'price_STARTER4',
 };
+
+const validActivationBody = {
+  action: 'activate_payments',
+  confirmation: 'ENABLE PAYMENTS',
+  settings_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2',
+  expected_updated_at: '2026-07-16T03:00:00.000Z',
+  settings: {
+    target_launch_date: '2026-08-01',
+    countdown_enabled: true,
+    bookings_enabled: true,
+    payments_enabled: true,
+    announcement_banner_text: '  Packs are live  ',
+    announcement_banner_enabled: true,
+  },
+};
+
+function paymentActivationAdmin(result) {
+  const calls = [];
+  return {
+    calls,
+    admin: {
+      async rpc(name, body) {
+        calls.push(['rpc', name, body]);
+        return result;
+      },
+    },
+  };
+}
+
+function capabilityAdmin(capabilities) {
+  return {
+    from(table) {
+      assert.equal(table, 'xert_schema_capabilities');
+      let requestedCapability;
+      return {
+        select() { return this; },
+        eq(field, value) {
+          assert.equal(field, 'capability');
+          requestedCapability = value;
+          return this;
+        },
+        async maybeSingle() {
+          return capabilities.has(requestedCapability)
+            ? { data: { capability: requestedCapability }, error: null }
+            : { data: null, error: null };
+        },
+      };
+    },
+  };
+}
+
+function readyStripe() {
+  return {
+    prices: {
+      async retrieve(id) {
+        return {
+          id, active: true, type: 'one_time', recurring: null,
+          unit_amount: validProduct.price_cents, currency: 'aud', livemode: false,
+        };
+      },
+    },
+    webhookEndpoints: {
+      async list() {
+        return { data: [{
+          url: 'https://xert-fitness.vercel.app/api/stripe-webhook',
+          status: 'enabled',
+          enabled_events: [
+            'checkout.session.completed', 'checkout.session.async_payment_succeeded',
+            'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
+          ],
+        }] };
+      },
+    },
+    accounts: {
+      async retrieve() {
+        return {
+          details_submitted: true, charges_enabled: true, payouts_enabled: true,
+          country: 'AU', default_currency: 'aud',
+        };
+      },
+    },
+  };
+}
+
+test('payment activation accepts only a confirmed bounded platform snapshot', () => {
+  assert.deepEqual(normalizePaymentActivationRequest(validActivationBody), {
+    settingsId: validActivationBody.settings_id,
+    expectedUpdatedAt: validActivationBody.expected_updated_at,
+    updates: {
+      target_launch_date: '2026-08-01',
+      countdown_enabled: true,
+      bookings_enabled: true,
+      payments_enabled: true,
+      announcement_banner_text: 'Packs are live',
+      announcement_banner_enabled: true,
+    },
+  });
+
+  assert.throws(
+    () => normalizePaymentActivationRequest({ ...validActivationBody, confirmation: 'yes' }),
+    /PAYMENT_ACTIVATION_NOT_CONFIRMED/,
+  );
+  for (const settings of [
+    { ...validActivationBody.settings, payments_enabled: false },
+    { ...validActivationBody.settings, bookings_enabled: 'true' },
+    { ...validActivationBody.settings, target_launch_date: '2026-02-30' },
+    { ...validActivationBody.settings, announcement_banner_text: 'x'.repeat(1_001) },
+  ]) {
+    assert.throws(
+      () => normalizePaymentActivationRequest({ ...validActivationBody, settings }),
+      /INVALID_PAYMENT_ACTIVATION/,
+    );
+  }
+});
+
+test('payment activation compare-and-sets the paused settings version', async () => {
+  const activation = normalizePaymentActivationRequest(validActivationBody);
+  const actorId = '9bb45f52-9022-4b5b-933f-d8998dbe659f';
+  const updated = { id: activation.settingsId, payments_enabled: true };
+  const { admin, calls } = paymentActivationAdmin({ data: [updated], error: null });
+  assert.deepEqual(await activateSessionPackPayments(admin, actorId, activation), updated);
+  assert.deepEqual(calls, [
+    ['rpc', 'admin_activate_session_pack_payments', {
+      p_actor_id: actorId,
+      p_settings_id: activation.settingsId,
+      p_expected_updated_at: activation.expectedUpdatedAt,
+      p_target_launch_date: activation.updates.target_launch_date,
+      p_countdown_enabled: activation.updates.countdown_enabled,
+      p_bookings_enabled: activation.updates.bookings_enabled,
+      p_announcement_banner_text: activation.updates.announcement_banner_text,
+      p_announcement_banner_enabled: activation.updates.announcement_banner_enabled,
+    }],
+  ]);
+
+  const stale = paymentActivationAdmin({ data: null, error: null });
+  await assert.rejects(activateSessionPackPayments(stale.admin, actorId, activation), /PAYMENT_ACTIVATION_STALE/);
+});
+
+test('commerce readiness cannot pass without the guarded activation capability', async () => {
+  const environment = {
+    STRIPE_SECRET_KEY: 'sk_test_secret_value',
+    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
+  };
+  const products = [validProduct];
+  const complete = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation'])),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(complete.ready, true);
+  assert.equal(complete.fulfillment_ready, true);
+  assert.equal(complete.activation_guard_ready, true);
+
+  const missingGuard = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment'])),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingGuard.ready, false);
+  assert.equal(missingGuard.activation_guard_ready, false);
+  assert.match(missingGuard.issues.find(issue => issue.reason.includes('Guarded'))?.reason || '', /not installed/);
+});
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {
   const result = await inspectCommerceProducts([
@@ -193,6 +361,11 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(httpSource, /'Cache-Control', 'private, no-store, max-age=0'/);
   assert.match(source, /profile\?\.role !== 'admin'/);
   assert.match(source, /environmentIssues\(environment\)/);
+  assert.match(source, /request\.method === 'POST'/);
+  assert.match(source, /if \(!health\.ready\)[\s\S]*Payments remain paused/);
+  assert.match(source, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
+  assert.match(source, /createClient\(SUPABASE_URL, SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /global: \{ headers: \{ Authorization: `Bearer \$\{token\}` \} \}/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);
 });
 

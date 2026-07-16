@@ -599,7 +599,13 @@ final class AdminStore: ObservableObject {
         isSavingSettings = true
         defer { isSavingSettings = false }
         do {
-            settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
+            let activatingPayments = draft.payments_enabled && settings?.payments_enabled != true
+            if activatingPayments {
+                settings = try await api.adminActivatePlatformPayments(session: session, settings: draft)
+                commerceHealth = try? await api.adminCommerceHealth(session: session)
+            } else {
+                settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
+            }
             lastUpdatedAt = Date()
             return true
         } catch {

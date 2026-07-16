@@ -16,7 +16,10 @@ function response(status, body = '') {
   return new Response(responseBody, { status });
 }
 
-function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilities = [{ capability: 'stripe_payment_fulfillment' }] } = {}) {
+function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilities = [
+  { capability: 'stripe_payment_fulfillment' },
+  { capability: 'guarded_payment_activation' },
+] } = {}) {
   return async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path === '/api/checkout' && options.method === 'HEAD') return response(commerceStatus);
@@ -29,10 +32,10 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
   };
 }
 
-test('Stripe readiness requires every safe production boundary and atomic fulfillment', async () => {
+test('Stripe readiness requires every safe production boundary and database activation guard', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 6);
+  assert.equal(report.checks.length, 7);
   assert.ok(report.checks.every(check => check.ready));
 });
 
@@ -58,6 +61,7 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.match(report.checks.find(check => check.key === 'fulfillment').detail, /is missing/);
   assert.match(report.checks.find(check => check.key === 'webhook').remediation, /STRIPE_WEBHOOK_SECRET/);
   assert.match(report.checks.find(check => check.key === 'fulfillment').remediation, /20260715010000_stripe_payment_fulfillment\.sql/);
+  assert.match(report.checks.find(check => check.key === 'activation-guard').remediation, /20260716010000_guarded_payment_activation\.sql/);
   assert.doesNotMatch(JSON.stringify(report), /sb_publishable_/);
 });
 

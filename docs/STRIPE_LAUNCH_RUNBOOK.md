@@ -11,11 +11,14 @@ the iOS project, or Codemagic build logs.
    and prevents delayed webhook retries from reversing refunds.
    Until this capability is installed, `/api/checkout` returns HTTP `503`
    before creating a Stripe session, so no customer can be charged prematurely.
-2. Complete the Australian business profile, bank account and identity checks.
-3. Confirm that **Charges enabled** and **Payouts enabled** are both true.
-4. Create one one-time Stripe Price in AUD for every active XERT session pack.
-5. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
-6. Do not change the amount or currency of a linked pack. Create a new Stripe
+2. Apply `supabase/migrations/20260716010000_guarded_payment_activation.sql`.
+   This forces every paused-to-enabled payment transition through the protected
+   server preflight while preserving immediate owner shutdown from either admin app.
+3. Complete the Australian business profile, bank account and identity checks.
+4. Confirm that **Charges enabled** and **Payouts enabled** are both true.
+5. Create one one-time Stripe Price in AUD for every active XERT session pack.
+6. Copy each `price_...` identifier into **iOS Admin > Session Packs** and save.
+7. Do not change the amount or currency of a linked pack. Create a new Stripe
    Price and update the pack instead.
 
 ## 2. Configure Vercel
@@ -95,10 +98,12 @@ The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
 Vercel payment settings are present; HTTP `503` reveals no values and prevents
 a false-green release audit.
 
-The command must report six `PASS` results. A webhook `503` means the Vercel
+The command must report seven `PASS` results. A webhook `503` means the Vercel
 Stripe service is unavailable, normally because its private secrets are absent;
 a missing fulfillment contract means the migration in step 1 has not been
-installed. Keep **Session pack payments** disabled until all six checks pass.
+installed. A missing activation guard means the guarded activation migration in
+step 2 has not been installed. Keep **Session pack payments** disabled until all
+seven checks pass.
 
 Open **iOS Admin > Operations Health** and require all of the following:
 

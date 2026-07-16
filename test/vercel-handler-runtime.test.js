@@ -49,7 +49,7 @@ test('Hobby deployment stays within the twelve-function ceiling', () => {
 for (const [name, handler, method] of [
   ['checkout', checkoutHandler, 'GET'],
   ['delete account', deleteAccountHandler, 'GET'],
-  ['commerce health', commerceHealthHandler, 'POST'],
+  ['commerce health', commerceHealthHandler, 'PUT'],
   ['Stripe webhook', stripeWebhookHandler, 'GET'],
   ['admin refund', adminRefundHandler, 'GET'],
   ['admin order reconciliation', adminReconcileHandler, 'GET'],

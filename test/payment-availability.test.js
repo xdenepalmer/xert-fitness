@@ -41,21 +41,36 @@ test('web and native purchase surfaces fail closed before checkout', async () =>
   assert.match(nativeBooking, /Pack purchases are paused/);
 });
 
-test('owner activation requires Stripe health and an explicit confirmation', async () => {
-  const [commerceAPI, webData, webAdmin, nativeAdmin] = await Promise.all([
+test('owner activation requires a fresh server preflight and an explicit confirmation', async () => {
+  const [commerceAPI, webData, webAdmin, nativeAPI, nativeStore, nativeAdmin] = await Promise.all([
     readFile(new URL('../api/admin-commerce-health.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/admin/SoftLaunchSettings.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift', import.meta.url), 'utf8'),
     readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(commerceAPI, /await paymentFulfillmentIsReady\(admin\)/);
+  assert.match(commerceAPI, /paymentFulfillmentIsReady\(admin\)/);
   assert.match(commerceAPI, /&& fulfillmentReady/);
   assert.match(commerceAPI, /Atomic Stripe payment fulfillment is not installed/);
+  assert.match(commerceAPI, /Guarded payment activation is not installed/);
+  assert.match(commerceAPI, /request\.method === 'POST'/);
+  assert.match(commerceAPI, /if \(!health\.ready\)/);
+  assert.match(commerceAPI, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
   assert.match(webData, /export async function getCommerceConfigurationHealth/);
+  assert.match(webData, /export async function activateSessionPackPayments/);
+  assert.match(webData, /action: 'activate_payments'/);
+  assert.match(webData, /confirmation: 'ENABLE PAYMENTS'/);
   assert.match(webAdmin, /await getCommerceConfigurationHealth\(\)/);
   assert.match(webAdmin, /if \(!health\.ready\)/);
+  assert.match(webAdmin, /activateSessionPackPayments\(normalized, savedSettings\)/);
   assert.match(webAdmin, /title="Open session pack checkout\?"/);
+  assert.match(nativeAPI, /func adminActivatePlatformPayments/);
+  assert.match(nativeAPI, /confirmation: "ENABLE PAYMENTS"/);
+  assert.match(nativeStore, /let activatingPayments = draft\.payments_enabled/);
+  assert.match(nativeStore, /api\.adminActivatePlatformPayments/);
   assert.match(nativeAdmin, /confirmationDialog\("Open session pack checkout\?"/);
-  assert.match(nativeAdmin, /disabled\(admin\.commerceHealth\?\.ready != true\)/);
+  assert.match(nativeAdmin, /run every Stripe launch check on the server/);
+  assert.doesNotMatch(nativeAdmin, /disabled\(admin\.commerceHealth\?\.ready != true\)/);
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
@@ -51,10 +51,12 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     setSettings(p => ({ ...p, [k]: v }));
   };
 
-  const persistSettings = async normalized => {
+  const persistSettings = async (normalized, activatePayments = false) => {
     setSaving(true);
     try {
-      const updated = await updateSoftLaunchSettings(normalized, savedSettings);
+      const updated = activatePayments
+        ? await activateSessionPackPayments(normalized, savedSettings)
+        : await updateSoftLaunchSettings(normalized, savedSettings);
       setSettings(updated);
       setSavedSettings(updated);
       setSaved(true);
@@ -161,7 +163,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         onConfirm={() => {
           const pending = pendingPaymentActivation;
           setPendingPaymentActivation(null);
-          if (pending) void persistSettings(pending);
+          if (pending) void persistSettings(pending, true);
         }}
       />
     </div>

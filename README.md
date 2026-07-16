@@ -82,6 +82,8 @@ The Supabase schema is defined in:
   staff class cancellation with automatic member credit returns
 - `src/supabase/payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
   that guarantees a paid order grants at most one credit batch
+- `src/supabase/guarded_payment_activation_upgrade.sql` — requires a fresh
+  protected Stripe preflight before checkout can move from paused to enabled
 - `src/supabase/product_validation_upgrade.sql` — validates product price,
   currency, credit count, and expiry before checkout can use a pack
 - `src/supabase/event_goals_upgrade.sql` — lets members choose a calendar event
@@ -158,7 +160,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
-`targeted_member_notices_upgrade.sql`. This sequence produces the
+`targeted_member_notices_upgrade.sql`, then
+`guarded_payment_activation_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -186,7 +189,8 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
-`targeted_member_notices_upgrade.sql`. The scripts are idempotent;
+`targeted_member_notices_upgrade.sql`, then
+`guarded_payment_activation_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
