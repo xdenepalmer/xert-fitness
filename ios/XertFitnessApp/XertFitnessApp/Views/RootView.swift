@@ -230,8 +230,7 @@ struct RootView: View {
             selection: selectedDestinationBinding,
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
-            noticeCount: store.announcements.count,
-            bookingCount: activeBookingCount,
+            statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
@@ -248,8 +247,7 @@ struct RootView: View {
             selection: selectedDestinationBinding,
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
-            noticeCount: store.announcements.count,
-            bookingCount: activeBookingCount,
+            statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             onOpenAdmin: { showingAdminCommandCentre = true },
@@ -474,8 +472,7 @@ private struct XertNavigationRail: View {
     @Binding var selection: XertPrimaryDestination
     let currentRoute: XertMemberRoute
     let isAdmin: Bool
-    let noticeCount: Int
-    let bookingCount: Int
+    let statusSnapshot: XertNavigationStatusSnapshot
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
@@ -623,7 +620,7 @@ private struct XertNavigationRail: View {
 
     private func navigationButton(_ item: XertPrimaryDestination) -> some View {
         let selected = selection == item
-        let badge = item == .home ? noticeCount : item == .booking ? bookingCount : 0
+        let status = statusSnapshot.status(for: item)
         return Button {
             guard selection != item else {
                 onReselect(item)
@@ -639,14 +636,8 @@ private struct XertNavigationRail: View {
                         .foregroundStyle(selected ? Color.xertSteel : Color.xertPale.opacity(0.66))
                         .frame(width: 42, height: 30)
 
-                    if badge > 0 {
-                        Text(badge > 99 ? "99+" : "\(badge)")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(Color.xertNavy)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .padding(.horizontal, badge > 9 ? 2 : 0)
-                            .background(Color.xertPale)
-                            .clipShape(Capsule())
+                    if let status {
+                        XertNavigationStatusBadge(status: status)
                             .offset(x: 18, y: -11)
                     }
                 }
@@ -676,7 +667,7 @@ private struct XertNavigationRail: View {
         .hoverEffect(.highlight)
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
-        .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+        .accessibilityHint(accessibilityHint(for: item, status: status, selected: selected))
         .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
         .accessibilityActions {
             if selected {
@@ -702,15 +693,11 @@ private struct XertNavigationRail: View {
 
     private func accessibilityHint(
         for item: XertPrimaryDestination,
-        badge: Int,
+        status: XertNavigationStatus?,
         selected: Bool
     ) -> String {
         var details: [String] = []
-        if badge > 0 {
-            details.append(item == .home
-                ? "\(badge) active member notices"
-                : "\(badge) upcoming bookings")
-        }
+        if let status { details.append(status.accessibilityLabel) }
         details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
         return details.joined(separator: ". ")
     }
@@ -732,8 +719,7 @@ private struct XertNavigationDock: View {
     @Binding var selection: XertPrimaryDestination
     let currentRoute: XertMemberRoute
     let isAdmin: Bool
-    let noticeCount: Int
-    let bookingCount: Int
+    let statusSnapshot: XertNavigationStatusSnapshot
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let onOpenAdmin: () -> Void
@@ -908,7 +894,7 @@ private struct XertNavigationDock: View {
 
     private func navigationButton(_ item: XertPrimaryDestination) -> some View {
         let selected = selection == item
-        let badge = item == .home ? noticeCount : item == .booking ? bookingCount : 0
+        let status = statusSnapshot.status(for: item)
         return Button {
             guard selection != item else {
                 onReselect(item)
@@ -930,14 +916,8 @@ private struct XertNavigationDock: View {
                         .foregroundStyle(item == .booking ? Color.xertNavy : selected ? Color.xertSteel : Color.xertPale.opacity(0.62))
                         .frame(width: 38, height: 34)
 
-                    if badge > 0 {
-                        Text(badge > 99 ? "99+" : "\(badge)")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(Color.xertNavy)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .padding(.horizontal, badge > 9 ? 2 : 0)
-                            .background(Color.xertPale)
-                            .clipShape(Capsule())
+                    if let status {
+                        XertNavigationStatusBadge(status: status)
                             .offset(x: 16, y: -12)
                     }
                 }
@@ -963,7 +943,7 @@ private struct XertNavigationDock: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
         .accessibilityValue(selected ? "Selected" : "")
-        .accessibilityHint(accessibilityHint(for: item, badge: badge, selected: selected))
+        .accessibilityHint(accessibilityHint(for: item, status: status, selected: selected))
         .accessibilityIdentifier("xert-navigation-\(item.title.lowercased())")
         .accessibilityActions {
             if selected {
@@ -992,17 +972,28 @@ private struct XertNavigationDock: View {
 
     private func accessibilityHint(
         for item: XertPrimaryDestination,
-        badge: Int,
+        status: XertNavigationStatus?,
         selected: Bool
     ) -> String {
         var details: [String] = []
-        if badge > 0 {
-            details.append(item == .home
-                ? "\(badge) active member notices"
-                : "\(badge) upcoming bookings")
-        }
+        if let status { details.append(status.accessibilityLabel) }
         details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
         return details.joined(separator: ". ")
+    }
+}
+
+private struct XertNavigationStatusBadge: View {
+    let status: XertNavigationStatus
+
+    var body: some View {
+        Text(status.badgeText)
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(Color.xertNavy)
+            .frame(minWidth: 16, minHeight: 16)
+            .padding(.horizontal, status.badgeText.count > 1 ? 2 : 0)
+            .background(status.kind == .attention ? Color.orange : Color.xertPale)
+            .clipShape(Capsule())
+            .accessibilityHidden(true)
     }
 }
 

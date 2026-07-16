@@ -381,6 +381,38 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testNavigationStatusSignalsRouteToTheirOwningWorkspaces() {
+        let context = XertNavigationContext(
+            isSignedIn: true,
+            noticeCount: 120,
+            bookingCount: 2,
+            creditCount: 7,
+            eventGoalCount: 3,
+            hasPendingCheckout: true
+        )
+        let snapshot = XertNavigationStatusSnapshot(context: context)
+
+        XCTAssertEqual(snapshot.status(for: .home)?.badgeText, "99+")
+        XCTAssertEqual(snapshot.status(for: .home)?.accessibilityLabel, "120 active member notices")
+        XCTAssertEqual(snapshot.status(for: .booking)?.kind, .attention)
+        XCTAssertEqual(snapshot.status(for: .booking)?.accessibilityLabel, "Purchase confirmation needs attention")
+        XCTAssertEqual(snapshot.status(for: .events)?.badgeText, "3")
+        XCTAssertEqual(snapshot.status(for: .account)?.accessibilityLabel, "2 upcoming bookings")
+        XCTAssertNil(snapshot.status(for: .explore))
+
+        let signedOut = XertNavigationStatusSnapshot(context: XertNavigationContext(
+            isSignedIn: false,
+            noticeCount: 1,
+            bookingCount: 1,
+            creditCount: 1,
+            eventGoalCount: 1,
+            hasPendingCheckout: true
+        ))
+        for destination in XertPrimaryDestination.allCases {
+            XCTAssertNil(signedOut.status(for: destination))
+        }
+    }
+
     func testNavigationCommandPaletteOffersBoundedUniqueRecentTasks() throws {
         let firstNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000041"))
         let latestNoticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000042"))

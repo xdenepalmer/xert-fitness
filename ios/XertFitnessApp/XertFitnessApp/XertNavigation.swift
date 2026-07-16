@@ -361,6 +361,89 @@ struct XertNavigationContext: Equatable {
     )
 }
 
+enum XertNavigationStatusKind: Equatable {
+    case activity
+    case attention
+}
+
+struct XertNavigationStatus: Identifiable, Equatable {
+    let destination: XertPrimaryDestination
+    let kind: XertNavigationStatusKind
+    let count: Int?
+    let accessibilityLabel: String
+
+    var id: XertPrimaryDestination { destination }
+    var badgeText: String {
+        guard let count else { return "!" }
+        return count > 99 ? "99+" : String(count)
+    }
+}
+
+struct XertNavigationStatusSnapshot: Equatable {
+    private let statuses: [XertNavigationStatus]
+
+    init(context: XertNavigationContext) {
+        guard context.isSignedIn else {
+            statuses = []
+            return
+        }
+
+        var current: [XertNavigationStatus] = []
+        if context.noticeCount > 0 {
+            current.append(Self.activity(
+                destination: .home,
+                count: context.noticeCount,
+                singular: "active member notice",
+                plural: "active member notices"
+            ))
+        }
+        if context.hasPendingCheckout {
+            current.append(XertNavigationStatus(
+                destination: .booking,
+                kind: .attention,
+                count: nil,
+                accessibilityLabel: "Purchase confirmation needs attention"
+            ))
+        }
+        if context.eventGoalCount > 0 {
+            current.append(Self.activity(
+                destination: .events,
+                count: context.eventGoalCount,
+                singular: "selected event goal",
+                plural: "selected event goals"
+            ))
+        }
+        if context.bookingCount > 0 {
+            current.append(Self.activity(
+                destination: .account,
+                count: context.bookingCount,
+                singular: "upcoming booking",
+                plural: "upcoming bookings"
+            ))
+        }
+        statuses = current
+    }
+
+    func status(for destination: XertPrimaryDestination) -> XertNavigationStatus? {
+        statuses.first { $0.destination == destination }
+    }
+
+    private static func activity(
+        destination: XertPrimaryDestination,
+        count: Int,
+        singular: String,
+        plural: String
+    ) -> XertNavigationStatus {
+        let boundedCount = max(1, count)
+        return XertNavigationStatus(
+            destination: destination,
+            kind: .activity,
+            count: boundedCount,
+            accessibilityLabel: "\(boundedCount) \(boundedCount == 1 ? singular : plural)"
+        )
+    }
+}
+
 struct XertNavigationCommand: Identifiable, Hashable {
     let id: String
     let title: String

@@ -184,7 +184,11 @@ test('owner command access is role-aware, full-screen, and never buried in tab o
 });
 
 test('navigation carries operational state and native interaction feedback', async () => {
-  const root = await readFile(rootURL, 'utf8');
+  const [root, navigation, modelsTests] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
   assert.match(root, /noticeCount: store\.announcements\.count/);
   assert.match(root, /bookingCount: activeBookingCount/);
   assert.match(root, /creditCount: store\.creditTotal/);
@@ -207,8 +211,17 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.ok(root.includes('Label("Return to \\(previousRoute.navigationTitle)", systemImage: "arrow.uturn.backward")'));
   assert.match(root, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
   assert.match(root, /withAnimation\(reduceMotion \? nil : \.easeOut/);
-  assert.match(root, /active member notices/);
+  assert.match(navigation, /active member notices/);
   assert.match(root, /Refreshes this workspace/);
+  assert.match(navigation, /struct XertNavigationStatusSnapshot: Equatable/);
+  assert.match(navigation, /destination: \.booking,[\s\S]*kind: \.attention,[\s\S]*Purchase confirmation needs attention/);
+  assert.match(navigation, /destination: \.events,[\s\S]*selected event goals/);
+  assert.match(navigation, /destination: \.account,[\s\S]*upcoming bookings/);
+  assert.match(root, /statusSnapshot: XertNavigationStatusSnapshot\(context: navigationContext\)/);
+  assert.ok((root.match(/let statusSnapshot: XertNavigationStatusSnapshot/g) || []).length === 2);
+  assert.match(root, /XertNavigationStatusBadge\(status: status\)/);
+  assert.match(root, /status\.kind == \.attention \? Color\.orange : Color\.xertPale/);
+  assert.match(modelsTests, /testNavigationStatusSignalsRouteToTheirOwningWorkspaces/);
   assert.match(root, /navigation\.open\(\.purchaseConfirmation, source: \.checkout\)/);
   assert.match(root, /navigation\.open\(route, source: \.deepLink\)/);
   assert.match(root, /source: \.pushNotification/);
