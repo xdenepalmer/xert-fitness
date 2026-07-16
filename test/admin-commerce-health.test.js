@@ -12,6 +12,7 @@ import adminCommerceHealthHandler, {
 } from '../api/admin-commerce-health.js';
 
 const validProduct = {
+  id: '00000000-0000-4000-8000-000000000004',
   slug: 'starter-4',
   price_cents: 4800,
   currency: 'aud',
@@ -77,6 +78,12 @@ function readyStripe() {
         return {
           id, active: true, type: 'one_time', recurring: null,
           unit_amount: validProduct.price_cents, currency: 'aud', livemode: false,
+          metadata: {
+            xert_product_id: validProduct.id,
+            xert_catalog_slug: validProduct.slug,
+            xert_sessions: String(validProduct.sessions_count),
+            xert_validity_days: String(validProduct.validity_days),
+          },
         };
       },
     },
@@ -209,6 +216,12 @@ test('commerce health reconciles Stripe-linked and dynamic active products', asy
     type: 'one_time',
     unit_amount: 4800,
     currency: 'aud',
+    metadata: {
+      xert_product_id: validProduct.id,
+      xert_catalog_slug: validProduct.slug,
+      xert_sessions: String(validProduct.sessions_count),
+      xert_validity_days: String(validProduct.validity_days),
+    },
   }));
 
   assert.deepEqual(result, {
@@ -284,7 +297,7 @@ test('commerce health names invalid database values and Stripe mismatches', asyn
   assert.equal(result.ready, false);
   assert.deepEqual(result.issues, [
     { slug: 'bad-db', reason: 'Supabase product values are invalid.' },
-    { slug: 'bad-stripe', reason: 'Stripe amount, currency, type, or active state does not match.' },
+    { slug: 'bad-stripe', reason: 'Stripe Price identity, terms, amount, currency, type, or active state does not match.' },
     { slug: 'missing-stripe', reason: 'Stripe Price ID could not be loaded.' },
   ]);
 });
@@ -304,7 +317,7 @@ test('live commerce requires stable live-mode Stripe prices', async () => {
 
   assert.equal(result.ready, false);
   assert.deepEqual(result.issues, [
-    { slug: 'linked', reason: 'Stripe amount, currency, type, or active state does not match.' },
+    { slug: 'linked', reason: 'Stripe Price identity, terms, amount, currency, type, or active state does not match.' },
     { slug: 'dynamic', reason: 'Live checkout requires a stable Stripe Price ID.' },
   ]);
 });

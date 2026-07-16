@@ -27,6 +27,8 @@ const validProduct = {
 
 const productWithStripePrice = {
   ...validProduct,
+  id: '00000000-0000-4000-8000-000000000004',
+  slug: 'starter-4',
   stripe_price_id: 'price_XERT4800',
 };
 
@@ -36,6 +38,12 @@ const matchingStripePrice = {
   type: 'one_time',
   unit_amount: 4800,
   currency: 'aud',
+  metadata: {
+    xert_product_id: productWithStripePrice.id,
+    xert_catalog_slug: productWithStripePrice.slug,
+    xert_sessions: String(productWithStripePrice.sessions_count),
+    xert_validity_days: String(productWithStripePrice.validity_days),
+  },
 };
 
 test('checkout fails closed until atomic payment fulfillment is installed', async () => {
@@ -203,6 +211,10 @@ test('accepts only an active one-time Stripe price matching the configured pack'
     { ...matchingStripePrice, type: 'recurring' },
     { ...matchingStripePrice, unit_amount: 1200 },
     { ...matchingStripePrice, currency: 'usd' },
+    { ...matchingStripePrice, metadata: { ...matchingStripePrice.metadata, xert_product_id: 'another-product' } },
+    { ...matchingStripePrice, metadata: { ...matchingStripePrice.metadata, xert_catalog_slug: 'another-pack' } },
+    { ...matchingStripePrice, metadata: { ...matchingStripePrice.metadata, xert_sessions: '99' } },
+    { ...matchingStripePrice, metadata: { ...matchingStripePrice.metadata, xert_validity_days: '365' } },
     { id: matchingStripePrice.id, deleted: true },
   ]) {
     assert.throws(

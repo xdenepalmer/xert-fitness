@@ -58,9 +58,12 @@ IDs during live cutover, review the dry run and then run
 `npm run stripe:catalog:live:replace`. The script never prints secret values.
 It validates the complete catalog and every existing Stripe link before creating
 anything. Database linking compares the loaded pack version, amount, currency,
-session count and active state; if a pack changes mid-run, that link is skipped
+session count, validity and active state; if a pack changes mid-run, that link is skipped
 with an error. Stripe creation is idempotent, so review the changed pack and
 rerun the same command rather than manually attaching the partially created Price.
+Every created Price is bound to the immutable XERT product ID, slug, credit count
+and validity in Stripe metadata. Checkout and release health reject a same-value
+Price from another app or an older version of the pack.
 
 ## 3. Register The Webhook
 

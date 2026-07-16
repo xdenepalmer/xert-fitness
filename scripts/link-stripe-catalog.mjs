@@ -46,6 +46,10 @@ export function matchingStripePrice(prices, product, mode) {
     && price.unit_amount === product.price_cents
     && price.currency === product.currency.toLowerCase()
     && price.livemode === (mode === 'live')
+    && price.metadata?.xert_product_id === product.id
+    && price.metadata?.xert_catalog_slug === product.slug
+    && price.metadata?.xert_sessions === String(product.sessions_count)
+    && price.metadata?.xert_validity_days === String(product.validity_days)
   )) || null;
 }
 
@@ -56,6 +60,14 @@ export function assertStripePriceMatches(price, product, mode) {
   if (price.type !== 'one_time' || price.recurring) throw new Error(`${product.slug}: Stripe Price must be one-time.`);
   if (price.unit_amount !== product.price_cents || price.currency !== product.currency.toLowerCase()) {
     throw new Error(`${product.slug}: Stripe Price amount or currency does not match the catalog.`);
+  }
+  if (
+    price.metadata?.xert_product_id !== product.id
+    || price.metadata?.xert_catalog_slug !== product.slug
+    || price.metadata?.xert_sessions !== String(product.sessions_count)
+    || price.metadata?.xert_validity_days !== String(product.validity_days)
+  ) {
+    throw new Error(`${product.slug}: Stripe Price is not bound to the current XERT pack terms.`);
   }
 }
 
@@ -76,6 +88,9 @@ export function assertCatalogProduct(product) {
   if (!Number.isSafeInteger(product.sessions_count) || product.sessions_count <= 0) {
     throw new Error(`${product.slug}: sessions count must be a positive integer.`);
   }
+  if (!Number.isSafeInteger(product.validity_days) || product.validity_days <= 0) {
+    throw new Error(`${product.slug}: validity days must be a positive integer.`);
+  }
   if (product.active !== true) throw new Error(`${product.slug}: only active products may be linked.`);
   if (!Number.isFinite(Date.parse(product.updated_at))) {
     throw new Error(`${product.slug}: catalog version is missing or malformed.`);
@@ -89,17 +104,27 @@ function stripeProductQuery(slug) {
   return `metadata['xert_catalog_slug']:'${slug}'`;
 }
 
-async function findStripeProduct(stripe, slug, mode) {
-  const result = await stripe.products.search({ query: stripeProductQuery(slug), limit: 10 });
-  return result.data.find(product => product.active && product.livemode === (mode === 'live')) || null;
+async function findStripeProduct(stripe, product, mode) {
+  const result = await stripe.products.search({ query: stripeProductQuery(product.slug), limit: 10 });
+  return result.data.find(candidate => (
+    candidate.active
+    && candidate.livemode === (mode === 'live')
+    && candidate.metadata?.xert_product_id === product.id
+    && candidate.metadata?.xert_catalog_slug === product.slug
+  )) || null;
 }
 
 async function createStripeProduct(stripe, product, mode) {
   return stripe.products.create({
     name: product.name,
     description: product.description || undefined,
-    metadata: { xert_catalog_slug: product.slug, xert_sessions: String(product.sessions_count) },
-  }, { idempotencyKey: `xert-catalog-product-${mode}-${product.slug}` });
+    metadata: {
+      xert_product_id: product.id,
+      xert_catalog_slug: product.slug,
+      xert_sessions: String(product.sessions_count),
+      xert_validity_days: String(product.validity_days),
+    },
+  }, { idempotencyKey: `xert-catalog-product-v2-${mode}-${product.id}` });
 }
 
 async function createStripePrice(stripe, stripeProductID, product, mode) {
@@ -107,8 +132,15 @@ async function createStripePrice(stripe, stripeProductID, product, mode) {
     product: stripeProductID,
     unit_amount: product.price_cents,
     currency: product.currency.toLowerCase(),
-    metadata: { xert_catalog_slug: product.slug },
-  }, { idempotencyKey: `xert-catalog-price-${mode}-${product.slug}-${product.currency}-${product.price_cents}` });
+    metadata: {
+      xert_product_id: product.id,
+      xert_catalog_slug: product.slug,
+      xert_sessions: String(product.sessions_count),
+      xert_validity_days: String(product.validity_days),
+    },
+  }, {
+    idempotencyKey: `xert-catalog-price-v2-${mode}-${product.id}-${product.currency}-${product.price_cents}-${product.sessions_count}-${product.validity_days}`,
+  });
 }
 
 export async function linkDatabasePrice(supabase, product, stripePriceID) {
@@ -121,6 +153,7 @@ export async function linkDatabasePrice(supabase, product, stripePriceID) {
     .eq('price_cents', product.price_cents)
     .eq('currency', product.currency)
     .eq('sessions_count', product.sessions_count)
+    .eq('validity_days', product.validity_days)
     .eq('active', true);
   const { data, error } = await query.select('id,slug,stripe_price_id').maybeSingle();
   if (error) throw new Error(`${product.slug}: database link failed: ${error.message}`);
@@ -133,7 +166,7 @@ export async function linkDatabasePrice(supabase, product, stripePriceID) {
 export async function linkStripeCatalog({ stripe, supabase, mode, apply, replaceExisting, log = console.log }) {
   const { data, error } = await supabase
     .from('products')
-    .select('id,slug,name,description,price_cents,currency,sessions_count,stripe_price_id,active,updated_at')
+    .select('id,slug,name,description,price_cents,currency,sessions_count,validity_days,stripe_price_id,active,updated_at')
     .eq('active', true)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(`Could not load active products: ${error.message}`);
@@ -160,7 +193,7 @@ export async function linkStripeCatalog({ stripe, supabase, mode, apply, replace
       continue;
     }
 
-    let stripeProduct = await findStripeProduct(stripe, product.slug, mode);
+    let stripeProduct = await findStripeProduct(stripe, product, mode);
     if (!stripeProduct && !apply) {
       log(`PLAN ${product.slug}: create Stripe Product and ${product.currency.toUpperCase()} ${(product.price_cents / 100).toFixed(2)} Price, then link it.`);
       continue;

@@ -235,10 +235,11 @@ export function assertCheckoutProduct(product) {
 
 /**
  * A stored Stripe Price ID is an optional operational shortcut, not a second
- * source of truth. Refuse checkout when it would charge a different amount or
- * currency than the pack the member selected in XERT.
+ * source of truth. Refuse checkout unless the Price is explicitly bound to the
+ * same XERT pack identity, commercial terms, amount, currency and Stripe mode.
  */
 export function assertStripePriceMatchesProduct(product, stripePrice, expectedLivemode = null) {
+  const metadata = stripePrice?.metadata || {};
   if (
     !stripePrice ||
     stripePrice.deleted === true ||
@@ -247,6 +248,10 @@ export function assertStripePriceMatchesProduct(product, stripePrice, expectedLi
     stripePrice.type !== 'one_time' ||
     stripePrice.unit_amount !== product?.price_cents ||
     String(stripePrice.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
+    || metadata.xert_product_id !== product?.id
+    || metadata.xert_catalog_slug !== product?.slug
+    || metadata.xert_sessions !== String(product?.sessions_count)
+    || metadata.xert_validity_days !== String(product?.validity_days)
     || (typeof expectedLivemode === 'boolean' && stripePrice.livemode !== expectedLivemode)
   ) {
     throw new Error('Stripe price does not match the product configuration.');

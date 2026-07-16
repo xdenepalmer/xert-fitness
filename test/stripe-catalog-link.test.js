@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   assertCatalogProduct,
@@ -12,12 +13,18 @@ import {
 
 const product = {
   id: '00000000-0000-4000-8000-000000000004', slug: 'starter-4',
-  price_cents: 4800, currency: 'aud', sessions_count: 4, active: true,
+  price_cents: 4800, currency: 'aud', sessions_count: 4, validity_days: 28, active: true,
   stripe_price_id: null, updated_at: '2026-07-16T00:00:00.000Z',
 };
 const price = {
   id: 'price_STARTER4', active: true, deleted: false, type: 'one_time', recurring: null,
   unit_amount: 4800, currency: 'aud', livemode: true,
+  metadata: {
+    xert_product_id: product.id,
+    xert_catalog_slug: product.slug,
+    xert_sessions: String(product.sessions_count),
+    xert_validity_days: String(product.validity_days),
+  },
 };
 
 test('catalog linker requires an explicit mode and explicit mutation flags', () => {
@@ -26,6 +33,16 @@ test('catalog linker requires an explicit mode and explicit mutation flags', () 
   assert.throws(() => parseCatalogLinkArgs([]), /explicit Stripe mode/);
   assert.throws(() => parseCatalogLinkArgs(['--mode=live', '--replace-existing']), /requires --apply/);
   assert.throws(() => parseCatalogLinkArgs(['--mode=live', '--force']), /Unknown option/);
+});
+
+test('catalog creation binds versioned Stripe objects to immutable XERT pack terms', async () => {
+  const source = await readFile(new URL('../scripts/link-stripe-catalog.mjs', import.meta.url), 'utf8');
+  assert.match(source, /xert_product_id: product\.id/);
+  assert.match(source, /xert_catalog_slug: product\.slug/);
+  assert.match(source, /xert_sessions: String\(product\.sessions_count\)/);
+  assert.match(source, /xert_validity_days: String\(product\.validity_days\)/);
+  assert.match(source, /xert-catalog-product-v2-\$\{mode\}-\$\{product\.id\}/);
+  assert.match(source, /xert-catalog-price-v2-\$\{mode\}-\$\{product\.id\}/);
 });
 
 test('catalog linker accepts only canonical Supabase and mode-matched secrets', () => {
@@ -50,19 +67,25 @@ test('catalog linker accepts only canonical Supabase and mode-matched secrets', 
   assert.equal(invalid.issues.length, 3);
 });
 
-test('catalog linker reuses only exact one-time mode, amount, and currency matches', () => {
+test('catalog linker reuses only exact mode, value, and XERT pack identity matches', () => {
   assert.equal(matchingStripePrice([price], product, 'live'), price);
   assert.equal(matchingStripePrice([{ ...price, unit_amount: 4900 }], product, 'live'), null);
   assert.equal(matchingStripePrice([{ ...price, livemode: false }], product, 'live'), null);
   assert.doesNotThrow(() => assertStripePriceMatches(price, product, 'live'));
   assert.throws(() => assertStripePriceMatches({ ...price, currency: 'usd' }, product, 'live'), /amount or currency/);
   assert.throws(() => assertStripePriceMatches({ ...price, recurring: { interval: 'month' } }, product, 'live'), /one-time/);
+  assert.equal(matchingStripePrice([{ ...price, metadata: { ...price.metadata, xert_product_id: 'another-product' } }], product, 'live'), null);
+  assert.throws(
+    () => assertStripePriceMatches({ ...price, metadata: { ...price.metadata, xert_sessions: '10' } }, product, 'live'),
+    /not bound to the current XERT pack terms/,
+  );
 });
 
 test('catalog linker validates every mutable catalog invariant before Stripe access', async () => {
   assert.doesNotThrow(() => assertCatalogProduct(product));
   assert.throws(() => assertCatalogProduct({ ...product, price_cents: 48.5 }), /positive integer/);
   assert.throws(() => assertCatalogProduct({ ...product, currency: 'AUD' }), /lowercase three-letter/);
+  assert.throws(() => assertCatalogProduct({ ...product, validity_days: 0 }), /validity days/);
   assert.throws(() => assertCatalogProduct({ ...product, updated_at: null }), /catalog version/);
 
   let stripeCalls = 0;
@@ -121,6 +144,7 @@ test('database linking compares the complete loaded commercial snapshot', async 
     ['price_cents', product.price_cents],
     ['currency', product.currency],
     ['sessions_count', product.sessions_count],
+    ['validity_days', product.validity_days],
     ['active', true],
   ]);
 
@@ -157,7 +181,10 @@ test('catalog linker never links an existing remote match during a dry run', asy
     },
   };
   const stripe = {
-    products: { search: async () => ({ data: [{ id: 'prod_XERT', active: true, livemode: true }] }) },
+    products: { search: async () => ({ data: [{
+      id: 'prod_XERT', active: true, livemode: true,
+      metadata: { xert_product_id: product.id, xert_catalog_slug: product.slug },
+    }] }) },
     prices: { list: async () => ({ data: [price] }) },
   };
   const messages = [];

@@ -148,7 +148,7 @@ export async function inspectCommerceProducts(products, retrieveStripePrice, opt
     try {
       assertStripePriceMatchesProduct(product, stripePrice, options.expectedLivemode ?? null);
     } catch {
-      issues.push({ slug, reason: 'Stripe amount, currency, type, or active state does not match.' });
+      issues.push({ slug, reason: 'Stripe Price identity, terms, amount, currency, type, or active state does not match.' });
     }
   }
 
@@ -331,7 +331,7 @@ export default async function handler(request, response) {
 
   const { data: products, error: productError } = await admin
     .from('products')
-    .select('slug,price_cents,currency,sessions_count,validity_days,stripe_price_id')
+    .select('id,slug,price_cents,currency,sessions_count,validity_days,stripe_price_id')
     .eq('active', true)
     .order('sort_order');
   if (productError) return json({ error: 'Could not load active products.' }, 500);
