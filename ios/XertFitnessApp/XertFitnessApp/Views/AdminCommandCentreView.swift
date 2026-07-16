@@ -1602,7 +1602,8 @@ private struct AdminOrderDetailView: View {
                                 reason: refundReason,
                                 confirmation: refundConfirmation
                             ) {
-                                resultMessage = "Refund complete. \(result.credits_revoked) unused credits revoked, \(result.credits_consumed) already consumed, and \(result.bookings_cancelled) future bookings cancelled."
+                                let outcome = result.recovered == true ? "Stripe refund recovered and reconciled." : "Refund complete."
+                                resultMessage = "\(outcome) \(result.credits_revoked) unused credits revoked, \(result.credits_consumed) already consumed, and \(result.bookings_cancelled) future bookings cancelled."
                             }
                         }
                     } label: {

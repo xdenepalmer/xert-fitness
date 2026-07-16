@@ -114,7 +114,10 @@ export default function OrdersManager() {
       const result = await refundOrder(selectedOrder.id, refundReason, refundConfirmation);
       const count = Number(result.credits_revoked) || 0;
       const bookings = Number(result.bookings_cancelled) || 0;
-      toast({ title: 'Refund completed', description: `${count} credit${count === 1 ? '' : 's'} revoked; ${bookings} booking${bookings === 1 ? '' : 's'} cancelled.` });
+      toast({
+        title: result.recovered ? 'Refund recovered' : 'Refund completed',
+        description: `${count} credit${count === 1 ? '' : 's'} revoked; ${bookings} booking${bookings === 1 ? '' : 's'} cancelled.`,
+      });
       setSelectedOrder(null);
       setRefundReason('requested_by_customer');
       setRefundConfirmation('');

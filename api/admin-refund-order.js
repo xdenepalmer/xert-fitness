@@ -17,7 +17,11 @@ export function normalizeRefundRequest(body) {
   return { orderId, reason };
 }
 
-export function assertRefundableOrder(order, paymentIntent, charge) {
+function stripeReferenceId(value) {
+  return typeof value === 'string' ? value : value?.id;
+}
+
+export function assertRefundPaymentMatchesOrder(order, paymentIntent, charge) {
   if (!order || order.status !== 'paid' || !order.stripe_payment_intent_id) {
     throw new Error('ORDER_NOT_REFUNDABLE');
   }
@@ -30,28 +34,27 @@ export function assertRefundableOrder(order, paymentIntent, charge) {
   ) {
     throw new Error('PAYMENT_ORDER_MISMATCH');
   }
-  const latestChargeId = typeof paymentIntent.latest_charge === 'string'
-    ? paymentIntent.latest_charge
-    : paymentIntent.latest_charge?.id;
+  const latestChargeId = stripeReferenceId(paymentIntent.latest_charge);
   if (
     !charge || !latestChargeId || charge.id !== latestChargeId
-    || (typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id) !== paymentIntent.id
+    || stripeReferenceId(charge.payment_intent) !== paymentIntent.id
     || charge.amount !== order.amount_cents
-    || charge.amount_refunded !== 0
-    || charge.refunded === true
     || String(charge.currency || '').toLowerCase() !== String(order.currency || '').toLowerCase()
   ) {
+    throw new Error('PAYMENT_ORDER_MISMATCH');
+  }
+}
+
+export function assertRefundableOrder(order, paymentIntent, charge) {
+  assertRefundPaymentMatchesOrder(order, paymentIntent, charge);
+  if (charge.amount_refunded !== 0 || charge.refunded === true) {
     throw new Error('CHARGE_NOT_FULLY_REFUNDABLE');
   }
 }
 
 export function assertCreatedRefundMatchesOrder(refund, order, paymentIntent, charge) {
-  const refundPaymentIntentId = typeof refund?.payment_intent === 'string'
-    ? refund.payment_intent
-    : refund?.payment_intent?.id;
-  const refundChargeId = typeof refund?.charge === 'string'
-    ? refund.charge
-    : refund?.charge?.id;
+  const refundPaymentIntentId = stripeReferenceId(refund?.payment_intent);
+  const refundChargeId = stripeReferenceId(refund?.charge);
   if (refund?.status !== 'succeeded') throw new Error('REFUND_PENDING');
   if (
     !refund?.id
@@ -62,6 +65,22 @@ export function assertCreatedRefundMatchesOrder(refund, order, paymentIntent, ch
   ) {
     throw new Error('REFUND_RESULT_MISMATCH');
   }
+}
+
+export function matchingFullRefundForOrder(refunds, order, paymentIntent, charge) {
+  const candidates = Array.isArray(refunds?.data) ? refunds.data : [];
+  return candidates
+    .filter(refund => (
+      refund?.id
+      && stripeReferenceId(refund.payment_intent) === paymentIntent?.id
+      && stripeReferenceId(refund.charge) === charge?.id
+      && refund.amount === order?.amount_cents
+      && String(refund.currency || '').toLowerCase() === String(order?.currency || '').toLowerCase()
+    ))
+    .sort((left, right) => {
+      const succeededFirst = Number(right?.status === 'succeeded') - Number(left?.status === 'succeeded');
+      return succeededFirst || Number(right?.created || 0) - Number(left?.created || 0);
+    })[0] || null;
 }
 
 export async function performAdminRefund({ admin, stripe, orderId, reason, userId, now = new Date() }) {
@@ -79,13 +98,25 @@ export async function performAdminRefund({ admin, stripe, orderId, reason, userI
     : paymentIntent.latest_charge?.id;
   if (!chargeId) throw new Error('CHARGE_NOT_FULLY_REFUNDABLE');
   const charge = await stripe.charges.retrieve(chargeId);
-  assertRefundableOrder(order, paymentIntent, charge);
+  assertRefundPaymentMatchesOrder(order, paymentIntent, charge);
 
-  const refund = await stripe.refunds.create({
-    payment_intent: paymentIntent.id,
-    reason,
-    metadata: { xert_order_id: order.id, initiated_by: userId },
-  }, { idempotencyKey: `xert-order-refund-${order.id}` });
+  let refund;
+  let recovered = false;
+  if (charge.amount_refunded === 0 && charge.refunded === false) {
+    refund = await stripe.refunds.create({
+      payment_intent: paymentIntent.id,
+      reason,
+      metadata: { xert_order_id: order.id, initiated_by: userId },
+    }, { idempotencyKey: `xert-order-refund-${order.id}` });
+  } else {
+    if (charge.amount_refunded !== charge.amount || charge.refunded !== true) {
+      throw new Error('CHARGE_NOT_FULLY_REFUNDABLE');
+    }
+    const refunds = await stripe.refunds.list({ payment_intent: paymentIntent.id, limit: 100 });
+    refund = matchingFullRefundForOrder(refunds, order, paymentIntent, charge);
+    if (!refund) throw new Error('REFUND_RESULT_MISMATCH');
+    recovered = true;
+  }
   assertCreatedRefundMatchesOrder(refund, order, paymentIntent, charge);
 
   const refundedAt = new Date((refund.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString();
@@ -99,7 +130,7 @@ export async function performAdminRefund({ admin, stripe, orderId, reason, userI
     p_refunded_at: refundedAt,
   });
   if (error) throw error;
-  return { refund_id: refund.id, refunded_at: refundedAt, ...(data?.[0] || {}) };
+  return { refund_id: refund.id, refunded_at: refundedAt, ...(data?.[0] || {}), recovered };
 }
 
 export default async function handler(request, response) {

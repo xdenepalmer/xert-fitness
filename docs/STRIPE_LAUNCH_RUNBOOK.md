@@ -184,6 +184,10 @@ until this command passes.
 7. Repeat from iOS and confirm the app returns to XERT and refreshes credits.
 8. Retry or double-tap checkout and confirm XERT reuses the open unpaid session.
 9. Refund the test order from **Admin > Finance**.
+   If Stripe completed the refund but XERT lost the database response, repeat
+   the same confirmed refund action. XERT recovers only the exact succeeded
+   full refund and completes credit and booking reconciliation without issuing
+   a second Stripe refund.
 10. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
 11. Confirm Operations Health remains green.
 12. In Stripe test mode, create a dispute test event for the XERT payment and

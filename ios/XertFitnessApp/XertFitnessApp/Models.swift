@@ -353,6 +353,7 @@ struct AdminReconciliationResult: Decodable, Hashable {
 
 struct AdminRefundResult: Decodable, Hashable {
     let refunded: Bool
+    let recovered: Bool?
     let refund_id: String
     let refunded_at: Date
     let order_id: UUID
