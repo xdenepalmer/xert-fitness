@@ -216,8 +216,7 @@ final class XertAPI {
         return try await restRequest(
             path: "/rest/v1/credit_batches",
             queryItems: [
-                URLQueryItem(name: "select", value: "*"),
-                URLQueryItem(name: "remaining", value: "gt.0"),
+                URLQueryItem(name: "select", value: "id,order_id,total,remaining,expires_at"),
                 URLQueryItem(name: "or", value: "(expires_at.is.null,expires_at.gt.\(timestamp))"),
                 URLQueryItem(name: "order", value: "expires_at.asc")
             ],

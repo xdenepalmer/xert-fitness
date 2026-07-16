@@ -56,7 +56,9 @@ test('native app accepts only the XERT checkout callback and refreshes member da
 
 test('native app polls bounded order and credit state while Stripe fulfilment settles', () => {
   assert.match(deepLink, /retryDelaysNanoseconds: \[UInt64\] = \[0, 2_000_000_000, 3_000_000_000, 5_000_000_000\]/);
-  assert.match(deepLink, /currentCreditTotal > baselineCreditTotal && hasNewPaidOrder/);
+  assert.match(deepLink, /let newPaidOrderIDs = Set\(orders\.lazy\.compactMap/);
+  assert.match(deepLink, /guard let orderID = batch\.order_id/);
+  assert.match(deepLink, /newPaidOrderIDs\.contains\(orderID\)/);
   assert.match(store, /let userID = authSession\?\.user\?\.id,[\s\S]*!isReconcilingCheckout/);
   assert.match(store, /for delay in CheckoutReconciliation\.retryDelaysNanoseconds/);
   assert.match(store, /async let creditRequest = api\.credits/);
@@ -65,11 +67,14 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(store, /let pendingCheckout = PendingCheckoutStore\.load\(for: userID\)/);
   assert.match(store, /PendingCheckoutStore\.clear\(\)/);
   assert.match(store, /await reconcilePendingCheckout\(\)/);
+  assert.match(api, /select", value: "id,order_id,total,remaining,expires_at"/);
+  assert.doesNotMatch(api, /URLQueryItem\(name: "remaining", value: "gt\.0"\)/);
   assert.match(pendingStore, /checkout\.userID == userID/);
   assert.match(pendingStore, /now\.timeIntervalSince\(checkout\.startedAt\) <= maximumAge/);
   assert.match(booking, /Confirming purchase\.\.\./);
   assert.match(booking, /Purchase confirmation is taking longer than usual/);
-  assert.match(swiftTests, /testCheckoutReconciliationRequiresBothPaidOrderAndGrantedCredits/);
+  assert.match(swiftTests, /testCheckoutReconciliationRequiresThePaidOrdersFulfillmentBatch/);
+  assert.match(swiftTests, /creditBatch\(remaining: 0, orderID: newOrderID\)/);
   assert.match(swiftTests, /testPendingCheckoutRoundTripsForTheSameUser/);
   assert.match(swiftTests, /testPendingCheckoutRejectsAnotherUserAndExpires/);
 });

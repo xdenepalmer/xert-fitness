@@ -2,7 +2,6 @@ import Foundation
 
 struct PendingCheckout: Codable, Equatable {
     let userID: UUID
-    let baselineCreditTotal: Int
     let baselineOrderIDs: Set<UUID>
     let startedAt: Date
 }

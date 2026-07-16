@@ -1,6 +1,13 @@
 import XCTest
 @testable import XertFitness
 
+private struct LegacyPendingCheckout: Encodable {
+    let userID: UUID
+    let baselineCreditTotal: Int
+    let baselineOrderIDs: Set<UUID>
+    let startedAt: Date
+}
+
 final class ModelsTests: XCTestCase {
     func testPrimaryNavigationDeepLinksUseTheTypedRouteContract() throws {
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://booking"))), .booking)
@@ -443,7 +450,6 @@ final class ModelsTests: XCTestCase {
         let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let pending = PendingCheckout(
             userID: userID,
-            baselineCreditTotal: 3,
             baselineOrderIDs: orderIDs,
             startedAt: startedAt
         )
@@ -458,6 +464,18 @@ final class ModelsTests: XCTestCase {
             ),
             pending
         )
+
+        let legacy = LegacyPendingCheckout(
+            userID: userID,
+            baselineCreditTotal: 3,
+            baselineOrderIDs: orderIDs,
+            startedAt: startedAt
+        )
+        defaults.set(try JSONEncoder().encode(legacy), forKey: PendingCheckoutStore.storageKey)
+        XCTAssertEqual(
+            PendingCheckoutStore.load(for: userID, now: startedAt, defaults: defaults),
+            pending
+        )
     }
 
     func testPendingCheckoutRejectsAnotherUserAndExpires() throws {
@@ -468,7 +486,6 @@ final class ModelsTests: XCTestCase {
         let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let pending = PendingCheckout(
             userID: userID,
-            baselineCreditTotal: 0,
             baselineOrderIDs: [],
             startedAt: startedAt
         )
@@ -726,12 +743,14 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(classSession(spotsLeft: nil).isFull)
     }
 
-    func testCreditBatchDecodesTheDatabaseTotalColumn() throws {
+    func testCreditBatchDecodesPurchasedOrderIdentityAtZeroRemaining() throws {
+        let orderID = try XCTUnwrap(UUID(uuidString: "08B68EA8-ACF9-4F40-A050-9BA12D7252DB"))
         let data = """
         {
           "id": "C5747DAD-2E89-4D55-AD63-5732D8D67A60",
+          "order_id": "\(orderID.uuidString)",
           "total": 10,
-          "remaining": 7,
+          "remaining": 0,
           "expires_at": null
         }
         """.data(using: .utf8)!
@@ -739,7 +758,8 @@ final class ModelsTests: XCTestCase {
         let batch = try JSONDecoder().decode(CreditBatch.self, from: data)
 
         XCTAssertEqual(batch.total, 10)
-        XCTAssertEqual(batch.remaining, 7)
+        XCTAssertEqual(batch.remaining, 0)
+        XCTAssertEqual(batch.order_id, orderID)
     }
 
     func testCreditExpirySummaryIncludesOnlyActiveCreditsInsideSevenDays() throws {
@@ -770,35 +790,37 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(batches.expirySummary(now: now))
     }
 
-    func testCheckoutReconciliationRequiresBothPaidOrderAndGrantedCredits() {
+    func testCheckoutReconciliationRequiresThePaidOrdersFulfillmentBatch() {
         let baselineOrderID = UUID()
         let newOrderID = UUID()
+        let unrelatedOrderID = UUID()
         let baselineOrderIDs: Set<UUID> = [baselineOrderID]
-        let grantedCredits = [creditBatch(remaining: 4)]
+        let consumedFulfillmentBatch = [creditBatch(remaining: 0, orderID: newOrderID)]
         let paidOrder = order(id: newOrderID, status: "paid")
 
         XCTAssertFalse(CheckoutReconciliation.hasSettled(
-            baselineCreditTotal: 0,
             baselineOrderIDs: baselineOrderIDs,
             credits: [],
             orders: [paidOrder]
         ))
         XCTAssertFalse(CheckoutReconciliation.hasSettled(
-            baselineCreditTotal: 0,
             baselineOrderIDs: baselineOrderIDs,
-            credits: grantedCredits,
+            credits: consumedFulfillmentBatch,
             orders: [order(id: newOrderID, status: "pending")]
         ))
         XCTAssertFalse(CheckoutReconciliation.hasSettled(
-            baselineCreditTotal: 0,
             baselineOrderIDs: baselineOrderIDs,
-            credits: grantedCredits,
+            credits: [creditBatch(remaining: 4, orderID: baselineOrderID)],
             orders: [order(id: baselineOrderID, status: "paid")]
         ))
-        XCTAssertTrue(CheckoutReconciliation.hasSettled(
-            baselineCreditTotal: 0,
+        XCTAssertFalse(CheckoutReconciliation.hasSettled(
             baselineOrderIDs: baselineOrderIDs,
-            credits: grantedCredits,
+            credits: [creditBatch(remaining: 4, orderID: unrelatedOrderID)],
+            orders: [paidOrder]
+        ))
+        XCTAssertTrue(CheckoutReconciliation.hasSettled(
+            baselineOrderIDs: baselineOrderIDs,
+            credits: consumedFulfillmentBatch,
             orders: [paidOrder]
         ))
     }
@@ -1794,8 +1816,14 @@ final class ModelsTests: XCTestCase {
         XCTAssertThrowsError(try MemberInterestSubmission(member))
     }
 
-    private func creditBatch(remaining: Int) -> CreditBatch {
-        CreditBatch(id: UUID(), total: remaining, remaining: remaining, expires_at: nil)
+    private func creditBatch(remaining: Int, orderID: UUID? = nil) -> CreditBatch {
+        CreditBatch(
+            id: UUID(),
+            total: max(remaining, 1),
+            remaining: remaining,
+            expires_at: nil,
+            order_id: orderID
+        )
     }
 
     private func campaignRow(

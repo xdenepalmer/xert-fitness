@@ -206,9 +206,24 @@ struct EventGoal: Codable, Hashable {
 
 struct CreditBatch: Identifiable, Codable, Hashable {
     let id: UUID
+    let order_id: UUID?
     let total: Int
     let remaining: Int
     let expires_at: Date?
+
+    init(
+        id: UUID,
+        total: Int,
+        remaining: Int,
+        expires_at: Date?,
+        order_id: UUID? = nil
+    ) {
+        self.id = id
+        self.order_id = order_id
+        self.total = total
+        self.remaining = remaining
+        self.expires_at = expires_at
+    }
 }
 
 struct CreditExpirySummary: Equatable {

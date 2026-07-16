@@ -649,7 +649,6 @@ final class XertStore: ObservableObject {
             }
             let pendingCheckout = PendingCheckout(
                 userID: userID,
-                baselineCreditTotal: creditTotal,
                 baselineOrderIDs: Set(orders.map(\.id)),
                 startedAt: Date()
             )
@@ -676,7 +675,6 @@ final class XertStore: ObservableObject {
         else { return }
         let memberVersion = memberStateVersion.snapshot
         let pendingCheckout = PendingCheckoutStore.load(for: userID)
-        let baselineCreditTotal = pendingCheckout?.baselineCreditTotal ?? creditTotal
         let baselineOrderIDs = pendingCheckout?.baselineOrderIDs ?? Set(orders.map(\.id))
         isCheckoutConfirmationPending = pendingCheckout != nil
         isReconcilingCheckout = true
@@ -708,7 +706,6 @@ final class XertStore: ObservableObject {
                 memberDataUpdatedAt = Date()
 
                 if CheckoutReconciliation.hasSettled(
-                    baselineCreditTotal: baselineCreditTotal,
                     baselineOrderIDs: baselineOrderIDs,
                     credits: loadedCredits,
                     orders: loadedOrders

@@ -43,15 +43,19 @@ enum CheckoutReconciliation {
     static let retryDelaysNanoseconds: [UInt64] = [0, 2_000_000_000, 3_000_000_000, 5_000_000_000]
 
     static func hasSettled(
-        baselineCreditTotal: Int,
         baselineOrderIDs: Set<UUID>,
         credits: [CreditBatch],
         orders: [OrderItem]
     ) -> Bool {
-        let currentCreditTotal = credits.reduce(0) { $0 + $1.remaining }
-        let hasNewPaidOrder = orders.contains {
-            !baselineOrderIDs.contains($0.id) && $0.status.lowercased() == "paid"
+        let newPaidOrderIDs = Set(orders.lazy.compactMap { order -> UUID? in
+            guard !baselineOrderIDs.contains(order.id),
+                  order.status.lowercased() == "paid"
+            else { return nil }
+            return order.id
+        })
+        return credits.contains { batch in
+            guard let orderID = batch.order_id else { return false }
+            return newPaidOrderIDs.contains(orderID)
         }
-        return currentCreditTotal > baselineCreditTotal && hasNewPaidOrder
     }
 }
