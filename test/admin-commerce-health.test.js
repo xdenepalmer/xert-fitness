@@ -22,6 +22,13 @@ const validProduct = {
   stripe_price_id: 'price_STARTER4',
 };
 
+const completeCommerceCapabilities = new Set([
+  'stripe_refund_reconciliation', 'checkout_reconciliation',
+  'stripe_payment_fulfillment', 'guarded_payment_activation',
+  'admin_settings_singleton', 'stripe_pending_order_guard',
+  'stripe_order_terms_snapshot', 'stripe_webhook_ledger',
+]);
+
 const validActivationBody = {
   action: 'activate_payments',
   confirmation: 'ENABLE PAYMENTS',
@@ -182,19 +189,47 @@ test('commerce readiness cannot pass without the guarded activation capability',
   };
   const products = [validProduct];
   const complete = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger'])),
+    admin: capabilityAdmin(completeCommerceCapabilities),
     products,
     environment,
     stripe: readyStripe(),
   });
   assert.equal(complete.ready, true);
   assert.equal(complete.fulfillment_ready, true);
+  assert.equal(complete.refund_reconciliation_ready, true);
+  assert.equal(complete.checkout_reconciliation_ready, true);
   assert.equal(complete.activation_guard_ready, true);
   assert.equal(complete.settings_contract_ready, true);
   assert.equal(complete.pending_order_guard_ready, true);
   assert.equal(complete.order_terms_ready, true);
   assert.equal(complete.webhook_ledger_ready, true);
   assert.equal(complete.webhook_delivery.ready, true);
+
+  const missingRefundReconciliation = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set([...completeCommerceCapabilities].filter(capability => capability !== 'stripe_refund_reconciliation'))),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingRefundReconciliation.ready, false);
+  assert.equal(missingRefundReconciliation.refund_reconciliation_ready, false);
+  assert.match(
+    missingRefundReconciliation.issues.find(issue => issue.reason.includes('refund reconciliation'))?.reason || '',
+    /not installed/,
+  );
+
+  const missingCheckoutReconciliation = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set([...completeCommerceCapabilities].filter(capability => capability !== 'checkout_reconciliation'))),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingCheckoutReconciliation.ready, false);
+  assert.equal(missingCheckoutReconciliation.checkout_reconciliation_ready, false);
+  assert.match(
+    missingCheckoutReconciliation.issues.find(issue => issue.reason.includes('checkout recovery'))?.reason || '',
+    /not installed/,
+  );
 
   const missingGuard = await inspectCommerceHealth({
     admin: capabilityAdmin(new Set(['stripe_payment_fulfillment'])),

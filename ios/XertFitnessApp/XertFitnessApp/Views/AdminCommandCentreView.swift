@@ -3099,6 +3099,8 @@ private struct AdminOperationsHealthView: View {
                     )
                     HealthCheckRow(label: "Webhook registered", ready: commerce.webhook?.ready == true)
                     HealthCheckRow(label: "Webhook delivery ledger", ready: commerce.webhook_delivery?.ready == true)
+                    HealthCheckRow(label: "Refund reconciliation", ready: commerce.refund_reconciliation_ready == true)
+                    HealthCheckRow(label: "Checkout recovery", ready: commerce.checkout_reconciliation_ready == true)
                     if let delivery = commerce.webhook_delivery {
                         HealthCountRow(label: "Deliveries received (24h)", value: delivery.received)
                         HealthCountRow(label: "Delivery retries (24h)", value: delivery.retries)

@@ -17,6 +17,8 @@ function response(status, body = '') {
 }
 
 function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilities = [
+  { capability: 'stripe_refund_reconciliation' },
+  { capability: 'checkout_reconciliation' },
   { capability: 'stripe_payment_fulfillment' },
   { capability: 'guarded_payment_activation' },
   { capability: 'admin_settings_singleton' },
@@ -39,7 +41,7 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
 test('Stripe readiness requires every safe production boundary and database activation guard', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 11);
+  assert.equal(report.checks.length, 13);
   assert.ok(report.checks.every(check => check.ready));
 });
 
@@ -65,6 +67,8 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.match(report.checks.find(check => check.key === 'fulfillment').detail, /is missing/);
   assert.match(report.checks.find(check => check.key === 'webhook').remediation, /STRIPE_WEBHOOK_SECRET/);
   assert.match(report.checks.find(check => check.key === 'fulfillment').remediation, /20260715010000_stripe_payment_fulfillment\.sql/);
+  assert.match(report.checks.find(check => check.key === 'refund-reconciliation-contract').remediation, /20260713020000_stripe_refund_reconciliation\.sql/);
+  assert.match(report.checks.find(check => check.key === 'checkout-reconciliation-contract').remediation, /20260713030000_checkout_reconciliation\.sql/);
   assert.match(report.checks.find(check => check.key === 'activation-guard').remediation, /20260716010000_guarded_payment_activation\.sql/);
   assert.match(report.checks.find(check => check.key === 'settings-contract').remediation, /20260716020000_admin_settings_singleton\.sql/);
   assert.match(report.checks.find(check => check.key === 'pending-order-guard').remediation, /20260716030000_stripe_pending_order_guard\.sql/);

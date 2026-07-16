@@ -906,6 +906,8 @@ struct AdminCommerceHealth: Codable, Hashable {
     let dynamic_price_count: Int
     let environment: AdminEnvironmentHealth
     let fulfillment_ready: Bool?
+    let refund_reconciliation_ready: Bool?
+    let checkout_reconciliation_ready: Bool?
     let activation_guard_ready: Bool?
     let settings_contract_ready: Bool?
     let pending_order_guard_ready: Bool?

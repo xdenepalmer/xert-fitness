@@ -9,6 +9,8 @@ import {
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const REFUND_RECONCILIATION_CAPABILITY = 'stripe_refund_reconciliation';
+const CHECKOUT_RECONCILIATION_CAPABILITY = 'checkout_reconciliation';
 const PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
@@ -267,8 +269,14 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
 export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient }) {
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(runtimeEnvironment);
-  const [fulfillmentReady, activationGuardReady, settingsContractReady, pendingOrderGuardReady, orderTermsReady, webhookLedgerReady] = await Promise.all([
+  const [
+    fulfillmentReady, refundReconciliationReady, checkoutReconciliationReady,
+    activationGuardReady, settingsContractReady, pendingOrderGuardReady,
+    orderTermsReady, webhookLedgerReady,
+  ] = await Promise.all([
     paymentFulfillmentIsReady(admin),
+    schemaCapabilityIsReady(admin, REFUND_RECONCILIATION_CAPABILITY),
+    schemaCapabilityIsReady(admin, CHECKOUT_RECONCILIATION_CAPABILITY),
     schemaCapabilityIsReady(admin, PAYMENT_ACTIVATION_CAPABILITY),
     schemaCapabilityIsReady(admin, ADMIN_SETTINGS_SINGLETON_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_PENDING_ORDER_CAPABILITY),
@@ -284,6 +292,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       };
   const databaseIssues = [
     ...(fulfillmentReady ? [] : [{ slug: 'database', reason: 'Atomic Stripe payment fulfillment is not installed.' }]),
+    ...(refundReconciliationReady ? [] : [{ slug: 'database', reason: 'Atomic Stripe refund reconciliation is not installed.' }]),
+    ...(checkoutReconciliationReady ? [] : [{ slug: 'database', reason: 'Stripe checkout recovery reconciliation is not installed.' }]),
     ...(activationGuardReady ? [] : [{ slug: 'database', reason: 'Guarded payment activation is not installed.' }]),
     ...(settingsContractReady ? [] : [{ slug: 'database', reason: 'Versioned singleton platform settings are not installed.' }]),
     ...(pendingOrderGuardReady ? [] : [{ slug: 'database', reason: 'Stripe pending-order fulfillment guard is not installed.' }]),
@@ -300,6 +310,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       issues: [...databaseIssues, ...environmentIssues(environment)],
       environment,
       fulfillment_ready: fulfillmentReady,
+      refund_reconciliation_ready: refundReconciliationReady,
+      checkout_reconciliation_ready: checkoutReconciliationReady,
       activation_guard_ready: activationGuardReady,
       settings_contract_ready: settingsContractReady,
       pending_order_guard_ready: pendingOrderGuardReady,
@@ -331,6 +343,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       && accountHealth.ready
       && environment.ready
       && fulfillmentReady
+      && refundReconciliationReady
+      && checkoutReconciliationReady
       && activationGuardReady
       && settingsContractReady
       && pendingOrderGuardReady
@@ -349,6 +363,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     ],
     environment,
     fulfillment_ready: fulfillmentReady,
+    refund_reconciliation_ready: refundReconciliationReady,
+    checkout_reconciliation_ready: checkoutReconciliationReady,
     activation_guard_ready: activationGuardReady,
     settings_contract_ready: settingsContractReady,
     pending_order_guard_ready: pendingOrderGuardReady,

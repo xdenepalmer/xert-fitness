@@ -7,6 +7,8 @@ import {
 } from '../src/lib/publicRuntimeConfig.js';
 
 const DEFAULT_VERCEL_BASE_URL = 'https://xert-fitness.vercel.app';
+const REFUND_RECONCILIATION_CAPABILITY = 'stripe_refund_reconciliation';
+const CHECKOUT_RECONCILIATION_CAPABILITY = 'checkout_reconciliation';
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const GUARDED_PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
@@ -122,12 +124,16 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   ];
 
   let capabilityReady = false;
+  let refundReconciliationReady = false;
+  let checkoutReconciliationReady = false;
   let activationGuardReady = false;
   let settingsContractReady = false;
   let pendingOrderGuardReady = false;
   let orderTermsReady = false;
   let webhookLedgerReady = false;
   let capabilityDetail;
+  let refundReconciliationDetail;
+  let checkoutReconciliationDetail;
   let activationGuardDetail;
   let settingsContractDetail;
   let pendingOrderGuardDetail;
@@ -135,6 +141,8 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   let webhookLedgerDetail;
   if (capabilities.status !== 200) {
     capabilityDetail = `Capability RPC returned HTTP ${capabilities.status || 'no response'}${capabilities.body ? `: ${capabilities.body}` : ''}`;
+    refundReconciliationDetail = capabilityDetail;
+    checkoutReconciliationDetail = capabilityDetail;
     activationGuardDetail = capabilityDetail;
     settingsContractDetail = capabilityDetail;
     pendingOrderGuardDetail = capabilityDetail;
@@ -145,6 +153,8 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       const rows = JSON.parse(capabilities.body || '[]');
       const installed = new Set(Array.isArray(rows) ? rows.map(row => row?.capability) : []);
       capabilityReady = installed.has(PAYMENT_FULFILLMENT_CAPABILITY);
+      refundReconciliationReady = installed.has(REFUND_RECONCILIATION_CAPABILITY);
+      checkoutReconciliationReady = installed.has(CHECKOUT_RECONCILIATION_CAPABILITY);
       activationGuardReady = installed.has(GUARDED_PAYMENT_ACTIVATION_CAPABILITY);
       settingsContractReady = installed.has(ADMIN_SETTINGS_SINGLETON_CAPABILITY);
       pendingOrderGuardReady = installed.has(STRIPE_PENDING_ORDER_CAPABILITY);
@@ -153,6 +163,12 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       capabilityDetail = capabilityReady
         ? `${PAYMENT_FULFILLMENT_CAPABILITY} installed`
         : `${PAYMENT_FULFILLMENT_CAPABILITY} is missing`;
+      refundReconciliationDetail = refundReconciliationReady
+        ? `${REFUND_RECONCILIATION_CAPABILITY} installed`
+        : `${REFUND_RECONCILIATION_CAPABILITY} is missing`;
+      checkoutReconciliationDetail = checkoutReconciliationReady
+        ? `${CHECKOUT_RECONCILIATION_CAPABILITY} installed`
+        : `${CHECKOUT_RECONCILIATION_CAPABILITY} is missing`;
       activationGuardDetail = activationGuardReady
         ? `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} installed`
         : `${GUARDED_PAYMENT_ACTIVATION_CAPABILITY} is missing`;
@@ -170,6 +186,8 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
         : `${STRIPE_WEBHOOK_LEDGER_CAPABILITY} is missing`;
     } catch {
       capabilityDetail = 'Capability RPC returned malformed JSON.';
+      refundReconciliationDetail = capabilityDetail;
+      checkoutReconciliationDetail = capabilityDetail;
       activationGuardDetail = capabilityDetail;
       settingsContractDetail = capabilityDetail;
       pendingOrderGuardDetail = capabilityDetail;
@@ -177,6 +195,24 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       webhookLedgerDetail = capabilityDetail;
     }
   }
+  checks.push({
+    key: 'refund-reconciliation-contract',
+    label: 'Atomic Stripe refund reconciliation',
+    ready: refundReconciliationReady,
+    detail: refundReconciliationDetail,
+    remediation: refundReconciliationReady
+      ? null
+      : 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql to the XERT Supabase project.',
+  });
+  checks.push({
+    key: 'checkout-reconciliation-contract',
+    label: 'Recoverable Stripe checkout reconciliation',
+    ready: checkoutReconciliationReady,
+    detail: checkoutReconciliationDetail,
+    remediation: checkoutReconciliationReady
+      ? null
+      : 'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql to the XERT Supabase project.',
+  });
   checks.push({
     key: 'fulfillment',
     label: 'Atomic Stripe fulfillment contract',

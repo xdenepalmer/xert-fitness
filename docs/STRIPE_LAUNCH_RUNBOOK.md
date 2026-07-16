@@ -113,12 +113,12 @@ The first check is a body-free `HEAD /api/checkout` environment gate. HTTP
 Vercel payment settings are present; HTTP `503` reveals no values and prevents
 a false-green release audit.
 
-The command must report eleven `PASS` results. A webhook `503` means the Vercel
+The command must report thirteen `PASS` results. A webhook `503` means the Vercel
 Stripe service is unavailable, normally because its private secrets are absent;
 a missing fulfillment contract means the migration in step 1 has not been
 installed. A missing activation guard means the guarded activation migration in
 step 2 has not been installed. Keep **Session pack payments** disabled until all
-eleven checks pass. A missing settings contract means the migration in step 3
+thirteen checks pass. A missing settings contract means the migration in step 3
 has not repaired the versioned singleton platform settings. A missing recorded-
 order guard means the migration in step 4 has not hardened webhook fulfillment.
 A missing purchased-terms snapshot means the migration in step 5 has not bound
@@ -141,7 +141,7 @@ the live Stripe and Supabase secrets:
 npm run stripe:launch:check
 ```
 
-This reruns the eleven deployed boundary checks and inspects every active pack
+This reruns the thirteen deployed boundary and payment-contract checks and inspects every active pack
 against live Stripe. It passes only when all packs already have exact, active,
 one-time AUD Prices bound to their current XERT product identity, session count
 and validity. A dry-run `PLAN` is a release failure: review it, run

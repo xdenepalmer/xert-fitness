@@ -21,9 +21,10 @@ test('native app exposes the command centre only to admin profiles', async () =>
 });
 
 test('native owner workspace uses protected operational RPCs and real actions', async () => {
-  const [api, adminStore, view] = await Promise.all([
+  const [api, adminStore, adminModels, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
   ]);
 
@@ -52,6 +53,10 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /adminPublishAnnouncement/);
   assert.match(api, /\/api\/admin-publish-announcement/);
   assert.match(api, /\/api\/admin-commerce-health/);
+  assert.match(adminModels, /let refund_reconciliation_ready: Bool\?/);
+  assert.match(adminModels, /let checkout_reconciliation_ready: Bool\?/);
+  assert.match(view, /HealthCheckRow\(label: "Refund reconciliation"/);
+  assert.match(view, /HealthCheckRow\(label: "Checkout recovery"/);
   assert.match(api, /\/api\/admin-push-health/);
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
