@@ -365,18 +365,26 @@ struct XertNavigationTransition: Equatable {
 }
 
 struct XertNavigationWorkspaceSnapshot: Codable, Equatable {
-    static let currentVersion = 1
+    static let currentVersion = 2
+    static let legacyVersion = 1
     static let maximumEncodedLength = 4_096
     static let maximumRouteCount = 32
+    static let maximumWorkspaceRouteCount = XertPrimaryDestination.allCases.count
 
     let version: Int
     let routeValues: [String]
     let forwardRouteValues: [String]?
+    let workspaceRouteValues: [String]?
 
-    init(routes: [XertMemberRoute], forwardRoutes: [XertMemberRoute] = []) {
+    init(
+        routes: [XertMemberRoute],
+        forwardRoutes: [XertMemberRoute] = [],
+        workspaceRoutes: [XertMemberRoute] = []
+    ) {
         version = Self.currentVersion
         routeValues = routes.map(\.restorationValue)
         forwardRouteValues = forwardRoutes.isEmpty ? nil : forwardRoutes.map(\.restorationValue)
+        workspaceRouteValues = workspaceRoutes.map(\.restorationValue)
     }
 }
 
@@ -725,6 +733,7 @@ final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var reselectionSequence: UInt = 0
     private(set) var routeHistory: [XertMemberRoute]
     private(set) var forwardRouteHistory: [XertMemberRoute] = []
+    private(set) var workspaceRoutes: [XertPrimaryDestination: XertMemberRoute]
 
     private let historyLimit: Int
     private var transitionSequence: UInt = 0
@@ -733,6 +742,7 @@ final class XertNavigationCoordinator: ObservableObject {
         selection = initial
         route = .primary(initial)
         routeHistory = [.primary(initial)]
+        workspaceRoutes = Self.defaultWorkspaceRoutes
         self.historyLimit = min(
             max(2, historyLimit),
             XertNavigationWorkspaceSnapshot.maximumRouteCount
@@ -781,17 +791,20 @@ final class XertNavigationCoordinator: ObservableObject {
     var containsContextualHistory: Bool {
         routeHistory.contains { $0.isContextualTask }
             || forwardRouteHistory.contains { $0.isContextualTask }
+            || workspaceRoutes.values.contains { $0.isContextualTask }
     }
 
     var containsProtectedHistory: Bool {
         routeHistory.contains { $0.requiresAuthentication }
             || forwardRouteHistory.contains { $0.requiresAuthentication }
+            || workspaceRoutes.values.contains { $0.requiresAuthentication }
     }
 
     var workspaceRestorationValue: String {
         let snapshot = XertNavigationWorkspaceSnapshot(
             routes: routeHistory,
-            forwardRoutes: forwardRouteHistory
+            forwardRoutes: forwardRouteHistory,
+            workspaceRoutes: XertPrimaryDestination.dockOrder.compactMap { workspaceRoutes[$0] }
         )
         guard
             let data = try? JSONEncoder().encode(snapshot),
@@ -810,12 +823,15 @@ final class XertNavigationCoordinator: ObservableObject {
         var commands = XertWorkspaceOrderStore.normalized(orderedDestinations)
             .filter { $0 != selection }
             .map { destination in
-                XertNavigationCommand(
+                let rememberedRoute = commandRoute(for: destination, context: context)
+                return XertNavigationCommand(
                     id: "destination-\(destination.rawValue)",
-                    title: "Open \(destination.title)",
+                    title: rememberedRoute.isContextualTask
+                        ? "Return to \(rememberedRoute.navigationTitle)"
+                        : "Open \(destination.title)",
                     subtitle: commandSubtitle(for: destination, context: context),
                     icon: destination.icon,
-                    keywords: commandKeywords(for: destination),
+                    keywords: commandKeywords(for: destination) + [rememberedRoute.navigationTitle],
                     section: .navigate,
                     action: .destination(destination)
                 )
@@ -908,6 +924,7 @@ final class XertNavigationCoordinator: ObservableObject {
         routeSequence &+= 1
         routeHistory = [.primary(destination)]
         forwardRouteHistory = []
+        workspaceRoutes = Self.defaultWorkspaceRoutes
         if previous == destination {
             lastTransition = nil
         } else {
@@ -917,7 +934,7 @@ final class XertNavigationCoordinator: ObservableObject {
 
     func restore(routeValue: String) {
         let restoredRoute = XertMemberRoute.restore(routeValue) ?? .home
-        applyRestoredRoutes([restoredRoute], forwardRoutes: [])
+        applyRestoredRoutes([restoredRoute], forwardRoutes: [], workspaceRoutes: nil)
     }
 
     func restore(
@@ -930,10 +947,17 @@ final class XertNavigationCoordinator: ObservableObject {
             workspaceValue.count <= XertNavigationWorkspaceSnapshot.maximumEncodedLength,
             let data = workspaceValue.data(using: .utf8),
             let snapshot = try? JSONDecoder().decode(XertNavigationWorkspaceSnapshot.self, from: data),
-            snapshot.version == XertNavigationWorkspaceSnapshot.currentVersion,
+            [
+                XertNavigationWorkspaceSnapshot.legacyVersion,
+                XertNavigationWorkspaceSnapshot.currentVersion,
+            ].contains(snapshot.version),
             !snapshot.routeValues.isEmpty,
             snapshot.routeValues.count + (snapshot.forwardRouteValues?.count ?? 0)
-                <= XertNavigationWorkspaceSnapshot.maximumRouteCount
+                <= XertNavigationWorkspaceSnapshot.maximumRouteCount,
+            snapshot.version == XertNavigationWorkspaceSnapshot.legacyVersion
+                ? snapshot.workspaceRouteValues == nil
+                : snapshot.workspaceRouteValues?.count
+                    == XertNavigationWorkspaceSnapshot.maximumWorkspaceRouteCount
         else {
             restore(routeValue: authorizedFallback(
                 fallbackRouteValue,
@@ -945,9 +969,13 @@ final class XertNavigationCoordinator: ObservableObject {
         let restoredRoutes = snapshot.routeValues.compactMap { XertMemberRoute.restore($0) }
         let forwardValues = snapshot.forwardRouteValues ?? []
         let restoredForwardRoutes = forwardValues.compactMap { XertMemberRoute.restore($0) }
+        let workspaceValues = snapshot.workspaceRouteValues ?? []
+        let restoredWorkspaceRoutes = workspaceValues.compactMap { XertMemberRoute.restore($0) }
         guard
             restoredRoutes.count == snapshot.routeValues.count,
-            restoredForwardRoutes.count == forwardValues.count
+            restoredForwardRoutes.count == forwardValues.count,
+            restoredWorkspaceRoutes.count == workspaceValues.count,
+            Set(restoredWorkspaceRoutes.map(\.destination)).count == restoredWorkspaceRoutes.count
         else {
             restore(routeValue: authorizedFallback(
                 fallbackRouteValue,
@@ -962,6 +990,9 @@ final class XertNavigationCoordinator: ObservableObject {
         let authorizedForwardRoutes = allowsProtectedRoutes
             ? restoredForwardRoutes
             : restoredForwardRoutes.filter { !$0.requiresAuthentication }
+        let authorizedWorkspaceRoutes = allowsProtectedRoutes
+            ? restoredWorkspaceRoutes
+            : restoredWorkspaceRoutes.filter { !$0.requiresAuthentication }
         guard !authorizedRoutes.isEmpty else {
             restore(routeValue: authorizedFallback(
                 fallbackRouteValue,
@@ -975,7 +1006,10 @@ final class XertNavigationCoordinator: ObservableObject {
         let boundedRoutes = Array(authorizedRoutes.suffix(backwardCapacity))
         applyRestoredRoutes(
             boundedRoutes,
-            forwardRoutes: boundedForwardRoutes
+            forwardRoutes: boundedForwardRoutes,
+            workspaceRoutes: snapshot.version == XertNavigationWorkspaceSnapshot.legacyVersion
+                ? nil
+                : Dictionary(uniqueKeysWithValues: authorizedWorkspaceRoutes.map { ($0.destination, $0) })
         )
     }
 
@@ -989,7 +1023,8 @@ final class XertNavigationCoordinator: ObservableObject {
 
     private func applyRestoredRoutes(
         _ restoredRoutes: [XertMemberRoute],
-        forwardRoutes: [XertMemberRoute]
+        forwardRoutes: [XertMemberRoute],
+        workspaceRoutes restoredWorkspaceRoutes: [XertPrimaryDestination: XertMemberRoute]?
     ) {
         guard let restoredRoute = restoredRoutes.last else { return }
         let destination = restoredRoute.destination
@@ -999,6 +1034,15 @@ final class XertNavigationCoordinator: ObservableObject {
         routeSequence &+= 1
         routeHistory = restoredRoutes
         forwardRouteHistory = forwardRoutes
+        workspaceRoutes = Self.defaultWorkspaceRoutes
+        if let restoredWorkspaceRoutes {
+            workspaceRoutes.merge(restoredWorkspaceRoutes) { _, restored in restored }
+        } else {
+            for rememberedRoute in restoredRoutes + forwardRoutes {
+                remember(rememberedRoute)
+            }
+        }
+        remember(restoredRoute)
         if previous == destination {
             lastTransition = nil
         } else {
@@ -1007,8 +1051,20 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func select(_ destination: XertPrimaryDestination, source: XertNavigationSource) -> Bool {
-        open(.primary(destination), source: source)
+    func select(
+        _ destination: XertPrimaryDestination,
+        source: XertNavigationSource,
+        allowsProtectedRoutes: Bool = true
+    ) -> Bool {
+        let rememberedRoute = rememberedRoute(for: destination)
+        let targetRoute = allowsProtectedRoutes || !rememberedRoute.requiresAuthentication
+            ? rememberedRoute
+            : .primary(destination)
+        return open(targetRoute, source: source)
+    }
+
+    func rememberedRoute(for destination: XertPrimaryDestination) -> XertMemberRoute {
+        workspaceRoutes[destination] ?? .primary(destination)
     }
 
     @discardableResult
@@ -1022,6 +1078,7 @@ final class XertNavigationCoordinator: ObservableObject {
         let previous = selection
         selection = destination
         route = targetRoute
+        remember(targetRoute)
         routeSequence &+= 1
         forwardRouteHistory = []
         routeHistory.append(targetRoute)
@@ -1036,13 +1093,18 @@ final class XertNavigationCoordinator: ObservableObject {
     func step(
         _ direction: XertNavigationDirection,
         order: [XertPrimaryDestination] = XertPrimaryDestination.dockOrder,
-        source: XertNavigationSource = .dockSwipe
+        source: XertNavigationSource = .dockSwipe,
+        allowsProtectedRoutes: Bool = true
     ) -> Bool {
         let destinations = XertWorkspaceOrderStore.normalized(order)
         guard let index = destinations.firstIndex(of: selection) else { return false }
         let targetIndex = direction == .next ? index + 1 : index - 1
         guard destinations.indices.contains(targetIndex) else { return false }
-        return select(destinations[targetIndex], source: source)
+        return select(
+            destinations[targetIndex],
+            source: source,
+            allowsProtectedRoutes: allowsProtectedRoutes
+        )
     }
 
     @discardableResult
@@ -1054,6 +1116,7 @@ final class XertNavigationCoordinator: ObservableObject {
         guard let targetRoute = routeHistory.last else { return false }
         selection = targetRoute.destination
         route = targetRoute
+        remember(targetRoute)
         routeSequence &+= 1
         recordTransition(from: previous, to: targetRoute.destination, source: source)
         return true
@@ -1067,6 +1130,7 @@ final class XertNavigationCoordinator: ObservableObject {
         routeHistory.append(targetRoute)
         selection = targetRoute.destination
         route = targetRoute
+        remember(targetRoute)
         routeSequence &+= 1
         recordTransition(from: previous, to: targetRoute.destination, source: source)
         return true
@@ -1092,6 +1156,7 @@ final class XertNavigationCoordinator: ObservableObject {
         forwardRouteHistory = Array(routes.dropFirst(index + 1))
         selection = targetRoute.destination
         route = targetRoute
+        remember(targetRoute)
         routeSequence &+= 1
         recordTransition(from: previous, to: targetRoute.destination, source: source)
         return true
@@ -1100,6 +1165,24 @@ final class XertNavigationCoordinator: ObservableObject {
     func reselect(_ destination: XertPrimaryDestination) {
         guard destination == selection else { return }
         reselectionSequence &+= 1
+    }
+
+    private static var defaultWorkspaceRoutes: [XertPrimaryDestination: XertMemberRoute] {
+        Dictionary(uniqueKeysWithValues: XertPrimaryDestination.allCases.map { ($0, .primary($0)) })
+    }
+
+    private func remember(_ route: XertMemberRoute) {
+        workspaceRoutes[route.destination] = route
+    }
+
+    private func commandRoute(
+        for destination: XertPrimaryDestination,
+        context: XertNavigationContext
+    ) -> XertMemberRoute {
+        let rememberedRoute = rememberedRoute(for: destination)
+        return context.isSignedIn || !rememberedRoute.requiresAuthentication
+            ? rememberedRoute
+            : .primary(destination)
     }
 
     private func recordTransition(

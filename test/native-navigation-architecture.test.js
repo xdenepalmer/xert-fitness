@@ -211,7 +211,7 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /handleReselection[\s\S]*store\.refresh\(\)/);
   assert.match(root, /DragGesture\(minimumDistance: 36\)/);
   assert.match(root, /abs\(horizontal\) > 44[\s\S]*abs\(vertical\) \* 1\.35/);
-  assert.match(root, /navigation\.step\(direction, order: memberWorkspaceOrder\)/);
+  assert.match(root, /navigation\.step\([\s\S]*direction,[\s\S]*order: memberWorkspaceOrder,[\s\S]*allowsProtectedRoutes: store\.isSignedIn/);
   assert.match(root, /previousRoute: navigation\.previousRoute/);
   assert.match(root, /navigation\.returnToPrevious\(\)/);
   assert.match(root, /\.accessibilityActions \{/);
@@ -292,6 +292,26 @@ test('navigation history preserves exact member tasks instead of flattening them
   assert.match(modelsTests, /testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs/);
 });
 
+test('each native workspace preserves and restores its own exact task', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /private\(set\) var workspaceRoutes: \[XertPrimaryDestination: XertMemberRoute\]/);
+  assert.match(navigation, /func rememberedRoute\(for destination: XertPrimaryDestination\)/);
+  assert.match(navigation, /func select\([\s\S]*allowsProtectedRoutes: Bool = true[\s\S]*return open\(targetRoute, source: source\)/);
+  assert.match(navigation, /workspaceRouteValues: \[String\]\?/);
+  assert.match(navigation, /workspaceRoutes: XertPrimaryDestination\.dockOrder\.compactMap/);
+  assert.match(navigation, /Set\(restoredWorkspaceRoutes\.map\(\\\.destination\)\)\.count == restoredWorkspaceRoutes\.count/);
+  assert.match(navigation, /workspaceRouteValues\?\.count[\s\S]*== XertNavigationWorkspaceSnapshot\.maximumWorkspaceRouteCount/);
+  assert.match(navigation, /restoredWorkspaceRoutes\.filter \{ !\$0\.requiresAuthentication \}/);
+  assert.match(root, /allowsProtectedRoutes: store\.isSignedIn/);
+  assert.ok(navigation.includes('"Return to \\(rememberedRoute.navigationTitle)"'));
+  assert.match(modelsTests, /testNavigationRemembersTheExactTaskInEveryWorkspace/);
+  assert.match(modelsTests, /testNavigationWorkspaceRestoresIndependentTasksAndFiltersPrivateMemory/);
+});
+
 test('sign-out clears exact-task history before another member can inherit it', async () => {
   const [navigation, root, modelsTests] = await Promise.all([
     readFile(navigationURL, 'utf8'),
@@ -331,8 +351,8 @@ test('external native navigation defers private member tasks until authenticatio
   assert.match(root, /consumePendingQuickActionRoute[\s\S]*openMemberRoute\(route, source: \.quickAction\)/);
   assert.match(root, /if canReconcile \{ await store\.reconcileCheckout\(\) \}/);
   assert.match(root, /AccountView\([\s\S]*pendingNavigationTitle: pendingProtectedNavigation\?\.route\.navigationTitle/);
-  assert.match(root, /private func selectMemberDestination\([\s\S]*guard navigation\.select\(destination, source: source\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
-  assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\(direction, order: memberWorkspaceOrder\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /private func selectMemberDestination\([\s\S]*guard navigation\.select\([\s\S]*allowsProtectedRoutes: store\.isSignedIn[\s\S]*else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
+  assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\([\s\S]*allowsProtectedRoutes: store\.isSignedIn[\s\S]*else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
   assert.match(root, /returnToPreviousNavigationDestination[\s\S]*guard navigation\.returnToPrevious\(\) else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
   assert.match(root, /case \.destination\(let destination\):[\s\S]*selectMemberDestination\(destination, source: \.keyboard\)/);
   assert.match(account, /let pendingNavigationTitle: String\?/);
@@ -354,7 +374,7 @@ test('scene restoration preserves a bounded versioned exact-task workspace', asy
   assert.match(navigation, /maximumRouteCount = 32/);
   assert.match(navigation, /var workspaceRestorationValue: String/);
   assert.match(navigation, /func restore\([\s\S]*workspaceValue: String,[\s\S]*fallbackRouteValue: String,[\s\S]*allowsProtectedRoutes: Bool = true/);
-  assert.match(navigation, /snapshot\.version == XertNavigationWorkspaceSnapshot\.currentVersion/);
+  assert.match(navigation, /XertNavigationWorkspaceSnapshot\.legacyVersion,[\s\S]*XertNavigationWorkspaceSnapshot\.currentVersion/);
   assert.match(navigation, /restoredRoutes\.count == snapshot\.routeValues\.count/);
   assert.match(navigation, /authorizedForwardRoutes\.prefix\(max\(0, historyLimit - 1\)\)/);
   assert.match(navigation, /backwardCapacity = max\(1, historyLimit - boundedForwardRoutes\.count\)/);

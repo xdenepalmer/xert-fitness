@@ -308,7 +308,11 @@ struct RootView: View {
         source: XertNavigationSource
     ) {
         claimMemberNavigation()
-        guard navigation.select(destination, source: source) else { return }
+        guard navigation.select(
+            destination,
+            source: source,
+            allowsProtectedRoutes: store.isSignedIn
+        ) else { return }
         cancelPendingProtectedNavigation()
     }
 
@@ -320,7 +324,11 @@ struct RootView: View {
     }
 
     private func handleNavigationStep(_ direction: XertNavigationDirection) {
-        guard navigation.step(direction, order: memberWorkspaceOrder) else { return }
+        guard navigation.step(
+            direction,
+            order: memberWorkspaceOrder,
+            allowsProtectedRoutes: store.isSignedIn
+        ) else { return }
         claimMemberNavigation()
         cancelPendingProtectedNavigation()
         UISelectionFeedbackGenerator().selectionChanged()

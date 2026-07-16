@@ -241,6 +241,50 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(navigation.lastTransition?.source, .restoration)
     }
 
+    func testNavigationRemembersTheExactTaskInEveryWorkspace() throws {
+        let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000071"))
+        let navigation = XertNavigationCoordinator(initial: .booking)
+
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.eventGoals, source: .content))
+        XCTAssertEqual(navigation.rememberedRoute(for: .booking), .sessionPacks)
+        XCTAssertEqual(navigation.rememberedRoute(for: .events), .eventGoals)
+
+        XCTAssertTrue(navigation.select(.booking, source: .dock))
+        XCTAssertEqual(navigation.route, .sessionPacks)
+        XCTAssertTrue(navigation.step(
+            .next,
+            order: [.booking, .events, .home, .explore, .account]
+        ))
+        XCTAssertEqual(navigation.route, .eventGoals)
+
+        XCTAssertTrue(navigation.open(.upcomingBookings(bookingID), source: .pushNotification))
+        XCTAssertTrue(navigation.select(.events, source: .keyboard))
+        XCTAssertEqual(navigation.route, .eventGoals)
+        XCTAssertTrue(navigation.select(.account, source: .commandPalette))
+        XCTAssertEqual(navigation.route, .upcomingBookings(bookingID))
+
+        let commands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: XertNavigationContext(
+                isSignedIn: true,
+                noticeCount: 0,
+                bookingCount: 1,
+                creditCount: 4,
+                eventGoalCount: 1,
+                hasPendingCheckout: false
+            )
+        )
+        XCTAssertEqual(
+            commands.first { $0.action == .destination(.booking) }?.title,
+            "Return to Session Packs"
+        )
+        XCTAssertEqual(
+            commands.first { $0.action == .destination(.events) }?.title,
+            "Return to Event Goals"
+        )
+    }
+
     func testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs() throws {
         let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000031"))
         let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 6)
@@ -325,11 +369,74 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(protectedFallback.route, .home)
     }
 
+    func testNavigationWorkspaceRestoresIndependentTasksAndFiltersPrivateMemory() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000072"))
+        let source = XertNavigationCoordinator(initial: .home, historyLimit: 8)
+        XCTAssertTrue(source.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(source.open(.sessionPacks, source: .content))
+        XCTAssertTrue(source.open(.eventGoals, source: .commandPalette))
+        XCTAssertTrue(source.open(.explore, source: .dock))
+
+        let data = try XCTUnwrap(source.workspaceRestorationValue.data(using: .utf8))
+        let snapshot = try JSONDecoder().decode(XertNavigationWorkspaceSnapshot.self, from: data)
+        XCTAssertEqual(snapshot.version, XertNavigationWorkspaceSnapshot.currentVersion)
+        XCTAssertEqual(
+            snapshot.workspaceRouteValues?.count,
+            XertNavigationWorkspaceSnapshot.maximumWorkspaceRouteCount
+        )
+
+        let signedIn = XertNavigationCoordinator(initial: .account, historyLimit: 8)
+        signedIn.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.account.restorationValue,
+            allowsProtectedRoutes: true
+        )
+        XCTAssertEqual(signedIn.rememberedRoute(for: .home), .notices(noticeID))
+        XCTAssertEqual(signedIn.rememberedRoute(for: .booking), .sessionPacks)
+        XCTAssertEqual(signedIn.rememberedRoute(for: .events), .eventGoals)
+        XCTAssertTrue(signedIn.select(.home, source: .dock))
+        XCTAssertEqual(signedIn.route, .notices(noticeID))
+
+        let signedOut = XertNavigationCoordinator(initial: .account, historyLimit: 8)
+        signedOut.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.home.restorationValue,
+            allowsProtectedRoutes: false
+        )
+        XCTAssertEqual(signedOut.rememberedRoute(for: .home), .home)
+        XCTAssertEqual(signedOut.rememberedRoute(for: .booking), .sessionPacks)
+        XCTAssertEqual(signedOut.rememberedRoute(for: .events), .events)
+        XCTAssertFalse(signedOut.containsProtectedHistory)
+
+        let defensiveSelection = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(defensiveSelection.open(.eventGoals, source: .deepLink))
+        XCTAssertTrue(defensiveSelection.open(.booking, source: .dock))
+        XCTAssertTrue(defensiveSelection.select(
+            .events,
+            source: .dock,
+            allowsProtectedRoutes: false
+        ))
+        XCTAssertEqual(defensiveSelection.route, .events)
+
+        let legacy = #"{"version":1,"routeValues":["booking/packs","events/goals"]}"#
+        let legacyRestored = XertNavigationCoordinator(initial: .home)
+        legacyRestored.restore(
+            workspaceValue: legacy,
+            fallbackRouteValue: XertMemberRoute.home.restorationValue
+        )
+        XCTAssertEqual(legacyRestored.route, .eventGoals)
+        XCTAssertEqual(legacyRestored.rememberedRoute(for: .booking), .sessionPacks)
+    }
+
     func testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots() {
         let fallback = XertMemberRoute.upcomingBookings(nil)
         let invalidSnapshots = [
             "not-json",
+            #"{"version":3,"routeValues":["events/goals"],"workspaceRouteValues":["home","booking","events/goals","explore","account"]}"#,
             #"{"version":2,"routeValues":["events/goals"]}"#,
+            #"{"version":2,"routeValues":["booking"],"workspaceRouteValues":["home"]}"#,
+            #"{"version":2,"routeValues":["booking"],"workspaceRouteValues":["booking/packs","booking/purchase-confirmation"]}"#,
+            #"{"version":2,"routeValues":["booking"],"workspaceRouteValues":["home","unknown"]}"#,
             #"{"version":1,"routeValues":["booking/packs","unknown"]}"#,
             #"{"version":1,"routeValues":["booking"],"forwardRouteValues":["unknown"]}"#,
             #"{"version":1,"routeValues":[]}"#,
