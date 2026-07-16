@@ -90,7 +90,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Password recovery that sends members to the existing web reset page.
 - Secure token persistence in Keychain.
 - Optional Face ID, Touch ID, or device-passcode privacy lock that hides all signed-in tabs whenever the app leaves the foreground.
-- Typed exact-task navigation across deep links, Universal Links, privacy-safe Handoff, scene restoration, Back/Forward history, and Home Screen quick actions for booking, upcoming bookings, and the event calendar. The same allowlisted routes are published as App Intents for Siri, Spotlight, Shortcuts, and supported system controls.
+- Typed exact-task navigation across deep links, Universal Links, privacy-safe Handoff, scene restoration, Back/Forward history, and Home Screen quick actions for booking, upcoming bookings, and the event calendar. The same allowlisted routes are published as App Intents for Siri, Spotlight, Shortcuts, and supported system controls. iPadOS also exposes scene-level menu and hardware-keyboard commands for all five workspaces, exact-task history, refresh, the quick switcher, and role-gated owner operations.
 - Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
 - Searchable class discovery with Queensland-aware today/7-day windows, open-spot and beginner-friendly filters.

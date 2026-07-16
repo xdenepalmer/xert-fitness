@@ -30,6 +30,7 @@ struct RootView: View {
                 memberTabs
             }
         }
+        .focusedSceneValue(\.xertNavigationCommandContext, navigationCommandContext)
         .onChange(of: scenePhase, perform: handleScenePhase)
         .onChange(of: store.isSignedIn) { isSignedIn in
             guard isSignedIn, privacyLockEnabled else {
@@ -204,6 +205,20 @@ struct RootView: View {
         )
     }
 
+    private var navigationCommandContext: XertNavigationCommandContext {
+        let isAvailable = !isPrivacyLocked
+            && !showingAdminCommandCentre
+            && !showingNavigationCommands
+        return XertNavigationCommandContext(
+            isAvailable: isAvailable,
+            selection: isAvailable ? navigation.selection : .home,
+            previousRoute: isAvailable ? navigation.previousRoute : nil,
+            nextRoute: isAvailable ? navigation.nextRoute : nil,
+            isAdmin: isAvailable && store.profile?.isAdmin == true,
+            perform: executeSceneNavigationCommand
+        )
+    }
+
     private var navigationDock: some View {
         XertNavigationDock(
             selection: selectedDestinationBinding,
@@ -311,6 +326,27 @@ struct RootView: View {
         opensAdminAfterCommandDismissal = false
         guard store.profile?.isAdmin == true else { return }
         showingAdminCommandCentre = true
+    }
+
+    private func executeSceneNavigationCommand(_ command: XertSceneNavigationCommand) {
+        guard !isPrivacyLocked else { return }
+
+        switch command {
+        case .destination(let destination):
+            navigation.select(destination, source: .keyboard)
+        case .previous:
+            returnToPreviousNavigationDestination()
+        case .next:
+            returnToNextNavigationDestination()
+        case .quickSwitcher:
+            guard !showingAdminCommandCentre else { return }
+            showingNavigationCommands = true
+        case .refresh:
+            handleReselection(navigation.selection)
+        case .owner:
+            guard store.profile?.isAdmin == true, !showingNavigationCommands else { return }
+            showingAdminCommandCentre = true
+        }
     }
 
     private var isPrivacyLocked: Bool {

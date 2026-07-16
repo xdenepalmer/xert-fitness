@@ -18,5 +18,8 @@ struct XertFitnessApp: App {
                     await store.bootstrap()
                 }
         }
+        .commands {
+            XertNavigationCommands()
+        }
     }
 }
