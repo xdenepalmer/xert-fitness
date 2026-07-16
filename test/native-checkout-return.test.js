@@ -56,7 +56,8 @@ test('native app accepts only the XERT checkout callback and refreshes member da
 
 test('native app polls bounded order and credit state while Stripe fulfilment settles', () => {
   assert.match(deepLink, /retryDelaysNanoseconds: \[UInt64\] = \[0, 2_000_000_000, 3_000_000_000, 5_000_000_000\]/);
-  assert.match(deepLink, /let newPaidOrderIDs = Set\(orders\.lazy\.compactMap/);
+  assert.match(deepLink, /var newPaidOrderIDs = Set<UUID>\(\)/);
+  assert.match(deepLink, /newPaidOrderIDs\.insert\(order\.id\)/);
   assert.match(deepLink, /guard let orderID = batch\.order_id/);
   assert.match(deepLink, /newPaidOrderIDs\.contains\(orderID\)/);
   assert.match(store, /let userID = authSession\?\.user\?\.id,[\s\S]*!isReconcilingCheckout/);

@@ -47,12 +47,11 @@ enum CheckoutReconciliation {
         credits: [CreditBatch],
         orders: [OrderItem]
     ) -> Bool {
-        let newPaidOrderIDs = Set(orders.lazy.compactMap { order -> UUID? in
-            guard !baselineOrderIDs.contains(order.id),
-                  order.status.lowercased() == "paid"
-            else { return nil }
-            return order.id
-        })
+        var newPaidOrderIDs = Set<UUID>()
+        for order in orders where
+            !baselineOrderIDs.contains(order.id) && order.status.lowercased() == "paid" {
+            newPaidOrderIDs.insert(order.id)
+        }
         return credits.contains { batch in
             guard let orderID = batch.order_id else { return false }
             return newPaidOrderIDs.contains(orderID)
