@@ -196,6 +196,8 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /return AnyView\(dashboard\(session: session\)/);
   assert.match(view, /managementDirectory\(session: session\)/);
   assert.match(view, /private func classSummary\(_ item: AdminClassSession\) -> String/);
+  assert.match(view, /private func classDay\(_ item: AdminClassSession\) -> String/);
+  assert.match(view, /private func classMonth\(_ item: AdminClassSession\) -> String/);
 });
 
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {

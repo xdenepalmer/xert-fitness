@@ -959,15 +959,23 @@ private struct AdminScheduleView: View {
         return "\(time) · \(capacity) places"
     }
 
+    private func classDay(_ item: AdminClassSession) -> String {
+        item.start_time?.formatted(.dateTime.day()) ?? "--"
+    }
+
+    private func classMonth(_ item: AdminClassSession) -> String {
+        item.start_time?.formatted(.dateTime.month(.abbreviated)) ?? "TBC"
+    }
+
     var body: some View {
         List {
             if rows.isEmpty { Text("No matching classes.").listRowBackground(Color.xertInk) }
             ForEach(rows) { item in
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 2) {
-                        Text(item.start_time?.formatted(.dateTime.day()) ?? "--")
+                        Text(classDay(item))
                             .font(.title3.weight(.bold))
-                        Text(item.start_time?.formatted(.dateTime.month(.abbreviated)) ?? "TBC")
+                        Text(classMonth(item))
                             .font(.caption2.weight(.bold))
                     }
                     .frame(width: 42)
