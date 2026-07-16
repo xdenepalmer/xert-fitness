@@ -200,6 +200,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /private func classMonth\(_ item: AdminClassSession\) -> String/);
   assert.match(view, /ForEach\(rows\) \{ item in\s*classRow\(item\)/);
   assert.match(view, /private func classStatusActions\(_ item: AdminClassSession\) -> some View/);
+  assert.match(view, /if item\.public_visible == true/);
 });
 
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {

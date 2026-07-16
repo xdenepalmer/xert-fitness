@@ -1042,7 +1042,7 @@ private struct AdminScheduleView: View {
     private func classStatusActions(_ item: AdminClassSession) -> some View {
         HStack {
             Text(item.status.uppercased()).foregroundStyle(classStatusColour(item.status))
-            if item.public_visible { Text("PUBLIC").foregroundStyle(.green) }
+            if item.public_visible == true { Text("PUBLIC").foregroundStyle(.green) }
             Spacer()
             Menu {
                 Button {
