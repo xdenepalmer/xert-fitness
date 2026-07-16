@@ -23,6 +23,7 @@ test('App Intents expose the typed XERT task router to Siri, Spotlight and Short
   assert.match(shortcuts, /NotificationCenter\.default\.post\(name: \.xertOpenQuickAction/);
   assert.match(shortcuts, /struct XertAppShortcuts: AppShortcutsProvider/);
   assert.equal((shortcuts.match(/AppShortcut\(/g) || []).length, 3);
+  assert.match(shortcuts, /shortcutTileColor:\s*ShortcutTileColor\s*\{\s*\.blue\s*\}/);
   assert.equal((shortcuts.match(/\\\(\.applicationName\)/g) || []).length, 3);
   assert.match(shortcuts, /Book a class/);
   assert.match(shortcuts, /Upcoming bookings/);

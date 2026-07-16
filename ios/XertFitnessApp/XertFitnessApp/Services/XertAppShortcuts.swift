@@ -67,5 +67,5 @@ struct XertAppShortcuts: AppShortcutsProvider {
         )
     }
 
-    static var shortcutTileColor: ShortcutTileColor { .gray }
+    static var shortcutTileColor: ShortcutTileColor { .blue }
 }
