@@ -11,8 +11,10 @@ import {
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
+  recordStripeOperatorReview,
   finishStripeWebhookEvent,
   stripeRefundForEvent,
+  stripeDisputeReviewForEvent,
   stripeOperatorReviewForEvent,
   stripeModeForSecret,
   stripeWebhookErrorCode,
@@ -116,6 +118,7 @@ test('webhook public failures never echo Stripe or database exception messages',
   assert.match(source, /ledgerStarted[\s\S]*status: 'failed'[\s\S]*stripeWebhookErrorCode\(e\)/);
   assert.match(source, /stripeOperatorReviewForEvent\(event\)[\s\S]*PARTIAL_REFUND_REQUIRES_REVIEW|operatorReview\.errorCode/);
   assert.match(source, /status: 'failed'[\s\S]*requires_review: true/);
+  assert.match(source, /stripeDisputeReviewForEvent\(event\)/);
 });
 
 test('creates one durable fulfilment record for a paid checkout', () => {
@@ -352,6 +355,54 @@ test('links an exceptional Stripe event to its XERT order without exposing membe
     ['select', 'id'],
     ['eq', 'stripe_payment_intent_id', 'pi_test_xert'],
   ]);
+});
+
+test('classifies a complete Stripe dispute for exact-order operator review', () => {
+  const event = {
+    id: 'evt_dispute_xert',
+    type: 'charge.dispute.created',
+    data: { object: {
+      id: 'dp_xert', payment_intent: 'pi_test_xert', charge: 'ch_xert',
+      amount: 4800, currency: 'aud',
+    } },
+  };
+  assert.deepEqual(stripeDisputeReviewForEvent(event), {
+    errorCode: 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+    paymentIntentId: 'pi_test_xert',
+  });
+  assert.equal(stripeDisputeReviewForEvent({ ...event, type: 'charge.dispute.closed' }), null);
+  assert.throws(() => stripeDisputeReviewForEvent({
+    ...event,
+    data: { object: { ...event.data.object, payment_intent: null } },
+  }), /dispute data is incomplete or invalid/i);
+});
+
+test('records operator review only after applying the event scoping rule', async () => {
+  const event = { id: 'evt_review_xert' };
+  const review = {
+    errorCode: 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+    paymentIntentId: 'pi_test_xert',
+  };
+  const calls = [];
+  const noOrderQuery = {
+    select() { return noOrderQuery; },
+    eq() { return noOrderQuery; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const noOrderAdmin = {
+    from() { return noOrderQuery; },
+    async rpc(name, payload) { calls.push({ name, payload }); return { error: null }; },
+  };
+  assert.equal(await recordStripeOperatorReview(
+    noOrderAdmin, event, review, { requireLinkedOrder: true }
+  ), false);
+  assert.equal(calls.length, 0);
+
+  assert.equal(await recordStripeOperatorReview(noOrderAdmin, event, review), true);
+  assert.equal(calls[0].name, 'finish_stripe_webhook_event');
+  assert.equal(calls[0].payload.p_status, 'failed');
+  assert.equal(calls[0].payload.p_error_code, 'PAYMENT_DISPUTE_REQUIRES_REVIEW');
+  assert.equal(calls[0].payload.p_order_id, null);
 });
 
 test('persists refund recovery through the service-role reconciliation RPC', async () => {

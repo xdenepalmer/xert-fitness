@@ -23,6 +23,7 @@ const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.expired',
   'checkout.session.async_payment_failed',
   'charge.refunded',
+  'charge.dispute.created',
 ];
 
 export function inspectCommerceEnvironment(environment = {}) {
@@ -210,6 +211,9 @@ export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
 export function stripeIncidentResolution(errorCode) {
   if (errorCode === 'PARTIAL_REFUND_REQUIRES_REVIEW') {
     return 'Review the refund in Stripe, then adjust or revoke the member credits from the linked order.';
+  }
+  if (errorCode === 'PAYMENT_DISPUTE_REQUIRES_REVIEW') {
+    return 'Open the dispute in Stripe, preserve the member and order evidence, then decide whether access or credits must be suspended.';
   }
   return null;
 }

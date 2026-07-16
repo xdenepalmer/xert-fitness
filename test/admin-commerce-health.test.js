@@ -113,6 +113,7 @@ function readyStripe() {
           enabled_events: [
             'checkout.session.completed', 'checkout.session.async_payment_succeeded',
             'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
+            'charge.dispute.created',
           ],
         }] };
       },
@@ -351,6 +352,7 @@ test('partial-refund incidents give owners a concrete recovery instruction', asy
     last_error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
   }]), new Date('2026-07-16T06:00:00.000Z'));
   assert.match(result.incidents[0].resolution, /linked order/i);
+  assert.match(stripeIncidentResolution('PAYMENT_DISPUTE_REQUIRES_REVIEW'), /preserve the member and order evidence/i);
 });
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {
@@ -497,12 +499,13 @@ test('commerce health verifies Australian charge and payout readiness', () => {
   assert.equal(result.issues.length, 5);
 });
 
-test('commerce health requires checkout and refund events on the canonical Stripe webhook', () => {
+test('commerce health requires checkout, refund, and dispute events on the canonical Stripe webhook', () => {
   const url = 'https://xert-fitness.vercel.app/api/stripe-webhook';
   assert.deepEqual(inspectStripeWebhookEndpoints([{
     url, status: 'enabled', enabled_events: [
       'checkout.session.completed', 'checkout.session.async_payment_succeeded',
       'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
+      'charge.dispute.created',
     ],
   }], 'https://xert-fitness.vercel.app'), { ready: true, missing_events: [], issue: null });
 
@@ -513,6 +516,7 @@ test('commerce health requires checkout and refund events on the canonical Strip
   assert.deepEqual(incomplete.missing_events, [
     'checkout.session.async_payment_succeeded', 'checkout.session.expired',
     'checkout.session.async_payment_failed', 'charge.refunded',
+    'charge.dispute.created',
   ]);
   assert.match(incomplete.issue, /charge\.refunded/);
 

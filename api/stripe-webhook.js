@@ -227,6 +227,28 @@ export function stripeOperatorReviewForEvent(event) {
   };
 }
 
+export function stripeDisputeReviewForEvent(event) {
+  if (event?.type !== 'charge.dispute.created') return null;
+  const dispute = event.data?.object;
+  const paymentIntentId = typeof dispute?.payment_intent === 'string'
+    ? dispute.payment_intent
+    : dispute?.payment_intent?.id;
+  const chargeId = typeof dispute?.charge === 'string'
+    ? dispute.charge
+    : dispute?.charge?.id;
+  if (
+    !event.id || !dispute?.id || !paymentIntentId || !chargeId
+    || !Number.isSafeInteger(dispute.amount) || dispute.amount <= 0
+    || !/^[a-z]{3}$/i.test(String(dispute.currency || ''))
+  ) {
+    throw new Error('Stripe dispute data is incomplete or invalid.');
+  }
+  return {
+    errorCode: 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+    paymentIntentId,
+  };
+}
+
 export async function findStripeOrderForReview(admin, paymentIntentId) {
   const { data, error } = await admin
     .from('orders')
@@ -238,6 +260,18 @@ export async function findStripeOrderForReview(admin, paymentIntentId) {
     throw new Error('Stripe order lookup returned an invalid result.');
   }
   return data?.id || null;
+}
+
+export async function recordStripeOperatorReview(admin, event, review, { requireLinkedOrder = false } = {}) {
+  const orderId = await findStripeOrderForReview(admin, review.paymentIntentId);
+  if (requireLinkedOrder && !orderId) return false;
+  await finishStripeWebhookEvent(admin, {
+    eventId: event.id,
+    status: 'failed',
+    orderId,
+    errorCode: review.errorCode,
+  });
+  return true;
 }
 
 export async function persistStripeRefund(admin, refund) {
@@ -391,15 +425,15 @@ export default async function handler(request, response) {
       await persistCheckoutFailure(admin, failure);
       handled = true;
     }
+    const disputeReview = stripeDisputeReviewForEvent(event);
+    if (disputeReview && await recordStripeOperatorReview(
+      admin, event, disputeReview, { requireLinkedOrder: true }
+    )) {
+      return sendJson(response, { received: true, requires_review: true });
+    }
     const operatorReview = stripeOperatorReviewForEvent(event);
     if (operatorReview) {
-      orderId = await findStripeOrderForReview(admin, operatorReview.paymentIntentId);
-      await finishStripeWebhookEvent(admin, {
-        eventId: event.id,
-        status: 'failed',
-        orderId,
-        errorCode: operatorReview.errorCode,
-      });
+      await recordStripeOperatorReview(admin, event, operatorReview);
       return sendJson(response, { received: true, requires_review: true });
     }
     const refund = stripeRefundForEvent(event);
