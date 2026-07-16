@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
   assertCheckoutProduct,
+  checkoutReceiptDetails,
   stripePendingOrderGuardIsReady,
   stripeOrderTermsSnapshotIsReady,
   stripeWebhookLedgerIsReady,
@@ -23,11 +24,34 @@ import {
 const checkoutAttemptID = '7b464e63-6e3f-4f7d-94be-d8ef4231d589';
 
 const validProduct = {
+  name: 'Starter 4',
   price_cents: 4800,
   currency: 'aud',
   sessions_count: 4,
   validity_days: 28,
 };
+
+test('builds authenticated and immutable receipt terms from the product contract', () => {
+  const details = checkoutReceiptDetails(
+    { id: 'member-xert', email: ' Member@Example.com ' },
+    validProduct,
+  );
+  assert.deepEqual(details, {
+    email: 'member@example.com',
+    terms: 'This purchase adds 4 XERT training sessions to your member account. Credits expire 28 days after successful payment.',
+    description: 'XERT Fitness - Starter 4: 4 sessions, valid for 28 days from payment.',
+    contractVersion: 'receipt_terms_v1',
+  });
+  assert.ok(details.terms.length <= 1200);
+  assert.throws(
+    () => checkoutReceiptDetails({ id: 'member-xert', email: 'invalid' }, validProduct),
+    /valid email address/i,
+  );
+  assert.ok(checkoutReceiptDetails(
+    { email: 'member@example.com' },
+    { ...validProduct, name: `  Premium\n${'x'.repeat(300)}  ` },
+  ).description.length < 300);
+});
 
 const productWithStripePrice = {
   ...validProduct,
@@ -365,6 +389,7 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
   const checkout = {
     status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_test_xert',
     amount_total: 4800, currency: 'aud', livemode: false,
+    customer_email: 'member@example.com',
     metadata: {
       user_id: user.id,
       product_id: product.id,
@@ -372,9 +397,12 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
       sessions_count: String(product.sessions_count),
       validity_days: String(product.validity_days),
       return_target: 'ios',
+      checkout_contract: 'receipt_terms_v1',
     },
   };
-  const options = { returnTarget: 'ios', stripeMode: 'test' };
+  const options = {
+    returnTarget: 'ios', stripeMode: 'test', memberEmail: 'member@example.com',
+  };
   assert.equal(reusableCheckoutURL(checkout, user, product, options), checkout.url);
   for (const invalid of [
     { ...checkout, status: 'complete' },
@@ -388,6 +416,8 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
     { ...checkout, metadata: { ...checkout.metadata, sessions_count: '99' } },
     { ...checkout, metadata: { ...checkout.metadata, validity_days: '365' } },
     { ...checkout, metadata: { ...checkout.metadata, return_target: 'web' } },
+    { ...checkout, metadata: { ...checkout.metadata, checkout_contract: 'legacy' } },
+    { ...checkout, customer_email: 'another@example.com' },
   ]) assert.equal(reusableCheckoutURL(invalid, user, product, options), null);
 });
 
@@ -426,7 +456,11 @@ test('records a member-bound pending order before handing off to Stripe', async 
   assert.match(source, /catch \{[\s\S]*checkout\.sessions\.expire\(session\.id\)/);
   assert.match(source, /findReusableCheckout/);
   assert.match(source, /stripeMode === 'live' && !product\.stripe_price_id/);
-  assert.match(source, /customer_creation: 'always'/);
+  assert.match(source, /customer_creation: 'if_required'/);
+  assert.match(source, /origin_context: returnTarget === 'ios' \? 'mobile_app' : 'web'/);
+  assert.match(source, /receipt_email: receiptDetails\.email/);
+  assert.match(source, /submit: \{ message: receiptDetails\.terms \}/);
+  assert.match(source, /checkout_contract: receiptDetails\.contractVersion/);
   assert.match(source, /payment_intent_data:/);
   assert.match(source, /checkout\.sessions\.create\(checkoutParameters, \{[\s\S]*idempotencyKey:/);
   assert.equal(

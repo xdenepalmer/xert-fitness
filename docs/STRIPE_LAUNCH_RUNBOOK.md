@@ -207,7 +207,10 @@ until this command passes.
    guarded confirmation flow.
 7. Run `npm run stripe:launch:verify`; require every check to pass and the platform
    payment switch to be `ENABLED`.
-8. Run one low-value real card purchase, verify the receipt and refund it.
+8. Run one low-value real card purchase. Before paying, confirm Stripe Checkout
+   shows the exact session count and credit validity and uses the signed-in
+   member email. After paying, confirm the receipt reaches that address and the
+   XERT order has the same credits and expiry, then issue and verify a full refund.
 
 ## Rollback
 

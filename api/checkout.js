@@ -31,6 +31,7 @@ const PAYMENT_ACTIVATION_DRIFT_CAPABILITY = 'payment_activation_drift_guard';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
+const CHECKOUT_CONTRACT_VERSION = 'receipt_terms_v1';
 
 export { stripeModeForSecret };
 
@@ -229,6 +230,28 @@ export function assertCheckoutProduct(product) {
   }
 }
 
+export function checkoutReceiptDetails(user, product) {
+  assertCheckoutProduct(product);
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('The member account needs a valid email address before checkout.');
+  }
+
+  const sessionLabel = product.sessions_count === 1 ? 'session' : 'sessions';
+  const productName = String(product.name || 'Session pack')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200) || 'Session pack';
+  const terms = `This purchase adds ${product.sessions_count} XERT training ${sessionLabel} to your member account. Credits expire ${product.validity_days} days after successful payment.`;
+
+  return {
+    email,
+    terms,
+    description: `XERT Fitness - ${productName}: ${product.sessions_count} ${sessionLabel}, valid for ${product.validity_days} days from payment.`,
+    contractVersion: CHECKOUT_CONTRACT_VERSION,
+  };
+}
+
 /**
  * A stored Stripe Price ID is an optional operational shortcut, not a second
  * source of truth. Refuse checkout unless the Price is explicitly bound to the
@@ -271,13 +294,17 @@ export function reusableCheckoutURL(checkout, user, product, options = {}) {
     || metadata.sessions_count !== String(product?.sessions_count)
     || metadata.validity_days !== String(product?.validity_days)
     || metadata.return_target !== options.returnTarget
+    || metadata.checkout_contract !== CHECKOUT_CONTRACT_VERSION
+    || String(checkout.customer_email || '').trim().toLowerCase() !== options.memberEmail
     || checkout.amount_total !== product?.price_cents
     || String(checkout.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
   ) return null;
   return url.toString();
 }
 
-async function findReusableCheckout({ admin, stripe, user, product, returnTarget, stripeMode, now = new Date() }) {
+async function findReusableCheckout({
+  admin, stripe, user, product, returnTarget, stripeMode, memberEmail, now = new Date(),
+}) {
   const cutoff = new Date(now.getTime() - REUSABLE_CHECKOUT_WINDOW_MS).toISOString();
   const { data, error } = await admin
     .from('orders')
@@ -297,7 +324,9 @@ async function findReusableCheckout({ admin, stripe, user, product, returnTarget
     ) continue;
     try {
       const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
-      const url = reusableCheckoutURL(checkout, user, product, { returnTarget, stripeMode });
+      const url = reusableCheckoutURL(checkout, user, product, {
+        returnTarget, stripeMode, memberEmail,
+      });
       if (url) return { url, checkoutSessionID: checkout.id };
     } catch {
       // A missing or expired Stripe session is not reusable; create a clean one.
@@ -457,13 +486,25 @@ export default async function handler(request, response) {
       .single();
     if (prodErr || !product) return json({ error: 'Unknown product.' }, 400);
     assertCheckoutProduct(product);
+    let receiptDetails;
+    try {
+      receiptDetails = checkoutReceiptDetails(user, product);
+    } catch (error) {
+      return json({ error: error.message }, 409);
+    }
 
     if (stripeMode === 'live' && !product.stripe_price_id) {
       return json({ error: 'This pack is not linked to a live Stripe Price yet.' }, 409);
     }
 
     const reusableCheckout = await findReusableCheckout({
-      admin, stripe, user, product, returnTarget, stripeMode,
+      admin,
+      stripe,
+      user,
+      product,
+      returnTarget,
+      stripeMode,
+      memberEmail: receiptDetails.email,
     });
     if (reusableCheckout) {
       return json({
@@ -494,18 +535,23 @@ export default async function handler(request, response) {
 
     const checkoutParameters = {
       mode: 'payment',
-      customer_creation: 'always',
+      customer_creation: 'if_required',
+      origin_context: returnTarget === 'ios' ? 'mobile_app' : 'web',
       billing_address_collection: 'auto',
       line_items: [lineItem],
-      customer_email: user.email,
+      customer_email: receiptDetails.email,
       client_reference_id: user.id,
       success_url: returnURLs.success,
       cancel_url: returnURLs.cancel,
       // Stripe requires at least 30 minutes. The extra five minutes avoids a
       // boundary rejection caused by network transit or clock skew.
       expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
+      custom_text: {
+        submit: { message: receiptDetails.terms },
+      },
       payment_intent_data: {
-        description: `XERT Fitness - ${product.name}`,
+        description: receiptDetails.description,
+        receipt_email: receiptDetails.email,
         metadata: {
           xert_user_id: user.id,
           xert_product_id: product.id,
@@ -521,6 +567,7 @@ export default async function handler(request, response) {
         sessions_count: String(product.sessions_count),
         validity_days: String(product.validity_days),
         return_target: returnTarget,
+        checkout_contract: receiptDetails.contractVersion,
         checkout_attempt_id: checkoutAttemptID,
       },
     };
