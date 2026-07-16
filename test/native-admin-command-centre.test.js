@@ -14,18 +14,19 @@ test('native app exposes the command centre only to admin profiles', async () =>
 
   assert.match(models, /let role: String\?/);
   assert.match(models, /var isAdmin: Bool \{ role == "admin" \}/);
-  assert.match(root, /if store\.profile\?\.isAdmin == true[\s\S]*AdminCommandCentreView\(onClose:/);
+  assert.match(root, /if store\.profile\?\.isAdmin == true[\s\S]*AdminCommandCentreView\([\s\S]*requestedWorkspace: requestedAdminWorkspace/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
   assert.match(view, /Owner access required/);
   assert.match(api, /select", value: "id,full_name,phone,email,role"/);
 });
 
 test('native owner workspace uses protected operational RPCs and real actions', async () => {
-  const [api, adminStore, adminModels, view] = await Promise.all([
+  const [api, adminStore, adminModels, view, ownerNavigation] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
   ]);
 
   for (const rpc of [
@@ -140,7 +141,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func refundOrder/);
   assert.match(view, /AdminLeadsView/);
   assert.match(view, /AdminLeadDetailView/);
-  assert.match(view, /Lead pipelines/);
+  assert.match(ownerNavigation, /Lead Pipelines/);
   assert.match(api, /func adminLeads/);
   assert.match(api, /path: "admin_update_lead"/);
   assert.match(api, /path: "admin_update_lead_statuses"/);
@@ -148,7 +149,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func saveLead/);
   assert.match(adminStore, /func bulkUpdateLeads/);
   assert.match(view, /AdminCampaignAttributionView/);
-  assert.match(view, /Campaign attribution/);
+  assert.match(ownerNavigation, /Campaign Attribution/);
   assert.match(view, /fileExporter/);
   assert.match(api, /func adminCampaignAttribution/);
   assert.match(api, /id,utm_source,utm_medium,utm_campaign,source,created_at/);
@@ -156,7 +157,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func loadCampaignAttribution/);
   assert.match(view, /AdminSiteContentView/);
   assert.match(view, /AdminSiteContentEditor/);
-  assert.match(view, /Site content/);
+  assert.match(ownerNavigation, /Site Content/);
   assert.match(view, /PhotosPicker/);
   assert.match(api, /func adminSiteContent/);
   assert.match(api, /func adminSaveSiteContent/);
@@ -167,7 +168,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func uploadSiteImage/);
   assert.match(view, /AdminBookingRequestsView/);
   assert.match(view, /AdminBookingRequestDetailView/);
-  assert.match(view, /Booking requests/);
+  assert.match(ownerNavigation, /Booking Requests/);
   assert.match(api, /func adminBookingRequests/);
   assert.match(api, /\/rest\/v1\/class_bookings/);
   assert.match(api, /\/rest\/v1\/session_bookings/);
@@ -184,30 +185,38 @@ test('native owner workspace uses protected operational RPCs and real actions', 
 });
 
 test('native owner navigation adapts into a categorized scene-restored iPad workspace', async () => {
-  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const [view, ownerNavigation] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+  ]);
 
-  assert.match(view, /private enum AdminWorkspaceSection: String, CaseIterable, Identifiable/);
+  assert.match(ownerNavigation, /enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable/);
   for (const section of ['operate', 'grow', 'publish', 'commerce', 'platform']) {
-    assert.match(view, new RegExp(`case ${section}`));
+    assert.match(ownerNavigation, new RegExp(`case ${section}`));
   }
-  assert.match(view, /private enum AdminWorkspace: String, CaseIterable, Identifiable/);
+  assert.match(ownerNavigation, /enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable/);
   for (const workspace of [
     'overview', 'members', 'classDesk', 'bookingRequests', 'timetable', 'availability',
     'ptRequests', 'retention', 'leads', 'campaigns', 'siteContent', 'notices', 'events',
     'team', 'finance', 'products', 'controls', 'health', 'audit',
-  ]) assert.match(view, new RegExp(`case ${workspace}`));
+  ]) assert.match(ownerNavigation, new RegExp(`case ${workspace}`));
   assert.match(view, /@Environment\(\\\.horizontalSizeClass\) private var horizontalSizeClass/);
   assert.match(view, /@SceneStorage\("xert\.adminWorkspace"\)/);
   assert.match(view, /horizontalSizeClass == \.regular[\s\S]*ownerSplitWorkspace/);
   assert.match(view, /NavigationSplitView \{/);
   assert.match(view, /List\(selection: workspaceSelection\)/);
-  assert.match(view, /AdminWorkspace\.workspaces\(in: section\)/);
+  assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
+  assert.match(view, /NavigationStack\(path: \$compactPath\)/);
+  assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
+  assert.match(view, /applyRequestedWorkspace\(requestedWorkspace\)/);
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
   assert.match(view, /private func workspaceBadge/);
   assert.match(view, /private func workspaceDestination[\s\S]*-> AnyView/);
   assert.match(view, /return AnyView\(dashboard\(session: session\)/);
-  assert.match(view, /managementDirectory\(session: session\)/);
+  assert.match(view, /managementDirectory/);
+  assert.match(view, /let target = workspace \?\? currentWorkspace/);
+  assert.match(view, /onChange\(of: compactPath\)[\s\S]*restoredWorkspace = \(path\.last \?\? \.overview\)\.rawValue/);
   assert.match(view, /private func classSummary\(_ item: AdminClassSession\) -> String/);
   assert.match(view, /private func classDay\(_ item: AdminClassSession\) -> String/);
   assert.match(view, /private func classMonth\(_ item: AdminClassSession\) -> String/);

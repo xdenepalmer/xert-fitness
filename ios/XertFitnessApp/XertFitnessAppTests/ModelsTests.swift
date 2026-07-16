@@ -40,6 +40,64 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking:444/packs"))))
     }
 
+    func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 20)
+        for workspace in XertOwnerWorkspace.allCases {
+            let route = XertOwnerRoute(workspace: workspace)
+            XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
+            XCTAssertEqual(
+                XertOwnerRoute.route(for: try XCTUnwrap(URL(
+                    string: "xertfitness://owner/\(workspace.rawValue)"
+                ))),
+                route
+            )
+            XCTAssertEqual(
+                XertOwnerRoute.route(for: try XCTUnwrap(URL(
+                    string: "https://xert-fitness.vercel.app/open/owner/\(workspace.rawValue)"
+                ))),
+                route
+            )
+        }
+
+        XCTAssertNil(XertOwnerRoute.restore("owner/not-a-workspace"))
+        XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(
+            string: "xertfitness://owner/finance?member=private"
+        ))))
+        XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(
+            string: "https://example.com/open/owner/finance"
+        ))))
+        XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(
+            string: "https://xert-fitness.vercel.app/open/owner/finance#order"
+        ))))
+        XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(
+            string: "https://xert-fitness.vercel.app/open/owner/finance"
+        ))))
+
+        let intent = XertOwnerNavigationIntent(
+            route: XertOwnerRoute(workspace: .finance)
+        )
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: false,
+            isProfileLoaded: false,
+            isAdmin: false
+        ), .requireAuthentication)
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: true,
+            isProfileLoaded: false,
+            isAdmin: false
+        ), .waitForProfile)
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: true,
+            isProfileLoaded: true,
+            isAdmin: true
+        ), .open)
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: true,
+            isProfileLoaded: true,
+            isAdmin: false
+        ), .deny)
+    }
+
     func testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins() throws {
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000024"))
@@ -624,7 +682,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(navigation.select(.booking, source: .content))
 
         let memberCommands = navigation.commandPaletteCommands(isAdmin: false)
-        XCTAssertFalse(memberCommands.contains { $0.action == .owner })
+        XCTAssertFalse(memberCommands.contains {
+            if case .owner = $0.action { return true }
+            return false
+        })
         XCTAssertTrue(memberCommands.contains { $0.action == .previous })
         XCTAssertTrue(memberCommands.contains { $0.action == .refresh })
         XCTAssertEqual(
@@ -636,10 +697,16 @@ final class ModelsTests: XCTestCase {
         )
 
         let ownerCommands = navigation.commandPaletteCommands(isAdmin: true)
-        XCTAssertTrue(ownerCommands.contains { $0.action == .owner })
         XCTAssertEqual(
-            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "payment operations").map(\.action),
-            [.owner]
+            ownerCommands.compactMap { command -> XertOwnerWorkspace? in
+                guard case .owner(let workspace) = command.action else { return nil }
+                return workspace
+            },
+            XertOwnerWorkspace.allCases
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "refund revenue").map(\.action),
+            [.owner(.finance)]
         )
         XCTAssertEqual(
             XertNavigationCoordinator.filteredCommands(memberCommands, query: "race calendar").map(\.action),

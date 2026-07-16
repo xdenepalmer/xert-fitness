@@ -6,7 +6,7 @@
         "components": [
           {
             "/": "/open/*",
-            "comment": "Opens canonical XERT member tasks in the native app."
+            "comment": "Opens allowlisted XERT member and role-gated owner tasks in the native app."
           }
         ]
       }

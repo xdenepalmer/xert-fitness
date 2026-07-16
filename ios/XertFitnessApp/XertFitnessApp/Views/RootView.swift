@@ -14,9 +14,11 @@ struct RootView: View {
     @State private var isUnlocking = false
     @State private var privacyLockError: String?
     @State private var showingAdminCommandCentre = false
+    @State private var requestedAdminWorkspace: XertOwnerWorkspace?
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
     @State private var pendingProtectedNavigation: XertNavigationIntent?
+    @State private var pendingOwnerNavigation: XertOwnerRoute?
     @State private var hasRestoredMemberWorkspace = false
     @State private var hasExplicitMemberNavigation = false
     @State private var pinnedMemberRoutes: [XertMemberRoute] = []
@@ -43,16 +45,22 @@ struct RootView: View {
                 memberWorkspaceOrder = XertPrimaryDestination.dockOrder
                 isPrivacyUnlocked = true
                 privacyLockError = nil
+                pendingOwnerNavigation = nil
+                requestedAdminWorkspace = nil
                 resetMemberNavigationAfterSignOut(clearPendingIntent: true)
                 return
             }
             resumePendingProtectedNavigation()
+            resumePendingOwnerNavigation()
             guard privacyLockEnabled else {
                 isPrivacyUnlocked = true
                 privacyLockError = nil
                 return
             }
             lockAndAuthenticate()
+        }
+        .onChange(of: store.profile?.role) { _ in
+            resumePendingOwnerNavigation()
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
             guard hasBootstrapped else { return }
@@ -176,7 +184,13 @@ struct RootView: View {
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
             if store.profile?.isAdmin == true {
-                AdminCommandCentreView(onClose: { showingAdminCommandCentre = false })
+                AdminCommandCentreView(
+                    requestedWorkspace: requestedAdminWorkspace,
+                    onClose: {
+                        showingAdminCommandCentre = false
+                        requestedAdminWorkspace = nil
+                    }
+                )
                     .environmentObject(store)
             }
         }
@@ -261,7 +275,7 @@ struct RootView: View {
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
             items: memberWorkspaceOrder,
-            onOpenAdmin: { showingAdminCommandCentre = true },
+            onOpenAdmin: openOwnerCommandCentre,
             onOpenCommands: { showingNavigationCommands = true },
             onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
             onOpenStatus: executeNavigationStatus,
@@ -282,7 +296,7 @@ struct RootView: View {
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
             items: memberWorkspaceOrder,
-            onOpenAdmin: { showingAdminCommandCentre = true },
+            onOpenAdmin: openOwnerCommandCentre,
             onOpenCommands: { showingNavigationCommands = true },
             onOpenPinned: { openMemberRoute($0, source: .commandPalette) },
             onOpenStatus: executeNavigationStatus,
@@ -372,8 +386,9 @@ struct RootView: View {
             returnToNextNavigationDestination()
         case .refresh:
             handleReselection(navigation.selection)
-        case .owner:
+        case .owner(let workspace):
             guard store.profile?.isAdmin == true else { return }
+            requestedAdminWorkspace = workspace
             opensAdminAfterCommandDismissal = true
         }
     }
@@ -445,7 +460,7 @@ struct RootView: View {
             handleReselection(navigation.selection)
         case .owner:
             guard store.profile?.isAdmin == true, !showingNavigationCommands else { return }
-            showingAdminCommandCentre = true
+            openOwnerCommandCentre()
         }
     }
 
@@ -592,8 +607,58 @@ struct RootView: View {
             }
             return
         }
+        if let ownerRoute = XertOwnerRoute.route(for: url) {
+            handleOwnerRoute(ownerRoute)
+            return
+        }
         guard let route = XertMemberRoute.route(for: url) else { return }
         openMemberRoute(route, source: .deepLink)
+    }
+
+    private func openOwnerCommandCentre() {
+        guard store.profile?.isAdmin == true else { return }
+        requestedAdminWorkspace = nil
+        showingAdminCommandCentre = true
+    }
+
+    private func handleOwnerRoute(_ route: XertOwnerRoute) {
+        switch ownerDisposition(for: route) {
+        case .open:
+            pendingOwnerNavigation = nil
+            requestedAdminWorkspace = route.workspace
+            showingAdminCommandCentre = true
+        case .deny:
+            pendingOwnerNavigation = nil
+            store.errorMessage = "Owner access is required for this XERT workspace."
+        case .requireAuthentication:
+            pendingOwnerNavigation = route
+            openMemberRoute(.account, source: .deepLink)
+        case .waitForProfile:
+            pendingOwnerNavigation = route
+        }
+    }
+
+    private func resumePendingOwnerNavigation() {
+        guard let route = pendingOwnerNavigation else { return }
+        switch ownerDisposition(for: route) {
+        case .open:
+            pendingOwnerNavigation = nil
+            requestedAdminWorkspace = route.workspace
+            showingAdminCommandCentre = true
+        case .deny:
+            pendingOwnerNavigation = nil
+            store.errorMessage = "Owner access is required for this XERT workspace."
+        case .requireAuthentication, .waitForProfile:
+            break
+        }
+    }
+
+    private func ownerDisposition(for route: XertOwnerRoute) -> XertOwnerNavigationDisposition {
+        XertOwnerNavigationIntent(route: route).disposition(
+            isSignedIn: store.isSignedIn,
+            isProfileLoaded: store.profile != nil,
+            isAdmin: store.profile?.isAdmin == true
+        )
     }
 
     private func consumePendingAnnouncementRoute() {

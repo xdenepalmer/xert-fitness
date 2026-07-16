@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const rootURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url);
 const navigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift', import.meta.url);
+const ownerNavigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift', import.meta.url);
 const modelsTestsURL = new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url);
 const viewURL = name => new URL(`../ios/XertFitnessApp/XertFitnessApp/Views/${name}.swift`, import.meta.url);
 
@@ -139,7 +140,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(navigation, /func commandPaletteCommands\([\s\S]*context: XertNavigationContext = \.empty/);
   assert.match(navigation, /static func filteredCommands/);
   assert.match(navigation, /terms\.allSatisfy \{ command\.searchIndex\.contains\(\$0\) \}/);
-  assert.match(navigation, /if isAdmin \{[\s\S]*action: \.owner/);
+  assert.match(navigation, /if isAdmin \{[\s\S]*XertOwnerWorkspace\.allCases\.map[\s\S]*action: \.owner\(workspace\)/);
   assert.match(root, /XertNavigationCommandPalette/);
   assert.match(root, /context: navigationContext/);
   assert.match(root, /XertNavigationCommandSection\.allCases/);
@@ -185,11 +186,26 @@ test('quick switcher exposes a bounded authorization-aware exact-task timeline',
 });
 
 test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
-  const root = await readFile(rootURL, 'utf8');
+  const [root, ownerNavigation] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(ownerNavigationURL, 'utf8'),
+  ]);
   assert.match(root, /isAdmin: store\.profile\?\.isAdmin == true/);
   assert.match(root, /Text\("Owner Command Centre"\)/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
-  assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*AdminCommandCentreView\(onClose:/);
+  assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedWorkspace: requestedAdminWorkspace/);
+  assert.match(ownerNavigation, /struct XertOwnerRoute: Equatable, Hashable/);
+  assert.match(ownerNavigation, /enum XertOwnerNavigationDisposition: Equatable/);
+  assert.match(ownerNavigation, /guard isSignedIn else \{ return \.requireAuthentication \}/);
+  assert.match(ownerNavigation, /guard isProfileLoaded else \{ return \.waitForProfile \}/);
+  assert.match(ownerNavigation, /return isAdmin \? \.open : \.deny/);
+  assert.match(ownerNavigation, /url\.host\?\.lowercased\(\) == "owner"/);
+  assert.match(ownerNavigation, /url\.path\.lowercased\(\)\.hasPrefix\("\/open\/owner\/"\)/);
+  assert.match(root, /if let ownerRoute = XertOwnerRoute\.route\(for: url\)/);
+  assert.match(root, /guard store\.profile\?\.isAdmin == true else/);
+  assert.match(root, /case \.requireAuthentication:[\s\S]*pendingOwnerNavigation = route[\s\S]*openMemberRoute\(\.account, source: \.deepLink\)/);
+  assert.match(root, /case \.waitForProfile:[\s\S]*pendingOwnerNavigation = route/);
+  assert.match(root, /resumePendingOwnerNavigation/);
 });
 
 test('navigation carries operational state and native interaction feedback', async () => {

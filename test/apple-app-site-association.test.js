@@ -17,7 +17,7 @@ test('AASA associates only canonical XERT task links with the signed app identit
         appID: '25R438YK9F.com.xertfitness.app',
         components: [{
           '/': '/open/*',
-          comment: 'Opens canonical XERT member tasks in the native app.',
+            comment: 'Opens allowlisted XERT member and role-gated owner tasks in the native app.',
         }],
       }],
     },

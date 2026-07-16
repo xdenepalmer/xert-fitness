@@ -3,133 +3,22 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
-private enum AdminWorkspaceSection: String, CaseIterable, Identifiable {
-    case operate = "Operate"
-    case grow = "Grow"
-    case publish = "Publish"
-    case commerce = "Commerce"
-    case platform = "Platform"
-
-    var id: String { rawValue }
-}
-
-private enum AdminWorkspace: String, CaseIterable, Identifiable {
-    case overview
-    case members
-    case classDesk
-    case bookingRequests
-    case timetable
-    case availability
-    case ptRequests
-    case retention
-    case leads
-    case campaigns
-    case siteContent
-    case notices
-    case events
-    case team
-    case finance
-    case products
-    case controls
-    case health
-    case audit
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .overview: return "Overview"
-        case .members: return "Members"
-        case .classDesk: return "Class Desk"
-        case .bookingRequests: return "Booking requests"
-        case .timetable: return "Full Timetable"
-        case .availability: return "Availability"
-        case .ptRequests: return "PT Requests"
-        case .retention: return "Retention"
-        case .leads: return "Lead pipelines"
-        case .campaigns: return "Campaign attribution"
-        case .siteContent: return "Site content"
-        case .notices: return "Member Notices"
-        case .events: return "Event Calendar"
-        case .team: return "Team Directory"
-        case .finance: return "Finance"
-        case .products: return "Session Packs"
-        case .controls: return "Platform Controls"
-        case .health: return "Operations Health"
-        case .audit: return "Admin Audit"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .overview: return "Business pulse and today's priorities"
-        case .members: return "Search accounts and review member value"
-        case .classDesk: return "Run today's schedule and waitlists"
-        case .bookingRequests: return "Resolve member and public requests"
-        case .timetable: return "Create, publish and cancel classes"
-        case .availability: return "Control bookable windows and blackouts"
-        case .ptRequests: return "Approve and complete private training"
-        case .retention: return "Contact members before they disengage"
-        case .leads: return "Manage member, trainer and partner opportunities"
-        case .campaigns: return "Measure acquisition sources and campaigns"
-        case .siteContent: return "Edit public copy, FAQs and hero media"
-        case .notices: return "Publish updates to web and iOS"
-        case .events: return "Coordinate the annual training calendar"
-        case .team: return "Manage coaches and practitioners"
-        case .finance: return "Track pack sales, revenue and refunds"
-        case .products: return "Control pricing, credits and Stripe links"
-        case .controls: return "Control launch, bookings and messaging"
-        case .health: return "Verify Stripe, schema and APNs readiness"
-        case .audit: return "Review protected operational changes"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .overview: return "waveform.path.ecg.rectangle"
-        case .members: return "person.2"
-        case .classDesk: return "calendar.badge.clock"
-        case .bookingRequests: return "tray.full"
-        case .timetable: return "calendar"
-        case .availability: return "calendar.badge.exclamationmark"
-        case .ptRequests: return "figure.strengthtraining.traditional"
-        case .retention: return "arrow.triangle.2.circlepath"
-        case .leads: return "person.crop.circle.badge.plus"
-        case .campaigns: return "chart.bar.xaxis"
-        case .siteContent: return "square.and.pencil"
-        case .notices: return "bell.badge"
-        case .events: return "trophy"
-        case .team: return "person.crop.rectangle.stack"
-        case .finance: return "chart.line.uptrend.xyaxis"
-        case .products: return "ticket"
-        case .controls: return "switch.2"
-        case .health: return "checkmark.shield"
-        case .audit: return "clock.arrow.circlepath"
-        }
-    }
-
-    var section: AdminWorkspaceSection? {
-        switch self {
-        case .overview: return nil
-        case .members, .classDesk, .bookingRequests, .timetable, .availability, .ptRequests: return .operate
-        case .retention, .leads, .campaigns: return .grow
-        case .siteContent, .notices, .events, .team: return .publish
-        case .finance, .products: return .commerce
-        case .controls, .health, .audit: return .platform
-        }
-    }
-
-    static func workspaces(in section: AdminWorkspaceSection) -> [Self] {
-        allCases.filter { $0.section == section }
-    }
-}
-
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @StateObject private var admin = AdminStore()
-    @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = AdminWorkspace.overview.rawValue
+    @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
+    @State private var compactPath: [XertOwnerWorkspace] = []
+    let requestedWorkspace: XertOwnerWorkspace?
     var onClose: (() -> Void)? = nil
+
+    init(
+        requestedWorkspace: XertOwnerWorkspace? = nil,
+        onClose: (() -> Void)? = nil
+    ) {
+        self.requestedWorkspace = requestedWorkspace
+        self.onClose = onClose
+    }
 
     var body: some View {
         Group {
@@ -146,7 +35,11 @@ struct AdminCommandCentreView: View {
         .background(Color.xertNavy.ignoresSafeArea())
         .task {
             guard let session = store.authSession, store.profile?.isAdmin == true else { return }
+            applyRequestedWorkspace(requestedWorkspace)
             await admin.refresh(session: session)
+        }
+        .onChange(of: requestedWorkspace) { workspace in
+            applyRequestedWorkspace(workspace)
         }
         .alert("Command Centre", isPresented: Binding(
             get: { admin.errorMessage != nil },
@@ -158,35 +51,47 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private var currentWorkspace: AdminWorkspace {
-        AdminWorkspace(rawValue: restoredWorkspace) ?? .overview
+    private var currentWorkspace: XertOwnerWorkspace {
+        XertOwnerWorkspace(rawValue: restoredWorkspace) ?? .overview
     }
 
-    private var workspaceSelection: Binding<AdminWorkspace?> {
+    private var workspaceSelection: Binding<XertOwnerWorkspace?> {
         Binding(
             get: { currentWorkspace },
             set: { restoredWorkspace = ($0 ?? .overview).rawValue }
         )
     }
 
+    private func applyRequestedWorkspace(_ workspace: XertOwnerWorkspace?) {
+        let target = workspace ?? currentWorkspace
+        restoredWorkspace = target.rawValue
+        compactPath = target == .overview ? [] : [target]
+    }
+
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
-        NavigationStack {
+        NavigationStack(path: $compactPath) {
             dashboard(session: session)
                 .navigationTitle("Command Centre")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { closeToolbar }
+                .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
+                    workspaceDestination(workspace, session: session)
+                }
+        }
+        .onChange(of: compactPath) { path in
+            restoredWorkspace = (path.last ?? .overview).rawValue
         }
     }
 
     private func ownerSplitWorkspace(session: AuthSession) -> some View {
         NavigationSplitView {
             List(selection: workspaceSelection) {
-                Label(AdminWorkspace.overview.title, systemImage: AdminWorkspace.overview.icon)
-                    .tag(AdminWorkspace.overview)
+                Label(XertOwnerWorkspace.overview.title, systemImage: XertOwnerWorkspace.overview.icon)
+                    .tag(XertOwnerWorkspace.overview)
 
-                ForEach(AdminWorkspaceSection.allCases) { section in
+                ForEach(XertOwnerWorkspaceSection.allCases) { section in
                     Section(section.rawValue) {
-                        ForEach(AdminWorkspace.workspaces(in: section)) { workspace in
+                        ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
                             HStack(spacing: 10) {
                                 Label(workspace.title, systemImage: workspace.icon)
                                 Spacer(minLength: 4)
@@ -235,7 +140,7 @@ struct AdminCommandCentreView: View {
                 attentionGrid
                 businessPulse
                 todayDesk(session: session)
-                managementDirectory(session: session)
+                managementDirectory
             }
             .frame(maxWidth: 880)
             .padding(.horizontal, 18)
@@ -390,26 +295,25 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func managementDirectory(session: AuthSession) -> some View {
+    private var managementDirectory: some View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Manage XERT")
-            ForEach(AdminWorkspaceSection.allCases) { section in
+            ForEach(XertOwnerWorkspaceSection.allCases) { section in
                 adminHeading(section.rawValue)
                     .padding(.top, section == .operate ? 0 : 8)
-                ForEach(AdminWorkspace.workspaces(in: section)) { workspace in
+                ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
                     AdminDestinationRow(
                         title: workspace.title,
                         detail: compactWorkspaceDetail(workspace),
-                        icon: workspace.icon
-                    ) {
-                        workspaceDestination(workspace, session: session)
-                    }
+                        icon: workspace.icon,
+                        workspace: workspace
+                    )
                 }
             }
         }
     }
 
-    private func compactWorkspaceDetail(_ workspace: AdminWorkspace) -> String {
+    private func compactWorkspaceDetail(_ workspace: XertOwnerWorkspace) -> String {
         switch workspace {
         case .members:
             return "Search \(admin.memberCount) accounts and review member value"
@@ -425,7 +329,7 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func workspaceBadge(_ workspace: AdminWorkspace) -> Int? {
+    private func workspaceBadge(_ workspace: XertOwnerWorkspace) -> Int? {
         switch workspace {
         case .classDesk:
             return admin.requestedPlaces + admin.waitingMembers + admin.attendanceDue
@@ -444,7 +348,7 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func workspaceDestination(_ workspace: AdminWorkspace, session: AuthSession) -> AnyView {
+    private func workspaceDestination(_ workspace: XertOwnerWorkspace, session: AuthSession) -> AnyView {
         switch workspace {
         case .overview:
             return AnyView(dashboard(session: session).navigationTitle("Overview"))
@@ -4015,21 +3919,14 @@ private struct FinanceSummaryRow: View {
     }
 }
 
-private struct AdminDestinationRow<Destination: View>: View {
+private struct AdminDestinationRow: View {
     let title: String
     let detail: String
     let icon: String
-    let destination: Destination
-
-    init(title: String, detail: String, icon: String, @ViewBuilder destination: () -> Destination) {
-        self.title = title
-        self.detail = detail
-        self.icon = icon
-        self.destination = destination()
-    }
+    let workspace: XertOwnerWorkspace
 
     var body: some View {
-        NavigationLink(destination: destination) {
+        NavigationLink(value: workspace) {
             HStack(spacing: 14) {
                 Image(systemName: icon).frame(width: 26).foregroundStyle(Color.xertSteel)
                 VStack(alignment: .leading, spacing: 3) {

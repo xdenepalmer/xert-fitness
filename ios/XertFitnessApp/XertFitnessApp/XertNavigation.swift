@@ -542,7 +542,7 @@ enum XertNavigationCommandAction: Hashable {
     case previous
     case next
     case refresh
-    case owner
+    case owner(XertOwnerWorkspace)
 }
 
 enum XertNavigationActivity: Hashable {
@@ -557,6 +557,7 @@ enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     case pinned = "Pinned Workspaces"
     case recent = "Workspace History"
     case navigate = "Navigate"
+    case owner = "Owner Operations"
     case system = "System"
 
     var id: Self { self }
@@ -881,15 +882,17 @@ final class XertNavigationCoordinator: ObservableObject {
         }
 
         if isAdmin {
-            commands.append(XertNavigationCommand(
-                id: "owner-command-centre",
-                title: "Owner Command Centre",
-                subtitle: "Open protected gym operations and platform controls",
-                icon: "waveform.path.ecg.rectangle",
-                keywords: ["admin", "business", "operations", "members", "payments"],
-                section: .system,
-                action: .owner
-            ))
+            commands.append(contentsOf: XertOwnerWorkspace.allCases.map { workspace in
+                XertNavigationCommand(
+                    id: "owner-\(workspace.rawValue)",
+                    title: workspace == .overview ? "Owner Command Centre" : workspace.title,
+                    subtitle: workspace.detail,
+                    icon: workspace.icon,
+                    keywords: ["owner", "admin", "operations"] + workspace.searchKeywords,
+                    section: .owner,
+                    action: .owner(workspace)
+                )
+            })
         }
         return commands
     }

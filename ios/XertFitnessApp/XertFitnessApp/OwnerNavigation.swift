@@ -1,0 +1,214 @@
+import Foundation
+
+enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
+    case operate = "Operate"
+    case grow = "Grow"
+    case publish = "Publish"
+    case commerce = "Commerce"
+    case platform = "Platform"
+
+    var id: String { rawValue }
+}
+
+enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
+    case overview
+    case members
+    case classDesk
+    case bookingRequests
+    case timetable
+    case availability
+    case ptRequests
+    case retention
+    case leads
+    case campaigns
+    case siteContent
+    case notices
+    case events
+    case team
+    case finance
+    case products
+    case controls
+    case health
+    case audit
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: return "Overview"
+        case .members: return "Members"
+        case .classDesk: return "Class Desk"
+        case .bookingRequests: return "Booking Requests"
+        case .timetable: return "Full Timetable"
+        case .availability: return "Availability"
+        case .ptRequests: return "PT Requests"
+        case .retention: return "Retention"
+        case .leads: return "Lead Pipelines"
+        case .campaigns: return "Campaign Attribution"
+        case .siteContent: return "Site Content"
+        case .notices: return "Member Notices"
+        case .events: return "Event Calendar"
+        case .team: return "Team Directory"
+        case .finance: return "Finance"
+        case .products: return "Session Packs"
+        case .controls: return "Platform Controls"
+        case .health: return "Operations Health"
+        case .audit: return "Admin Audit"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .overview: return "Business pulse and today's priorities"
+        case .members: return "Search accounts and review member value"
+        case .classDesk: return "Run today's schedule and waitlists"
+        case .bookingRequests: return "Resolve member and public requests"
+        case .timetable: return "Create, publish and cancel classes"
+        case .availability: return "Control bookable windows and blackouts"
+        case .ptRequests: return "Approve and complete private training"
+        case .retention: return "Contact members before they disengage"
+        case .leads: return "Manage member, trainer and partner opportunities"
+        case .campaigns: return "Measure acquisition sources and campaigns"
+        case .siteContent: return "Edit public copy, FAQs and hero media"
+        case .notices: return "Publish updates to web and iOS"
+        case .events: return "Coordinate the annual training calendar"
+        case .team: return "Manage coaches and practitioners"
+        case .finance: return "Track pack sales, revenue and refunds"
+        case .products: return "Control pricing, credits and Stripe links"
+        case .controls: return "Control launch, bookings and messaging"
+        case .health: return "Verify Stripe, schema and APNs readiness"
+        case .audit: return "Review protected operational changes"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .overview: return "waveform.path.ecg.rectangle"
+        case .members: return "person.2"
+        case .classDesk: return "calendar.badge.clock"
+        case .bookingRequests: return "tray.full"
+        case .timetable: return "calendar"
+        case .availability: return "calendar.badge.exclamationmark"
+        case .ptRequests: return "figure.strengthtraining.traditional"
+        case .retention: return "arrow.triangle.2.circlepath"
+        case .leads: return "person.crop.circle.badge.plus"
+        case .campaigns: return "chart.bar.xaxis"
+        case .siteContent: return "square.and.pencil"
+        case .notices: return "bell.badge"
+        case .events: return "trophy"
+        case .team: return "person.crop.rectangle.stack"
+        case .finance: return "chart.line.uptrend.xyaxis"
+        case .products: return "ticket"
+        case .controls: return "switch.2"
+        case .health: return "checkmark.shield"
+        case .audit: return "clock.arrow.circlepath"
+        }
+    }
+
+    var section: XertOwnerWorkspaceSection? {
+        switch self {
+        case .overview: return nil
+        case .members, .classDesk, .bookingRequests, .timetable, .availability, .ptRequests:
+            return .operate
+        case .retention, .leads, .campaigns: return .grow
+        case .siteContent, .notices, .events, .team: return .publish
+        case .finance, .products: return .commerce
+        case .controls, .health, .audit: return .platform
+        }
+    }
+
+    var searchKeywords: [String] {
+        switch self {
+        case .overview: return ["owner", "dashboard", "today", "business", "operations"]
+        case .members: return ["member", "account", "credit", "notes", "contact"]
+        case .classDesk: return ["today", "class", "attendance", "roll call", "waitlist"]
+        case .bookingRequests: return ["booking", "request", "approve", "decline"]
+        case .timetable: return ["schedule", "class", "publish", "cancel"]
+        case .availability: return ["availability", "blackout", "booking window"]
+        case .ptRequests: return ["personal training", "pt", "request"]
+        case .retention: return ["retention", "follow up", "inactive", "contact"]
+        case .leads: return ["lead", "pipeline", "member", "trainer", "partner"]
+        case .campaigns: return ["campaign", "attribution", "source", "marketing"]
+        case .siteContent: return ["website", "homepage", "hero", "faq", "content"]
+        case .notices: return ["announcement", "push", "message", "notification"]
+        case .events: return ["event", "race", "competition", "calendar"]
+        case .team: return ["coach", "practitioner", "trainer", "team"]
+        case .finance: return ["payment", "order", "revenue", "refund", "Stripe"]
+        case .products: return ["pack", "price", "credit", "Stripe", "product"]
+        case .controls: return ["launch", "payment", "booking", "platform", "settings"]
+        case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
+        case .audit: return ["audit", "history", "change", "operator"]
+        }
+    }
+
+    static func workspaces(in section: XertOwnerWorkspaceSection) -> [Self] {
+        allCases.filter { $0.section == section }
+    }
+}
+
+struct XertOwnerRoute: Equatable, Hashable {
+    static let canonicalWebHost = AppConfig.vercelHost
+    let workspace: XertOwnerWorkspace
+
+    var restorationValue: String { "owner/\(workspace.rawValue)" }
+
+    static func restore(_ value: String) -> Self? {
+        let parts = value
+            .lowercased()
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard
+            parts.count == 2,
+            parts[0] == "owner",
+            let workspace = XertOwnerWorkspace.allCases.first(where: {
+                $0.rawValue.lowercased() == parts[1]
+            })
+        else { return nil }
+        return XertOwnerRoute(workspace: workspace)
+    }
+
+    static func route(for url: URL) -> Self? {
+        guard
+            url.user == nil,
+            url.password == nil,
+            url.query == nil,
+            url.fragment == nil
+        else { return nil }
+
+        switch url.scheme?.lowercased() {
+        case "xertfitness":
+            guard url.port == nil, url.host?.lowercased() == "owner" else { return nil }
+            return restore("owner/\(url.path)")
+        case "https":
+            guard
+                url.host?.lowercased() == canonicalWebHost,
+                url.port == nil || url.port == 443,
+                url.path.lowercased().hasPrefix("/open/owner/")
+            else { return nil }
+            return restore(String(url.path.dropFirst("/open/".count)))
+        default:
+            return nil
+        }
+    }
+}
+
+enum XertOwnerNavigationDisposition: Equatable {
+    case requireAuthentication
+    case waitForProfile
+    case open
+    case deny
+}
+
+struct XertOwnerNavigationIntent: Equatable {
+    let route: XertOwnerRoute
+
+    func disposition(
+        isSignedIn: Bool,
+        isProfileLoaded: Bool,
+        isAdmin: Bool
+    ) -> XertOwnerNavigationDisposition {
+        guard isSignedIn else { return .requireAuthentication }
+        guard isProfileLoaded else { return .waitForProfile }
+        return isAdmin ? .open : .deny
+    }
+}
