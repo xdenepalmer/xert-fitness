@@ -66,6 +66,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "https://xert-fitness.vercel.app/open/admin"))))
     }
 
+    func testRouteSharingNeverExportsPrivateMemberTaskIdentity() throws {
+        let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000025"))
+        let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000026"))
+
+        let exactRoutes: [XertMemberRoute] = [.home, .booking, .sessionPacks, .events, .explore]
+        for route in exactRoutes {
+            XCTAssertEqual(route.shareDestination?.route, route)
+            XCTAssertEqual(route.shareDestination?.isExactTask, true)
+        }
+
+        let safeParents: [(XertMemberRoute, XertMemberRoute)] = [
+            (.notices(announcementID), .home),
+            (.purchaseConfirmation, .sessionPacks),
+            (.eventGoals, .events),
+            (.upcomingBookings(bookingID), .booking),
+        ]
+        for (privateRoute, publicRoute) in safeParents {
+            let shared = try XCTUnwrap(privateRoute.shareDestination)
+            XCTAssertEqual(shared.route, publicRoute)
+            XCTAssertFalse(shared.isExactTask)
+            XCTAssertFalse(shared.route.requiresAuthentication)
+            XCTAssertFalse(shared.route.webURL.absoluteString.contains(announcementID.uuidString.lowercased()))
+            XCTAssertFalse(shared.route.webURL.absoluteString.contains(bookingID.uuidString.lowercased()))
+        }
+
+        XCTAssertNil(XertMemberRoute.account.shareDestination)
+    }
+
     func testRouteUserActivityRoundTripsExactTasksWithoutIndexingPrivateContext() throws {
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
         let route = XertMemberRoute.upcomingBookings(bookingID)

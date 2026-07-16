@@ -26,7 +26,7 @@ test('shared native task links fall back to the nearest real web workflow', () =
   assert.equal(nativeTaskFallback(null), '/app');
 });
 
-test('native routes expose trusted exact-task HTTPS sharing without changing signing entitlements', async () => {
+test('native routes expose trusted privacy-aware HTTPS sharing without changing signing entitlements', async () => {
   const [navigation, root, app, bridge, modelsTests, account, events] = await Promise.all([
     readFile(navigationURL, 'utf8'),
     readFile(rootURL, 'utf8'),
@@ -42,13 +42,16 @@ test('native routes expose trusted exact-task HTTPS sharing without changing sig
   assert.match(navigation, /url\.host\?\.lowercased\(\) == canonicalWebHost/);
   assert.match(navigation, /path\.hasPrefix\("\/open\/"\)/);
   assert.match(navigation, /guard url\.user == nil, url\.password == nil, url\.query == nil/);
-  assert.match(root, /ShareLink\(item: currentRoute\.webURL/);
+  assert.match(navigation, /var shareDestination: XertRouteShareDestination\?/);
+  assert.match(root, /ShareLink\(item: destination\.route\.webURL/);
   assert.match(root, /xert-navigation-share/);
+  assert.match(root, /xert-navigation-share-private/);
   assert.match(app, /<Route path="\/open\/\*" element=\{<NativeTaskBridge \/>\} \/>/);
   assert.match(bridge, /<Navigate replace to=\{nativeTaskFallback\(location\.pathname\)\} \/>/);
   assert.match(account, /<section id="notices"/);
   assert.match(account, /<section id="bookings"/);
   assert.match(events, /<div id="goals"/);
   assert.match(modelsTests, /testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins/);
+  assert.match(modelsTests, /testRouteSharingNeverExportsPrivateMemberTaskIdentity/);
   assert.doesNotMatch(navigation, /com\.apple\.developer\.associated-domains/);
 });

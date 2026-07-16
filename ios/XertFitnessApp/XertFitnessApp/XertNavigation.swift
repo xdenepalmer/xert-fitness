@@ -147,6 +147,23 @@ enum XertMemberRoute: Hashable {
         return url
     }
 
+    var shareDestination: XertRouteShareDestination? {
+        switch self {
+        case .home, .booking, .sessionPacks, .events, .explore:
+            return XertRouteShareDestination(route: self, isExactTask: true)
+        case .notices(_):
+            return XertRouteShareDestination(route: .home, isExactTask: false)
+        case .purchaseConfirmation:
+            return XertRouteShareDestination(route: .sessionPacks, isExactTask: false)
+        case .eventGoals:
+            return XertRouteShareDestination(route: .events, isExactTask: false)
+        case .upcomingBookings(_):
+            return XertRouteShareDestination(route: .booking, isExactTask: false)
+        case .account:
+            return nil
+        }
+    }
+
     static func restore(_ value: String) -> Self? {
         route(forPath: "/\(value.trimmingCharacters(in: CharacterSet(charactersIn: "/")))")
     }
@@ -219,6 +236,19 @@ enum XertMemberRoute: Hashable {
             }
             return nil
         }
+    }
+}
+
+struct XertRouteShareDestination: Equatable {
+    let route: XertMemberRoute
+    let isExactTask: Bool
+
+    var title: String { route.navigationTitle }
+
+    var accessibilityHint: String {
+        isExactTask
+            ? "Shares a link to this XERT task"
+            : "Shares the public \(title) workspace without private member details"
     }
 }
 

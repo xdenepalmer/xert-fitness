@@ -587,24 +587,7 @@ private struct XertNavigationRail: View {
             .accessibilityHint("Searches workspaces and available actions")
             .accessibilityIdentifier("xert-navigation-commands")
 
-            ShareLink(item: currentRoute.webURL, subject: Text(currentRoute.navigationTitle)) {
-                VStack(spacing: 5) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Share")
-                        .font(.caption2.weight(.bold))
-                        .textCase(.uppercase)
-                        .tracking(0.7)
-                }
-                .foregroundStyle(Color.xertPale)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .accessibilityLabel("Share \(currentRoute.navigationTitle)")
-            .accessibilityHint("Shares a secure link to this exact XERT task")
-            .accessibilityIdentifier("xert-navigation-share")
+            XertNavigationShareControl(route: currentRoute, layout: .rail)
 
             if let previousRoute {
                 Button(action: onReturnPrevious) {
@@ -936,17 +919,7 @@ private struct XertNavigationDock: View {
             .accessibilityHidden(nextRoute == nil)
             .accessibilityIdentifier("xert-navigation-forward-history")
 
-            ShareLink(item: currentRoute.webURL, subject: Text(currentRoute.navigationTitle)) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.xertPale)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Share \(currentRoute.navigationTitle)")
-            .accessibilityHint("Shares a secure link to this exact XERT task")
-            .accessibilityIdentifier("xert-navigation-share")
+            XertNavigationShareControl(route: currentRoute, layout: .compact)
 
             Button(action: onOpenCommands) {
                 Image(systemName: "magnifyingglass")
@@ -1056,6 +1029,84 @@ private struct XertNavigationDock: View {
         if let status { details.append(status.accessibilityLabel) }
         details.append(selected ? "Refreshes this workspace" : "Opens the \(item.title) workspace")
         return details.joined(separator: ". ")
+    }
+}
+
+private enum XertNavigationShareLayout {
+    case rail
+    case compact
+}
+
+private struct XertNavigationShareControl: View {
+    let route: XertMemberRoute
+    let layout: XertNavigationShareLayout
+
+    var body: some View {
+        Group {
+            if let destination = route.shareDestination {
+                ShareLink(item: destination.route.webURL, subject: Text(destination.title)) {
+                    shareLabel
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Share \(destination.title)")
+                .accessibilityHint(destination.accessibilityHint)
+                .accessibilityIdentifier("xert-navigation-share")
+            } else {
+                privateLabel
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(route.navigationTitle) is private")
+                    .accessibilityHint("Private account tasks cannot be shared")
+                    .accessibilityIdentifier("xert-navigation-share-private")
+                    .help("Private account tasks cannot be shared")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var shareLabel: some View {
+        switch layout {
+        case .rail:
+            VStack(spacing: 5) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Share")
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+            }
+            .foregroundStyle(Color.xertPale)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .contentShape(Rectangle())
+        case .compact:
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.xertPale)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
+    private var privateLabel: some View {
+        switch layout {
+        case .rail:
+            VStack(spacing: 5) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Private")
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+            }
+            .foregroundStyle(Color.xertConcrete.opacity(0.5))
+            .frame(maxWidth: .infinity, minHeight: 48)
+        case .compact:
+            Image(systemName: "lock.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.xertConcrete.opacity(0.5))
+                .frame(width: 44, height: 44)
+        }
     }
 }
 

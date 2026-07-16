@@ -325,6 +325,27 @@ test('scene restoration preserves a bounded versioned exact-task workspace', asy
   assert.match(navigation, /authorizedFallback/);
 });
 
+test('native route portability shares public context without private member task identity', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /struct XertRouteShareDestination: Equatable/);
+  assert.match(navigation, /var shareDestination: XertRouteShareDestination\?/);
+  assert.match(navigation, /case \.notices\(_\):[\s\S]*route: \.home, isExactTask: false/);
+  assert.match(navigation, /case \.purchaseConfirmation:[\s\S]*route: \.sessionPacks, isExactTask: false/);
+  assert.match(navigation, /case \.eventGoals:[\s\S]*route: \.events, isExactTask: false/);
+  assert.match(navigation, /case \.upcomingBookings\(_\):[\s\S]*route: \.booking, isExactTask: false/);
+  assert.match(navigation, /case \.account:[\s\S]*return nil/);
+  assert.match(root, /XertNavigationShareControl\(route: currentRoute, layout: \.rail\)/);
+  assert.match(root, /XertNavigationShareControl\(route: currentRoute, layout: \.compact\)/);
+  assert.match(root, /ShareLink\(item: destination\.route\.webURL/);
+  assert.match(root, /xert-navigation-share-private/);
+  assert.match(root, /Private account tasks cannot be shared/);
+  assert.match(modelsTests, /testRouteSharingNeverExportsPrivateMemberTaskIdentity/);
+});
+
 test('native task history supports bounded back and forward traversal', async () => {
   const [navigation, root, modelsTests] = await Promise.all([
     readFile(navigationURL, 'utf8'),
