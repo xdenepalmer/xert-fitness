@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, Loader2, Receipt, Target, Ticket, X } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
@@ -9,6 +9,12 @@ import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCan
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
 import { announcementAction } from '@/lib/memberAnnouncements';
+import {
+  clearPendingWebCheckout,
+  loadPendingWebCheckout,
+  WEB_CHECKOUT_RETRY_DELAYS_MS,
+  webCheckoutSettlement,
+} from '@/lib/webCheckoutRecovery';
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 
@@ -52,7 +58,7 @@ const cardStyle = {
 export default function Account() {
   const { session, user, profile, loading: authLoading, signOut } = useSupabaseAuth();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [credits, setCredits] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -71,8 +77,12 @@ export default function Account() {
   const expiringCredits = useMemo(() => summarizeExpiringCredits(credits?.batches), [credits]);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
+  const [purchaseStatus, setPurchaseStatus] = useState(purchaseSuccess ? 'confirming' : null);
+  const [purchaseRefreshKey, setPurchaseRefreshKey] = useState(0);
+  const commerceRequestIDRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const commerceRequestID = ++commerceRequestIDRef.current;
     try {
       const [c, b, o, goals, ptRequests, memberNotices] = await Promise.all([
         getMyCredits(),
@@ -86,9 +96,11 @@ export default function Account() {
         // Member notices are additive and must never block account essentials.
         getMemberAnnouncements().catch(() => []),
       ]);
-      setCredits(c);
+      if (commerceRequestID === commerceRequestIDRef.current) {
+        setCredits(c);
+        setOrders(o);
+      }
       setBookings(b);
-      setOrders(o);
       setEventGoals(goals);
       setPrivateSessionRequests(ptRequests);
       setAnnouncements(memberNotices);
@@ -135,13 +147,49 @@ export default function Account() {
     return () => window.removeEventListener('keydown', dismissOnEscape);
   }, [cancellationTarget]);
 
-  // After a Stripe purchase the webhook may land a moment after redirect —
-  // poll briefly so the new credits appear without a manual refresh.
   useEffect(() => {
-    if (!purchaseSuccess || !session) return;
-    const timers = [2000, 5000, 10000].map(ms => setTimeout(refresh, ms));
-    return () => timers.forEach(clearTimeout);
-  }, [purchaseSuccess, session, refresh]);
+    if (!purchaseSuccess || !session || !user?.id) return undefined;
+    let cancelled = false;
+    let timeoutID;
+    const pending = loadPendingWebCheckout(user.id);
+    const commerceRequestID = ++commerceRequestIDRef.current;
+    setPurchaseStatus('confirming');
+
+    const reconcile = async () => {
+      for (const delay of WEB_CHECKOUT_RETRY_DELAYS_MS) {
+        if (delay > 0) {
+          await new Promise(resolve => { timeoutID = window.setTimeout(resolve, delay); });
+        }
+        if (cancelled) return;
+        try {
+          const [loadedCredits, loadedOrders] = await Promise.all([getMyCredits(), getMyOrders()]);
+          if (cancelled) return;
+          if (commerceRequestID === commerceRequestIDRef.current) {
+            setCredits(loadedCredits);
+            setOrders(loadedOrders);
+          }
+          const settlement = webCheckoutSettlement(pending, loadedOrders);
+          if (settlement !== 'pending') {
+            clearPendingWebCheckout();
+            setPurchaseStatus(settlement);
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('purchase');
+            setSearchParams(nextParams, { replace: true });
+            return;
+          }
+        } catch {
+          // The bounded retry loop keeps account data usable during a transient read failure.
+        }
+      }
+      if (!cancelled) setPurchaseStatus('delayed');
+    };
+
+    void reconcile();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutID);
+    };
+  }, [purchaseRefreshKey, purchaseSuccess, searchParams, session, setSearchParams, user?.id]);
 
   const handleCancel = async booking => {
     setCancellingId(booking.booking_id);
@@ -274,18 +322,39 @@ export default function Account() {
       <PublicNav />
 
       <main id="main" className="max-w-4xl mx-auto px-6 pt-28 pb-20">
-        {purchaseSuccess && (
+        {purchaseStatus && (
           <div
-            className="flex items-center gap-3 border p-4 mb-8"
+            className="flex flex-wrap items-center gap-3 border p-4 mb-8"
+            role="status"
+            aria-live="polite"
             style={{
-              borderColor: '#7BA7BC',
-              backgroundColor: 'rgba(123,167,188,0.12)'
+              borderColor: purchaseStatus === 'failed' || purchaseStatus === 'refunded' ? '#e0b36a' : '#7BA7BC',
+              backgroundColor: purchaseStatus === 'failed' || purchaseStatus === 'refunded'
+                ? 'rgba(224,179,106,0.1)'
+                : 'rgba(123,167,188,0.12)'
             }}
           >
-            <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} />
-            <p className="font-body text-sm" style={{ color: '#D1DDE6' }}>
-              Payment received — your class credits are being added now.
+            {purchaseStatus === 'confirming'
+              ? <Loader2 className="w-5 h-5 shrink-0 animate-spin" style={{ color: '#7BA7BC' }} />
+              : purchaseStatus === 'confirmed'
+                ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} />
+                : <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#e0b36a' }} />}
+            <p className="font-body text-sm flex-1 min-w-[14rem]" style={{ color: '#D1DDE6' }}>
+              {purchaseStatus === 'confirming' && 'Payment received — confirming your session pack now.'}
+              {purchaseStatus === 'confirmed' && 'Payment confirmed — your session pack is ready.'}
+              {purchaseStatus === 'refunded' && 'This payment was refunded. No purchased credits remain on the order.'}
+              {purchaseStatus === 'failed' && 'Checkout did not complete. No session pack was activated.'}
+              {purchaseStatus === 'delayed' && 'Confirmation is taking longer than usual. Your payment record remains safe.'}
             </p>
+            {purchaseStatus === 'delayed' && (
+              <button
+                type="button"
+                onClick={() => setPurchaseRefreshKey(value => value + 1)}
+                className="min-h-11 px-4 border border-xert-steel/40 font-display text-sm uppercase text-xert-offwhite"
+              >
+                Check again
+              </button>
+            )}
           </div>
         )}
 

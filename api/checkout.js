@@ -335,7 +335,7 @@ async function findReusableCheckout({ admin, stripe, user, product, returnTarget
     try {
       const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
       const url = reusableCheckoutURL(checkout, user, product, { returnTarget, stripeMode });
-      if (url) return url;
+      if (url) return { url, checkoutSessionID: checkout.id };
     } catch {
       // A missing or expired Stripe session is not reusable; create a clean one.
     }
@@ -474,10 +474,16 @@ export default async function handler(request, response) {
       return json({ error: 'This pack is not linked to a live Stripe Price yet.' }, 409);
     }
 
-    const reusableURL = await findReusableCheckout({
+    const reusableCheckout = await findReusableCheckout({
       admin, stripe, user, product, returnTarget, stripeMode,
     });
-    if (reusableURL) return json({ url: reusableURL, reused: true });
+    if (reusableCheckout) {
+      return json({
+        url: reusableCheckout.url,
+        checkout_session_id: reusableCheckout.checkoutSessionID,
+        reused: true,
+      });
+    }
 
     let lineItem;
     if (product.stripe_price_id) {
@@ -552,7 +558,7 @@ export default async function handler(request, response) {
       throw recordingError;
     }
 
-    return json({ url: session.url });
+    return json({ url: session.url, checkout_session_id: session.id });
   } catch (e) {
     const failure = publicCheckoutFailure(e);
     console.error('Checkout request failed.', {

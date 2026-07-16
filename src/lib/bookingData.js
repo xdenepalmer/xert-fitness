@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
 import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkoutAttempt';
 import { sessionPackPaymentsEnabled } from './launchSettings';
+import { savePendingWebCheckout } from './webCheckoutRecovery';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -50,8 +51,9 @@ export async function startCheckout(productSlug) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || 'Could not start checkout. Please try again.');
   }
-  const { url } = await res.json();
-  if (!url) throw new Error('Checkout session did not return a URL.');
+  const { url, checkout_session_id: checkoutSessionID } = await res.json();
+  if (!url || !checkoutSessionID) throw new Error('Checkout session did not return a complete handoff.');
+  savePendingWebCheckout({ userID: session.user.id, checkoutSessionID });
   clearCheckoutAttemptID(productSlug);
   window.location.href = url;
 }

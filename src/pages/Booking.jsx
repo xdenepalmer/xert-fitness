@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Check, Loader2, RefreshCw, Ticket, Users } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
@@ -14,6 +14,7 @@ import { useSiteContent } from '@/lib/siteContent';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
 import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
+import { clearPendingWebCheckout } from '@/lib/webCheckoutRecovery';
 
 const steps = [
   'Purchase a session pack.',
@@ -35,6 +36,7 @@ export default function Booking() {
   const { session } = useSupabaseAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pageContent = useSiteContent('booking', BOOKING_DEFAULTS);
 
   const [products, setProducts] = useState([]);
@@ -47,6 +49,15 @@ export default function Booking() {
   const [buyingSlug, setBuyingSlug] = useState(null);
   const [bookingId, setBookingId] = useState(null);
   const [loadErrors, setLoadErrors] = useState([]);
+
+  useEffect(() => {
+    if (searchParams.get('purchase') !== 'cancelled') return;
+    clearPendingWebCheckout();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('purchase');
+    setSearchParams(nextParams, { replace: true });
+    toast({ title: 'Checkout cancelled', description: 'No payment was taken.' });
+  }, [searchParams, setSearchParams, toast]);
 
   const refresh = useCallback(async () => {
     setLoadErrors([]);
