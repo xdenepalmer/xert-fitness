@@ -1,5 +1,7 @@
 -- Platform launch settings are one versioned record. Multiple rows could make
 -- checkout and admin clients observe different payment switches.
+begin;
+
 lock table public.admin_settings in share row exclusive mode;
 
 do $$
@@ -24,3 +26,5 @@ create unique index if not exists admin_settings_singleton_idx
 insert into public.xert_schema_capabilities (capability)
 values ('admin_settings_singleton')
 on conflict (capability) do update set installed_at = excluded.installed_at;
+
+commit;

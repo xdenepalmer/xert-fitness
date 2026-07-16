@@ -10,6 +10,8 @@ const sqlURLs = [
 
 test('fresh and upgrade SQL enforce one versioned platform settings record', async () => {
   for (const sql of await Promise.all(sqlURLs.map(url => readFile(url, 'utf8')))) {
+    assert.match(sql, /^--[^]*?\nbegin;/i);
+    assert.match(sql, /commit;\s*$/i);
     assert.match(sql, /lock table public\.admin_settings in share row exclusive mode/i);
     assert.match(sql, /count\(\*\) from public\.admin_settings\) > 1/i);
     assert.match(sql, /ADMIN_SETTINGS_SINGLETON_VIOLATION/i);
