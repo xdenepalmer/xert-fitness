@@ -1,6 +1,10 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { requestHeader, requestText, sendJson, sendText } from './http.js';
+import {
+  inspectCommerceRuntimeEnvironment,
+  stripeModeForSecret,
+} from '../src/lib/commerceRuntime.js';
 
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
@@ -48,11 +52,7 @@ export function webhookRequestIssue({ contentType, signature, rawBody }) {
   return null;
 }
 
-export function stripeModeForSecret(secretKey) {
-  if (/^sk_live_/.test(secretKey || '')) return 'live';
-  if (/^sk_test_/.test(secretKey || '')) return 'test';
-  return 'unknown';
-}
+export { stripeModeForSecret };
 
 export function assertStripeEventMode(event, secretKey) {
   const keyMode = stripeModeForSecret(secretKey);
@@ -372,10 +372,7 @@ export default async function handler(request, response) {
   if (request.method !== 'POST') return text('Method not allowed', 405);
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!process.env.STRIPE_SECRET_KEY || !webhookSecret) {
-    return text('Webhook service is unavailable.', 503);
-  }
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  if (!inspectCommerceRuntimeEnvironment(process.env, { requireWebhookSecret: true }).ready) {
     return text('Webhook service is unavailable.', 503);
   }
 

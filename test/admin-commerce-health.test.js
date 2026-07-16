@@ -26,6 +26,14 @@ const validProduct = {
   stripe_price_id: 'price_STARTER4',
 };
 
+const validCommerceEnvironment = {
+  SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-role-value',
+  STRIPE_SECRET_KEY: 'sk_test_secret_value',
+  STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
+  APP_BASE_URL: 'https://xert-fitness.vercel.app',
+};
+
 const completeCommerceCapabilities = new Set([
   'stripe_refund_reconciliation', 'checkout_reconciliation',
   'stripe_payment_fulfillment', 'guarded_payment_activation',
@@ -244,11 +252,7 @@ test('payment activation compare-and-sets the paused settings version', async ()
 });
 
 test('commerce readiness cannot pass without the guarded activation capability', async () => {
-  const environment = {
-    STRIPE_SECRET_KEY: 'sk_test_secret_value',
-    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
-    APP_BASE_URL: 'https://xert-fitness.vercel.app',
-  };
+  const environment = validCommerceEnvironment;
   const products = [validProduct];
   const complete = await inspectCommerceHealth({
     admin: capabilityAdmin(completeCommerceCapabilities),
@@ -546,9 +550,17 @@ test('commerce health reconciles Stripe-linked and dynamic active products', asy
 test('commerce health requires the complete production payment environment without exposing values', () => {
   assert.deepEqual(inspectCommerceEnvironment({}), {
     ready: false,
-    missing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'APP_BASE_URL'],
+    missing: [
+      'SUPABASE_URL',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'APP_BASE_URL',
+    ],
   });
   assert.deepEqual(inspectCommerceEnvironment({
+    SUPABASE_URL: validCommerceEnvironment.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: validCommerceEnvironment.SUPABASE_SERVICE_ROLE_KEY,
     STRIPE_SECRET_KEY: 'sk_test_secret_value',
     STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
     APP_BASE_URL: 'http://xert.example.com',
@@ -556,11 +568,7 @@ test('commerce health requires the complete production payment environment witho
     ready: false,
     missing: ['APP_BASE_URL'],
   });
-  assert.deepEqual(inspectCommerceEnvironment({
-    STRIPE_SECRET_KEY: 'sk_test_secret_value',
-    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
-    APP_BASE_URL: 'https://xert-fitness.vercel.app',
-  }), { ready: true, missing: [] });
+  assert.deepEqual(inspectCommerceEnvironment(validCommerceEnvironment), { ready: true, missing: [] });
 
   for (const APP_BASE_URL of [
     'https://xert.example.com',
@@ -568,23 +576,21 @@ test('commerce health requires the complete production payment environment witho
     'https://xert-fitness.vercel.app?preview=true',
   ]) {
     assert.deepEqual(inspectCommerceEnvironment({
-      STRIPE_SECRET_KEY: 'sk_test_secret_value',
-      STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
+      ...validCommerceEnvironment,
       APP_BASE_URL,
     }), { ready: false, missing: ['APP_BASE_URL'] });
   }
 
   assert.deepEqual(inspectCommerceEnvironment({
-    STRIPE_SECRET_KEY: 'sk_test_secret_value',
-    STRIPE_WEBHOOK_SECRET: 'whsec_webhook_value',
+    ...validCommerceEnvironment,
     APP_BASE_URL: 'https://lookalike.example.com',
     EXPECTED_APP_HOST: 'lookalike.example.com',
   }), { ready: false, missing: ['APP_BASE_URL'] });
 
   assert.deepEqual(inspectCommerceEnvironment({
+    ...validCommerceEnvironment,
     STRIPE_SECRET_KEY: 'secret-value',
     STRIPE_WEBHOOK_SECRET: 'webhook-value',
-    APP_BASE_URL: 'https://xert-fitness.vercel.app',
   }), { ready: false, missing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] });
 });
 
@@ -715,7 +721,7 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.doesNotMatch(source, /environment:\s*process\.env/);
 });
 
-test('commerce health authenticates before reporting server configuration', async () => {
+test('commerce health fails closed before authentication when runtime identity is invalid', async () => {
   const response = {
     statusCode: 200,
     setHeader() {},
@@ -723,6 +729,6 @@ test('commerce health authenticates before reporting server configuration', asyn
     json(body) { this.body = body; return this; },
   };
   await adminCommerceHealthHandler({ method: 'GET', headers: {} }, response);
-  assert.equal(response.statusCode, 401);
-  assert.deepEqual(response.body, { error: 'Not authenticated.' });
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.body, { error: 'Commerce health service is unavailable.' });
 });

@@ -3,8 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { requestHeader, requestJson, sendJson } from './http.js';
 import {
+  inspectCommerceRuntimeEnvironment,
+  stripeModeForSecret,
+} from '../src/lib/commerceRuntime.js';
+import {
   validateCanonicalServiceURL,
-  XERT_SUPABASE_HOST,
   XERT_VERCEL_HOST,
 } from '../src/lib/publicRuntimeConfig.js';
 import {
@@ -29,64 +32,13 @@ const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89a
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
 
-export function stripeModeForSecret(secret = '') {
-  const value = String(secret).trim();
-  if (/^(sk|rk)_live_/.test(value)) return 'live';
-  if (/^(sk|rk)_test_/.test(value)) return 'test';
-  return 'unknown';
-}
+export { stripeModeForSecret };
 
 export function inspectCheckoutEnvironment(environment = {}) {
-  const invalid = [];
-  const serviceRoleKey = String(environment.SUPABASE_SERVICE_ROLE_KEY || '');
-  const stripeSecretKey = String(environment.STRIPE_SECRET_KEY || '');
-  const webhookSecret = String(environment.STRIPE_WEBHOOK_SECRET || '');
-  const publicSupabaseKeys = new Set([
-    environment.SUPABASE_ANON_KEY,
-    environment.VITE_SUPABASE_ANON_KEY,
-  ].filter(Boolean).map(String));
-  try {
-    validateCanonicalServiceURL(
-      environment.SUPABASE_URL || environment.VITE_SUPABASE_URL,
-      'SUPABASE_URL',
-      XERT_SUPABASE_HOST,
-    );
-  } catch {
-    invalid.push('SUPABASE_URL');
-  }
-  if (
-    !serviceRoleKey
-    || serviceRoleKey !== serviceRoleKey.trim()
-    || /\s/.test(serviceRoleKey)
-    || /^sb_publishable_/i.test(serviceRoleKey)
-    || publicSupabaseKeys.has(serviceRoleKey)
-  ) {
-    invalid.push('SUPABASE_SERVICE_ROLE_KEY');
-  }
-  if (
-    stripeSecretKey !== stripeSecretKey.trim()
-    || /\s/.test(stripeSecretKey)
-    || stripeModeForSecret(stripeSecretKey) === 'unknown'
-  ) {
-    invalid.push('STRIPE_SECRET_KEY');
-  }
-  if (
-    webhookSecret !== webhookSecret.trim()
-    || /\s/.test(webhookSecret)
-    || !/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)
-  ) {
-    invalid.push('STRIPE_WEBHOOK_SECRET');
-  }
-  try {
-    validateCanonicalServiceURL(
-      environment.APP_BASE_URL,
-      'APP_BASE_URL',
-      XERT_VERCEL_HOST,
-    );
-  } catch {
-    invalid.push('APP_BASE_URL');
-  }
-  return { ready: invalid.length === 0, invalid };
+  return inspectCommerceRuntimeEnvironment(environment, {
+    requireWebhookSecret: true,
+    requireAppBaseURL: true,
+  });
 }
 
 function sendCheckoutEnvironmentStatus(response, environment = process.env) {
@@ -388,12 +340,13 @@ export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method === 'HEAD') return sendCheckoutEnvironmentStatus(response);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (!inspectCheckoutEnvironment(process.env).ready) {
+    return json({ error: 'Checkout service is unavailable.' }, 503);
+  }
 
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'Not authenticated.' }, 401);
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   try {

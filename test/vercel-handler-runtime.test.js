@@ -68,14 +68,14 @@ for (const [name, handler, method] of [
   });
 }
 
-test('payment endpoints authenticate before reporting server configuration', async () => {
+test('payment endpoints fail closed before authentication when runtime identity is invalid', async () => {
   for (const handler of [checkoutHandler, adminRefundHandler, adminReconcileHandler]) {
     const response = createVercelResponse();
     await handler({ method: 'POST', headers: {} }, response);
 
     assert.equal(response.completed, true);
-    assert.equal(response.statusCode, 401);
-    assert.match(response.body?.error || '', /Not authenticated/);
+    assert.equal(response.statusCode, 503);
+    assert.match(response.body?.error || '', /unavailable/i);
   }
 });
 

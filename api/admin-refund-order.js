@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { requestHeader, requestJson, sendJson } from './http.js';
+import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -136,12 +137,13 @@ export async function performAdminRefund({ admin, stripe, orderId, reason, userI
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (!inspectCommerceRuntimeEnvironment(process.env).ready) {
+    return json({ error: 'Payment operations are unavailable.' }, 503);
+  }
 
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'Not authenticated.' }, 401);
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
-
   try {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const { data: { user }, error: userError } = await admin.auth.getUser(token);
@@ -149,7 +151,6 @@ export default async function handler(request, response) {
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
     if (profileError) return json({ error: 'Could not verify admin access.' }, 500);
     if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
-    if (!process.env.STRIPE_SECRET_KEY) return json({ error: 'Stripe is not configured.' }, 500);
     const { orderId, reason } = normalizeRefundRequest(await requestJson(request));
 
     const result = await performAdminRefund({

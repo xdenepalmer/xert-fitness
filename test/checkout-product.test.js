@@ -188,12 +188,12 @@ test('checkout has a fail-closed owner payment switch before any Stripe operatio
   })), false);
 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const runtimeGate = source.indexOf('inspectCheckoutEnvironment(process.env)');
   const authenticationGate = source.indexOf("if (!token) return json({ error: 'Not authenticated.' }, 401)");
   const paymentGate = source.indexOf('sessionPackPaymentsAreEnabled(admin)', authenticationGate);
-  const stripeConfigurationGate = source.indexOf('if (!process.env.STRIPE_SECRET_KEY)');
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(runtimeGate >= 0 && runtimeGate < authenticationGate);
   assert.ok(paymentGate > authenticationGate);
-  assert.ok(stripeConfigurationGate > paymentGate);
   assert.ok(sessionCreation > paymentGate);
   assert.match(source, /payment activation could not be verified[\s\S]*503/);
   assert.match(source, /Promise\.all\(\[[\s\S]*sessionPackPaymentsAreEnabled\(admin\)/);

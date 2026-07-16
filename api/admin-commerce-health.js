@@ -1,11 +1,11 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady, stripeModeForSecret } from './checkout.js';
+import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady } from './checkout.js';
 import { requestHeader, requestJson, sendJson } from './http.js';
 import {
-  validateCanonicalServiceURL,
-  XERT_VERCEL_HOST,
-} from '../src/lib/publicRuntimeConfig.js';
+  inspectCommerceRuntimeEnvironment,
+  stripeModeForSecret,
+} from '../src/lib/commerceRuntime.js';
 import {
   inspectPaymentActivationReceipt,
   loadPaymentActivationHealth,
@@ -38,31 +38,11 @@ const STRIPE_OPERATOR_REVIEW_CODES = [
 ];
 
 export function inspectCommerceEnvironment(environment = {}) {
-  const missing = [];
-  const stripeSecretKey = String(environment.STRIPE_SECRET_KEY || '');
-  const webhookSecret = String(environment.STRIPE_WEBHOOK_SECRET || '');
-  if (
-    stripeSecretKey !== stripeSecretKey.trim()
-    || /\s/.test(stripeSecretKey)
-    || stripeModeForSecret(stripeSecretKey) === 'unknown'
-  ) missing.push('STRIPE_SECRET_KEY');
-  if (
-    webhookSecret !== webhookSecret.trim()
-    || /\s/.test(webhookSecret)
-    || !/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)
-  ) missing.push('STRIPE_WEBHOOK_SECRET');
-
-  try {
-    validateCanonicalServiceURL(
-      environment.APP_BASE_URL,
-      'APP_BASE_URL',
-      XERT_VERCEL_HOST,
-    );
-  } catch {
-    missing.push('APP_BASE_URL');
-  }
-
-  return { ready: missing.length === 0, missing };
+  const { ready, invalid } = inspectCommerceRuntimeEnvironment(environment, {
+    requireWebhookSecret: true,
+    requireAppBaseURL: true,
+  });
+  return { ready, missing: invalid };
 }
 
 function environmentIssues(environmentHealth) {
@@ -493,12 +473,13 @@ export async function resolveStripeOperatorReview(admin, review, resolvedAt = ne
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
+  if (!inspectCommerceRuntimeEnvironment(process.env, { requireStripeSecret: false }).ready) {
+    return json({ error: 'Commerce health service is unavailable.' }, 503);
+  }
 
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'Not authenticated.' }, 401);
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const { data: { user }, error: userError } = await admin.auth.getUser(token);
   if (userError || !user) return json({ error: 'Invalid or expired session.' }, 401);
