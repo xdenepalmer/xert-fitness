@@ -528,6 +528,11 @@ final class XertNavigationCoordinator: ObservableObject {
             || forwardRouteHistory.contains { $0.isContextualTask }
     }
 
+    var containsProtectedHistory: Bool {
+        routeHistory.contains { $0.requiresAuthentication }
+            || forwardRouteHistory.contains { $0.requiresAuthentication }
+    }
+
     var workspaceRestorationValue: String {
         let snapshot = XertNavigationWorkspaceSnapshot(
             routes: routeHistory,
@@ -652,7 +657,11 @@ final class XertNavigationCoordinator: ObservableObject {
         applyRestoredRoutes([restoredRoute], forwardRoutes: [])
     }
 
-    func restore(workspaceValue: String, fallbackRouteValue: String) {
+    func restore(
+        workspaceValue: String,
+        fallbackRouteValue: String,
+        allowsProtectedRoutes: Bool = true
+    ) {
         guard
             !workspaceValue.isEmpty,
             workspaceValue.count <= XertNavigationWorkspaceSnapshot.maximumEncodedLength,
@@ -663,7 +672,10 @@ final class XertNavigationCoordinator: ObservableObject {
             snapshot.routeValues.count + (snapshot.forwardRouteValues?.count ?? 0)
                 <= XertNavigationWorkspaceSnapshot.maximumRouteCount
         else {
-            restore(routeValue: fallbackRouteValue)
+            restore(routeValue: authorizedFallback(
+                fallbackRouteValue,
+                allowsProtectedRoutes: allowsProtectedRoutes
+            ).restorationValue)
             return
         }
 
@@ -674,16 +686,42 @@ final class XertNavigationCoordinator: ObservableObject {
             restoredRoutes.count == snapshot.routeValues.count,
             restoredForwardRoutes.count == forwardValues.count
         else {
-            restore(routeValue: fallbackRouteValue)
+            restore(routeValue: authorizedFallback(
+                fallbackRouteValue,
+                allowsProtectedRoutes: allowsProtectedRoutes
+            ).restorationValue)
             return
         }
-        let boundedForwardRoutes = Array(restoredForwardRoutes.prefix(max(0, historyLimit - 1)))
+
+        let authorizedRoutes = allowsProtectedRoutes
+            ? restoredRoutes
+            : restoredRoutes.filter { !$0.requiresAuthentication }
+        let authorizedForwardRoutes = allowsProtectedRoutes
+            ? restoredForwardRoutes
+            : restoredForwardRoutes.filter { !$0.requiresAuthentication }
+        guard !authorizedRoutes.isEmpty else {
+            restore(routeValue: authorizedFallback(
+                fallbackRouteValue,
+                allowsProtectedRoutes: allowsProtectedRoutes
+            ).restorationValue)
+            return
+        }
+
+        let boundedForwardRoutes = Array(authorizedForwardRoutes.prefix(max(0, historyLimit - 1)))
         let backwardCapacity = max(1, historyLimit - boundedForwardRoutes.count)
-        let boundedRoutes = Array(restoredRoutes.suffix(backwardCapacity))
+        let boundedRoutes = Array(authorizedRoutes.suffix(backwardCapacity))
         applyRestoredRoutes(
             boundedRoutes,
             forwardRoutes: boundedForwardRoutes
         )
+    }
+
+    private func authorizedFallback(
+        _ routeValue: String,
+        allowsProtectedRoutes: Bool
+    ) -> XertMemberRoute {
+        let route = XertMemberRoute.restore(routeValue) ?? .home
+        return allowsProtectedRoutes || !route.requiresAuthentication ? route : .home
     }
 
     private func applyRestoredRoutes(

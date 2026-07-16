@@ -252,8 +252,11 @@ test('sign-out clears exact-task history before another member can inherit it', 
   assert.match(navigation, /var containsContextualHistory: Bool/);
   assert.match(navigation, /routeHistory\.contains \{ \$0\.isContextualTask \}/);
   assert.match(navigation, /forwardRouteHistory\.contains \{ \$0\.isContextualTask \}/);
+  assert.match(navigation, /var containsProtectedHistory: Bool/);
+  assert.match(navigation, /routeHistory\.contains \{ \$0\.requiresAuthentication \}/);
+  assert.match(navigation, /forwardRouteHistory\.contains \{ \$0\.requiresAuthentication \}/);
   assert.match(root, /guard isSignedIn else \{[\s\S]*resetMemberNavigationAfterSignOut\(clearPendingIntent: true\)/);
-  assert.match(root, /hasBootstrapped, !store\.isSignedIn, navigation\.containsContextualHistory/);
+  assert.match(root, /guard hasBootstrapped else \{ return \}[\s\S]*!store\.isSignedIn, navigation\.containsProtectedHistory/);
   assert.match(root, /resetMemberNavigationAfterSignOut\(clearPendingIntent: true\)/);
   assert.match(root, /resetMemberNavigationAfterSignOut\(clearPendingIntent: Bool\)[\s\S]*navigation\.restore\(routeValue: home\.restorationValue\)/);
   assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
@@ -301,17 +304,25 @@ test('scene restoration preserves a bounded versioned exact-task workspace', asy
   assert.match(navigation, /maximumEncodedLength = 4_096/);
   assert.match(navigation, /maximumRouteCount = 32/);
   assert.match(navigation, /var workspaceRestorationValue: String/);
-  assert.match(navigation, /func restore\(workspaceValue: String, fallbackRouteValue: String\)/);
+  assert.match(navigation, /func restore\([\s\S]*workspaceValue: String,[\s\S]*fallbackRouteValue: String,[\s\S]*allowsProtectedRoutes: Bool = true/);
   assert.match(navigation, /snapshot\.version == XertNavigationWorkspaceSnapshot\.currentVersion/);
   assert.match(navigation, /restoredRoutes\.count == snapshot\.routeValues\.count/);
-  assert.match(navigation, /restoredForwardRoutes\.prefix\(max\(0, historyLimit - 1\)\)/);
+  assert.match(navigation, /authorizedForwardRoutes\.prefix\(max\(0, historyLimit - 1\)\)/);
   assert.match(navigation, /backwardCapacity = max\(1, historyLimit - boundedForwardRoutes\.count\)/);
-  assert.match(navigation, /restoredRoutes\.suffix\(backwardCapacity\)/);
+  assert.match(navigation, /authorizedRoutes\.suffix\(backwardCapacity\)/);
   assert.match(root, /@SceneStorage\("xert\.memberWorkspace"\)/);
-  assert.match(root, /navigation\.restore\([\s\S]*workspaceValue: restoredMemberWorkspace,[\s\S]*fallbackRouteValue: restoredMemberRoute/);
+  assert.match(root, /restoreMemberWorkspaceWhenReady\(\)/);
+  assert.match(root, /guard store\.hasBootstrapped, !hasRestoredMemberWorkspace else \{ return \}/);
+  assert.match(root, /guard !hasExplicitMemberNavigation else \{ return \}/);
+  assert.match(root, /navigation\.restore\([\s\S]*workspaceValue: restoredMemberWorkspace,[\s\S]*fallbackRouteValue: restoredMemberRoute,[\s\S]*allowsProtectedRoutes: store\.isSignedIn/);
+  assert.match(root, /claimMemberNavigation\(\)/);
   assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
   assert.match(modelsTests, /testNavigationWorkspaceRestoresBoundedExactTaskHistory/);
   assert.match(modelsTests, /testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots/);
+  assert.match(modelsTests, /testNavigationWorkspaceFiltersProtectedTasksUntilAuthentication/);
+  assert.match(navigation, /var containsProtectedHistory: Bool/);
+  assert.match(navigation, /restoredRoutes\.filter \{ !\$0\.requiresAuthentication \}/);
+  assert.match(navigation, /authorizedFallback/);
 });
 
 test('native task history supports bounded back and forward traversal', async () => {

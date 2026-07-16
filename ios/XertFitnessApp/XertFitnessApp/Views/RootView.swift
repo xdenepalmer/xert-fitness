@@ -17,6 +17,8 @@ struct RootView: View {
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
     @State private var pendingProtectedNavigation: XertNavigationIntent?
+    @State private var hasRestoredMemberWorkspace = false
+    @State private var hasExplicitMemberNavigation = false
 
     var body: some View {
         Group {
@@ -49,10 +51,12 @@ struct RootView: View {
             lockAndAuthenticate()
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
-            if hasBootstrapped, !store.isSignedIn, navigation.containsContextualHistory {
+            guard hasBootstrapped else { return }
+            restoreMemberWorkspaceWhenReady()
+            if !store.isSignedIn, navigation.containsProtectedHistory {
                 resetMemberNavigationAfterSignOut(clearPendingIntent: false)
             }
-            if hasBootstrapped, isPrivacyLocked, privacyLockError == nil {
+            if isPrivacyLocked, privacyLockError == nil {
                 Task { await unlockApp() }
             }
         }
@@ -73,10 +77,7 @@ struct RootView: View {
             openMemberRoute(route, source: .handoff)
         }
         .onAppear {
-            navigation.restore(
-                workspaceValue: restoredMemberWorkspace,
-                fallbackRouteValue: restoredMemberRoute
-            )
+            restoreMemberWorkspaceWhenReady()
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
             consumePendingQuickActionRoute()
@@ -280,11 +281,13 @@ struct RootView: View {
         _ destination: XertPrimaryDestination,
         source: XertNavigationSource
     ) {
+        claimMemberNavigation()
         guard navigation.select(destination, source: source) else { return }
         cancelPendingProtectedNavigation()
     }
 
     private func handleReselection(_ destination: XertPrimaryDestination) {
+        claimMemberNavigation()
         navigation.reselect(destination)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task { await store.refresh() }
@@ -292,18 +295,21 @@ struct RootView: View {
 
     private func handleNavigationStep(_ direction: XertNavigationDirection) {
         guard navigation.step(direction) else { return }
+        claimMemberNavigation()
         cancelPendingProtectedNavigation()
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
     private func returnToPreviousNavigationDestination() {
         guard navigation.returnToPrevious() else { return }
+        claimMemberNavigation()
         cancelPendingProtectedNavigation()
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     private func returnToNextNavigationDestination() {
         guard navigation.returnToNext() else { return }
+        claimMemberNavigation()
         cancelPendingProtectedNavigation()
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
@@ -458,6 +464,7 @@ struct RootView: View {
         _ route: XertMemberRoute,
         source: XertNavigationSource
     ) -> Bool {
+        claimMemberNavigation()
         let intent = XertNavigationIntent(route: route, source: source)
         guard intent.disposition(isSignedIn: store.isSignedIn) == .open else {
             pendingProtectedNavigation = intent
@@ -467,6 +474,24 @@ struct RootView: View {
         pendingProtectedNavigation = nil
         navigation.open(route, source: source)
         return true
+    }
+
+    private func restoreMemberWorkspaceWhenReady() {
+        guard store.hasBootstrapped, !hasRestoredMemberWorkspace else { return }
+        hasRestoredMemberWorkspace = true
+        guard !hasExplicitMemberNavigation else { return }
+        navigation.restore(
+            workspaceValue: restoredMemberWorkspace,
+            fallbackRouteValue: restoredMemberRoute,
+            allowsProtectedRoutes: store.isSignedIn
+        )
+    }
+
+    private func claimMemberNavigation() {
+        hasExplicitMemberNavigation = true
+        if store.hasBootstrapped {
+            hasRestoredMemberWorkspace = true
+        }
     }
 
     private func resumePendingProtectedNavigation() {

@@ -256,6 +256,47 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(restored.route, .sessionPacks)
     }
 
+    func testNavigationWorkspaceFiltersProtectedTasksUntilAuthentication() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000053"))
+        let source = XertNavigationCoordinator(initial: .home, historyLimit: 8)
+        XCTAssertTrue(source.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(source.open(.sessionPacks, source: .content))
+        XCTAssertTrue(source.open(.eventGoals, source: .commandPalette))
+        XCTAssertTrue(source.open(.explore, source: .dock))
+        XCTAssertTrue(source.returnToPrevious())
+
+        let signedOut = XertNavigationCoordinator(initial: .account, historyLimit: 8)
+        signedOut.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.upcomingBookings(nil).restorationValue,
+            allowsProtectedRoutes: false
+        )
+
+        XCTAssertEqual(signedOut.route, .sessionPacks)
+        XCTAssertEqual(signedOut.routeHistory, [.home, .sessionPacks])
+        XCTAssertEqual(signedOut.nextRoute, .explore)
+        XCTAssertFalse(signedOut.containsProtectedHistory)
+
+        let signedIn = XertNavigationCoordinator(initial: .account, historyLimit: 8)
+        signedIn.restore(
+            workspaceValue: source.workspaceRestorationValue,
+            fallbackRouteValue: XertMemberRoute.home.restorationValue,
+            allowsProtectedRoutes: true
+        )
+        XCTAssertEqual(signedIn.route, .eventGoals)
+        XCTAssertEqual(signedIn.routeHistory, [.home, .notices(noticeID), .sessionPacks, .eventGoals])
+        XCTAssertEqual(signedIn.nextRoute, .explore)
+        XCTAssertTrue(signedIn.containsProtectedHistory)
+
+        let protectedFallback = XertNavigationCoordinator(initial: .events)
+        protectedFallback.restore(
+            workspaceValue: "not-json",
+            fallbackRouteValue: XertMemberRoute.purchaseConfirmation.restorationValue,
+            allowsProtectedRoutes: false
+        )
+        XCTAssertEqual(protectedFallback.route, .home)
+    }
+
     func testNavigationWorkspaceRejectsMalformedPartialAndFutureSnapshots() {
         let fallback = XertMemberRoute.upcomingBookings(nil)
         let invalidSnapshots = [
