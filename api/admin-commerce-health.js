@@ -12,6 +12,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
+const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
@@ -206,17 +207,19 @@ export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
 export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient }) {
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(runtimeEnvironment);
-  const [fulfillmentReady, activationGuardReady, settingsContractReady, pendingOrderGuardReady] = await Promise.all([
+  const [fulfillmentReady, activationGuardReady, settingsContractReady, pendingOrderGuardReady, orderTermsReady] = await Promise.all([
     paymentFulfillmentIsReady(admin),
     schemaCapabilityIsReady(admin, PAYMENT_ACTIVATION_CAPABILITY),
     schemaCapabilityIsReady(admin, ADMIN_SETTINGS_SINGLETON_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_PENDING_ORDER_CAPABILITY),
+    schemaCapabilityIsReady(admin, STRIPE_ORDER_TERMS_CAPABILITY),
   ]);
   const databaseIssues = [
     ...(fulfillmentReady ? [] : [{ slug: 'database', reason: 'Atomic Stripe payment fulfillment is not installed.' }]),
     ...(activationGuardReady ? [] : [{ slug: 'database', reason: 'Guarded payment activation is not installed.' }]),
     ...(settingsContractReady ? [] : [{ slug: 'database', reason: 'Versioned singleton platform settings are not installed.' }]),
     ...(pendingOrderGuardReady ? [] : [{ slug: 'database', reason: 'Stripe pending-order fulfillment guard is not installed.' }]),
+    ...(orderTermsReady ? [] : [{ slug: 'database', reason: 'Immutable Stripe order terms are not installed.' }]),
   ];
   if (environment.missing.includes('STRIPE_SECRET_KEY')) {
     return {
@@ -230,6 +233,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       activation_guard_ready: activationGuardReady,
       settings_contract_ready: settingsContractReady,
       pending_order_guard_ready: pendingOrderGuardReady,
+      order_terms_ready: orderTermsReady,
     };
   }
 
@@ -257,7 +261,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       && fulfillmentReady
       && activationGuardReady
       && settingsContractReady
-      && pendingOrderGuardReady,
+      && pendingOrderGuardReady
+      && orderTermsReady,
     mode: stripeMode,
     account: accountHealth,
     issues: [
@@ -273,6 +278,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     activation_guard_ready: activationGuardReady,
     settings_contract_ready: settingsContractReady,
     pending_order_guard_ready: pendingOrderGuardReady,
+    order_terms_ready: orderTermsReady,
     webhook: webhookHealth,
   };
 }

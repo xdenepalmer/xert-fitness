@@ -295,6 +295,7 @@ workflows:
               "guarded_payment_activation",
               "admin_settings_singleton",
               "stripe_pending_order_guard",
+              "stripe_order_terms_snapshot",
               "member_announcements",
               "announcement_receipts",
               "announcement_actions",

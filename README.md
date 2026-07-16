@@ -82,7 +82,8 @@ The Supabase schema is defined in:
   staff class cancellation with automatic member credit returns
 - `src/supabase/stripe_payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
   that guarantees a paid recorded order grants at most one credit batch and
-  rejects webhook fulfillment without checkout's pending order
+  rejects webhook fulfillment without checkout's pending order; it also snapshots
+  immutable credit quantity and validity terms and derives expiry transactionally
 - `src/supabase/guarded_payment_activation_upgrade.sql` — requires a fresh
   protected Stripe preflight before checkout can move from paused to enabled
 - `src/supabase/admin_settings_singleton_upgrade.sql` — repairs the launch

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   assertCheckoutProduct,
   stripePendingOrderGuardIsReady,
+  stripeOrderTermsSnapshotIsReady,
   assertStripePriceMatchesProduct,
   checkoutIdempotencyKey,
   inspectCheckoutEnvironment,
@@ -91,6 +92,26 @@ test('checkout fails closed until Stripe fulfillment requires its pending order'
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
   assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
   assert.match(source, /payment order safeguards are being upgraded[\s\S]*503/);
+});
+
+test('checkout fails closed until purchased credit terms are snapshotted', async () => {
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() {
+      return { data: { capability: 'stripe_order_terms_snapshot' }, error: null };
+    },
+  };
+  assert.equal(await stripeOrderTermsSnapshotIsReady({ from() { return query; } }), true);
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await stripeOrderTermsSnapshotIsReady({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const guard = source.indexOf('stripeOrderTermsSnapshotIsReady(admin)');
+  const paymentSwitch = source.indexOf('sessionPackPaymentsAreEnabled(admin)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
+  assert.match(source, /purchased pack terms are being secured[\s\S]*503/);
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {
@@ -317,6 +338,8 @@ test('records a member-bound pending order before handing off to Stripe', async 
     amount_cents: 4800,
     currency: 'aud',
     status: 'pending',
+    credit_total: 4,
+    credit_validity_days: 28,
     stripe_checkout_session_id: 'cs_xert',
     stripe_payment_intent_id: null,
   });

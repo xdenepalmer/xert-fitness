@@ -141,6 +141,7 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
       user_id: metadata.user_id,
       product_id: metadata.product_id,
       total: sessions,
+      validity_days: validityDays,
       remaining: sessions,
       expires_at:
         validityDays > 0
@@ -198,7 +199,7 @@ export function checkoutFulfillmentRPCPayload(fulfillment) {
     p_payment_intent_id: fulfillment.order.stripe_payment_intent_id,
     p_paid_at: fulfillment.order.paid_at,
     p_credit_total: fulfillment.credit.total,
-    p_expires_at: fulfillment.credit.expires_at,
+    p_credit_validity_days: fulfillment.credit.validity_days,
   };
 }
 

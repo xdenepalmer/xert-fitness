@@ -18,7 +18,8 @@ export function normalizeReconciliationRequest(body) {
 
 export function assertFulfillmentMatchesOrder(order, fulfillment) {
   const paidOrder = fulfillment?.order;
-  if (!order || !paidOrder) throw new Error('PAYMENT_NOT_COMPLETE');
+  const credit = fulfillment?.credit;
+  if (!order || !paidOrder || !credit) throw new Error('PAYMENT_NOT_COMPLETE');
   if (order.status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
   if (
     paidOrder.stripe_checkout_session_id !== order.stripe_checkout_session_id
@@ -26,6 +27,8 @@ export function assertFulfillmentMatchesOrder(order, fulfillment) {
     || paidOrder.product_id !== order.product_id
     || Number(paidOrder.amount_cents) !== Number(order.amount_cents)
     || String(paidOrder.currency || '').toLowerCase() !== String(order.currency || '').toLowerCase()
+    || credit.total !== order.credit_total
+    || credit.validity_days !== order.credit_validity_days
   ) {
     throw new Error('PAYMENT_ORDER_MISMATCH');
   }
@@ -34,7 +37,7 @@ export function assertFulfillmentMatchesOrder(order, fulfillment) {
 export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, now = new Date() }) {
   const { data: order, error: orderError } = await admin
     .from('orders')
-    .select('id,user_id,product_id,status,amount_cents,currency,stripe_checkout_session_id')
+    .select('id,user_id,product_id,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id')
     .eq('id', orderId)
     .single();
   if (orderError || !order) throw new Error('ORDER_NOT_FOUND');

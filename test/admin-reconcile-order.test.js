@@ -18,6 +18,8 @@ const order = {
   status: 'pending',
   amount_cents: 4800,
   currency: 'aud',
+  credit_total: 4,
+  credit_validity_days: 28,
   stripe_checkout_session_id: 'cs_xert',
 };
 const checkout = {
@@ -47,6 +49,7 @@ test('Stripe fulfilment must match the complete pending order identity', () => {
       stripe_checkout_session_id: 'cs_xert', user_id: USER_ID, product_id: PRODUCT_ID,
       amount_cents: 4800, currency: 'aud',
     },
+    credit: { total: 4, validity_days: 28 },
   };
   assert.doesNotThrow(() => assertFulfillmentMatchesOrder(order, fulfillment));
   assert.throws(() => assertFulfillmentMatchesOrder(order, null), /PAYMENT_NOT_COMPLETE/);
@@ -56,7 +59,13 @@ test('Stripe fulfilment must match the complete pending order identity', () => {
     { amount_cents: 4700 }, { currency: 'usd' }, { stripe_checkout_session_id: 'cs_other' },
   ]) {
     assert.throws(
-      () => assertFulfillmentMatchesOrder(order, { order: { ...fulfillment.order, ...mismatch } }),
+      () => assertFulfillmentMatchesOrder(order, { ...fulfillment, order: { ...fulfillment.order, ...mismatch } }),
+      /PAYMENT_ORDER_MISMATCH/,
+    );
+  }
+  for (const credit of [{ total: 99, validity_days: 28 }, { total: 4, validity_days: 365 }]) {
+    assert.throws(
+      () => assertFulfillmentMatchesOrder(order, { ...fulfillment, credit }),
       /PAYMENT_ORDER_MISMATCH/,
     );
   }

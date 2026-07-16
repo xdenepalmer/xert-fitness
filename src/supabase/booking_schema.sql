@@ -170,6 +170,8 @@ create table if not exists public.orders (
   amount_cents                integer,
   currency                    text default 'aud',
   status                      text not null default 'pending', -- pending|paid|failed|refunded
+  credit_total                integer check (credit_total > 0),
+  credit_validity_days        integer check (credit_validity_days > 0),
   stripe_checkout_session_id  text unique,
   stripe_payment_intent_id    text,
   stripe_charge_id            text,
@@ -182,6 +184,27 @@ create table if not exists public.orders (
 );
 create index if not exists orders_status_created_idx on public.orders(status, created_at desc, id desc);
 create index if not exists orders_unresolved_checkout_idx on public.orders(created_at desc, id desc) where status in ('pending', 'failed');
+
+create or replace function public.guard_stripe_order_terms()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' and new.stripe_checkout_session_id is not null
+     and (new.credit_total is null or new.credit_validity_days is null) then
+    raise exception 'Stripe orders require a purchased credit terms snapshot';
+  end if;
+  if tg_op = 'UPDATE' and (
+    new.credit_total is distinct from old.credit_total
+    or new.credit_validity_days is distinct from old.credit_validity_days
+  ) then
+    raise exception 'Stripe order credit terms are immutable';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists guard_stripe_order_terms_trigger on public.orders;
+create trigger guard_stripe_order_terms_trigger
+before insert or update on public.orders
+for each row execute function public.guard_stripe_order_terms();
 
 -- ── member announcements ────────────────────────────────────────────────────
 -- Admin-authored operational notices shared by the web account and iOS app.
@@ -276,7 +299,7 @@ create or replace function public.fulfill_stripe_checkout(
   p_payment_intent_id text,
   p_paid_at timestamptz,
   p_credit_total integer,
-  p_expires_at timestamptz
+  p_credit_validity_days integer
 )
 returns table(fulfilled_order_id uuid, final_status text, credit_created boolean)
 language plpgsql security definer set search_path = ''
@@ -285,13 +308,17 @@ declare
   v_order public.orders%rowtype;
   v_credit_rows integer := 0;
 begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'Stripe fulfillment requires service role';
+  end if;
   if nullif(btrim(p_checkout_session_id), '') is null
      or nullif(btrim(p_payment_intent_id), '') is null
      or p_user_id is null or p_product_id is null
      or p_amount_cents is null or p_amount_cents <= 0
      or lower(coalesce(p_currency, '')) <> 'aud'
      or p_paid_at is null
-     or p_credit_total is null or p_credit_total <= 0 then
+     or p_credit_total is null or p_credit_total <= 0
+     or p_credit_validity_days is null or p_credit_validity_days <= 0 then
     raise exception 'Invalid Stripe fulfillment payload';
   end if;
 
@@ -302,6 +329,8 @@ begin
      or v_order.product_id is distinct from p_product_id
      or v_order.amount_cents is distinct from p_amount_cents
      or lower(coalesce(v_order.currency, '')) <> lower(p_currency)
+     or v_order.credit_total is distinct from p_credit_total
+     or v_order.credit_validity_days is distinct from p_credit_validity_days
      or (v_order.stripe_payment_intent_id is not null
          and v_order.stripe_payment_intent_id <> p_payment_intent_id) then
     raise exception 'Stripe fulfillment does not match the recorded order';
@@ -323,17 +352,20 @@ begin
   where orders.id = v_order.id returning orders.* into v_order;
 
   insert into public.credit_batches (user_id, product_id, order_id, total, remaining, expires_at)
-  values (p_user_id, p_product_id, v_order.id, p_credit_total, p_credit_total, p_expires_at)
+  values (
+    p_user_id, p_product_id, v_order.id, v_order.credit_total, v_order.credit_total,
+    v_order.paid_at + make_interval(days => v_order.credit_validity_days)
+  )
   on conflict (order_id) do nothing;
   get diagnostics v_credit_rows = row_count;
   return query select v_order.id, v_order.status, v_credit_rows = 1;
 end;
 $$;
 revoke execute on function public.fulfill_stripe_checkout(
-  text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
+  text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
 ) from public, anon, authenticated;
 grant execute on function public.fulfill_stripe_checkout(
-  text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
+  text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
 ) to service_role;
 
 create table if not exists public.stripe_refunds (
@@ -1214,6 +1246,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('stripe_payment_fulfillment') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('stripe_pending_order_guard') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('stripe_order_terms_snapshot') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('member_announcements') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)

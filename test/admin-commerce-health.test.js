@@ -172,7 +172,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   };
   const products = [validProduct];
   const complete = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot'])),
     products,
     environment,
     stripe: readyStripe(),
@@ -182,6 +182,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(complete.activation_guard_ready, true);
   assert.equal(complete.settings_contract_ready, true);
   assert.equal(complete.pending_order_guard_ready, true);
+  assert.equal(complete.order_terms_ready, true);
 
   const missingGuard = await inspectCommerceHealth({
     admin: capabilityAdmin(new Set(['stripe_payment_fulfillment'])),
@@ -216,6 +217,19 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(missingPendingOrderGuard.pending_order_guard_ready, false);
   assert.match(
     missingPendingOrderGuard.issues.find(issue => issue.reason.includes('pending-order'))?.reason || '',
+    /not installed/,
+  );
+
+  const missingOrderTerms = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard'])),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingOrderTerms.ready, false);
+  assert.equal(missingOrderTerms.order_terms_ready, false);
+  assert.match(
+    missingOrderTerms.issues.find(issue => issue.reason.includes('order terms'))?.reason || '',
     /not installed/,
   );
 });

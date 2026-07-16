@@ -17,6 +17,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
+const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -122,6 +123,16 @@ export async function stripePendingOrderGuardIsReady(admin) {
     .maybeSingle();
   if (error) return false;
   return data?.capability === STRIPE_PENDING_ORDER_CAPABILITY;
+}
+
+export async function stripeOrderTermsSnapshotIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', STRIPE_ORDER_TERMS_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === STRIPE_ORDER_TERMS_CAPABILITY;
 }
 
 export async function sessionPackPaymentsAreEnabled(admin) {
@@ -296,7 +307,7 @@ async function findReusableCheckout({ admin, stripe, user, product, returnTarget
   const cutoff = new Date(now.getTime() - REUSABLE_CHECKOUT_WINDOW_MS).toISOString();
   const { data, error } = await admin
     .from('orders')
-    .select('stripe_checkout_session_id')
+    .select('stripe_checkout_session_id,credit_total,credit_validity_days')
     .eq('user_id', user.id)
     .eq('product_id', product.id)
     .eq('status', 'pending')
@@ -306,6 +317,10 @@ async function findReusableCheckout({ admin, stripe, user, product, returnTarget
   if (error) return null;
   for (const order of data || []) {
     if (!order.stripe_checkout_session_id) continue;
+    if (
+      order.credit_total !== product.sessions_count
+      || order.credit_validity_days !== product.validity_days
+    ) continue;
     try {
       const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
       const url = reusableCheckoutURL(checkout, user, product, { returnTarget, stripeMode });
@@ -337,6 +352,8 @@ export function pendingOrderForCheckout(checkout, user, product) {
     amount_cents: amountCents,
     currency,
     status: 'pending',
+    credit_total: product.sessions_count,
+    credit_validity_days: product.validity_days,
     stripe_checkout_session_id: checkout.id,
     stripe_payment_intent_id:
       typeof checkout.payment_intent === 'string'
@@ -370,6 +387,12 @@ export default async function handler(request, response) {
     if (!await stripePendingOrderGuardIsReady(admin)) {
       return json({
         error: 'Checkout is temporarily unavailable while payment order safeguards are being upgraded.',
+      }, 503);
+    }
+
+    if (!await stripeOrderTermsSnapshotIsReady(admin)) {
+      return json({
+        error: 'Checkout is temporarily unavailable while purchased pack terms are being secured.',
       }, 503);
     }
 

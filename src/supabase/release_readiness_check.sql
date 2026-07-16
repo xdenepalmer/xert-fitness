@@ -17,6 +17,7 @@ with required (capability, migration) as (
     ('guarded_payment_activation', 'supabase/migrations/20260716010000_guarded_payment_activation.sql'),
     ('admin_settings_singleton', 'supabase/migrations/20260716020000_admin_settings_singleton.sql'),
     ('stripe_pending_order_guard', 'supabase/migrations/20260716030000_stripe_pending_order_guard.sql'),
+    ('stripe_order_terms_snapshot', 'supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql'),
     ('member_announcements', 'supabase/migrations/20260713040000_member_announcements.sql'),
     ('announcement_receipts', 'supabase/migrations/20260713050000_announcement_receipts.sql'),
     ('announcement_actions', 'supabase/migrations/20260714000000_announcement_actions.sql'),

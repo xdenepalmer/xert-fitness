@@ -100,6 +100,7 @@ test('creates one durable fulfilment record for a paid checkout', () => {
   assert.equal(fulfilment.order.status, 'paid');
   assert.equal(fulfilment.order.stripe_checkout_session_id, 'cs_test_xert');
   assert.equal(fulfilment.credit.total, 4);
+  assert.equal(fulfilment.credit.validity_days, 28);
   assert.equal(fulfilment.credit.remaining, 4);
   assert.equal(fulfilment.credit.expires_at, '2026-08-09T00:00:00.000Z');
 });
@@ -163,6 +164,8 @@ test('settles the order and credit grant through one database transaction', asyn
   assert.equal(calls[0].payload.p_checkout_session_id, 'cs_test_xert');
   assert.equal(calls[0].payload.p_payment_intent_id, 'pi_test_xert');
   assert.equal(calls[0].payload.p_credit_total, 4);
+  assert.equal(calls[0].payload.p_credit_validity_days, 28);
+  assert.equal('p_expires_at' in calls[0].payload, false);
   assert.equal(calls[0].payload.p_amount_cents, 4800);
   assert.equal(result.final_status, 'paid');
 });
