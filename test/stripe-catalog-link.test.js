@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertCatalogProduct,
   assertStripePriceMatches,
   inspectCatalogLinkEnvironment,
+  linkDatabasePrice,
   linkStripeCatalog,
   matchingStripePrice,
   parseCatalogLinkArgs,
 } from '../scripts/link-stripe-catalog.mjs';
 
-const product = { slug: 'starter-4', price_cents: 4800, currency: 'aud' };
+const product = {
+  id: '00000000-0000-4000-8000-000000000004', slug: 'starter-4',
+  price_cents: 4800, currency: 'aud', sessions_count: 4, active: true,
+  stripe_price_id: null, updated_at: '2026-07-16T00:00:00.000Z',
+};
 const price = {
   id: 'price_STARTER4', active: true, deleted: false, type: 'one_time', recurring: null,
   unit_amount: 4800, currency: 'aud', livemode: true,
@@ -29,6 +35,11 @@ test('catalog linker accepts only canonical Supabase and mode-matched secrets', 
     STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(32)}`,
   }, 'live');
   assert.equal(valid.ready, true);
+  assert.equal(inspectCatalogLinkEnvironment({
+    SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: `sb_secret_${'s'.repeat(32)}`,
+    STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(32)}`,
+  }, 'live').ready, true);
 
   const invalid = inspectCatalogLinkEnvironment({
     SUPABASE_URL: 'https://other.supabase.co',
@@ -48,11 +59,92 @@ test('catalog linker reuses only exact one-time mode, amount, and currency match
   assert.throws(() => assertStripePriceMatches({ ...price, recurring: { interval: 'month' } }, product, 'live'), /one-time/);
 });
 
+test('catalog linker validates every mutable catalog invariant before Stripe access', async () => {
+  assert.doesNotThrow(() => assertCatalogProduct(product));
+  assert.throws(() => assertCatalogProduct({ ...product, price_cents: 48.5 }), /positive integer/);
+  assert.throws(() => assertCatalogProduct({ ...product, currency: 'AUD' }), /lowercase three-letter/);
+  assert.throws(() => assertCatalogProduct({ ...product, updated_at: null }), /catalog version/);
+
+  let stripeCalls = 0;
+  const supabase = catalogSupabase([product, { ...product, id: '00000000-0000-4000-8000-000000000005', slug: 'broken', sessions_count: 0 }]);
+  const stripe = {
+    products: { search: async () => { stripeCalls += 1; return { data: [] }; } },
+    prices: { retrieve: async () => { stripeCalls += 1; return price; } },
+  };
+  await assert.rejects(
+    linkStripeCatalog({ stripe, supabase, mode: 'live', apply: true, replaceExisting: false }),
+    /sessions count/,
+  );
+  assert.equal(stripeCalls, 0);
+});
+
+test('catalog linker verifies every stored Stripe link before creating anything', async () => {
+  let createSearches = 0;
+  const linked = { ...product, id: '00000000-0000-4000-8000-000000000006', slug: 'linked', stripe_price_id: price.id };
+  const stripe = {
+    products: { search: async () => { createSearches += 1; return { data: [] }; } },
+    prices: { retrieve: async () => ({ ...price, unit_amount: 9999 }) },
+  };
+
+  await assert.rejects(
+    linkStripeCatalog({
+      stripe,
+      supabase: catalogSupabase([product, linked]),
+      mode: 'live',
+      apply: true,
+      replaceExisting: false,
+    }),
+    /amount or currency/,
+  );
+  assert.equal(createSearches, 0);
+});
+
+test('database linking compares the complete loaded commercial snapshot', async () => {
+  const filters = [];
+  const supabase = {
+    from() {
+      return {
+        update() { return this; },
+        eq(column, value) { filters.push([column, value]); return this; },
+        is(column, value) { filters.push([column, value]); return this; },
+        select() { return this; },
+        async maybeSingle() { return { data: { id: product.id, slug: product.slug, stripe_price_id: price.id }, error: null }; },
+      };
+    },
+  };
+
+  await linkDatabasePrice(supabase, product, price.id);
+  assert.deepEqual(filters, [
+    ['id', product.id],
+    ['stripe_price_id', null],
+    ['updated_at', product.updated_at],
+    ['price_cents', product.price_cents],
+    ['currency', product.currency],
+    ['sessions_count', product.sessions_count],
+    ['active', true],
+  ]);
+
+  const changedSupabase = {
+    from() {
+      return {
+        update() { return this; },
+        eq() { return this; },
+        is() { return this; },
+        select() { return this; },
+        async maybeSingle() { return { data: null, error: null }; },
+      };
+    },
+  };
+  await assert.rejects(
+    linkDatabasePrice(changedSupabase, product, price.id),
+    /catalog changed during linking; no database update was made/,
+  );
+});
+
 test('catalog linker never links an existing remote match during a dry run', async () => {
   let databaseUpdates = 0;
   const catalogProduct = {
-    id: 'product-id', slug: 'starter-4', name: 'Starter Pack', description: null,
-    price_cents: 4800, currency: 'aud', sessions_count: 4, stripe_price_id: null, active: true,
+    ...product, name: 'Starter Pack', description: null,
   };
   const supabase = {
     from() {
@@ -78,3 +170,15 @@ test('catalog linker never links an existing remote match during a dry run', asy
   assert.equal(databaseUpdates, 0);
   assert.match(messages.join('\n'), /link existing matching Price price_STARTER4/);
 });
+
+function catalogSupabase(products) {
+  return {
+    from() {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async order() { return { data: products, error: null }; },
+      };
+    },
+  };
+}

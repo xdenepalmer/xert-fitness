@@ -25,9 +25,11 @@ export function inspectCatalogLinkEnvironment(environment, mode) {
   const stripeSecretKey = String(environment.STRIPE_SECRET_KEY || '').trim();
   const expectedStripePrefix = mode === 'live' ? 'sk_live_' : 'sk_test_';
   const issues = [];
+  const isLegacyServiceRole = /^eyJ[A-Za-z0-9._-]+$/.test(serviceRoleKey) && serviceRoleKey.length >= 100;
+  const isSecretKey = /^sb_secret_[A-Za-z0-9_-]{20,}$/.test(serviceRoleKey);
 
   if (supabaseUrl !== XERT_SUPABASE_URL) issues.push(`SUPABASE_URL must be ${XERT_SUPABASE_URL}.`);
-  if (!/^eyJ[A-Za-z0-9._-]+$/.test(serviceRoleKey) || serviceRoleKey.length < 100) {
+  if (!isLegacyServiceRole && !isSecretKey) {
     issues.push('SUPABASE_SERVICE_ROLE_KEY is missing or malformed.');
   }
   if (!stripeSecretKey.startsWith(expectedStripePrefix) || stripeSecretKey.length < expectedStripePrefix.length + 16) {
@@ -57,6 +59,32 @@ export function assertStripePriceMatches(price, product, mode) {
   }
 }
 
+export function assertCatalogProduct(product) {
+  if (!product || typeof product !== 'object') throw new Error('Invalid XERT catalog row.');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(product.id || ''))) {
+    throw new Error(`${product.slug || 'unknown'}: invalid product identity.`);
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(product.slug || ''))) {
+    throw new Error(`Unsafe product slug: ${product.slug || 'missing'}`);
+  }
+  if (!Number.isSafeInteger(product.price_cents) || product.price_cents <= 0) {
+    throw new Error(`${product.slug}: price must be a positive integer in cents.`);
+  }
+  if (!/^[a-z]{3}$/.test(String(product.currency || ''))) {
+    throw new Error(`${product.slug}: currency must be a lowercase three-letter code.`);
+  }
+  if (!Number.isSafeInteger(product.sessions_count) || product.sessions_count <= 0) {
+    throw new Error(`${product.slug}: sessions count must be a positive integer.`);
+  }
+  if (product.active !== true) throw new Error(`${product.slug}: only active products may be linked.`);
+  if (!Number.isFinite(Date.parse(product.updated_at))) {
+    throw new Error(`${product.slug}: catalog version is missing or malformed.`);
+  }
+  if (product.stripe_price_id && !PRICE_ID_PATTERN.test(product.stripe_price_id)) {
+    throw new Error(`${product.slug}: malformed stored Stripe Price ID.`);
+  }
+}
+
 function stripeProductQuery(slug) {
   return `metadata['xert_catalog_slug']:'${slug}'`;
 }
@@ -83,32 +111,51 @@ async function createStripePrice(stripe, stripeProductID, product, mode) {
   }, { idempotencyKey: `xert-catalog-price-${mode}-${product.slug}-${product.currency}-${product.price_cents}` });
 }
 
-async function linkDatabasePrice(supabase, product, stripePriceID) {
+export async function linkDatabasePrice(supabase, product, stripePriceID) {
   let query = supabase.from('products').update({ stripe_price_id: stripePriceID }).eq('id', product.id);
   query = product.stripe_price_id
     ? query.eq('stripe_price_id', product.stripe_price_id)
     : query.is('stripe_price_id', null);
-  const { data, error } = await query.select('id,slug,stripe_price_id').single();
+  query = query
+    .eq('updated_at', product.updated_at)
+    .eq('price_cents', product.price_cents)
+    .eq('currency', product.currency)
+    .eq('sessions_count', product.sessions_count)
+    .eq('active', true);
+  const { data, error } = await query.select('id,slug,stripe_price_id').maybeSingle();
   if (error) throw new Error(`${product.slug}: database link failed: ${error.message}`);
+  if (!data) {
+    throw new Error(`${product.slug}: catalog changed during linking; no database update was made. Review the pack and rerun the linker.`);
+  }
   if (data.stripe_price_id !== stripePriceID) throw new Error(`${product.slug}: database did not retain the expected Price ID.`);
 }
 
 export async function linkStripeCatalog({ stripe, supabase, mode, apply, replaceExisting, log = console.log }) {
   const { data, error } = await supabase
     .from('products')
-    .select('id,slug,name,description,price_cents,currency,sessions_count,stripe_price_id,active')
+    .select('id,slug,name,description,price_cents,currency,sessions_count,stripe_price_id,active,updated_at')
     .eq('active', true)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(`Could not load active products: ${error.message}`);
   const products = data || [];
   if (products.length === 0) throw new Error('No active XERT products were found.');
 
-  for (const product of products) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(product.slug)) throw new Error(`Unsafe product slug: ${product.slug}`);
-    if (product.stripe_price_id && !replaceExisting) {
-      if (!PRICE_ID_PATTERN.test(product.stripe_price_id)) throw new Error(`${product.slug}: malformed stored Stripe Price ID.`);
+  products.forEach(assertCatalogProduct);
+
+  const verifiedLinkedPrices = new Map();
+  if (!replaceExisting) {
+    for (const product of products.filter(item => item.stripe_price_id)) {
       const existingPrice = await stripe.prices.retrieve(product.stripe_price_id);
       assertStripePriceMatches(existingPrice, product, mode);
+      verifiedLinkedPrices.set(product.id, existingPrice);
+    }
+  }
+
+  for (const product of products) {
+    if (product.stripe_price_id && !replaceExisting) {
+      if (!verifiedLinkedPrices.has(product.id)) {
+        throw new Error(`${product.slug}: verified Stripe Price preflight is missing.`);
+      }
       log(`PASS ${product.slug}: ${product.stripe_price_id} already matches.`);
       continue;
     }

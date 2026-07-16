@@ -44,10 +44,17 @@ npm run stripe:catalog:live:apply
 ```
 
 Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `STRIPE_SECRET_KEY` in the
-operator shell first. The script requires the canonical XERT Supabase project
-and a Stripe key matching the explicit mode. If replacing existing test Price
+operator shell first. `SUPABASE_SERVICE_ROLE_KEY` accepts either the recommended
+Supabase `sb_secret_...` key or the legacy service-role JWT; never use a public
+key. The script requires the canonical XERT Supabase project and a Stripe key
+matching the explicit mode. If replacing existing test Price
 IDs during live cutover, review the dry run and then run
 `npm run stripe:catalog:live:replace`. The script never prints secret values.
+It validates the complete catalog and every existing Stripe link before creating
+anything. Database linking compares the loaded pack version, amount, currency,
+session count and active state; if a pack changes mid-run, that link is skipped
+with an error. Stripe creation is idempotent, so review the changed pack and
+rerun the same command rather than manually attaching the partially created Price.
 
 ## 3. Register The Webhook
 
