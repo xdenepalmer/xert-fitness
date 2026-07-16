@@ -170,6 +170,32 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /URLQueryItem\(name: "updated_at", value: "eq\.\\\(settings\.updated_at\)"\)/);
 });
 
+test('native owner navigation adapts into a categorized scene-restored iPad workspace', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+
+  assert.match(view, /private enum AdminWorkspaceSection: String, CaseIterable, Identifiable/);
+  for (const section of ['operate', 'grow', 'publish', 'commerce', 'platform']) {
+    assert.match(view, new RegExp(`case ${section}`));
+  }
+  assert.match(view, /private enum AdminWorkspace: String, CaseIterable, Identifiable/);
+  for (const workspace of [
+    'overview', 'members', 'classDesk', 'bookingRequests', 'timetable', 'availability',
+    'ptRequests', 'retention', 'leads', 'campaigns', 'siteContent', 'notices', 'events',
+    'team', 'finance', 'products', 'controls', 'health', 'audit',
+  ]) assert.match(view, new RegExp(`case ${workspace}`));
+  assert.match(view, /@Environment\(\\\.horizontalSizeClass\) private var horizontalSizeClass/);
+  assert.match(view, /@SceneStorage\("xert\.adminWorkspace"\)/);
+  assert.match(view, /horizontalSizeClass == \.regular[\s\S]*ownerSplitWorkspace/);
+  assert.match(view, /NavigationSplitView \{/);
+  assert.match(view, /List\(selection: workspaceSelection\)/);
+  assert.match(view, /AdminWorkspace\.workspaces\(in: section\)/);
+  assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
+  assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
+  assert.match(view, /private func workspaceBadge/);
+  assert.match(view, /private func workspaceDestination/);
+  assert.match(view, /managementDirectory\(session: session\)/);
+});
+
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {
   const api = await readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8');
   assert.match(api, /private struct AdminRequestUpdate: Encodable \{[\s\S]*let p_status: String\?/);

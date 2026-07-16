@@ -3,62 +3,275 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
+private enum AdminWorkspaceSection: String, CaseIterable, Identifiable {
+    case operate = "Operate"
+    case grow = "Grow"
+    case publish = "Publish"
+    case commerce = "Commerce"
+    case platform = "Platform"
+
+    var id: String { rawValue }
+}
+
+private enum AdminWorkspace: String, CaseIterable, Identifiable {
+    case overview
+    case members
+    case classDesk
+    case bookingRequests
+    case timetable
+    case availability
+    case ptRequests
+    case retention
+    case leads
+    case campaigns
+    case siteContent
+    case notices
+    case events
+    case team
+    case finance
+    case products
+    case controls
+    case health
+    case audit
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: return "Overview"
+        case .members: return "Members"
+        case .classDesk: return "Class Desk"
+        case .bookingRequests: return "Booking requests"
+        case .timetable: return "Full Timetable"
+        case .availability: return "Availability"
+        case .ptRequests: return "PT Requests"
+        case .retention: return "Retention"
+        case .leads: return "Lead pipelines"
+        case .campaigns: return "Campaign attribution"
+        case .siteContent: return "Site content"
+        case .notices: return "Member Notices"
+        case .events: return "Event Calendar"
+        case .team: return "Team Directory"
+        case .finance: return "Finance"
+        case .products: return "Session Packs"
+        case .controls: return "Platform Controls"
+        case .health: return "Operations Health"
+        case .audit: return "Admin Audit"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .overview: return "Business pulse and today's priorities"
+        case .members: return "Search accounts and review member value"
+        case .classDesk: return "Run today's schedule and waitlists"
+        case .bookingRequests: return "Resolve member and public requests"
+        case .timetable: return "Create, publish and cancel classes"
+        case .availability: return "Control bookable windows and blackouts"
+        case .ptRequests: return "Approve and complete private training"
+        case .retention: return "Contact members before they disengage"
+        case .leads: return "Manage member, trainer and partner opportunities"
+        case .campaigns: return "Measure acquisition sources and campaigns"
+        case .siteContent: return "Edit public copy, FAQs and hero media"
+        case .notices: return "Publish updates to web and iOS"
+        case .events: return "Coordinate the annual training calendar"
+        case .team: return "Manage coaches and practitioners"
+        case .finance: return "Track pack sales, revenue and refunds"
+        case .products: return "Control pricing, credits and Stripe links"
+        case .controls: return "Control launch, bookings and messaging"
+        case .health: return "Verify Stripe, schema and APNs readiness"
+        case .audit: return "Review protected operational changes"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .overview: return "waveform.path.ecg.rectangle"
+        case .members: return "person.2"
+        case .classDesk: return "calendar.badge.clock"
+        case .bookingRequests: return "tray.full"
+        case .timetable: return "calendar"
+        case .availability: return "calendar.badge.exclamationmark"
+        case .ptRequests: return "figure.strengthtraining.traditional"
+        case .retention: return "arrow.triangle.2.circlepath"
+        case .leads: return "person.crop.circle.badge.plus"
+        case .campaigns: return "chart.bar.xaxis"
+        case .siteContent: return "square.and.pencil"
+        case .notices: return "bell.badge"
+        case .events: return "trophy"
+        case .team: return "person.crop.rectangle.stack"
+        case .finance: return "chart.line.uptrend.xyaxis"
+        case .products: return "ticket"
+        case .controls: return "switch.2"
+        case .health: return "checkmark.shield"
+        case .audit: return "clock.arrow.circlepath"
+        }
+    }
+
+    var section: AdminWorkspaceSection? {
+        switch self {
+        case .overview: return nil
+        case .members, .classDesk, .bookingRequests, .timetable, .availability, .ptRequests: return .operate
+        case .retention, .leads, .campaigns: return .grow
+        case .siteContent, .notices, .events, .team: return .publish
+        case .finance, .products: return .commerce
+        case .controls, .health, .audit: return .platform
+        }
+    }
+
+    static func workspaces(in section: AdminWorkspaceSection) -> [Self] {
+        allCases.filter { $0.section == section }
+    }
+}
+
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @StateObject private var admin = AdminStore()
+    @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = AdminWorkspace.overview.rawValue
     var onClose: (() -> Void)? = nil
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let session = store.authSession, store.profile?.isAdmin == true {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 20) {
-                            ownerHeader
-                            attentionGrid
-                            businessPulse
-                            todayDesk(session: session)
-                            managementDirectory
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.bottom, 32)
-                    }
-                    .refreshable { await admin.refresh(session: session) }
-                    .task { await admin.refresh(session: session) }
+        Group {
+            if let session = store.authSession, store.profile?.isAdmin == true {
+                if horizontalSizeClass == .regular {
+                    ownerSplitWorkspace(session: session)
                 } else {
-                    VStack(spacing: 14) {
-                        Image(systemName: "lock.shield")
-                            .font(.system(size: 38, weight: .semibold))
-                            .foregroundStyle(Color.xertSteel)
-                        Text("Owner access required").xertDisplay(28)
-                        Text("This workspace is available only to XERT administrators.")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(Color.xertPale.opacity(0.7))
-                    }
-                    .padding(28)
+                    ownerCompactWorkspace(session: session)
                 }
+            } else {
+                NavigationStack { accessDenied }
             }
-            .background(Color.xertNavy.ignoresSafeArea())
-            .navigationTitle("Command Centre")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if let onClose {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: onClose) {
-                            Label("Close", systemImage: "xmark")
+        }
+        .background(Color.xertNavy.ignoresSafeArea())
+        .task {
+            guard let session = store.authSession, store.profile?.isAdmin == true else { return }
+            await admin.refresh(session: session)
+        }
+        .alert("Command Centre", isPresented: Binding(
+            get: { admin.errorMessage != nil },
+            set: { if !$0 { admin.errorMessage = nil } }
+        )) {
+            Button("OK") { admin.errorMessage = nil }
+        } message: {
+            Text(admin.errorMessage ?? "")
+        }
+    }
+
+    private var currentWorkspace: AdminWorkspace {
+        AdminWorkspace(rawValue: restoredWorkspace) ?? .overview
+    }
+
+    private var workspaceSelection: Binding<AdminWorkspace?> {
+        Binding(
+            get: { currentWorkspace },
+            set: { restoredWorkspace = ($0 ?? .overview).rawValue }
+        )
+    }
+
+    private func ownerCompactWorkspace(session: AuthSession) -> some View {
+        NavigationStack {
+            dashboard(session: session)
+                .navigationTitle("Command Centre")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { closeToolbar }
+        }
+    }
+
+    private func ownerSplitWorkspace(session: AuthSession) -> some View {
+        NavigationSplitView {
+            List(selection: workspaceSelection) {
+                Label(AdminWorkspace.overview.title, systemImage: AdminWorkspace.overview.icon)
+                    .tag(AdminWorkspace.overview)
+
+                ForEach(AdminWorkspaceSection.allCases) { section in
+                    Section(section.rawValue) {
+                        ForEach(AdminWorkspace.workspaces(in: section)) { workspace in
+                            HStack(spacing: 10) {
+                                Label(workspace.title, systemImage: workspace.icon)
+                                Spacer(minLength: 4)
+                                if let badge = workspaceBadge(workspace), badge > 0 {
+                                    Text(badge > 99 ? "99+" : "\(badge)")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(Color.xertNavy)
+                                        .padding(.horizontal, 7)
+                                        .frame(minHeight: 20)
+                                        .background(Color.xertSteel)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .tag(workspace)
                         }
-                        .foregroundStyle(Color.xertSteel)
                     }
                 }
             }
-            .alert("Command Centre", isPresented: Binding(
-                get: { admin.errorMessage != nil },
-                set: { if !$0 { admin.errorMessage = nil } }
-            )) {
-                Button("OK") { admin.errorMessage = nil }
-            } message: {
-                Text(admin.errorMessage ?? "")
+            .scrollContentBackground(.hidden)
+            .background(Color.xertInk)
+            .navigationTitle("Command Centre")
+            .toolbar {
+                closeToolbar
+                ToolbarItem(placement: .primaryAction) {
+                    Button { Task { await admin.refresh(session: session) } } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(admin.isLoading)
+                    .accessibilityLabel("Refresh owner workspace")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 320)
+        } detail: {
+            NavigationStack {
+                workspaceDestination(currentWorkspace, session: session)
+                    .id(currentWorkspace)
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private func dashboard(session: AuthSession) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 20) {
+                ownerHeader
+                attentionGrid
+                businessPulse
+                todayDesk(session: session)
+                managementDirectory(session: session)
+            }
+            .frame(maxWidth: 880)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color.xertNavy)
+        .refreshable { await admin.refresh(session: session) }
+    }
+
+    private var accessDenied: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundStyle(Color.xertSteel)
+            Text("Owner access required").xertDisplay(28)
+            Text("This workspace is available only to XERT administrators.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.xertPale.opacity(0.7))
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.xertNavy)
+        .navigationTitle("Command Centre")
+        .toolbar { closeToolbar }
+    }
+
+    @ToolbarContentBuilder
+    private var closeToolbar: some ToolbarContent {
+        if let onClose {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: onClose) {
+                    Label("Close", systemImage: "xmark")
+                }
+                .foregroundStyle(Color.xertSteel)
             }
         }
     }
@@ -177,65 +390,102 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private var managementDirectory: some View {
+    private func managementDirectory(session: AuthSession) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Manage XERT")
-            if let session = store.authSession {
-                AdminDestinationRow(title: "Members", detail: "Search \(admin.memberCount) accounts and review value", icon: "person.2") {
-                    AdminMembersView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Classes & waitlists", detail: "Run today's schedule and fill open places", icon: "calendar.badge.clock") {
-                    AdminClassesView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Booking requests", detail: "Resolve member-credit and enquiry-form bookings", icon: "tray.full") {
-                    AdminBookingRequestsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Full timetable", detail: "Create, publish, edit, duplicate and cancel classes", icon: "calendar") {
-                    AdminScheduleView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Availability & blackouts", detail: "Control bookable windows and protect closed periods", icon: "calendar.badge.exclamationmark") {
-                    AdminAvailabilityView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Retention", detail: "Contact members before they disengage", icon: "arrow.triangle.2.circlepath") {
-                    AdminRetentionView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Lead pipelines", detail: "Manage member, trainer and partner opportunities", icon: "person.crop.circle.badge.plus") {
-                    AdminLeadsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Site content", detail: "Edit public copy, contact details, FAQs and hero photos", icon: "square.and.pencil") {
-                    AdminSiteContentView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Campaign attribution", detail: "Measure sources, channels, campaigns and daily lead volume", icon: "chart.bar.xaxis") {
-                    AdminCampaignAttributionView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "PT requests", detail: "Approve, reschedule and complete private training", icon: "figure.strengthtraining.traditional") {
-                    AdminPTRequestsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Member notices", detail: "\(admin.liveAnnouncements) live · publish to web and iOS", icon: "bell.badge") {
-                    AdminCommunicationsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Finance", detail: "Track pack sales and revenue", icon: "chart.line.uptrend.xyaxis") {
-                    AdminFinanceView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Session packs", detail: "Edit pricing, credits, validity and sale status", icon: "ticket") {
-                    AdminProductsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Event calendar", detail: "Publish events and coordinate member training groups", icon: "trophy") {
-                    AdminEventsView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Team directory", detail: "Manage coaches and practitioners shown publicly", icon: "person.crop.rectangle.stack") {
-                    AdminCoachesView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Platform controls", detail: "Control bookings, launch and public messaging", icon: "switch.2") {
-                    AdminPlatformView(admin: admin, session: session)
-                }
-                AdminDestinationRow(title: "Operations health", detail: !admin.hasHealthSnapshot ? "Checking release services" : admin.healthIssues == 0 ? "Schema, Stripe and APNs ready" : "\(admin.healthIssues) release issue\(admin.healthIssues == 1 ? "" : "s")", icon: "checkmark.shield") {
-                    AdminOperationsHealthView(admin: admin)
-                }
-                AdminDestinationRow(title: "Admin audit", detail: "Review recent business and platform changes", icon: "clock.arrow.circlepath") {
-                    AdminAuditView(admin: admin)
+            ForEach(AdminWorkspaceSection.allCases) { section in
+                adminHeading(section.rawValue)
+                    .padding(.top, section == .operate ? 0 : 8)
+                ForEach(AdminWorkspace.workspaces(in: section)) { workspace in
+                    AdminDestinationRow(
+                        title: workspace.title,
+                        detail: compactWorkspaceDetail(workspace),
+                        icon: workspace.icon
+                    ) {
+                        workspaceDestination(workspace, session: session)
+                    }
                 }
             }
+        }
+    }
+
+    private func compactWorkspaceDetail(_ workspace: AdminWorkspace) -> String {
+        switch workspace {
+        case .members:
+            return "Search \(admin.memberCount) accounts and review member value"
+        case .notices:
+            return "\(admin.liveAnnouncements) live · publish to web and iOS"
+        case .health:
+            if !admin.hasHealthSnapshot { return "Checking release services" }
+            return admin.healthIssues == 0
+                ? "Schema, Stripe and APNs ready"
+                : "\(admin.healthIssues) release issue\(admin.healthIssues == 1 ? "" : "s")"
+        default:
+            return workspace.detail
+        }
+    }
+
+    private func workspaceBadge(_ workspace: AdminWorkspace) -> Int? {
+        switch workspace {
+        case .classDesk:
+            return admin.requestedPlaces + admin.waitingMembers + admin.attendanceDue
+        case .bookingRequests:
+            return admin.requestedPlaces
+        case .ptRequests:
+            return admin.pendingPTRequests
+        case .retention:
+            return admin.followUps.count
+        case .notices:
+            return admin.liveAnnouncements
+        case .health:
+            return admin.hasHealthSnapshot ? admin.healthIssues : nil
+        default:
+            return nil
+        }
+    }
+
+    @ViewBuilder
+    private func workspaceDestination(_ workspace: AdminWorkspace, session: AuthSession) -> some View {
+        switch workspace {
+        case .overview:
+            dashboard(session: session)
+                .navigationTitle("Overview")
+        case .members:
+            AdminMembersView(admin: admin, session: session)
+        case .classDesk:
+            AdminClassesView(admin: admin, session: session)
+        case .bookingRequests:
+            AdminBookingRequestsView(admin: admin, session: session)
+        case .timetable:
+            AdminScheduleView(admin: admin, session: session)
+        case .availability:
+            AdminAvailabilityView(admin: admin, session: session)
+        case .ptRequests:
+            AdminPTRequestsView(admin: admin, session: session)
+        case .retention:
+            AdminRetentionView(admin: admin, session: session)
+        case .leads:
+            AdminLeadsView(admin: admin, session: session)
+        case .campaigns:
+            AdminCampaignAttributionView(admin: admin, session: session)
+        case .siteContent:
+            AdminSiteContentView(admin: admin, session: session)
+        case .notices:
+            AdminCommunicationsView(admin: admin, session: session)
+        case .events:
+            AdminEventsView(admin: admin, session: session)
+        case .team:
+            AdminCoachesView(admin: admin, session: session)
+        case .finance:
+            AdminFinanceView(admin: admin, session: session)
+        case .products:
+            AdminProductsView(admin: admin, session: session)
+        case .controls:
+            AdminPlatformView(admin: admin, session: session)
+        case .health:
+            AdminOperationsHealthView(admin: admin)
+        case .audit:
+            AdminAuditView(admin: admin)
         }
     }
 }
