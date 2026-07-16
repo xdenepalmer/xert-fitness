@@ -36,11 +36,17 @@ struct RootView: View {
             guard isSignedIn, privacyLockEnabled else {
                 isPrivacyUnlocked = true
                 privacyLockError = nil
+                if !isSignedIn {
+                    resetMemberNavigationAfterSignOut()
+                }
                 return
             }
             lockAndAuthenticate()
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
+            if hasBootstrapped, !store.isSignedIn, navigation.containsContextualHistory {
+                resetMemberNavigationAfterSignOut()
+            }
             if hasBootstrapped, isPrivacyLocked, privacyLockError == nil {
                 Task { await unlockApp() }
             }
@@ -415,6 +421,16 @@ struct RootView: View {
         store.signOut()
         isPrivacyUnlocked = true
         privacyLockError = nil
+    }
+
+    private func resetMemberNavigationAfterSignOut() {
+        let home = XertMemberRoute.home
+        navigation.restore(routeValue: home.restorationValue)
+        restoredMemberRoute = home.restorationValue
+        restoredMemberWorkspace = navigation.workspaceRestorationValue
+        showingNavigationCommands = false
+        showingAdminCommandCentre = false
+        opensAdminAfterCommandDismissal = false
     }
 
     private func handleOpenURL(_ url: URL) {

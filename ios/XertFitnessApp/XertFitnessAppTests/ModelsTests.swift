@@ -271,6 +271,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(navigation.returnToNext())
     }
 
+    func testNavigationIdentifiesPrivateContextAcrossBackAndForwardHistory() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertFalse(navigation.containsContextualHistory)
+
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.containsContextualHistory)
+        XCTAssertTrue(navigation.open(.events, source: .dock))
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertTrue(navigation.returnToPrevious())
+        XCTAssertTrue(navigation.containsContextualHistory)
+
+        navigation.restore(routeValue: XertMemberRoute.explore.restorationValue)
+        XCTAssertFalse(navigation.containsContextualHistory)
+    }
+
     func testNavigationWorkspaceRestoresExactForwardTaskHistory() throws {
         let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000052"))
         let source = XertNavigationCoordinator(initial: .home, historyLimit: 5)

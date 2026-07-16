@@ -230,6 +230,22 @@ test('navigation history preserves exact member tasks instead of flattening them
   assert.match(modelsTests, /testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs/);
 });
 
+test('sign-out clears exact-task history before another member can inherit it', async () => {
+  const [navigation, root, modelsTests] = await Promise.all([
+    readFile(navigationURL, 'utf8'),
+    readFile(rootURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(navigation, /var containsContextualHistory: Bool/);
+  assert.match(navigation, /routeHistory\.contains \{ \$0\.isContextualTask \}/);
+  assert.match(navigation, /forwardRouteHistory\.contains \{ \$0\.isContextualTask \}/);
+  assert.match(root, /if !isSignedIn \{[\s\S]*resetMemberNavigationAfterSignOut\(\)/);
+  assert.match(root, /hasBootstrapped, !store\.isSignedIn, navigation\.containsContextualHistory/);
+  assert.match(root, /resetMemberNavigationAfterSignOut[\s\S]*navigation\.restore\(routeValue: home\.restorationValue\)/);
+  assert.match(root, /restoredMemberWorkspace = navigation\.workspaceRestorationValue/);
+  assert.match(modelsTests, /testNavigationIdentifiesPrivateContextAcrossBackAndForwardHistory/);
+});
+
 test('scene restoration preserves a bounded versioned exact-task workspace', async () => {
   const [navigation, root, modelsTests] = await Promise.all([
     readFile(navigationURL, 'utf8'),

@@ -417,6 +417,11 @@ final class XertNavigationCoordinator: ObservableObject {
         forwardRouteHistory.first
     }
 
+    var containsContextualHistory: Bool {
+        routeHistory.contains { $0.isContextualTask }
+            || forwardRouteHistory.contains { $0.isContextualTask }
+    }
+
     var workspaceRestorationValue: String {
         let snapshot = XertNavigationWorkspaceSnapshot(
             routes: routeHistory,
