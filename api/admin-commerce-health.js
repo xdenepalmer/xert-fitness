@@ -210,14 +210,14 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const staleBefore = now.getTime() - 10 * 60 * 1000;
   const { data, error } = await admin
     .from('stripe_webhook_events')
-    .select('status,attempts,last_received_at')
+    .select('event_id,event_type,status,attempts,order_id,last_received_at,last_error_code')
     .gte('last_received_at', since)
     .order('last_received_at', { ascending: false })
     .limit(500);
   if (error) {
     return {
       ready: false, available: false, received: 0, failed: 0,
-      stale_processing: 0, retries: 0,
+      stale_processing: 0, retries: 0, incidents: [],
       issue: 'Stripe webhook delivery history could not be loaded.',
     };
   }
@@ -227,6 +227,23 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore
   )).length;
   const retries = rows.reduce((total, row) => total + Math.max(0, Number(row.attempts || 0) - 1), 0);
+  const incidents = rows
+    .filter(row => (
+      row.status === 'failed'
+      || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore)
+    ))
+    .slice(0, 10)
+    .map(row => ({
+      event_id: String(row.event_id || '').slice(0, 255),
+      event_type: String(row.event_type || '').slice(0, 160),
+      status: row.status === 'failed' ? 'failed' : 'stalled',
+      attempts: Math.max(1, Math.min(1_000, Number(row.attempts || 1))),
+      order_id: UUID_PATTERN.test(String(row.order_id || '')) ? row.order_id : null,
+      last_received_at: Number.isFinite(Date.parse(row.last_received_at)) ? row.last_received_at : null,
+      error_code: row.status === 'failed'
+        ? String(row.last_error_code || 'WEBHOOK_PROCESSING_FAILED').slice(0, 120)
+        : null,
+    }));
   const truncated = rows.length === 500;
   const ready = failed === 0 && staleProcessing === 0 && !truncated;
   return {
@@ -236,6 +253,7 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     failed,
     stale_processing: staleProcessing,
     retries,
+    incidents,
     issue: truncated
       ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
       : failed > 0
@@ -261,7 +279,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     ? await inspectWebhookDeliveryHealth(admin)
     : {
         ready: false, available: false, received: 0, failed: 0,
-        stale_processing: 0, retries: 0,
+        stale_processing: 0, retries: 0, incidents: [],
         issue: 'Stripe webhook delivery ledger is not installed.',
       };
   const databaseIssues = [

@@ -878,12 +878,25 @@ struct AdminCommerceHealth: Codable, Hashable {
     }
 
     struct WebhookDelivery: Codable, Hashable {
+        struct Incident: Codable, Hashable, Identifiable {
+            let event_id: String
+            let event_type: String
+            let status: String
+            let attempts: Int
+            let order_id: UUID?
+            let last_received_at: Date?
+            let error_code: String?
+
+            var id: String { event_id }
+        }
+
         let ready: Bool
         let available: Bool
         let received: Int
         let failed: Int
         let stale_processing: Int
         let retries: Int
+        let incidents: [Incident]?
         let issue: String?
     }
 

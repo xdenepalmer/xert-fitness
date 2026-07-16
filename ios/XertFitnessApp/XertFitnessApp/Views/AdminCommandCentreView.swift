@@ -2826,6 +2826,55 @@ private struct AdminOperationsHealthView: View {
                     }
                 }
 
+                if let incidents = commerce.webhook_delivery?.incidents, !incidents.isEmpty {
+                    Section("Recent Stripe incidents") {
+                        ForEach(incidents) { incident in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(incident.status.uppercased())
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.red)
+                                    Text(incident.event_type)
+                                        .font(.caption)
+                                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                                        .lineLimit(2)
+                                    Spacer()
+                                    Button {
+                                        UIPasteboard.general.string = incident.event_id
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .frame(width: 44, height: 44)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(Color.xertSteel)
+                                    .accessibilityLabel("Copy Stripe Event ID")
+                                }
+                                Text(incident.event_id)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(Color.xertPale.opacity(0.55))
+                                    .textSelection(.enabled)
+                                if let orderID = incident.order_id {
+                                    Text("Order \(orderID.uuidString.lowercased())")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(Color.xertPale.opacity(0.45))
+                                        .textSelection(.enabled)
+                                }
+                                HStack(spacing: 12) {
+                                    Text("\(incident.attempts) attempt\(incident.attempts == 1 ? "" : "s")")
+                                    if let code = incident.error_code { Text(code) }
+                                    if let received = incident.last_received_at {
+                                        Text(received.formatted(date: .abbreviated, time: .shortened))
+                                    }
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(Color.xertPale.opacity(0.45))
+                            }
+                            .padding(.vertical, 4)
+                            .listRowBackground(Color.xertInk)
+                        }
+                    }
+                }
+
                 if let issues = commerce.issues, !issues.isEmpty {
                     Section("Stripe actions required") {
                         ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in

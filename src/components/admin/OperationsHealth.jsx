@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Database, Loader2,
+  AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Copy, Database, Loader2,
   RefreshCw, ShieldCheck,
 } from 'lucide-react';
 import { getOperationsHealth } from '@/lib/adminData';
@@ -116,6 +116,19 @@ export default function OperationsHealth({ onNavigate }) {
 
   const orderedChecks = useMemo(() => orderOperationsHealthChecks(checks), [checks]);
 
+  const copyIncidentId = useCallback(async eventId => {
+    try {
+      await navigator.clipboard.writeText(eventId);
+      toast({ title: 'Stripe Event ID copied' });
+    } catch {
+      toast({
+        title: 'Could not copy Event ID',
+        description: 'Select the Event ID and copy it manually.',
+        variant: 'destructive',
+      });
+    }
+  }, []);
+
   return (
     <div className="p-6 space-y-6">
       <div className="relative p-6 overflow-hidden"
@@ -211,6 +224,46 @@ export default function OperationsHealth({ onNavigate }) {
                   <p className="font-body text-xs leading-relaxed mt-auto" style={{ color: 'rgba(209,221,230,0.52)' }}>
                     {check.action}
                   </p>
+                )}
+
+                {check.incidents?.length > 0 && (
+                  <div className="mt-4 space-y-2" aria-label="Unresolved Stripe webhook incidents">
+                    {check.incidents.map(incident => (
+                      <div key={incident.event_id} className="p-3"
+                        style={{ backgroundColor: 'rgba(16,24,32,0.48)', border: '1px solid rgba(248,113,113,0.18)' }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-body text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#f87171' }}>
+                                {incident.status}
+                              </span>
+                              <span className="font-body text-xs text-xert-pale/70 break-all">{incident.event_type}</span>
+                            </div>
+                            <code className="block mt-1 font-mono text-[11px] text-xert-pale/55 break-all">{incident.event_id}</code>
+                            {incident.order_id && (
+                              <code className="block mt-1 font-mono text-[10px] text-xert-pale/40 break-all">
+                                Order {incident.order_id}
+                              </code>
+                            )}
+                          </div>
+                          <button type="button" onClick={() => void copyIncidentId(incident.event_id)}
+                            className="inline-flex size-11 shrink-0 items-center justify-center border border-xert-steel/20 text-xert-steel transition-colors hover:bg-xert-steel/10"
+                            title="Copy Stripe Event ID" aria-label={`Copy Stripe Event ID ${incident.event_id}`}>
+                            <Copy className="size-4" />
+                          </button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-body text-[10px] uppercase tracking-wider text-xert-pale/40">
+                          <span>{incident.attempts} attempt{incident.attempts === 1 ? '' : 's'}</span>
+                          {incident.error_code && <span>{incident.error_code}</span>}
+                          {incident.last_received_at && (
+                            <time dateTime={incident.last_received_at}>
+                              {new Date(incident.last_received_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </time>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {target && (

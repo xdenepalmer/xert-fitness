@@ -267,18 +267,43 @@ test('webhook delivery health reports retries, failures and stalled processing',
   ]), now);
   assert.deepEqual(healthy, {
     ready: true, available: true, received: 2, failed: 0,
-    stale_processing: 0, retries: 1, issue: null,
+    stale_processing: 0, retries: 1, incidents: [], issue: null,
   });
 
   const unhealthy = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [
-    { status: 'failed', attempts: 3, last_received_at: '2026-07-16T05:59:00.000Z' },
-    { status: 'processing', attempts: 1, last_received_at: '2026-07-16T05:30:00.000Z' },
+    {
+      event_id: 'evt_failed_123', event_type: 'checkout.session.completed', status: 'failed', attempts: 3,
+      order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2', last_received_at: '2026-07-16T05:59:00.000Z',
+      last_error_code: 'FULFILLMENT_REJECTED',
+    },
+    {
+      event_id: 'evt_stalled_456', event_type: 'charge.refunded', status: 'processing', attempts: 1,
+      order_id: 'not-a-uuid', last_received_at: '2026-07-16T05:30:00.000Z', last_error_code: null,
+    },
   ]), now);
   assert.equal(unhealthy.ready, false);
   assert.equal(unhealthy.failed, 1);
   assert.equal(unhealthy.stale_processing, 1);
   assert.equal(unhealthy.retries, 2);
+  assert.deepEqual(unhealthy.incidents, [
+    {
+      event_id: 'evt_failed_123', event_type: 'checkout.session.completed', status: 'failed', attempts: 3,
+      order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2', last_received_at: '2026-07-16T05:59:00.000Z',
+      error_code: 'FULFILLMENT_REJECTED',
+    },
+    {
+      event_id: 'evt_stalled_456', event_type: 'charge.refunded', status: 'stalled', attempts: 1,
+      order_id: null, last_received_at: '2026-07-16T05:30:00.000Z', error_code: null,
+    },
+  ]);
   assert.match(unhealthy.issue, /unresolved failure/);
+
+  const bounded = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), Array.from({ length: 14 }, (_, index) => ({
+    event_id: `evt_${index}`, event_type: 'checkout.session.completed', status: 'failed', attempts: 1,
+    order_id: null, last_received_at: '2026-07-16T05:59:00.000Z', last_error_code: 'x'.repeat(200),
+  }))), now);
+  assert.equal(bounded.incidents.length, 10);
+  assert.equal(bounded.incidents[0].error_code.length, 120);
 });
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {

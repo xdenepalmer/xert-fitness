@@ -55,6 +55,9 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /\/api\/admin-push-health/);
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
+  assert.match(view, /Recent Stripe incidents/);
+  assert.match(view, /UIPasteboard\.general\.string = incident\.event_id/);
+  assert.match(view, /Copy Stripe Event ID/);
   assert.match(view, /AdminAuditView/);
   assert.match(view, /AdminProductsView/);
   assert.match(view, /AdminProductEditor/);

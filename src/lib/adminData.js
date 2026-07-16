@@ -1251,7 +1251,8 @@ async function healthCheck(key, label, fn) {
       status: result.status || 'ok',
       detail: result.detail || 'Ready',
       action: result.action || null,
-      count: result.count ?? null
+      count: result.count ?? null,
+      incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : []
     };
   } catch (error) {
     return {
@@ -1260,7 +1261,8 @@ async function healthCheck(key, label, fn) {
       status: 'error',
       detail: error.message || 'Check failed',
       action: 'Check Supabase schema, RLS policies, and admin permissions.',
-      count: null
+      count: null,
+      incidents: []
     };
   }
 }
@@ -1349,6 +1351,7 @@ export async function getOperationsHealth() {
           status: 'attention',
           count: result.active_product_count,
           detail: problems.join(' ') || 'No active checkout products are configured.',
+          incidents: result.webhook_delivery?.incidents || [],
           action: missing.length > 0
             ? 'Set the missing values in Vercel, redeploy, then refresh this check.'
             : 'Resolve each item in Stripe and Session Packs, redeploy if settings changed, then refresh this check.'
@@ -1356,7 +1359,8 @@ export async function getOperationsHealth() {
       }
       return {
         count: result.active_product_count,
-        detail: `${String(result.mode || 'unknown').toUpperCase()} mode: ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`
+        detail: `${String(result.mode || 'unknown').toUpperCase()} mode: ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`,
+        incidents: result.webhook_delivery?.incidents || []
       };
     }),
 

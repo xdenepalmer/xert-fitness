@@ -38,3 +38,10 @@ test('operations health prioritizes errors and warnings while keeping fix target
   assert.match(monitor, /min-h-11[\s\S]*Open section/);
   assert.match(monitor, /role="status" aria-live="polite"/);
 });
+
+test('operations health exposes bounded Stripe incidents with an accessible copy action', () => {
+  assert.match(monitor, /check\.incidents\?\.length > 0/);
+  assert.match(monitor, /Unresolved Stripe webhook incidents/);
+  assert.match(monitor, /navigator\.clipboard\.writeText\(eventId\)/);
+  assert.match(monitor, /Copy Stripe Event ID/);
+});
