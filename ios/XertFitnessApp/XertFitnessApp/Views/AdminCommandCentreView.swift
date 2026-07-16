@@ -444,48 +444,46 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    @ViewBuilder
-    private func workspaceDestination(_ workspace: AdminWorkspace, session: AuthSession) -> some View {
+    private func workspaceDestination(_ workspace: AdminWorkspace, session: AuthSession) -> AnyView {
         switch workspace {
         case .overview:
-            dashboard(session: session)
-                .navigationTitle("Overview")
+            return AnyView(dashboard(session: session).navigationTitle("Overview"))
         case .members:
-            AdminMembersView(admin: admin, session: session)
+            return AnyView(AdminMembersView(admin: admin, session: session))
         case .classDesk:
-            AdminClassesView(admin: admin, session: session)
+            return AnyView(AdminClassesView(admin: admin, session: session))
         case .bookingRequests:
-            AdminBookingRequestsView(admin: admin, session: session)
+            return AnyView(AdminBookingRequestsView(admin: admin, session: session))
         case .timetable:
-            AdminScheduleView(admin: admin, session: session)
+            return AnyView(AdminScheduleView(admin: admin, session: session))
         case .availability:
-            AdminAvailabilityView(admin: admin, session: session)
+            return AnyView(AdminAvailabilityView(admin: admin, session: session))
         case .ptRequests:
-            AdminPTRequestsView(admin: admin, session: session)
+            return AnyView(AdminPTRequestsView(admin: admin, session: session))
         case .retention:
-            AdminRetentionView(admin: admin, session: session)
+            return AnyView(AdminRetentionView(admin: admin, session: session))
         case .leads:
-            AdminLeadsView(admin: admin, session: session)
+            return AnyView(AdminLeadsView(admin: admin, session: session))
         case .campaigns:
-            AdminCampaignAttributionView(admin: admin, session: session)
+            return AnyView(AdminCampaignAttributionView(admin: admin, session: session))
         case .siteContent:
-            AdminSiteContentView(admin: admin, session: session)
+            return AnyView(AdminSiteContentView(admin: admin, session: session))
         case .notices:
-            AdminCommunicationsView(admin: admin, session: session)
+            return AnyView(AdminCommunicationsView(admin: admin, session: session))
         case .events:
-            AdminEventsView(admin: admin, session: session)
+            return AnyView(AdminEventsView(admin: admin, session: session))
         case .team:
-            AdminCoachesView(admin: admin, session: session)
+            return AnyView(AdminCoachesView(admin: admin, session: session))
         case .finance:
-            AdminFinanceView(admin: admin, session: session)
+            return AnyView(AdminFinanceView(admin: admin, session: session))
         case .products:
-            AdminProductsView(admin: admin, session: session)
+            return AnyView(AdminProductsView(admin: admin, session: session))
         case .controls:
-            AdminPlatformView(admin: admin, session: session)
+            return AnyView(AdminPlatformView(admin: admin, session: session))
         case .health:
-            AdminOperationsHealthView(admin: admin)
+            return AnyView(AdminOperationsHealthView(admin: admin))
         case .audit:
-            AdminAuditView(admin: admin)
+            return AnyView(AdminAuditView(admin: admin))
         }
     }
 }
@@ -955,6 +953,12 @@ private struct AdminScheduleView: View {
         }
     }
 
+    private func classSummary(_ item: AdminClassSession) -> String {
+        let time = item.start_time?.formatted(date: .omitted, time: .shortened) ?? "Time TBC"
+        let capacity = item.capacity ?? 0
+        return "\(time) · \(capacity) places"
+    }
+
     var body: some View {
         List {
             if rows.isEmpty { Text("No matching classes.").listRowBackground(Color.xertInk) }
@@ -975,7 +979,7 @@ private struct AdminScheduleView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title).font(.headline)
-                                Text("\(item.start_time?.formatted(date: .omitted, time: .shortened) ?? "Time TBC") · \(item.capacity ?? 0) places")
+                                Text(classSummary(item))
                                     .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
                             }
                         }

@@ -2030,7 +2030,7 @@ private struct EventGoalMutation: Encodable {
     let event_id: UUID
 }
 
-private extension String {
+extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
