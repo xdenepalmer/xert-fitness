@@ -44,22 +44,13 @@ begin
     raise exception 'Invalid Stripe fulfillment payload';
   end if;
 
-  insert into public.orders (
-    user_id, product_id, email, amount_cents, currency, status,
-    stripe_checkout_session_id, stripe_payment_intent_id, paid_at
-  ) values (
-    p_user_id, p_product_id, nullif(btrim(p_email), ''), p_amount_cents, lower(p_currency), 'paid',
-    p_checkout_session_id, p_payment_intent_id, p_paid_at
-  )
-  on conflict (stripe_checkout_session_id) do nothing;
-
   select orders.* into v_order
   from public.orders as orders
   where orders.stripe_checkout_session_id = p_checkout_session_id
   for update;
 
   if v_order.id is null then
-    raise exception 'Stripe order could not be locked';
+    raise exception 'Stripe fulfillment requires a recorded pending order';
   end if;
   if v_order.user_id is distinct from p_user_id
      or v_order.product_id is distinct from p_product_id
@@ -114,3 +105,5 @@ create table if not exists public.xert_schema_capabilities (
 alter table public.xert_schema_capabilities enable row level security;
 insert into public.xert_schema_capabilities (capability)
 values ('stripe_payment_fulfillment') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('stripe_pending_order_guard') on conflict (capability) do nothing;

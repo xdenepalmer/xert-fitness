@@ -1,17 +1,5 @@
--- Atomically settle a verified Stripe Checkout Session without allowing an
--- older webhook retry to reverse a later refund or duplicate member credits.
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.credit_batches'::regclass
-      and conname = 'credit_batches_order_id_key'
-  ) then
-    alter table public.credit_batches
-      add constraint credit_batches_order_id_key unique (order_id);
-  end if;
-end $$;
-
+-- A paid Stripe event may settle only the XERT order recorded before the buyer
+-- received its Checkout URL. Never synthesize an order from webhook metadata.
 create or replace function public.fulfill_stripe_checkout(
   p_checkout_session_id text,
   p_user_id uuid,
@@ -61,8 +49,6 @@ begin
     raise exception 'Stripe fulfillment does not match the recorded order';
   end if;
 
-  -- Refund is terminal. A delayed success delivery must never restore the
-  -- order or recreate a credit batch after refund reconciliation.
   if v_order.status = 'refunded' then
     return query select v_order.id, v_order.status, false;
     return;
@@ -98,12 +84,9 @@ grant execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
 ) to service_role;
 
-create table if not exists public.xert_schema_capabilities (
-  capability text primary key,
-  installed_at timestamptz not null default now()
-);
-alter table public.xert_schema_capabilities enable row level security;
 insert into public.xert_schema_capabilities (capability)
-values ('stripe_payment_fulfillment') on conflict (capability) do nothing;
+values ('stripe_payment_fulfillment')
+on conflict (capability) do update set installed_at = excluded.installed_at;
 insert into public.xert_schema_capabilities (capability)
-values ('stripe_pending_order_guard') on conflict (capability) do nothing;
+values ('stripe_pending_order_guard')
+on conflict (capability) do update set installed_at = excluded.installed_at;

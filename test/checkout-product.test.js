@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
   assertCheckoutProduct,
+  stripePendingOrderGuardIsReady,
   assertStripePriceMatchesProduct,
   checkoutIdempotencyKey,
   inspectCheckoutEnvironment,
@@ -70,6 +71,26 @@ test('checkout fails closed until atomic payment fulfillment is installed', asyn
   assert.ok(gate >= 0 && stripeConfigurationGate > gate);
   assert.ok(gate >= 0 && sessionCreation > gate);
   assert.match(source, /payment services are being upgraded[\s\S]*503/);
+});
+
+test('checkout fails closed until Stripe fulfillment requires its pending order', async () => {
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() {
+      return { data: { capability: 'stripe_pending_order_guard' }, error: null };
+    },
+  };
+  assert.equal(await stripePendingOrderGuardIsReady({ from() { return query; } }), true);
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await stripePendingOrderGuardIsReady({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const guard = source.indexOf('stripePendingOrderGuardIsReady(admin)');
+  const paymentSwitch = source.indexOf('sessionPackPaymentsAreEnabled(admin)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
+  assert.match(source, /payment order safeguards are being upgraded[\s\S]*503/);
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {

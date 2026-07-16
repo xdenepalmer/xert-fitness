@@ -16,6 +16,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
+const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -111,6 +112,16 @@ export async function adminSettingsContractIsReady(admin) {
     .maybeSingle();
   if (error) return false;
   return data?.capability === ADMIN_SETTINGS_SINGLETON_CAPABILITY;
+}
+
+export async function stripePendingOrderGuardIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', STRIPE_PENDING_ORDER_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === STRIPE_PENDING_ORDER_CAPABILITY;
 }
 
 export async function sessionPackPaymentsAreEnabled(admin) {
@@ -353,6 +364,12 @@ export default async function handler(request, response) {
     if (!await paymentFulfillmentIsReady(admin)) {
       return json({
         error: 'Checkout is temporarily unavailable while payment services are being upgraded.',
+      }, 503);
+    }
+
+    if (!await stripePendingOrderGuardIsReady(admin)) {
+      return json({
+        error: 'Checkout is temporarily unavailable while payment order safeguards are being upgraded.',
       }, 503);
     }
 

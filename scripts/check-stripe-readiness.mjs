@@ -10,6 +10,7 @@ const DEFAULT_VERCEL_BASE_URL = 'https://xert-fitness.vercel.app';
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const GUARDED_PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
+const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const RESPONSE_PREVIEW_LIMIT = 180;
 
 async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, ...options }) {
@@ -121,13 +122,16 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   let capabilityReady = false;
   let activationGuardReady = false;
   let settingsContractReady = false;
+  let pendingOrderGuardReady = false;
   let capabilityDetail;
   let activationGuardDetail;
   let settingsContractDetail;
+  let pendingOrderGuardDetail;
   if (capabilities.status !== 200) {
     capabilityDetail = `Capability RPC returned HTTP ${capabilities.status || 'no response'}${capabilities.body ? `: ${capabilities.body}` : ''}`;
     activationGuardDetail = capabilityDetail;
     settingsContractDetail = capabilityDetail;
+    pendingOrderGuardDetail = capabilityDetail;
   } else {
     try {
       const rows = JSON.parse(capabilities.body || '[]');
@@ -135,6 +139,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       capabilityReady = installed.has(PAYMENT_FULFILLMENT_CAPABILITY);
       activationGuardReady = installed.has(GUARDED_PAYMENT_ACTIVATION_CAPABILITY);
       settingsContractReady = installed.has(ADMIN_SETTINGS_SINGLETON_CAPABILITY);
+      pendingOrderGuardReady = installed.has(STRIPE_PENDING_ORDER_CAPABILITY);
       capabilityDetail = capabilityReady
         ? `${PAYMENT_FULFILLMENT_CAPABILITY} installed`
         : `${PAYMENT_FULFILLMENT_CAPABILITY} is missing`;
@@ -144,10 +149,14 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       settingsContractDetail = settingsContractReady
         ? `${ADMIN_SETTINGS_SINGLETON_CAPABILITY} installed`
         : `${ADMIN_SETTINGS_SINGLETON_CAPABILITY} is missing`;
+      pendingOrderGuardDetail = pendingOrderGuardReady
+        ? `${STRIPE_PENDING_ORDER_CAPABILITY} installed`
+        : `${STRIPE_PENDING_ORDER_CAPABILITY} is missing`;
     } catch {
       capabilityDetail = 'Capability RPC returned malformed JSON.';
       activationGuardDetail = capabilityDetail;
       settingsContractDetail = capabilityDetail;
+      pendingOrderGuardDetail = capabilityDetail;
     }
   }
   checks.push({
@@ -176,6 +185,15 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     remediation: settingsContractReady
       ? null
       : 'Apply supabase/migrations/20260716020000_admin_settings_singleton.sql to the XERT Supabase project.',
+  });
+  checks.push({
+    key: 'pending-order-guard',
+    label: 'Recorded-order Stripe fulfillment',
+    ready: pendingOrderGuardReady,
+    detail: pendingOrderGuardDetail,
+    remediation: pendingOrderGuardReady
+      ? null
+      : 'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql to the XERT Supabase project.',
   });
 
   return { ready: checks.every(check => check.ready), checks };

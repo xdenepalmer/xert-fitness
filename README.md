@@ -80,8 +80,9 @@ The Supabase schema is defined in:
   deployment: instant bookings, staff-confirmed requests, and interest-only
   classes now behave differently end to end; re-run it to add transactional
   staff class cancellation with automatic member credit returns
-- `src/supabase/payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
-  that guarantees a paid order grants at most one credit batch
+- `src/supabase/stripe_payment_fulfillment_upgrade.sql` — one-time Stripe safeguard
+  that guarantees a paid recorded order grants at most one credit batch and
+  rejects webhook fulfillment without checkout's pending order
 - `src/supabase/guarded_payment_activation_upgrade.sql` — requires a fresh
   protected Stripe preflight before checkout can move from paused to enabled
 - `src/supabase/admin_settings_singleton_upgrade.sql` — repairs the launch
@@ -170,7 +171,7 @@ signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
 profile-privilege trigger and the availability/blackout policies.
 For the already-deployed XERT database, run `booking_modes_upgrade.sql`,
-`payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
+`stripe_payment_fulfillment_upgrade.sql`, `availability_schema.sql`, and
 `rls_hardening.sql`, `product_validation_upgrade.sql`, and
 `event_goals_upgrade.sql`, `credit_grant_audit_upgrade.sql`, and
 `admin_role_safety_upgrade.sql`, `admin_member_search_upgrade.sql`,

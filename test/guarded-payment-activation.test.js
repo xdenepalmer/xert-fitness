@@ -41,5 +41,5 @@ test('release gates require guarded payment activation everywhere', async () => 
     assert.match(source, /guarded_payment_activation/);
   }
   assert.match(runbook, /20260716010000_guarded_payment_activation\.sql/);
-  assert.match(runbook, /eight `PASS` results/);
+  assert.match(runbook, /nine `PASS` results/);
 });

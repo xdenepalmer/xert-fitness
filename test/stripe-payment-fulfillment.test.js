@@ -6,17 +6,29 @@ const paths = [
   '../src/supabase/booking_schema.sql',
   '../src/supabase/stripe_payment_fulfillment_upgrade.sql',
   '../supabase/migrations/20260715010000_stripe_payment_fulfillment.sql',
+  '../supabase/migrations/20260716030000_stripe_pending_order_guard.sql',
 ];
+
+function fulfillmentFunction(sql) {
+  const start = sql.indexOf('create or replace function public.fulfill_stripe_checkout');
+  const end = sql.indexOf('revoke execute on function public.fulfill_stripe_checkout', start);
+  return sql.slice(start, end);
+}
 
 test('every database path settles Stripe payments in one locked transaction', async () => {
   for (const path of paths) {
     const sql = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.match(sql, /function public\.fulfill_stripe_checkout/i);
-    assert.match(sql, /credit_batches_order_id_key[\s\S]*unique \(order_id\)|order_id\s+uuid unique/i);
+    if (!path.includes('20260716030000')) {
+      assert.match(sql, /credit_batches_order_id_key[\s\S]*unique \(order_id\)|order_id\s+uuid unique/i);
+    }
     assert.match(sql, /where orders\.stripe_checkout_session_id = p_checkout_session_id[\s\S]*for update/i);
-    assert.match(sql, /on conflict \(stripe_checkout_session_id\) do nothing/i);
+    const fulfillment = fulfillmentFunction(sql);
+    assert.doesNotMatch(fulfillment, /insert into public\.orders/i);
+    assert.match(fulfillment, /Stripe fulfillment requires a recorded pending order/i);
     assert.match(sql, /on conflict \(order_id\) do nothing/i);
     assert.match(sql, /values \('stripe_payment_fulfillment'\)/i);
+    assert.match(sql, /values \('stripe_pending_order_guard'\)/i);
   }
 });
 
