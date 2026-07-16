@@ -134,6 +134,20 @@ Open **iOS Admin > Operations Health** and require all of the following:
 - The production webhook is registered and has all required events.
 - The database contract is fully installed.
 
+Finally, run the combined read-only launch gate from an operator shell containing
+the live Stripe and Supabase secrets:
+
+```bash
+npm run stripe:launch:check
+```
+
+This reruns the eleven deployed boundary checks and inspects every active pack
+against live Stripe. It passes only when all packs already have exact, active,
+one-time AUD Prices bound to their current XERT product identity, session count
+and validity. A dry-run `PLAN` is a release failure: review it, run
+`npm run stripe:catalog:live:apply`, and rerun the combined gate until it reports
+zero planned changes. The command is read-only and never prints private keys.
+
 ## 5. Test Purchase
 
 1. Sign in as a non-admin test member with no special database access.

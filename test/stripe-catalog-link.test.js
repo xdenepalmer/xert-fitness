@@ -10,6 +10,10 @@ import {
   matchingStripePrice,
   parseCatalogLinkArgs,
 } from '../scripts/link-stripe-catalog.mjs';
+import {
+  inspectStripeLaunchPreflight,
+  parseStripeLaunchArgs,
+} from '../scripts/stripe-launch-preflight.mjs';
 
 const product = {
   id: '00000000-0000-4000-8000-000000000004', slug: 'starter-4',
@@ -189,13 +193,77 @@ test('catalog linker never links an existing remote match during a dry run', asy
   };
   const messages = [];
 
-  await linkStripeCatalog({
+  const result = await linkStripeCatalog({
     stripe, supabase, mode: 'live', apply: false, replaceExisting: false,
     log: message => messages.push(message),
   });
 
   assert.equal(databaseUpdates, 0);
+  assert.deepEqual(result, {
+    productCount: 1, applied: false, verifiedCount: 0, linkedCount: 0, plannedCount: 1,
+  });
   assert.match(messages.join('\n'), /link existing matching Price price_STARTER4/);
+});
+
+test('launch preflight requires explicit mode and valid private operator configuration', async () => {
+  assert.deepEqual(parseStripeLaunchArgs(['--mode=live']), { mode: 'live' });
+  assert.throws(() => parseStripeLaunchArgs([]), /explicit Stripe mode/);
+  assert.throws(() => parseStripeLaunchArgs(['--mode=live', '--apply']), /Unknown option/);
+
+  let boundaryCalls = 0;
+  let catalogCalls = 0;
+  const report = await inspectStripeLaunchPreflight({
+    mode: 'live',
+    environment: {},
+    inspectBoundary: async () => { boundaryCalls += 1; },
+    catalogInspector: async () => { catalogCalls += 1; },
+  });
+  assert.equal(report.ready, false);
+  assert.ok(report.environmentIssues.length >= 3);
+  assert.equal(boundaryCalls, 0);
+  assert.equal(catalogCalls, 0);
+});
+
+test('launch preflight passes only when deployed boundaries and every catalog link are verified', async () => {
+  const environment = {
+    SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: `sb_secret_${'s'.repeat(32)}`,
+    STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(32)}`,
+  };
+  const boundary = { ready: true, checks: [] };
+  const ready = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    inspectBoundary: async () => boundary,
+    catalogInspector: async ({ log }) => {
+      log('PASS starter-4: linked price verified.');
+      return { productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0 };
+    },
+  });
+  assert.equal(ready.ready, true);
+  assert.equal(ready.catalog.ready, true);
+  assert.equal(ready.catalogMessages.length, 1);
+
+  const planned = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    inspectBoundary: async () => boundary,
+    catalogInspector: async () => ({
+      productCount: 1, applied: false, verifiedCount: 0, linkedCount: 0, plannedCount: 1,
+    }),
+  });
+  assert.equal(planned.ready, false);
+  assert.equal(planned.catalog.ready, false);
+
+  const brokenBoundary = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    inspectBoundary: async () => ({ ready: false, checks: [] }),
+    catalogInspector: async () => ({
+      productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0,
+    }),
+  });
+  assert.equal(brokenBoundary.ready, false);
 });
 
 function catalogSupabase(products) {

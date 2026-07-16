@@ -235,7 +235,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   return { ready: checks.every(check => check.ready), checks };
 }
 
-function printReport(report) {
+export function printReport(report) {
   for (const check of report.checks) {
     console.log(`${check.ready ? 'PASS' : 'FAIL'}  ${check.label}: ${check.detail}`);
     if (!check.ready && check.remediation) console.log(`      NEXT: ${check.remediation}`);

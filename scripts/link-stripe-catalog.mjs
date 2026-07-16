@@ -176,6 +176,9 @@ export async function linkStripeCatalog({ stripe, supabase, mode, apply, replace
   products.forEach(assertCatalogProduct);
 
   const verifiedLinkedPrices = new Map();
+  let verifiedCount = 0;
+  let linkedCount = 0;
+  let plannedCount = 0;
   if (!replaceExisting) {
     for (const product of products.filter(item => item.stripe_price_id)) {
       const existingPrice = await stripe.prices.retrieve(product.stripe_price_id);
@@ -190,12 +193,14 @@ export async function linkStripeCatalog({ stripe, supabase, mode, apply, replace
         throw new Error(`${product.slug}: verified Stripe Price preflight is missing.`);
       }
       log(`PASS ${product.slug}: ${product.stripe_price_id} already matches.`);
+      verifiedCount += 1;
       continue;
     }
 
     let stripeProduct = await findStripeProduct(stripe, product, mode);
     if (!stripeProduct && !apply) {
       log(`PLAN ${product.slug}: create Stripe Product and ${product.currency.toUpperCase()} ${(product.price_cents / 100).toFixed(2)} Price, then link it.`);
+      plannedCount += 1;
       continue;
     }
     if (!stripeProduct) stripeProduct = await createStripeProduct(stripe, product, mode);
@@ -204,19 +209,22 @@ export async function linkStripeCatalog({ stripe, supabase, mode, apply, replace
     let price = matchingStripePrice(priceList.data, product, mode);
     if (price && !apply) {
       log(`PLAN ${product.slug}: link existing matching Price ${price.id}.`);
+      plannedCount += 1;
       continue;
     }
     if (!price && !apply) {
       log(`PLAN ${product.slug}: create ${product.currency.toUpperCase()} ${(product.price_cents / 100).toFixed(2)} Price on ${stripeProduct.id}, then link it.`);
+      plannedCount += 1;
       continue;
     }
     if (!price) price = await createStripePrice(stripe, stripeProduct.id, product, mode);
     assertStripePriceMatches(price, product, mode);
     await linkDatabasePrice(supabase, product, price.id);
     log(`LINK ${product.slug}: ${price.id}`);
+    linkedCount += 1;
   }
 
-  return { productCount: products.length, applied: apply };
+  return { productCount: products.length, applied: apply, verifiedCount, linkedCount, plannedCount };
 }
 
 async function main() {
