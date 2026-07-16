@@ -12,6 +12,7 @@ import {
 } from '../scripts/link-stripe-catalog.mjs';
 import {
   inspectStripeLaunchPreflight,
+  inspectPaymentSwitch,
   parseStripeLaunchArgs,
 } from '../scripts/stripe-launch-preflight.mjs';
 
@@ -206,9 +207,14 @@ test('catalog linker never links an existing remote match during a dry run', asy
 });
 
 test('launch preflight requires explicit mode and valid private operator configuration', async () => {
-  assert.deepEqual(parseStripeLaunchArgs(['--mode=live']), { mode: 'live' });
+  assert.deepEqual(parseStripeLaunchArgs(['--mode=live']), { mode: 'live', expectPayments: 'paused' });
+  assert.deepEqual(
+    parseStripeLaunchArgs(['--mode=live', '--expect-payments=enabled']),
+    { mode: 'live', expectPayments: 'enabled' },
+  );
   assert.throws(() => parseStripeLaunchArgs([]), /explicit Stripe mode/);
   assert.throws(() => parseStripeLaunchArgs(['--mode=live', '--apply']), /Unknown option/);
+  assert.throws(() => parseStripeLaunchArgs(['--mode=live', '--expect-payments=open']), /paused or enabled/);
 
   let boundaryCalls = 0;
   let catalogCalls = 0;
@@ -236,6 +242,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
   };
   const boundary = { ready: true, checks: [] };
   const webhook = { ready: true, missing_events: [], issue: null };
+  const paymentSwitch = { ready: true, state: 'paused', expected: 'paused', issue: null };
   const ready = await inspectStripeLaunchPreflight({
     environment,
     mode: 'live',
@@ -245,6 +252,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
       return { productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0 };
     },
     webhookInspector: async () => webhook,
+    paymentSwitchInspector: async () => paymentSwitch,
   });
   assert.equal(ready.ready, true);
   assert.equal(ready.catalog.ready, true);
@@ -258,6 +266,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
       productCount: 1, applied: false, verifiedCount: 0, linkedCount: 0, plannedCount: 1,
     }),
     webhookInspector: async () => webhook,
+    paymentSwitchInspector: async () => paymentSwitch,
   });
   assert.equal(planned.ready, false);
   assert.equal(planned.catalog.ready, false);
@@ -270,6 +279,7 @@ test('launch preflight passes only when deployed boundaries and every catalog li
       productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0,
     }),
     webhookInspector: async () => webhook,
+    paymentSwitchInspector: async () => paymentSwitch,
   });
   assert.equal(brokenBoundary.ready, false);
 
@@ -285,9 +295,74 @@ test('launch preflight passes only when deployed boundaries and every catalog li
       missing_events: ['charge.dispute.created'],
       issue: 'The Stripe webhook is missing: charge.dispute.created.',
     }),
+    paymentSwitchInspector: async () => paymentSwitch,
   });
   assert.equal(missingDisputeDelivery.ready, false);
   assert.deepEqual(missingDisputeDelivery.webhook.missing_events, ['charge.dispute.created']);
+
+  const switchMismatch = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    expectPayments: 'enabled',
+    inspectBoundary: async () => boundary,
+    catalogInspector: async () => ({
+      productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0,
+    }),
+    webhookInspector: async () => webhook,
+    paymentSwitchInspector: async () => ({
+      ready: false, state: 'paused', expected: 'enabled',
+      issue: 'Platform payments are paused; this gate requires enabled.',
+    }),
+  });
+  assert.equal(switchMismatch.ready, false);
+  assert.equal(switchMismatch.paymentSwitch.state, 'paused');
+});
+
+test('launch preflight validates the singleton payment switch for both cutover phases', () => {
+  assert.deepEqual(inspectPaymentSwitch([{ payments_enabled: false }], null, 'paused'), {
+    ready: true, state: 'paused', expected: 'paused', issue: null,
+  });
+  assert.deepEqual(inspectPaymentSwitch([{ payments_enabled: true }], null, 'enabled'), {
+    ready: true, state: 'enabled', expected: 'enabled', issue: null,
+  });
+  assert.equal(inspectPaymentSwitch([{ payments_enabled: false }], null, 'enabled').ready, false);
+  assert.equal(inspectPaymentSwitch([], null, 'paused').state, 'invalid');
+  assert.equal(inspectPaymentSwitch([{ payments_enabled: false }, { payments_enabled: false }], null, 'paused').state, 'invalid');
+  assert.equal(inspectPaymentSwitch(null, new Error('network'), 'paused').state, 'unknown');
+});
+
+test('launch preflight observes the payment switch after all remote readiness checks settle', async () => {
+  const environment = {
+    SUPABASE_URL: 'https://ugmkwoapjcpiucsrxwzt.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: `sb_secret_${'s'.repeat(32)}`,
+    STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(32)}`,
+    APP_BASE_URL: 'https://xert-fitness.vercel.app',
+  };
+  const settled = new Set();
+  const report = await inspectStripeLaunchPreflight({
+    environment,
+    mode: 'live',
+    inspectBoundary: async () => {
+      await Promise.resolve();
+      settled.add('boundary');
+      return { ready: true, checks: [] };
+    },
+    catalogInspector: async () => {
+      await Promise.resolve();
+      settled.add('catalog');
+      return { productCount: 1, applied: false, verifiedCount: 1, linkedCount: 0, plannedCount: 0 };
+    },
+    webhookInspector: async () => {
+      await Promise.resolve();
+      settled.add('webhook');
+      return { ready: true, missing_events: [], issue: null };
+    },
+    paymentSwitchInspector: async () => {
+      assert.deepEqual([...settled].sort(), ['boundary', 'catalog', 'webhook']);
+      return { ready: true, state: 'paused', expected: 'paused', issue: null };
+    },
+  });
+  assert.equal(report.ready, true);
 });
 
 function catalogSupabase(products) {

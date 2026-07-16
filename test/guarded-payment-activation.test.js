@@ -30,16 +30,29 @@ test('fresh and upgrade SQL force payment activation through the trusted server'
 });
 
 test('release gates require guarded payment activation everywhere', async () => {
-  const [capabilities, readiness, codemagic, runbook, nativeModels] = await Promise.all([
+  const [capabilities, readiness, codemagic, runbook, nativeModels, packageSource, preflight] = await Promise.all([
     readFile(new URL('../src/lib/schemaCapabilities.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8'),
     readFile(new URL('../codemagic.yaml', import.meta.url), 'utf8'),
     readFile(new URL('../docs/STRIPE_LAUNCH_RUNBOOK.md', import.meta.url), 'utf8'),
     readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    readFile(new URL('../scripts/stripe-launch-preflight.mjs', import.meta.url), 'utf8'),
   ]);
   for (const source of [capabilities, readiness, codemagic, nativeModels]) {
     assert.match(source, /guarded_payment_activation/);
   }
   assert.match(runbook, /20260716010000_guarded_payment_activation\.sql/);
   assert.match(runbook, /thirteen `PASS` results/);
+  assert.match(runbook, /stripe:launch:check[\s\S]*payment switch is still \*\*PAUSED\*\*/);
+  assert.match(runbook, /stripe:launch:verify[\s\S]*payment switch to be \*\*ENABLED\*\*/);
+  assert.match(runbook, /Do not run a real card until this command passes/);
+  const scripts = JSON.parse(packageSource).scripts;
+  assert.match(scripts['stripe:launch:check'], /--mode=live --expect-payments=paused$/);
+  assert.match(scripts['stripe:launch:verify'], /--mode=live --expect-payments=enabled$/);
+  assert.match(scripts['stripe:test:check'], /--mode=test --expect-payments=paused$/);
+  assert.match(scripts['stripe:test:verify'], /--mode=test --expect-payments=enabled$/);
+  assert.match(preflight, /from\('admin_settings'\)[\s\S]*select\('id,payments_enabled,updated_at'\)[\s\S]*limit\(2\)/);
+  assert.match(preflight, /boundary\.ready && catalogReady && webhook\.ready && paymentSwitch\.ready/);
+  assert.match(preflight, /const \[boundary, catalog, webhook\] = await Promise\.all[\s\S]*const paymentSwitch = await inspectSwitch/);
 });

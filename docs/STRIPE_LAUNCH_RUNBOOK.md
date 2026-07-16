@@ -146,24 +146,40 @@ This reruns the thirteen deployed boundary and payment-contract checks, inspects
 every active pack against live Stripe, and queries Stripe for the canonical
 webhook's enabled events. It passes only when all packs already have exact, active,
 one-time AUD Prices bound to their current XERT product identity, session count
-and validity, and the webhook includes refund and dispute delivery. A dry-run
+and validity, the webhook includes refund and dispute delivery, and the platform
+payment switch is still **PAUSED**. Keeping checkout paused while secrets, Prices,
+and webhooks are changing prevents members entering a mixed deployment. A dry-run
 `PLAN` is a release failure: review it, run
 `npm run stripe:catalog:live:apply`, and rerun the combined gate until it reports
 zero planned changes. The command is read-only and never prints private keys.
 
+After guarded activation, `npm run stripe:launch:check` must intentionally fail
+because it is the pre-activation gate. Use the separate post-activation proof:
+
+```bash
+npm run stripe:launch:verify
+```
+
+This repeats the complete live inspection but requires the authoritative platform
+payment switch to be **ENABLED**. Do not run a real card until this command passes.
+
 ## 5. Test Purchase
 
-1. Sign in as a non-admin test member with no special database access.
-2. Purchase the lowest-priced pack through the website.
-3. Confirm one paid order and exactly one credit batch appear.
-4. Repeat from iOS and confirm the app returns to XERT and refreshes credits.
-5. Retry or double-tap checkout and confirm XERT reuses the open unpaid session.
-6. Refund the test order from **Admin > Finance**.
-7. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
-8. Confirm Operations Health remains green.
-9. In Stripe test mode, create a dispute test event for the XERT payment and
+1. Run `npm run stripe:test:check` and require the payment switch to be `PAUSED`.
+2. In **Admin > Platform Controls**, enable **Session pack payments** through the
+   guarded confirmation flow.
+3. Run `npm run stripe:test:verify` and require the payment switch to be `ENABLED`.
+4. Sign in as a non-admin test member with no special database access.
+5. Purchase the lowest-priced pack through the website.
+6. Confirm one paid order and exactly one credit batch appear.
+7. Repeat from iOS and confirm the app returns to XERT and refreshes credits.
+8. Retry or double-tap checkout and confirm XERT reuses the open unpaid session.
+9. Refund the test order from **Admin > Finance**.
+10. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
+11. Confirm Operations Health remains green.
+12. In Stripe test mode, create a dispute test event for the XERT payment and
    confirm **Operations Health > Unresolved Stripe incidents** shows it.
-10. Open the matching Stripe dispute, record the evidence or response outside
+13. Open the matching Stripe dispute, record the evidence or response outside
     XERT, then use **Mark handled** only after the owner has completed that work.
 
 ## 6. Live Cutover
@@ -172,7 +188,13 @@ zero planned changes. The command is read-only and never prints private keys.
 2. Replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` with live values.
 3. Redeploy Vercel.
 4. Reopen Operations Health; require `LIVE` and every check green.
-5. Run one low-value real card purchase, verify the receipt and refund it.
+5. Run `npm run stripe:launch:check`; require every check to pass and the platform
+   payment switch to be `PAUSED`.
+6. In **Admin > Platform Controls**, enable **Session pack payments** through the
+   guarded confirmation flow.
+7. Run `npm run stripe:launch:verify`; require every check to pass and the platform
+   payment switch to be `ENABLED`.
+8. Run one low-value real card purchase, verify the receipt and refund it.
 
 ## Rollback
 

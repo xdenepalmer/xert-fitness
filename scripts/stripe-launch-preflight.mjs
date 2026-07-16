@@ -6,33 +6,78 @@ import { inspectCatalogLinkEnvironment, linkStripeCatalog } from './link-stripe-
 import { inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
 
 export function parseStripeLaunchArgs(args) {
-  const modeArg = args.find(arg => arg.startsWith('--mode='));
+  const modeArgs = args.filter(arg => arg.startsWith('--mode='));
+  if (modeArgs.length !== 1) {
+    throw new Error('Choose an explicit Stripe mode with --mode=test or --mode=live.');
+  }
+  const modeArg = modeArgs[0];
   const mode = modeArg?.slice('--mode='.length);
   if (!['test', 'live'].includes(mode)) {
     throw new Error('Choose an explicit Stripe mode with --mode=test or --mode=live.');
   }
-  const unknown = args.filter(arg => !arg.startsWith('--mode='));
+  const expectationArgs = args.filter(arg => arg.startsWith('--expect-payments='));
+  if (expectationArgs.length > 1) throw new Error('Choose one expected payment-switch state.');
+  const expectPayments = expectationArgs[0]?.slice('--expect-payments='.length) || 'paused';
+  if (!['paused', 'enabled'].includes(expectPayments)) {
+    throw new Error('Expected payments must be paused or enabled.');
+  }
+  const unknown = args.filter(arg => (
+    !arg.startsWith('--mode=') && !arg.startsWith('--expect-payments=')
+  ));
   if (unknown.length > 0) throw new Error(`Unknown option: ${unknown[0]}`);
-  return { mode };
+  return { mode, expectPayments };
+}
+
+export function inspectPaymentSwitch(rows, error, expectedState) {
+  if (error) {
+    return {
+      ready: false,
+      state: 'unknown',
+      expected: expectedState,
+      issue: 'Platform payment settings could not be loaded.',
+    };
+  }
+  if (!Array.isArray(rows) || rows.length !== 1 || typeof rows[0]?.payments_enabled !== 'boolean') {
+    return {
+      ready: false,
+      state: 'invalid',
+      expected: expectedState,
+      issue: 'Platform payment settings must contain exactly one valid payment switch.',
+    };
+  }
+  const state = rows[0].payments_enabled ? 'enabled' : 'paused';
+  return {
+    ready: state === expectedState,
+    state,
+    expected: expectedState,
+    issue: state === expectedState
+      ? null
+      : `Platform payments are ${state}; this gate requires ${expectedState}.`,
+  };
 }
 
 export async function inspectStripeLaunchPreflight({
   environment = process.env,
   mode,
+  expectPayments = 'paused',
   inspectBoundary = inspectStripeReadiness,
   catalogInspector,
   webhookInspector,
+  paymentSwitchInspector,
 } = {}) {
   if (!['test', 'live'].includes(mode)) throw new Error('Stripe launch mode is required.');
+  if (!['paused', 'enabled'].includes(expectPayments)) throw new Error('Expected payment-switch state is required.');
   const privateEnvironment = inspectCatalogLinkEnvironment(environment, mode);
   if (!privateEnvironment.ready) {
     return {
       ready: false,
       mode,
+      expectPayments,
       environmentIssues: privateEnvironment.issues,
       boundary: null,
       catalog: null,
       webhook: null,
+      paymentSwitch: null,
       catalogMessages: [],
     };
   }
@@ -49,29 +94,45 @@ export async function inspectStripeLaunchPreflight({
     const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
     return inspectStripeWebhookEndpoints(endpoints.data, environment.APP_BASE_URL || '');
   });
+  const inspectSwitch = paymentSwitchInspector || (async () => {
+    const supabase = createClient(privateEnvironment.supabaseUrl, privateEnvironment.serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('id,payments_enabled,updated_at')
+      .limit(2);
+    return inspectPaymentSwitch(data, error, expectPayments);
+  });
   const catalogMessages = [];
   const [boundary, catalog, webhook] = await Promise.all([
     inspectBoundary({ environment }),
     inspectCatalog({ environment, mode, log: message => catalogMessages.push(message) }),
     inspectWebhook({ environment, mode }),
   ]);
+  // Read the kill switch last so a toggle during slower remote checks cannot
+  // produce a stale pre- or post-activation verdict.
+  const paymentSwitch = await inspectSwitch({ environment, mode, expectPayments });
   const catalogReady = catalog.productCount > 0
     && catalog.verifiedCount === catalog.productCount
     && catalog.plannedCount === 0;
 
   return {
-    ready: boundary.ready && catalogReady && webhook.ready,
+    ready: boundary.ready && catalogReady && webhook.ready && paymentSwitch.ready,
     mode,
+    expectPayments,
     environmentIssues: [],
     boundary,
     catalog: { ...catalog, ready: catalogReady },
     webhook,
+    paymentSwitch,
     catalogMessages,
   };
 }
 
 export function printStripeLaunchPreflight(report) {
-  console.log(`XERT Stripe ${report.mode.toUpperCase()} launch preflight`);
+  const phase = report.expectPayments === 'enabled' ? 'post-activation verification' : 'pre-activation gate';
+  console.log(`XERT Stripe ${report.mode.toUpperCase()} ${phase}`);
   if (report.environmentIssues.length > 0) {
     for (const issue of report.environmentIssues) console.log(`FAIL  Private operator environment: ${issue}`);
     console.log('Stripe launch preflight is not ready.');
@@ -92,6 +153,14 @@ export function printStripeLaunchPreflight(report) {
   );
   if (!report.webhook.ready) {
     console.log('      NEXT: Enable the canonical /api/stripe-webhook endpoint and every event in docs/STRIPE_LAUNCH_RUNBOOK.md.');
+  }
+  console.log(
+    `${report.paymentSwitch.ready ? 'PASS' : 'FAIL'}  Platform payment switch: ${report.paymentSwitch.state.toUpperCase()} (expected ${report.paymentSwitch.expected.toUpperCase()}).`
+  );
+  if (!report.paymentSwitch.ready) {
+    console.log(report.paymentSwitch.expected === 'enabled'
+      ? '      NEXT: Use Admin > Platform Controls to complete guarded payment activation, then rerun npm run stripe:launch:verify.'
+      : '      NEXT: Pause Session pack payments before changing live Stripe configuration or running the pre-activation gate.');
   }
   console.log(report.ready ? 'Stripe launch preflight is ready.' : 'Stripe launch preflight is not ready.');
 }

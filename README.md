@@ -60,6 +60,11 @@ Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the
 complete test-mode setup, owner health checks, purchase/refund proof, live
 cutover and rollback sequence.
 
+The live cutover uses two read-only gates: `npm run stripe:launch:check` requires
+checkout to remain paused while configuration is verified, then
+`npm run stripe:launch:verify` proves guarded activation is retained before the
+first real card purchase.
+
 ## Database
 
 The Supabase schema is defined in:
