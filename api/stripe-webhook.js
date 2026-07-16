@@ -180,7 +180,44 @@ export function stripeRefundForEvent(event, now = new Date()) {
 }
 
 export async function persistStripeRefund(admin, refund) {
-  const { error } = await admin.rpc('reconcile_stripe_order_refund', refund);
+  const { data, error } = await admin.rpc('reconcile_stripe_order_refund', refund);
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+export function stripeWebhookErrorCode(error) {
+  for (const candidate of [error?.code, error?.type, error?.name]) {
+    const value = String(candidate || '').trim();
+    if (value.length > 0 && value.length <= 120 && /^[A-Za-z0-9_.:-]+$/.test(value)) return value;
+  }
+  return 'WEBHOOK_PROCESSING_FAILED';
+}
+
+export async function beginStripeWebhookEvent(admin, event, receivedAt = new Date()) {
+  const { data, error } = await admin.rpc('begin_stripe_webhook_event', {
+    p_event_id: event?.id,
+    p_event_type: event?.type,
+    p_livemode: event?.livemode,
+    p_received_at: receivedAt.toISOString(),
+  });
+  if (error) throw error;
+  const result = Array.isArray(data) ? data[0] : data;
+  if (typeof result?.already_finished !== 'boolean' || !Number.isSafeInteger(result?.attempt_count)) {
+    throw new Error('Stripe webhook ledger returned an invalid result.');
+  }
+  return result;
+}
+
+export async function finishStripeWebhookEvent(admin, {
+  eventId, status, orderId = null, errorCode = null, finishedAt = new Date(),
+}) {
+  const { error } = await admin.rpc('finish_stripe_webhook_event', {
+    p_event_id: eventId,
+    p_status: status,
+    p_order_id: orderId,
+    p_error_code: errorCode,
+    p_finished_at: finishedAt.toISOString(),
+  });
   if (error) throw error;
 }
 
@@ -270,15 +307,47 @@ export default async function handler(request, response) {
     return text('Invalid webhook signature.', 400);
   }
 
+  let ledgerStarted = false;
   try {
     assertStripeEventMode(event, process.env.STRIPE_SECRET_KEY);
+    const attempt = await beginStripeWebhookEvent(admin, event);
+    ledgerStarted = true;
+    if (attempt.already_finished) {
+      return sendJson(response, { received: true, duplicate: true });
+    }
+
+    let handled = false;
+    let orderId = null;
     const fulfillment = checkoutFulfillmentForEvent(event);
-    if (fulfillment) await persistCheckoutFulfillment(admin, fulfillment);
+    if (fulfillment) {
+      const settlement = await persistCheckoutFulfillment(admin, fulfillment);
+      handled = true;
+      orderId = settlement.fulfilled_order_id;
+    }
     const failure = checkoutFailureForEvent(event);
-    if (failure) await persistCheckoutFailure(admin, failure);
+    if (failure) {
+      await persistCheckoutFailure(admin, failure);
+      handled = true;
+    }
     const refund = stripeRefundForEvent(event);
-    if (refund) await persistStripeRefund(admin, refund);
+    if (refund) {
+      const settlement = await persistStripeRefund(admin, refund);
+      handled = true;
+      orderId = settlement?.order_id || orderId;
+    }
+    await finishStripeWebhookEvent(admin, {
+      eventId: event.id,
+      status: handled ? 'processed' : 'ignored',
+      orderId,
+    });
   } catch (e) {
+    if (ledgerStarted) {
+      await finishStripeWebhookEvent(admin, {
+        eventId: event.id,
+        status: 'failed',
+        errorCode: stripeWebhookErrorCode(e),
+      }).catch(() => {});
+    }
     console.error('Stripe webhook processing failed.', {
       eventId: String(event?.id || ''),
       eventType: String(event?.type || ''),

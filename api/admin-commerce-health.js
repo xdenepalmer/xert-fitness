@@ -13,6 +13,7 @@ const PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
+const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
@@ -204,22 +205,73 @@ export function inspectStripeWebhookEndpoints(endpoints, appBaseUrl) {
   };
 }
 
+export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const staleBefore = now.getTime() - 10 * 60 * 1000;
+  const { data, error } = await admin
+    .from('stripe_webhook_events')
+    .select('status,attempts,last_received_at')
+    .gte('last_received_at', since)
+    .order('last_received_at', { ascending: false })
+    .limit(500);
+  if (error) {
+    return {
+      ready: false, available: false, received: 0, failed: 0,
+      stale_processing: 0, retries: 0,
+      issue: 'Stripe webhook delivery history could not be loaded.',
+    };
+  }
+  const rows = data || [];
+  const failed = rows.filter(row => row.status === 'failed').length;
+  const staleProcessing = rows.filter(row => (
+    row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore
+  )).length;
+  const retries = rows.reduce((total, row) => total + Math.max(0, Number(row.attempts || 0) - 1), 0);
+  const truncated = rows.length === 500;
+  const ready = failed === 0 && staleProcessing === 0 && !truncated;
+  return {
+    ready,
+    available: true,
+    received: rows.length,
+    failed,
+    stale_processing: staleProcessing,
+    retries,
+    issue: truncated
+      ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
+      : failed > 0
+        ? `${failed} Stripe webhook deliver${failed === 1 ? 'y has' : 'ies have'} an unresolved failure.`
+        : staleProcessing > 0
+          ? `${staleProcessing} Stripe webhook deliver${staleProcessing === 1 ? 'y is' : 'ies are'} still processing.`
+          : null,
+  };
+}
+
 export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient }) {
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(runtimeEnvironment);
-  const [fulfillmentReady, activationGuardReady, settingsContractReady, pendingOrderGuardReady, orderTermsReady] = await Promise.all([
+  const [fulfillmentReady, activationGuardReady, settingsContractReady, pendingOrderGuardReady, orderTermsReady, webhookLedgerReady] = await Promise.all([
     paymentFulfillmentIsReady(admin),
     schemaCapabilityIsReady(admin, PAYMENT_ACTIVATION_CAPABILITY),
     schemaCapabilityIsReady(admin, ADMIN_SETTINGS_SINGLETON_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_PENDING_ORDER_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_ORDER_TERMS_CAPABILITY),
+    schemaCapabilityIsReady(admin, STRIPE_WEBHOOK_LEDGER_CAPABILITY),
   ]);
+  const webhookDelivery = webhookLedgerReady
+    ? await inspectWebhookDeliveryHealth(admin)
+    : {
+        ready: false, available: false, received: 0, failed: 0,
+        stale_processing: 0, retries: 0,
+        issue: 'Stripe webhook delivery ledger is not installed.',
+      };
   const databaseIssues = [
     ...(fulfillmentReady ? [] : [{ slug: 'database', reason: 'Atomic Stripe payment fulfillment is not installed.' }]),
     ...(activationGuardReady ? [] : [{ slug: 'database', reason: 'Guarded payment activation is not installed.' }]),
     ...(settingsContractReady ? [] : [{ slug: 'database', reason: 'Versioned singleton platform settings are not installed.' }]),
     ...(pendingOrderGuardReady ? [] : [{ slug: 'database', reason: 'Stripe pending-order fulfillment guard is not installed.' }]),
     ...(orderTermsReady ? [] : [{ slug: 'database', reason: 'Immutable Stripe order terms are not installed.' }]),
+    ...(webhookLedgerReady ? [] : [{ slug: 'database', reason: 'Stripe webhook delivery ledger is not installed.' }]),
+    ...(webhookLedgerReady && !webhookDelivery.ready ? [{ slug: 'webhook-delivery', reason: webhookDelivery.issue }].filter(issue => issue.reason) : []),
   ];
   if (environment.missing.includes('STRIPE_SECRET_KEY')) {
     return {
@@ -234,6 +286,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       settings_contract_ready: settingsContractReady,
       pending_order_guard_ready: pendingOrderGuardReady,
       order_terms_ready: orderTermsReady,
+      webhook_ledger_ready: webhookLedgerReady,
+      webhook_delivery: webhookDelivery,
     };
   }
 
@@ -262,7 +316,9 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       && activationGuardReady
       && settingsContractReady
       && pendingOrderGuardReady
-      && orderTermsReady,
+      && orderTermsReady
+      && webhookLedgerReady
+      && webhookDelivery.ready,
     mode: stripeMode,
     account: accountHealth,
     issues: [
@@ -279,6 +335,8 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     settings_contract_ready: settingsContractReady,
     pending_order_guard_ready: pendingOrderGuardReady,
     order_terms_ready: orderTermsReady,
+    webhook_ledger_ready: webhookLedgerReady,
+    webhook_delivery: webhookDelivery,
     webhook: webhookHealth,
   };
 }

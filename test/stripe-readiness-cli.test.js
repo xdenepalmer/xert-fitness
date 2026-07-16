@@ -22,6 +22,7 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
   { capability: 'admin_settings_singleton' },
   { capability: 'stripe_pending_order_guard' },
   { capability: 'stripe_order_terms_snapshot' },
+  { capability: 'stripe_webhook_ledger' },
 ] } = {}) {
   return async (url, options = {}) => {
     const path = new URL(url).pathname;
@@ -38,7 +39,7 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
 test('Stripe readiness requires every safe production boundary and database activation guard', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 10);
+  assert.equal(report.checks.length, 11);
   assert.ok(report.checks.every(check => check.ready));
 });
 
@@ -68,6 +69,7 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.match(report.checks.find(check => check.key === 'settings-contract').remediation, /20260716020000_admin_settings_singleton\.sql/);
   assert.match(report.checks.find(check => check.key === 'pending-order-guard').remediation, /20260716030000_stripe_pending_order_guard\.sql/);
   assert.match(report.checks.find(check => check.key === 'order-terms').remediation, /20260716040000_stripe_order_terms_snapshot\.sql/);
+  assert.match(report.checks.find(check => check.key === 'webhook-ledger').remediation, /20260716050000_stripe_webhook_ledger\.sql/);
   assert.doesNotMatch(JSON.stringify(report), /sb_publishable_/);
 });
 

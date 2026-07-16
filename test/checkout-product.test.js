@@ -5,6 +5,7 @@ import {
   assertCheckoutProduct,
   stripePendingOrderGuardIsReady,
   stripeOrderTermsSnapshotIsReady,
+  stripeWebhookLedgerIsReady,
   assertStripePriceMatchesProduct,
   checkoutIdempotencyKey,
   inspectCheckoutEnvironment,
@@ -112,6 +113,26 @@ test('checkout fails closed until purchased credit terms are snapshotted', async
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
   assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
   assert.match(source, /purchased pack terms are being secured[\s\S]*503/);
+});
+
+test('checkout fails closed until Stripe delivery monitoring is installed', async () => {
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() {
+      return { data: { capability: 'stripe_webhook_ledger' }, error: null };
+    },
+  };
+  assert.equal(await stripeWebhookLedgerIsReady({ from() { return query; } }), true);
+  query.maybeSingle = async () => ({ data: null, error: null });
+  assert.equal(await stripeWebhookLedgerIsReady({ from() { return query; } }), false);
+
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const guard = source.indexOf('stripeWebhookLedgerIsReady(admin)');
+  const paymentSwitch = source.indexOf('sessionPackPaymentsAreEnabled(admin)');
+  const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
+  assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
+  assert.match(source, /payment delivery monitoring is being installed[\s\S]*503/);
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {

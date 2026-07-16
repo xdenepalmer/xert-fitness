@@ -2818,6 +2818,12 @@ private struct AdminOperationsHealthView: View {
                         ready: commerce.active_product_count > 0 && commerce.stripe_price_count == commerce.active_product_count
                     )
                     HealthCheckRow(label: "Webhook registered", ready: commerce.webhook?.ready == true)
+                    HealthCheckRow(label: "Webhook delivery ledger", ready: commerce.webhook_delivery?.ready == true)
+                    if let delivery = commerce.webhook_delivery {
+                        HealthCountRow(label: "Deliveries received (24h)", value: delivery.received)
+                        HealthCountRow(label: "Delivery retries (24h)", value: delivery.retries)
+                        HealthCountRow(label: "Failed or stalled", value: delivery.failed + delivery.stale_processing)
+                    }
                 }
 
                 if let issues = commerce.issues, !issues.isEmpty {

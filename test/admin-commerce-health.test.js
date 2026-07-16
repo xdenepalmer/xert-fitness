@@ -8,6 +8,7 @@ import adminCommerceHealthHandler, {
   inspectCommerceProducts,
   inspectStripeAccount,
   inspectStripeWebhookEndpoints,
+  inspectWebhookDeliveryHealth,
   normalizePaymentActivationRequest,
 } from '../api/admin-commerce-health.js';
 
@@ -49,9 +50,18 @@ function paymentActivationAdmin(result) {
   };
 }
 
-function capabilityAdmin(capabilities) {
+function capabilityAdmin(capabilities, webhookRows = []) {
   return {
     from(table) {
+      if (table === 'stripe_webhook_events') {
+        const query = {
+          select() { return query; },
+          gte() { return query; },
+          order() { return query; },
+          async limit() { return { data: webhookRows, error: null }; },
+        };
+        return query;
+      }
       assert.equal(table, 'xert_schema_capabilities');
       let requestedCapability;
       return {
@@ -172,7 +182,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
   };
   const products = [validProduct];
   const complete = await inspectCommerceHealth({
-    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot'])),
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger'])),
     products,
     environment,
     stripe: readyStripe(),
@@ -183,6 +193,8 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(complete.settings_contract_ready, true);
   assert.equal(complete.pending_order_guard_ready, true);
   assert.equal(complete.order_terms_ready, true);
+  assert.equal(complete.webhook_ledger_ready, true);
+  assert.equal(complete.webhook_delivery.ready, true);
 
   const missingGuard = await inspectCommerceHealth({
     admin: capabilityAdmin(new Set(['stripe_payment_fulfillment'])),
@@ -232,6 +244,41 @@ test('commerce readiness cannot pass without the guarded activation capability',
     missingOrderTerms.issues.find(issue => issue.reason.includes('order terms'))?.reason || '',
     /not installed/,
   );
+
+  const missingWebhookLedger = await inspectCommerceHealth({
+    admin: capabilityAdmin(new Set(['stripe_payment_fulfillment', 'guarded_payment_activation', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot'])),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(missingWebhookLedger.ready, false);
+  assert.equal(missingWebhookLedger.webhook_ledger_ready, false);
+  assert.match(
+    missingWebhookLedger.issues.find(issue => issue.reason.includes('delivery ledger'))?.reason || '',
+    /not installed/,
+  );
+});
+
+test('webhook delivery health reports retries, failures and stalled processing', async () => {
+  const now = new Date('2026-07-16T06:00:00.000Z');
+  const healthy = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [
+    { status: 'processed', attempts: 2, last_received_at: '2026-07-16T05:59:00.000Z' },
+    { status: 'ignored', attempts: 1, last_received_at: '2026-07-16T05:58:00.000Z' },
+  ]), now);
+  assert.deepEqual(healthy, {
+    ready: true, available: true, received: 2, failed: 0,
+    stale_processing: 0, retries: 1, issue: null,
+  });
+
+  const unhealthy = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [
+    { status: 'failed', attempts: 3, last_received_at: '2026-07-16T05:59:00.000Z' },
+    { status: 'processing', attempts: 1, last_received_at: '2026-07-16T05:30:00.000Z' },
+  ]), now);
+  assert.equal(unhealthy.ready, false);
+  assert.equal(unhealthy.failed, 1);
+  assert.equal(unhealthy.stale_processing, 1);
+  assert.equal(unhealthy.retries, 2);
+  assert.match(unhealthy.issue, /unresolved failure/);
 });
 
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {

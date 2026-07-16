@@ -59,6 +59,7 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(commerceAPI, /Versioned singleton platform settings are not installed/);
   assert.match(commerceAPI, /Stripe pending-order fulfillment guard is not installed/);
   assert.match(commerceAPI, /Immutable Stripe order terms are not installed/);
+  assert.match(commerceAPI, /Stripe webhook delivery ledger is not installed/);
   assert.match(commerceAPI, /request\.method === 'POST'/);
   assert.match(commerceAPI, /if \(!health\.ready\)/);
   assert.match(commerceAPI, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);

@@ -84,6 +84,8 @@ The Supabase schema is defined in:
   that guarantees a paid recorded order grants at most one credit batch and
   rejects webhook fulfillment without checkout's pending order; it also snapshots
   immutable credit quantity and validity terms and derives expiry transactionally
+- `src/supabase/stripe_webhook_ledger_upgrade.sql` — durable, admin-readable
+  Stripe delivery attempts, retries, failures, terminal outcomes and order links
 - `src/supabase/guarded_payment_activation_upgrade.sql` — requires a fresh
   protected Stripe preflight before checkout can move from paused to enabled
 - `src/supabase/admin_settings_singleton_upgrade.sql` — repairs the launch

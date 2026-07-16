@@ -3,13 +3,16 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   assertStripeEventMode,
+  beginStripeWebhookEvent,
   checkoutFailureForEvent,
   checkoutFulfillmentForEvent,
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
+  finishStripeWebhookEvent,
   stripeRefundForEvent,
   stripeModeForSecret,
+  stripeWebhookErrorCode,
   validStripeSignatureHeader,
   webhookRequestIssue,
 } from '../api/stripe-webhook.js';
@@ -92,6 +95,9 @@ test('webhook public failures never echo Stripe or database exception messages',
   assert.match(source, /return text\('Invalid webhook signature\.', 400\)/);
   assert.match(source, /return text\('Webhook processing failed\.', 500\)/);
   assert.match(source, /Webhook service is unavailable\.[\s\S]*503/);
+  assert.match(source, /beginStripeWebhookEvent\(admin, event\)[\s\S]*persistCheckoutFulfillment/);
+  assert.match(source, /finishStripeWebhookEvent\(admin,[\s\S]*status: handled \? 'processed' : 'ignored'/);
+  assert.match(source, /ledgerStarted[\s\S]*status: 'failed'[\s\S]*stripeWebhookErrorCode\(e\)/);
 });
 
 test('creates one durable fulfilment record for a paid checkout', () => {
@@ -168,6 +174,42 @@ test('settles the order and credit grant through one database transaction', asyn
   assert.equal('p_expires_at' in calls[0].payload, false);
   assert.equal(calls[0].payload.p_amount_cents, 4800);
   assert.equal(result.final_status, 'paid');
+});
+
+test('records verified webhook attempts and terminal outcomes without leaking errors', async () => {
+  const calls = [];
+  const admin = {
+    async rpc(name, payload) {
+      calls.push({ name, payload });
+      if (name === 'begin_stripe_webhook_event') {
+        return { data: [{ already_finished: false, attempt_count: 2 }], error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+  const event = { id: 'evt_xert_123', type: 'checkout.session.completed', livemode: false };
+  assert.deepEqual(await beginStripeWebhookEvent(admin, event, NOW), {
+    already_finished: false,
+    attempt_count: 2,
+  });
+  await finishStripeWebhookEvent(admin, {
+    eventId: event.id, status: 'processed', orderId: 'order-xert', finishedAt: NOW,
+  });
+  assert.deepEqual(calls[0], {
+    name: 'begin_stripe_webhook_event',
+    payload: {
+      p_event_id: event.id,
+      p_event_type: event.type,
+      p_livemode: false,
+      p_received_at: NOW.toISOString(),
+    },
+  });
+  assert.equal(calls[1].name, 'finish_stripe_webhook_event');
+  assert.equal(calls[1].payload.p_status, 'processed');
+  assert.equal(stripeWebhookErrorCode({ code: 'db_timeout' }), 'db_timeout');
+  assert.equal(stripeWebhookErrorCode({ code: 'secret value with spaces' }), 'WEBHOOK_PROCESSING_FAILED');
+  assert.equal(stripeWebhookErrorCode(Object.assign(new Error('private detail'), { code: 'invalid code' })), 'Error');
+  assert.doesNotMatch(stripeWebhookErrorCode({ name: 'secret value with spaces' }), /secret value/);
 });
 
 test('expired and delayed-failed checkouts close only their pending order', async () => {

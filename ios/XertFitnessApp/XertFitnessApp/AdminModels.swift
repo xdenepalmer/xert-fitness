@@ -877,6 +877,16 @@ struct AdminCommerceHealth: Codable, Hashable {
         let default_currency: String?
     }
 
+    struct WebhookDelivery: Codable, Hashable {
+        let ready: Bool
+        let available: Bool
+        let received: Int
+        let failed: Int
+        let stale_processing: Int
+        let retries: Int
+        let issue: String?
+    }
+
     let ready: Bool
     let active_product_count: Int
     let stripe_price_count: Int
@@ -887,6 +897,8 @@ struct AdminCommerceHealth: Codable, Hashable {
     let settings_contract_ready: Bool?
     let pending_order_guard_ready: Bool?
     let order_terms_ready: Bool?
+    let webhook_ledger_ready: Bool?
+    let webhook_delivery: WebhookDelivery?
     let mode: String?
     let account: StripeAccount?
     let webhook: Webhook?
@@ -920,6 +932,7 @@ enum AdminSchemaReadiness {
         "admin_settings_singleton",
         "stripe_pending_order_guard",
         "stripe_order_terms_snapshot",
+        "stripe_webhook_ledger",
         "member_announcements", "announcement_receipts",
         "announcement_actions", "announcement_archival", "booking_time_conflict_guard",
         "admin_member_notes", "schedule_blackout_guard", "database_security_hardening",

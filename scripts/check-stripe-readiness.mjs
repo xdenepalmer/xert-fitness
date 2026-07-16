@@ -12,6 +12,7 @@ const GUARDED_PAYMENT_ACTIVATION_CAPABILITY = 'guarded_payment_activation';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
+const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const RESPONSE_PREVIEW_LIMIT = 180;
 
 async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, ...options }) {
@@ -125,17 +126,20 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   let settingsContractReady = false;
   let pendingOrderGuardReady = false;
   let orderTermsReady = false;
+  let webhookLedgerReady = false;
   let capabilityDetail;
   let activationGuardDetail;
   let settingsContractDetail;
   let pendingOrderGuardDetail;
   let orderTermsDetail;
+  let webhookLedgerDetail;
   if (capabilities.status !== 200) {
     capabilityDetail = `Capability RPC returned HTTP ${capabilities.status || 'no response'}${capabilities.body ? `: ${capabilities.body}` : ''}`;
     activationGuardDetail = capabilityDetail;
     settingsContractDetail = capabilityDetail;
     pendingOrderGuardDetail = capabilityDetail;
     orderTermsDetail = capabilityDetail;
+    webhookLedgerDetail = capabilityDetail;
   } else {
     try {
       const rows = JSON.parse(capabilities.body || '[]');
@@ -145,6 +149,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       settingsContractReady = installed.has(ADMIN_SETTINGS_SINGLETON_CAPABILITY);
       pendingOrderGuardReady = installed.has(STRIPE_PENDING_ORDER_CAPABILITY);
       orderTermsReady = installed.has(STRIPE_ORDER_TERMS_CAPABILITY);
+      webhookLedgerReady = installed.has(STRIPE_WEBHOOK_LEDGER_CAPABILITY);
       capabilityDetail = capabilityReady
         ? `${PAYMENT_FULFILLMENT_CAPABILITY} installed`
         : `${PAYMENT_FULFILLMENT_CAPABILITY} is missing`;
@@ -160,12 +165,16 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
       orderTermsDetail = orderTermsReady
         ? `${STRIPE_ORDER_TERMS_CAPABILITY} installed`
         : `${STRIPE_ORDER_TERMS_CAPABILITY} is missing`;
+      webhookLedgerDetail = webhookLedgerReady
+        ? `${STRIPE_WEBHOOK_LEDGER_CAPABILITY} installed`
+        : `${STRIPE_WEBHOOK_LEDGER_CAPABILITY} is missing`;
     } catch {
       capabilityDetail = 'Capability RPC returned malformed JSON.';
       activationGuardDetail = capabilityDetail;
       settingsContractDetail = capabilityDetail;
       pendingOrderGuardDetail = capabilityDetail;
       orderTermsDetail = capabilityDetail;
+      webhookLedgerDetail = capabilityDetail;
     }
   }
   checks.push({
@@ -176,6 +185,15 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     remediation: capabilityReady
       ? null
       : 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql to the XERT Supabase project.',
+  });
+  checks.push({
+    key: 'webhook-ledger',
+    label: 'Durable Stripe delivery ledger',
+    ready: webhookLedgerReady,
+    detail: webhookLedgerDetail,
+    remediation: webhookLedgerReady
+      ? null
+      : 'Apply supabase/migrations/20260716050000_stripe_webhook_ledger.sql to the XERT Supabase project.',
   });
   checks.push({
     key: 'activation-guard',

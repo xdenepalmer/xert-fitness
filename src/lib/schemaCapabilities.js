@@ -14,6 +14,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_settings_singleton: 'Apply supabase/migrations/20260716020000_admin_settings_singleton.sql in Supabase.',
   stripe_pending_order_guard: 'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql in Supabase.',
   stripe_order_terms_snapshot: 'Apply supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql in Supabase.',
+  stripe_webhook_ledger: 'Apply supabase/migrations/20260716050000_stripe_webhook_ledger.sql in Supabase.',
   member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   announcement_receipts: 'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
   announcement_actions: 'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',

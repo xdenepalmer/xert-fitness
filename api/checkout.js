@@ -18,6 +18,7 @@ const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
+const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -133,6 +134,16 @@ export async function stripeOrderTermsSnapshotIsReady(admin) {
     .maybeSingle();
   if (error) return false;
   return data?.capability === STRIPE_ORDER_TERMS_CAPABILITY;
+}
+
+export async function stripeWebhookLedgerIsReady(admin) {
+  const { data, error } = await admin
+    .from('xert_schema_capabilities')
+    .select('capability')
+    .eq('capability', STRIPE_WEBHOOK_LEDGER_CAPABILITY)
+    .maybeSingle();
+  if (error) return false;
+  return data?.capability === STRIPE_WEBHOOK_LEDGER_CAPABILITY;
 }
 
 export async function sessionPackPaymentsAreEnabled(admin) {
@@ -393,6 +404,12 @@ export default async function handler(request, response) {
     if (!await stripeOrderTermsSnapshotIsReady(admin)) {
       return json({
         error: 'Checkout is temporarily unavailable while purchased pack terms are being secured.',
+      }, 503);
+    }
+
+    if (!await stripeWebhookLedgerIsReady(admin)) {
+      return json({
+        error: 'Checkout is temporarily unavailable while payment delivery monitoring is being installed.',
       }, 503);
     }
 
