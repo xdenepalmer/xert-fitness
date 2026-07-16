@@ -47,5 +47,8 @@ test('operations health exposes bounded Stripe incidents with an accessible copy
   assert.match(monitor, /incident\.resolution/);
   assert.match(monitor, /resolveStripeOperatorReview/);
   assert.match(monitor, /Mark handled/);
+  assert.match(monitor, /retryStripeWebhookEvent/);
+  assert.match(monitor, /Retry safely/);
+  assert.match(monitor, /XERT verifies the event identity and payment mode/);
   assert.match(monitor, /AdminConfirmDialog/);
 });

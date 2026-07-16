@@ -2962,6 +2962,7 @@ private struct AdminOperationsHealthView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
+    @State private var pendingRetry: AdminCommerceHealth.WebhookDelivery.Incident?
 
     var body: some View {
         List {
@@ -3088,6 +3089,13 @@ private struct AdminOperationsHealthView: View {
                                         Label("Mark handled", systemImage: "checkmark.seal")
                                     }
                                     .disabled(admin.resolvingStripeIncidentID != nil)
+                                } else {
+                                    Button {
+                                        pendingRetry = incident
+                                    } label: {
+                                        Label("Retry safely", systemImage: "arrow.triangle.2.circlepath")
+                                    }
+                                    .disabled(admin.retryingStripeIncidentID != nil)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -3132,6 +3140,21 @@ private struct AdminOperationsHealthView: View {
             Button("Keep unresolved", role: .cancel) {}
         } message: { incident in
             Text("Confirm that \(incident.event_type) has been reviewed and any required member credit action is complete. Stripe and order records remain unchanged.")
+        }
+        .confirmationDialog(
+            "Retry Stripe event?",
+            isPresented: Binding(
+                get: { pendingRetry != nil },
+                set: { if !$0 { pendingRetry = nil } }
+            ),
+            presenting: pendingRetry
+        ) { incident in
+            Button("Retry event") {
+                Task { _ = await admin.retryStripeEvent(session: session, incident: incident) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { incident in
+            Text("Retrieve \(incident.event_id) directly from Stripe and run it through XERT's idempotent recovery path. XERT verifies its identity and payment mode before processing.")
         }
     }
 

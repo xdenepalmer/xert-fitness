@@ -10,6 +10,7 @@ import {
   inspectPaymentActivationReceipt,
   loadPaymentActivationHealth,
 } from '../src/lib/paymentActivation.js';
+import { processStripeEvent } from './stripe-webhook.js';
 
 export { inspectPaymentActivationReceipt, loadPaymentActivationHealth };
 
@@ -117,6 +118,20 @@ export function normalizeStripeReviewResolutionRequest(body) {
     throw new Error('INVALID_STRIPE_REVIEW_RESOLUTION');
   }
   return { eventId, errorCode };
+}
+
+export function normalizeStripeRetryRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('INVALID_STRIPE_RETRY');
+  const eventId = String(body.event_id || '').trim();
+  if (
+    body.action !== 'retry_stripe_event'
+    || body.confirmation !== 'RETRY EVENT'
+    || !/^evt_[A-Za-z0-9_]+$/.test(eventId)
+    || eventId.length > 255
+  ) {
+    throw new Error('INVALID_STRIPE_RETRY');
+  }
+  return { eventId };
 }
 
 export async function schemaCapabilityIsReady(admin, capability) {
@@ -470,6 +485,40 @@ export async function resolveStripeOperatorReview(admin, review, resolvedAt = ne
   return data;
 }
 
+export async function retryStripeWebhookEvent(admin, stripe, retry, {
+  secretKey = process.env.STRIPE_SECRET_KEY,
+  now = new Date(),
+} = {}) {
+  const { data: ledgerEvent, error } = await admin
+    .from('stripe_webhook_events')
+    .select('event_id,event_type,livemode,status,last_received_at,last_error_code')
+    .eq('event_id', retry.eventId)
+    .maybeSingle();
+  if (error) throw new Error('STRIPE_RETRY_LOOKUP_FAILED');
+  if (!ledgerEvent) throw new Error('STRIPE_RETRY_NOT_FOUND');
+  if (STRIPE_OPERATOR_REVIEW_CODES.includes(ledgerEvent.last_error_code)) {
+    throw new Error('STRIPE_RETRY_REQUIRES_OPERATOR_REVIEW');
+  }
+
+  const staleBefore = now.getTime() - 10 * 60 * 1000;
+  const stalled = ledgerEvent.status === 'processing'
+    && Number.isFinite(Date.parse(ledgerEvent.last_received_at))
+    && Date.parse(ledgerEvent.last_received_at) < staleBefore;
+  if (ledgerEvent.status !== 'failed' && !stalled) {
+    throw new Error('STRIPE_RETRY_STALE');
+  }
+
+  const event = await stripe.events.retrieve(retry.eventId);
+  if (
+    event?.id !== ledgerEvent.event_id
+    || event?.type !== ledgerEvent.event_type
+    || event?.livemode !== ledgerEvent.livemode
+  ) {
+    throw new Error('STRIPE_RETRY_IDENTITY_MISMATCH');
+  }
+  return processStripeEvent(admin, event, { secretKey, receivedAt: now });
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
@@ -494,17 +543,23 @@ export default async function handler(request, response) {
 
   let activation;
   let reviewResolution;
+  let webhookRetry;
   if (request.method === 'POST') {
     try {
       const body = await requestJson(request);
       if (body?.action === 'resolve_stripe_review') {
         reviewResolution = normalizeStripeReviewResolutionRequest(body);
+      } else if (body?.action === 'retry_stripe_event') {
+        webhookRetry = normalizeStripeRetryRequest(body);
       } else {
         activation = normalizePaymentActivationRequest(body);
       }
     } catch (error) {
       if (error.message === 'INVALID_STRIPE_REVIEW_RESOLUTION') {
         return json({ error: 'Stripe incident resolution request is invalid.' }, 400);
+      }
+      if (error.message === 'INVALID_STRIPE_RETRY') {
+        return json({ error: 'Stripe event retry request is invalid.' }, 400);
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
@@ -526,6 +581,38 @@ export default async function handler(request, response) {
         return json({ error: 'This Stripe incident changed or was already handled. Refresh before continuing.' }, 409);
       }
       return json({ error: 'The Stripe incident could not be marked handled.' }, 500);
+    }
+  }
+
+  if (webhookRetry) {
+    if (stripeModeForSecret(process.env.STRIPE_SECRET_KEY) === 'unknown') {
+      return json({ error: 'Stripe event recovery is unavailable.' }, 503);
+    }
+    try {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { maxNetworkRetries: 2, timeout: 20_000 });
+      const result = await retryStripeWebhookEvent(admin, stripe, webhookRetry);
+      console.info('Stripe webhook event retried by owner.', {
+        eventId: webhookRetry.eventId,
+        actorId: user.id,
+        duplicate: result.duplicate,
+        requiresReview: result.requiresReview,
+      });
+      return json({
+        event_id: webhookRetry.eventId,
+        status: result.requiresReview ? 'failed' : result.handled ? 'processed' : 'ignored',
+        duplicate: result.duplicate,
+      });
+    } catch (error) {
+      if (error.message === 'STRIPE_RETRY_NOT_FOUND') {
+        return json({ error: 'This Stripe event is not recorded in XERT.' }, 404);
+      }
+      if (error.message === 'STRIPE_RETRY_REQUIRES_OPERATOR_REVIEW') {
+        return json({ error: 'This incident requires owner review and cannot be automatically retried.' }, 409);
+      }
+      if (['STRIPE_RETRY_STALE', 'STRIPE_RETRY_IDENTITY_MISMATCH'].includes(error.message)) {
+        return json({ error: 'This Stripe incident changed. Refresh Operations Health before retrying.' }, 409);
+      }
+      return json({ error: 'Stripe could not safely retry this event. The incident remains unresolved.' }, 500);
     }
   }
 

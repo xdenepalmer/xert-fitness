@@ -11,7 +11,9 @@ import adminCommerceHealthHandler, {
   inspectStripeWebhookEndpoints,
   inspectWebhookDeliveryHealth,
   normalizePaymentActivationRequest,
+  normalizeStripeRetryRequest,
   normalizeStripeReviewResolutionRequest,
+  retryStripeWebhookEvent,
   resolveStripeOperatorReview,
   stripeIncidentResolution,
 } from '../api/admin-commerce-health.js';
@@ -517,6 +519,93 @@ test('Stripe review resolution is confirmed, allow-listed, and compare-and-set',
   await assert.rejects(
     resolveStripeOperatorReview({ from() { return staleQuery; } }, review),
     /STRIPE_REVIEW_RESOLUTION_STALE/,
+  );
+});
+
+test('Stripe recovery accepts only confirmed event identifiers', () => {
+  assert.deepEqual(normalizeStripeRetryRequest({
+    action: 'retry_stripe_event', confirmation: 'RETRY EVENT', event_id: 'evt_retry_123',
+  }), { eventId: 'evt_retry_123' });
+  for (const body of [
+    { action: 'retry_stripe_event', confirmation: 'RETRY', event_id: 'evt_retry_123' },
+    { action: 'retry_stripe_event', confirmation: 'RETRY EVENT', event_id: 'cs_not_an_event' },
+    { action: 'resolve_stripe_review', confirmation: 'RETRY EVENT', event_id: 'evt_retry_123' },
+  ]) {
+    assert.throws(() => normalizeStripeRetryRequest(body), /INVALID_STRIPE_RETRY/);
+  }
+});
+
+function webhookRetryAdmin(ledgerEvent) {
+  const calls = [];
+  const query = {
+    select(columns) { calls.push(['select', columns]); return query; },
+    eq(column, value) { calls.push(['eq', column, value]); return query; },
+    async maybeSingle() { return { data: ledgerEvent, error: null }; },
+  };
+  return {
+    calls,
+    from(table) { assert.equal(table, 'stripe_webhook_events'); return query; },
+    async rpc(name, payload) {
+      calls.push(['rpc', name, payload]);
+      if (name === 'begin_stripe_webhook_event') {
+        return { data: [{ already_finished: false, attempt_count: 2 }], error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+}
+
+test('owner recovery retrieves the canonical Stripe event and reuses webhook processing', async () => {
+  const ledgerEvent = {
+    event_id: 'evt_retry_123', event_type: 'customer.created', livemode: false,
+    status: 'failed', last_received_at: '2026-07-16T05:55:00.000Z', last_error_code: 'DATABASE_TIMEOUT',
+  };
+  const admin = webhookRetryAdmin(ledgerEvent);
+  const retrieved = [];
+  const stripe = { events: { async retrieve(eventId) {
+    retrieved.push(eventId);
+    return { id: eventId, type: ledgerEvent.event_type, livemode: false, data: { object: {} } };
+  } } };
+
+  const result = await retryStripeWebhookEvent(admin, stripe, { eventId: ledgerEvent.event_id }, {
+    secretKey: 'sk_test_xert', now: new Date('2026-07-16T06:10:00.000Z'),
+  });
+  assert.deepEqual(retrieved, [ledgerEvent.event_id]);
+  assert.deepEqual(result, {
+    duplicate: false, requiresReview: false, handled: false, orderId: null,
+  });
+  assert.deepEqual(admin.calls.filter(call => call[0] === 'rpc').map(call => call[1]), [
+    'begin_stripe_webhook_event', 'finish_stripe_webhook_event',
+  ]);
+});
+
+test('owner recovery refuses review incidents, active attempts, and Stripe identity drift', async () => {
+  const base = {
+    event_id: 'evt_retry_123', event_type: 'customer.created', livemode: false,
+    status: 'failed', last_received_at: '2026-07-16T05:55:00.000Z', last_error_code: 'DATABASE_TIMEOUT',
+  };
+  const stripe = event => ({ events: { async retrieve() { return event; } } });
+  const options = { secretKey: 'sk_test_xert', now: new Date('2026-07-16T06:00:00.000Z') };
+
+  await assert.rejects(
+    retryStripeWebhookEvent(webhookRetryAdmin({
+      ...base, last_error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+    }), stripe(null), { eventId: base.event_id }, options),
+    /STRIPE_RETRY_REQUIRES_OPERATOR_REVIEW/,
+  );
+  await assert.rejects(
+    retryStripeWebhookEvent(webhookRetryAdmin({
+      ...base, status: 'processing', last_received_at: '2026-07-16T05:59:00.000Z',
+    }), stripe(null), { eventId: base.event_id }, options),
+    /STRIPE_RETRY_STALE/,
+  );
+  await assert.rejects(
+    retryStripeWebhookEvent(
+      webhookRetryAdmin(base),
+      stripe({ id: base.event_id, type: 'customer.updated', livemode: false }),
+      { eventId: base.event_id }, options,
+    ),
+    /STRIPE_RETRY_IDENTITY_MISMATCH/,
   );
 });
 

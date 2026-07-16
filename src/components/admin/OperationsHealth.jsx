@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Copy, Database, Loader2,
   RefreshCw, ShieldCheck,
 } from 'lucide-react';
-import { getOperationsHealth, resolveStripeOperatorReview } from '@/lib/adminData';
+import { getOperationsHealth, resolveStripeOperatorReview, retryStripeWebhookEvent } from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
@@ -53,7 +53,9 @@ export default function OperationsHealth({ onNavigate }) {
   const [loadError, setLoadError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [pendingResolution, setPendingResolution] = useState(null);
+  const [pendingRetry, setPendingRetry] = useState(null);
   const [resolving, setResolving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
@@ -146,6 +148,28 @@ export default function OperationsHealth({ onNavigate }) {
       setResolving(false);
     }
   }, [load, pendingResolution]);
+
+  const retryIncident = useCallback(async () => {
+    if (!pendingRetry?.event_id) return;
+    setRetrying(true);
+    try {
+      const result = await retryStripeWebhookEvent(pendingRetry.event_id);
+      setPendingRetry(null);
+      toast({
+        title: result.duplicate ? 'Stripe event was already settled' : 'Stripe event recovered',
+        description: result.duplicate
+          ? 'Another delivery completed this event before the recovery attempt.'
+          : result.status === 'processed'
+          ? 'XERT processed the canonical Stripe event and reconciled its records.'
+          : 'XERT safely completed the event without a payment record change.',
+      });
+      await load();
+    } catch (error) {
+      toast({ title: 'Could not retry Stripe event', description: error.message, variant: 'destructive' });
+    } finally {
+      setRetrying(false);
+    }
+  }, [load, pendingRetry]);
 
   return (
     <div className="p-6 space-y-6">
@@ -291,6 +315,13 @@ export default function OperationsHealth({ onNavigate }) {
                             </button>
                           </div>
                         )}
+                        {!incident.resolution && (
+                          <button type="button" onClick={() => setPendingRetry(incident)}
+                            className="mt-3 inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
+                            <RefreshCw className="size-4" />
+                            Retry safely
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -321,6 +352,19 @@ export default function OperationsHealth({ onNavigate }) {
         confirmLabel="Mark handled"
         onConfirm={() => void markIncidentHandled()}
         busy={resolving}
+      />
+      <AdminConfirmDialog
+        open={Boolean(pendingRetry)}
+        onOpenChange={open => !open && setPendingRetry(null)}
+        title="Retry Stripe event?"
+        description={pendingRetry
+          ? `Retrieve ${pendingRetry.event_id} directly from Stripe and run it through XERT's idempotent payment recovery path.`
+          : ''}
+        warning="XERT verifies the event identity and payment mode before processing. Existing paid orders and credit grants cannot be duplicated."
+        cancelLabel="Cancel"
+        confirmLabel="Retry event"
+        onConfirm={() => void retryIncident()}
+        busy={retrying}
       />
     </div>
   );

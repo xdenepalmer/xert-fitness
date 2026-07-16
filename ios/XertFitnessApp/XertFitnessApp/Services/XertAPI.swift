@@ -1037,6 +1037,18 @@ final class XertAPI {
         )
     }
 
+    func adminRetryStripeEvent(session auth: AuthSession, eventID: String) async throws -> AdminStripeRetryResponse {
+        try await vercelRequest(
+            path: "/api/admin-commerce-health",
+            body: AdminStripeRetryRequest(
+                action: "retry_stripe_event",
+                confirmation: "RETRY EVENT",
+                event_id: eventID
+            ),
+            auth: auth
+        )
+    }
+
     func adminPushHealth(session auth: AuthSession) async throws -> AdminPushHealth {
         try await vercelGet(path: "/api/admin-push-health", auth: auth)
     }
@@ -1950,6 +1962,16 @@ private struct AdminStripeReviewResolutionRequest: Encodable {
 private struct AdminStripeReviewResolutionResponse: Decodable {
     let event_id: String
     let status: String
+}
+private struct AdminStripeRetryRequest: Encodable {
+    let action: String
+    let confirmation: String
+    let event_id: String
+}
+struct AdminStripeRetryResponse: Decodable, Hashable {
+    let event_id: String
+    let status: String
+    let duplicate: Bool
 }
 private struct AdminRequestUpdate: Encodable {
     let p_request_type: String

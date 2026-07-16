@@ -90,8 +90,10 @@ export function hasXertCheckoutIdentity(metadata) {
  */
 export function checkoutFulfillmentForEvent(event, now = new Date()) {
   if (!FULFILLMENT_EVENT_TYPES.has(event?.type)) return null;
-
-  return checkoutFulfillmentForSession(event.data?.object, now);
+  const eventCreatedAt = Number.isSafeInteger(event.created) && event.created > 0
+    ? new Date(event.created * 1000)
+    : now;
+  return checkoutFulfillmentForSession(event.data?.object, eventCreatedAt);
 }
 
 /**
@@ -367,6 +369,72 @@ export async function persistCheckoutFailure(admin, failure) {
   if (error) throw error;
 }
 
+/**
+ * Processes one Stripe event through XERT's durable, idempotent settlement path.
+ * Signed webhook delivery and authenticated owner recovery both call this
+ * function so retry behavior cannot drift from normal fulfillment.
+ */
+export async function processStripeEvent(admin, event, {
+  secretKey = process.env.STRIPE_SECRET_KEY,
+  receivedAt = new Date(),
+} = {}) {
+  let ledgerStarted = false;
+  try {
+    assertStripeEventMode(event, secretKey);
+    const attempt = await beginStripeWebhookEvent(admin, event, receivedAt);
+    ledgerStarted = true;
+    if (attempt.already_finished) {
+      return { duplicate: true, requiresReview: false, handled: false, orderId: null };
+    }
+
+    let handled = false;
+    let orderId = null;
+    const fulfillment = checkoutFulfillmentForEvent(event);
+    if (fulfillment) {
+      const settlement = await persistCheckoutFulfillment(admin, fulfillment);
+      handled = true;
+      orderId = settlement.fulfilled_order_id;
+    }
+    const failure = checkoutFailureForEvent(event);
+    if (failure) {
+      await persistCheckoutFailure(admin, failure);
+      handled = true;
+    }
+    const disputeReview = stripeDisputeReviewForEvent(event);
+    if (disputeReview && await recordStripeOperatorReview(
+      admin, event, disputeReview, { requireLinkedOrder: true }
+    )) {
+      return { duplicate: false, requiresReview: true, handled: true, orderId: null };
+    }
+    const operatorReview = stripeOperatorReviewForEvent(event);
+    if (operatorReview) {
+      await recordStripeOperatorReview(admin, event, operatorReview);
+      return { duplicate: false, requiresReview: true, handled: true, orderId: null };
+    }
+    const refund = stripeRefundForEvent(event);
+    if (refund) {
+      const settlement = await persistStripeRefund(admin, refund);
+      handled = true;
+      orderId = settlement?.order_id || orderId;
+    }
+    await finishStripeWebhookEvent(admin, {
+      eventId: event.id,
+      status: handled ? 'processed' : 'ignored',
+      orderId,
+    });
+    return { duplicate: false, requiresReview: false, handled, orderId };
+  } catch (error) {
+    if (ledgerStarted) {
+      await finishStripeWebhookEvent(admin, {
+        eventId: event.id,
+        status: 'failed',
+        errorCode: stripeWebhookErrorCode(error),
+      }).catch(() => {});
+    }
+    throw error;
+  }
+}
+
 export default async function handler(request, response) {
   const text = (body, status = 200) => sendText(response, body, status);
   if (request.method !== 'POST') return text('Method not allowed', 405);
@@ -400,58 +468,14 @@ export default async function handler(request, response) {
     return text('Invalid webhook signature.', 400);
   }
 
-  let ledgerStarted = false;
   try {
-    assertStripeEventMode(event, process.env.STRIPE_SECRET_KEY);
-    const attempt = await beginStripeWebhookEvent(admin, event);
-    ledgerStarted = true;
-    if (attempt.already_finished) {
-      return sendJson(response, { received: true, duplicate: true });
-    }
-
-    let handled = false;
-    let orderId = null;
-    const fulfillment = checkoutFulfillmentForEvent(event);
-    if (fulfillment) {
-      const settlement = await persistCheckoutFulfillment(admin, fulfillment);
-      handled = true;
-      orderId = settlement.fulfilled_order_id;
-    }
-    const failure = checkoutFailureForEvent(event);
-    if (failure) {
-      await persistCheckoutFailure(admin, failure);
-      handled = true;
-    }
-    const disputeReview = stripeDisputeReviewForEvent(event);
-    if (disputeReview && await recordStripeOperatorReview(
-      admin, event, disputeReview, { requireLinkedOrder: true }
-    )) {
-      return sendJson(response, { received: true, requires_review: true });
-    }
-    const operatorReview = stripeOperatorReviewForEvent(event);
-    if (operatorReview) {
-      await recordStripeOperatorReview(admin, event, operatorReview);
-      return sendJson(response, { received: true, requires_review: true });
-    }
-    const refund = stripeRefundForEvent(event);
-    if (refund) {
-      const settlement = await persistStripeRefund(admin, refund);
-      handled = true;
-      orderId = settlement?.order_id || orderId;
-    }
-    await finishStripeWebhookEvent(admin, {
-      eventId: event.id,
-      status: handled ? 'processed' : 'ignored',
-      orderId,
+    const result = await processStripeEvent(admin, event);
+    return sendJson(response, {
+      received: true,
+      ...(result.duplicate ? { duplicate: true } : {}),
+      ...(result.requiresReview ? { requires_review: true } : {}),
     });
   } catch (e) {
-    if (ledgerStarted) {
-      await finishStripeWebhookEvent(admin, {
-        eventId: event.id,
-        status: 'failed',
-        errorCode: stripeWebhookErrorCode(e),
-      }).catch(() => {});
-    }
     console.error('Stripe webhook processing failed.', {
       eventId: String(event?.id || ''),
       eventType: String(event?.type || ''),
@@ -461,6 +485,4 @@ export default async function handler(request, response) {
     // A generic 500 makes Stripe retry without exposing provider or SQL details.
     return text('Webhook processing failed.', 500);
   }
-
-  return sendJson(response, { received: true });
 }

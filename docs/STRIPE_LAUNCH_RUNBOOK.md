@@ -190,6 +190,12 @@ until this command passes.
    a second Stripe refund.
 10. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
 11. Confirm Operations Health remains green.
+    If an ordinary webhook delivery is failed or has been processing for more
+    than ten minutes, use **Retry safely** in web or iOS Operations Health.
+    XERT retrieves the canonical event from Stripe, verifies its ID, type and
+    live/test mode against the durable ledger, then reuses the idempotent
+    webhook settlement path. Do not use this for partial-refund or dispute
+    incidents; those remain explicit owner-review actions.
 12. In Stripe test mode, create a dispute test event for the XERT payment and
    confirm **Operations Health > Unresolved Stripe incidents** shows it.
 13. Open the matching Stripe dispute, record the evidence or response outside

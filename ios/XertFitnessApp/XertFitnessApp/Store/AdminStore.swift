@@ -15,6 +15,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var schemaCapabilities: [AdminSchemaCapability] = []
     @Published private(set) var commerceHealth: AdminCommerceHealth?
     @Published private(set) var resolvingStripeIncidentID: String?
+    @Published private(set) var retryingStripeIncidentID: String?
     @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var auditEntries: [AdminAuditEntry] = []
     @Published private(set) var products: [AdminProduct] = []
@@ -628,6 +629,24 @@ final class AdminStore: ObservableObject {
                 eventID: incident.event_id,
                 errorCode: errorCode
             )
+            commerceHealth = try await api.adminCommerceHealth(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func retryStripeEvent(
+        session: AuthSession,
+        incident: AdminCommerceHealth.WebhookDelivery.Incident
+    ) async -> Bool {
+        guard retryingStripeIncidentID == nil, incident.resolution == nil else { return false }
+        retryingStripeIncidentID = incident.event_id
+        defer { retryingStripeIncidentID = nil }
+        do {
+            _ = try await api.adminRetryStripeEvent(session: session, eventID: incident.event_id)
             commerceHealth = try await api.adminCommerceHealth(session: session)
             lastUpdatedAt = Date()
             return true

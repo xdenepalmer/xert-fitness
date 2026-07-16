@@ -11,6 +11,7 @@ import {
   persistCheckoutFailure,
   persistCheckoutFulfillment,
   persistStripeRefund,
+  processStripeEvent,
   recordStripeOperatorReview,
   finishStripeWebhookEvent,
   stripeRefundForEvent,
@@ -113,12 +114,66 @@ test('webhook public failures never echo Stripe or database exception messages',
   assert.match(source, /return text\('Invalid webhook signature\.', 400\)/);
   assert.match(source, /return text\('Webhook processing failed\.', 500\)/);
   assert.match(source, /Webhook service is unavailable\.[\s\S]*503/);
-  assert.match(source, /beginStripeWebhookEvent\(admin, event\)[\s\S]*persistCheckoutFulfillment/);
+  assert.match(source, /beginStripeWebhookEvent\(admin, event, receivedAt\)[\s\S]*persistCheckoutFulfillment/);
   assert.match(source, /finishStripeWebhookEvent\(admin,[\s\S]*status: handled \? 'processed' : 'ignored'/);
-  assert.match(source, /ledgerStarted[\s\S]*status: 'failed'[\s\S]*stripeWebhookErrorCode\(e\)/);
+  assert.match(source, /ledgerStarted[\s\S]*status: 'failed'[\s\S]*stripeWebhookErrorCode\(error\)/);
   assert.match(source, /stripeOperatorReviewForEvent\(event\)[\s\S]*PARTIAL_REFUND_REQUIRES_REVIEW|operatorReview\.errorCode/);
   assert.match(source, /status: 'failed'[\s\S]*requires_review: true/);
   assert.match(source, /stripeDisputeReviewForEvent\(event\)/);
+});
+
+test('shared Stripe processor settles retries through the same durable ledger path', async () => {
+  const calls = [];
+  const admin = {
+    async rpc(name, payload) {
+      calls.push([name, payload]);
+      if (name === 'begin_stripe_webhook_event') {
+        return { data: [{ already_finished: false, attempt_count: 2 }], error: null };
+      }
+      if (name === 'fulfill_stripe_checkout') {
+        return { data: [{ fulfilled_order_id: 'order-xert', final_status: 'paid' }], error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+  const event = { ...checkoutEvent(), id: 'evt_retry_xert' };
+
+  const result = await processStripeEvent(admin, event, {
+    secretKey: 'sk_test_xert', receivedAt: NOW,
+  });
+
+  assert.deepEqual(result, {
+    duplicate: false, requiresReview: false, handled: true, orderId: 'order-xert',
+  });
+  assert.deepEqual(calls.map(([name]) => name), [
+    'begin_stripe_webhook_event', 'fulfill_stripe_checkout', 'finish_stripe_webhook_event',
+  ]);
+  assert.equal(calls[2][1].p_status, 'processed');
+});
+
+test('shared Stripe processor records a bounded failure and remains retryable', async () => {
+  const calls = [];
+  const admin = {
+    async rpc(name, payload) {
+      calls.push([name, payload]);
+      if (name === 'begin_stripe_webhook_event') {
+        return { data: [{ already_finished: false, attempt_count: 1 }], error: null };
+      }
+      if (name === 'fulfill_stripe_checkout') {
+        return { data: null, error: { code: 'DATABASE_TIMEOUT', message: 'private details' } };
+      }
+      return { data: null, error: null };
+    },
+  };
+  const event = { ...checkoutEvent(), id: 'evt_retry_failure' };
+
+  await assert.rejects(
+    processStripeEvent(admin, event, { secretKey: 'sk_test_xert', receivedAt: NOW }),
+  );
+  assert.equal(calls.at(-1)[0], 'finish_stripe_webhook_event');
+  assert.equal(calls.at(-1)[1].p_status, 'failed');
+  assert.equal(calls.at(-1)[1].p_error_code, 'DATABASE_TIMEOUT');
+  assert.equal(JSON.stringify(calls).includes('private details'), false);
 });
 
 test('creates one durable fulfilment record for a paid checkout', () => {
@@ -138,6 +193,13 @@ test('manual recovery preserves Stripe charge time for revenue and expiry', () =
     id: 'pi_test_xert',
     latest_charge: { id: 'ch_test_xert', created: 1783814400 },
   };
+  const fulfilment = checkoutFulfillmentForEvent(event, new Date('2026-07-20T00:00:00Z'));
+  assert.equal(fulfilment.order.paid_at, '2026-07-12T00:00:00.000Z');
+  assert.equal(fulfilment.credit.expires_at, '2026-08-09T00:00:00.000Z');
+});
+
+test('event replay preserves Stripe event time when charge expansion is unavailable', () => {
+  const event = { ...checkoutEvent(), created: 1783814400 };
   const fulfilment = checkoutFulfillmentForEvent(event, new Date('2026-07-20T00:00:00Z'));
   assert.equal(fulfilment.order.paid_at, '2026-07-12T00:00:00.000Z');
   assert.equal(fulfilment.credit.expires_at, '2026-08-09T00:00:00.000Z');

@@ -69,6 +69,13 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /adminResolveStripeReview/);
   assert.match(adminStore, /resolveStripeReview/);
   assert.match(view, /Mark handled/);
+  assert.match(api, /adminRetryStripeEvent/);
+  assert.match(api, /action: "retry_stripe_event"/);
+  assert.match(api, /confirmation: "RETRY EVENT"/);
+  assert.match(adminStore, /retryingStripeIncidentID/);
+  assert.match(adminStore, /func retryStripeEvent/);
+  assert.match(view, /Label\("Retry safely", systemImage: "arrow\.triangle\.2\.circlepath"\)/);
+  assert.match(view, /XERT verifies its identity and payment mode before processing/);
   assert.match(view, /AdminAuditView/);
   assert.match(view, /AdminProductsView/);
   assert.match(view, /AdminProductEditor/);

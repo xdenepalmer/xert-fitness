@@ -1299,6 +1299,26 @@ export async function resolveStripeOperatorReview(eventId, errorCode) {
   return body;
 }
 
+export async function retryStripeWebhookEvent(eventId) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-commerce-health', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'retry_stripe_event',
+      confirmation: 'RETRY EVENT',
+      event_id: eventId,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Stripe event retry failed.');
+  return body;
+}
+
 async function getPushConfigurationHealth() {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
