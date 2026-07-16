@@ -1466,10 +1466,10 @@ private struct AdminOrderDetailView: View {
 
             if order.isRecoverable {
                 Section("Payment recovery") {
-                    Text("Ask Stripe whether this checkout was paid. Credits are granted only when the member, product, amount, currency and purchased terms match this order.")
+                    Text("Ask Stripe for the canonical outcome. XERT grants credits only for an exact paid match, or safely closes an expired unpaid checkout.")
                         .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.7))
                     Button { confirmingReconciliation = true } label: {
-                        Label(isOperating ? "Checking Stripe..." : "Check and reconcile payment", systemImage: "arrow.triangle.2.circlepath")
+                        Label(isOperating ? "Checking Stripe..." : "Check Stripe outcome", systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(isOperating)
                 }
@@ -1526,7 +1526,9 @@ private struct AdminOrderDetailView: View {
             Button("Check and reconcile") {
                 Task {
                     if let result = await admin.reconcileOrder(session: session, order: order) {
-                        resultMessage = result.already_paid
+                        resultMessage = result.status == "failed" && result.checkout_status == "expired"
+                            ? "Stripe confirms no payment was taken. The expired checkout is closed without granting credits."
+                            : result.already_paid
                             ? "Fulfilment verified. \(result.credits_granted) session credits are attached to this order."
                             : "Payment reconciled. \(result.credits_granted) session credits were granted."
                     }

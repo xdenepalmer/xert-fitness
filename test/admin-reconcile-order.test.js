@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  assertCheckoutMatchesOrder,
   assertFulfillmentMatchesOrder,
   normalizeReconciliationRequest,
   reconcileCheckoutOrder,
@@ -72,6 +73,24 @@ test('Stripe fulfilment must match the complete pending order identity', () => {
   }
 });
 
+test('expired checkout cleanup requires the complete pending order identity', () => {
+  const expired = { ...checkout, status: 'expired', payment_status: 'unpaid' };
+  assert.doesNotThrow(() => assertCheckoutMatchesOrder(order, expired));
+  for (const mismatch of [
+    { id: 'cs_other' },
+    { amount_total: 4700 },
+    { currency: 'usd' },
+    { mode: 'subscription' },
+    { metadata: { ...expired.metadata, user_id: 'other-member' } },
+    { metadata: { ...expired.metadata, sessions_count: '99' } },
+  ]) {
+    assert.throws(
+      () => assertCheckoutMatchesOrder(order, { ...expired, ...mismatch }),
+      /PAYMENT_ORDER_MISMATCH/,
+    );
+  }
+});
+
 test('admin recovery reuses idempotent fulfilment and saves its actor audit', async () => {
   const calls = [];
   const admin = {
@@ -126,6 +145,71 @@ test('admin recovery cannot report paid when a concurrent refund wins the order 
   );
 });
 
+test('admin recovery closes an exact expired unpaid checkout without granting credits', async () => {
+  const calls = [];
+  const updateQuery = {
+    eq(column, value) { calls.push(['eq', column, value]); return updateQuery; },
+    in(column, values) { calls.push(['in', column, values]); return updateQuery; },
+    select(columns) { calls.push(['returning', columns]); return updateQuery; },
+    async maybeSingle() { return { data: { id: ORDER_ID, status: 'failed' }, error: null }; },
+  };
+  const admin = {
+    async rpc() { throw new Error('Expired checkout must not grant credits.'); },
+    from(table) {
+      return {
+        select() {
+          return { eq() { return { async single() { return { data: order, error: null }; } }; } };
+        },
+        update(payload) { calls.push(['update', table, payload]); return updateQuery; },
+      };
+    },
+  };
+  const expired = { ...checkout, status: 'expired', payment_status: 'unpaid' };
+  const stripe = { checkout: { sessions: { async retrieve() { return expired; } } } };
+
+  const result = await reconcileCheckoutOrder({
+    admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW,
+  });
+
+  assert.deepEqual(result, {
+    order_id: ORDER_ID,
+    status: 'failed',
+    checkout_status: 'expired',
+    credits_granted: 0,
+    already_paid: false,
+  });
+  assert.deepEqual(calls, [
+    ['update', 'orders', {
+      status: 'failed', reconciled_at: NOW.toISOString(), reconciled_by: 'admin-xert',
+    }],
+    ['eq', 'id', ORDER_ID],
+    ['in', 'status', ['pending', 'failed']],
+    ['returning', 'id,status'],
+  ]);
+});
+
+test('expired checkout cleanup refuses a concurrent paid or refunded transition', async () => {
+  const updateQuery = {
+    eq() { return updateQuery; }, in() { return updateQuery; }, select() { return updateQuery; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const admin = {
+    from() {
+      return {
+        select() { return { eq() { return { async single() { return { data: order, error: null }; } }; } }; },
+        update() { return updateQuery; },
+      };
+    },
+  };
+  const stripe = { checkout: { sessions: { async retrieve() {
+    return { ...checkout, status: 'expired', payment_status: 'unpaid' };
+  } } } };
+  await assert.rejects(
+    reconcileCheckoutOrder({ admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW }),
+    /ORDER_STATE_CHANGED/,
+  );
+});
+
 test('fresh and upgrade schemas retain a durable manual reconciliation marker', () => {
   for (const path of [
     '../supabase/migrations/20260713030000_checkout_reconciliation.sql',
@@ -144,5 +228,6 @@ test('orders admin exposes authenticated payment recovery for unresolved checkou
   const ui = readFileSync(new URL('../src/components/admin/OrdersManager.jsx', import.meta.url), 'utf8');
   assert.match(data, /fetch\('\/api\/admin-reconcile-order'/);
   assert.match(ui, /\['pending', 'failed'\]\.includes\(selectedOrder\.status\)/);
-  assert.match(ui, /Check and Reconcile Payment/);
+  assert.match(ui, /Check Stripe Outcome/);
+  assert.match(ui, /safely closes an expired unpaid checkout/);
 });

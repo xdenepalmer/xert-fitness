@@ -183,7 +183,7 @@ function readyStripe() {
           enabled_events: [
             'checkout.session.completed', 'checkout.session.async_payment_succeeded',
             'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
-            'charge.dispute.created',
+            'charge.dispute.created', 'charge.dispute.closed',
           ],
         }] };
       },
@@ -454,6 +454,7 @@ test('partial-refund incidents give owners a concrete recovery instruction', asy
   }]), new Date('2026-07-16T06:00:00.000Z'));
   assert.match(result.incidents[0].resolution, /linked order/i);
   assert.match(stripeIncidentResolution('PAYMENT_DISPUTE_REQUIRES_REVIEW'), /preserve the member and order evidence/i);
+  assert.match(stripeIncidentResolution('PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW'), /closed this dispute as lost/i);
 });
 
 test('owner-review incidents remain visible after the 24-hour delivery window', async () => {
@@ -494,6 +495,12 @@ test('Stripe review resolution is confirmed, allow-listed, and compare-and-set',
     action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
     event_id: 'evt_partial_123', error_code: 'DATABASE_TIMEOUT',
   }), /INVALID_STRIPE_REVIEW_RESOLUTION/);
+  assert.deepEqual(normalizeStripeReviewResolutionRequest({
+    action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
+    event_id: 'evt_dispute_lost_123', error_code: 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW',
+  }), {
+    eventId: 'evt_dispute_lost_123', errorCode: 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW',
+  });
 
   const calls = [];
   const query = {
@@ -761,7 +768,7 @@ test('commerce health requires checkout, refund, and dispute events on the canon
     url, status: 'enabled', enabled_events: [
       'checkout.session.completed', 'checkout.session.async_payment_succeeded',
       'checkout.session.expired', 'checkout.session.async_payment_failed', 'charge.refunded',
-      'charge.dispute.created',
+      'charge.dispute.created', 'charge.dispute.closed',
     ],
   }], 'https://xert-fitness.vercel.app'), { ready: true, missing_events: [], issue: null });
 
@@ -772,7 +779,7 @@ test('commerce health requires checkout, refund, and dispute events on the canon
   assert.deepEqual(incomplete.missing_events, [
     'checkout.session.async_payment_succeeded', 'checkout.session.expired',
     'checkout.session.async_payment_failed', 'charge.refunded',
-    'charge.dispute.created',
+    'charge.dispute.created', 'charge.dispute.closed',
   ]);
   assert.match(incomplete.issue, /charge\.refunded/);
 

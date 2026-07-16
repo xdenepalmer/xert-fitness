@@ -94,9 +94,14 @@ export default function OrdersManager() {
     setReconciling(true);
     try {
       const result = await reconcileOrder(selectedOrder.id);
+      const expired = result.status === 'failed' && result.checkout_status === 'expired';
       toast({
-        title: result.already_paid ? 'Fulfilment verified' : 'Payment reconciled',
-        description: `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
+        title: expired
+          ? 'Expired checkout closed'
+          : result.already_paid ? 'Fulfilment verified' : 'Payment reconciled',
+        description: expired
+          ? 'Stripe confirms no payment was taken. The pending order is now closed without granting credits.'
+          : `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
       });
       setSelectedOrder(null);
       await load();
@@ -289,10 +294,10 @@ export default function OrdersManager() {
               <div className="mt-6 border-t border-xert-orange/30 pt-5 space-y-3">
                 <div className="flex items-center gap-2 text-xert-orange"><RefreshCw className="w-4 h-4" /><h4 className="font-display text-sm uppercase">Payment recovery</h4></div>
                 <p className="font-body text-sm leading-relaxed text-xert-concrete/70">
-                  Ask Stripe whether this checkout was paid. Credits are granted only when the customer, product, amount, currency and purchased terms all match this order.
+                  Ask Stripe for the canonical outcome. XERT grants credits only for an exact paid match, or safely closes an expired unpaid checkout.
                 </p>
                 <button type="button" onClick={() => void submitReconciliation()} disabled={reconciling} className="w-full min-h-11 inline-flex items-center justify-center gap-2 border border-xert-orange/50 px-4 font-display text-sm uppercase text-xert-orange disabled:opacity-40">
-                  <RefreshCw className={`w-4 h-4 ${reconciling ? 'animate-spin' : ''}`} /> {reconciling ? 'Checking Stripe...' : 'Check and Reconcile Payment'}
+                  <RefreshCw className={`w-4 h-4 ${reconciling ? 'animate-spin' : ''}`} /> {reconciling ? 'Checking Stripe...' : 'Check Stripe Outcome'}
                 </button>
               </div>
             )}

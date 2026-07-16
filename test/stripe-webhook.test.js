@@ -432,11 +432,68 @@ test('classifies a complete Stripe dispute for exact-order operator review', () 
     errorCode: 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
     paymentIntentId: 'pi_test_xert',
   });
-  assert.equal(stripeDisputeReviewForEvent({ ...event, type: 'charge.dispute.closed' }), null);
+  assert.deepEqual(stripeDisputeReviewForEvent({
+    ...event,
+    type: 'charge.dispute.closed',
+    data: { object: { ...event.data.object, status: 'lost' } },
+  }), {
+    errorCode: 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW',
+    paymentIntentId: 'pi_test_xert',
+  });
+  for (const status of ['won', 'warning_closed']) {
+    assert.equal(stripeDisputeReviewForEvent({
+      ...event,
+      type: 'charge.dispute.closed',
+      data: { object: { ...event.data.object, status } },
+    }), null);
+  }
+  assert.throws(() => stripeDisputeReviewForEvent({
+    ...event,
+    type: 'charge.dispute.closed',
+    data: { object: { ...event.data.object, status: 'under_review' } },
+  }), /closed dispute status is incomplete or invalid/i);
   assert.throws(() => stripeDisputeReviewForEvent({
     ...event,
     data: { object: { ...event.data.object, payment_intent: null } },
   }), /dispute data is incomplete or invalid/i);
+});
+
+test('lost dispute closure reopens exact-order owner review through the shared processor', async () => {
+  const calls = [];
+  const orderID = '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2';
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() { return { data: { id: orderID }, error: null }; },
+  };
+  const admin = {
+    from(table) { assert.equal(table, 'orders'); return query; },
+    async rpc(name, payload) {
+      calls.push([name, payload]);
+      if (name === 'begin_stripe_webhook_event') {
+        return { data: [{ already_finished: false, attempt_count: 1 }], error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+  const event = {
+    id: 'evt_dispute_lost_xert', type: 'charge.dispute.closed', livemode: false,
+    data: { object: {
+      id: 'dp_xert', payment_intent: 'pi_test_xert', charge: 'ch_xert',
+      amount: 4800, currency: 'aud', status: 'lost',
+    } },
+  };
+
+  const result = await processStripeEvent(admin, event, {
+    secretKey: 'sk_test_xert', receivedAt: NOW,
+  });
+  assert.equal(result.requiresReview, true);
+  assert.deepEqual(calls.map(([name]) => name), [
+    'begin_stripe_webhook_event', 'finish_stripe_webhook_event',
+  ]);
+  assert.equal(calls[1][1].p_status, 'failed');
+  assert.equal(calls[1][1].p_order_id, orderID);
+  assert.equal(calls[1][1].p_error_code, 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW');
 });
 
 test('records operator review only after applying the event scoping rule', async () => {

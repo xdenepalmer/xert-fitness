@@ -230,7 +230,9 @@ export function stripeOperatorReviewForEvent(event) {
 }
 
 export function stripeDisputeReviewForEvent(event) {
-  if (event?.type !== 'charge.dispute.created') return null;
+  const isCreated = event?.type === 'charge.dispute.created';
+  const isClosed = event?.type === 'charge.dispute.closed';
+  if (!isCreated && !isClosed) return null;
   const dispute = event.data?.object;
   const paymentIntentId = typeof dispute?.payment_intent === 'string'
     ? dispute.payment_intent
@@ -245,8 +247,16 @@ export function stripeDisputeReviewForEvent(event) {
   ) {
     throw new Error('Stripe dispute data is incomplete or invalid.');
   }
+  if (isClosed) {
+    if (['won', 'warning_closed'].includes(dispute.status)) return null;
+    if (dispute.status !== 'lost') {
+      throw new Error('Stripe closed dispute status is incomplete or invalid.');
+    }
+  }
   return {
-    errorCode: 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+    errorCode: isClosed
+      ? 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW'
+      : 'PAYMENT_DISPUTE_REQUIRES_REVIEW',
     paymentIntentId,
   };
 }

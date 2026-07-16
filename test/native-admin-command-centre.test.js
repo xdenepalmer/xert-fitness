@@ -138,10 +138,12 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /Activation receipt/);
   assert.match(adminModels, /struct ActivationReceipt: Codable, Hashable/);
   assert.match(view, /Type REFUND to confirm/);
-  assert.match(view, /Check and reconcile payment/);
   assert.match(api, /func adminOrders/);
   assert.match(api, /while true[\s\S]*URLQueryItem\(name: "offset", value: String\(offset\)\)[\s\S]*offset \+= pageSize/);
   assert.match(api, /\/api\/admin-reconcile-order/);
+  assert.match(view, /Check Stripe outcome/);
+  assert.match(view, /expired unpaid checkout/);
+  assert.match(view, /result\.checkout_status == "expired"/);
   assert.match(api, /\/api\/admin-refund-order/);
   assert.match(api, /confirmation == "REFUND"/);
   assert.match(adminStore, /func reconcileOrder/);

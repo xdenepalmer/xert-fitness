@@ -32,10 +32,12 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.async_payment_failed',
   'charge.refunded',
   'charge.dispute.created',
+  'charge.dispute.closed',
 ];
 const STRIPE_OPERATOR_REVIEW_CODES = [
   'PARTIAL_REFUND_REQUIRES_REVIEW',
   'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+  'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW',
 ];
 
 export function inspectCommerceEnvironment(environment = {}) {
@@ -236,6 +238,9 @@ export function stripeIncidentResolution(errorCode) {
   }
   if (errorCode === 'PAYMENT_DISPUTE_REQUIRES_REVIEW') {
     return 'Open the dispute in Stripe, preserve the member and order evidence, then decide whether access or credits must be suspended.';
+  }
+  if (errorCode === 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW') {
+    return 'Stripe closed this dispute as lost. Review the linked order, member access and remaining credits, then record the accounting outcome.';
   }
   return null;
 }

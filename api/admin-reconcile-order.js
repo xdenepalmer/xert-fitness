@@ -35,6 +35,53 @@ export function assertFulfillmentMatchesOrder(order, fulfillment) {
   }
 }
 
+export function assertCheckoutMatchesOrder(order, checkout) {
+  const metadata = checkout?.metadata || {};
+  if (!order || order.status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
+  if (
+    !checkout
+    || checkout.id !== order.stripe_checkout_session_id
+    || checkout.mode !== 'payment'
+    || metadata.user_id !== order.user_id
+    || metadata.product_id !== order.product_id
+    || Number(checkout.amount_total) !== Number(order.amount_cents)
+    || String(checkout.currency || '').toLowerCase() !== String(order.currency || '').toLowerCase()
+    || metadata.sessions_count !== String(order.credit_total)
+    || metadata.validity_days !== String(order.credit_validity_days)
+  ) {
+    throw new Error('PAYMENT_ORDER_MISMATCH');
+  }
+}
+
+export async function reconcileExpiredCheckout(admin, order, checkout, userId, now = new Date()) {
+  assertCheckoutMatchesOrder(order, checkout);
+  if (checkout.status !== 'expired' || checkout.payment_status !== 'unpaid') {
+    throw new Error('PAYMENT_NOT_COMPLETE');
+  }
+  if (!['pending', 'failed'].includes(order.status)) throw new Error('ORDER_STATE_CHANGED');
+
+  const { data, error } = await admin
+    .from('orders')
+    .update({
+      status: 'failed',
+      reconciled_at: now.toISOString(),
+      reconciled_by: userId,
+    })
+    .eq('id', order.id)
+    .in('status', ['pending', 'failed'])
+    .select('id,status')
+    .maybeSingle();
+  if (error) throw new Error('CHECKOUT_EXPIRY_RECONCILIATION_FAILED');
+  if (data?.id !== order.id || data?.status !== 'failed') throw new Error('ORDER_STATE_CHANGED');
+  return {
+    order_id: order.id,
+    status: 'failed',
+    checkout_status: 'expired',
+    credits_granted: 0,
+    already_paid: false,
+  };
+}
+
 export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, now = new Date() }) {
   const { data: order, error: orderError } = await admin
     .from('orders')
@@ -47,7 +94,11 @@ export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, n
   const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id, {
     expand: ['payment_intent.latest_charge'],
   });
+  assertCheckoutMatchesOrder(order, checkout);
   const fulfillment = checkoutFulfillmentForSession(checkout, now);
+  if (!fulfillment) {
+    return reconcileExpiredCheckout(admin, order, checkout, userId, now);
+  }
   assertFulfillmentMatchesOrder(order, fulfillment);
   const settlement = await persistCheckoutFulfillment(admin, fulfillment);
   if (settlement.final_status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
@@ -63,6 +114,7 @@ export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, n
     status: 'paid',
     credits_granted: fulfillment.credit.total,
     already_paid: order.status === 'paid',
+    checkout_status: checkout.status,
   };
 }
 
@@ -73,6 +125,8 @@ const SAFE_ERRORS = {
   CHECKOUT_SESSION_NOT_RECORDED: ['This order has no Stripe Checkout Session.', 409],
   PAYMENT_NOT_COMPLETE: ['Stripe does not report this checkout as paid yet.', 409],
   PAYMENT_ORDER_MISMATCH: ['Stripe payment details do not match this order.', 409],
+  ORDER_STATE_CHANGED: ['This order changed while Stripe was being checked. Refresh before retrying.', 409],
+  CHECKOUT_EXPIRY_RECONCILIATION_FAILED: ['Stripe reports this checkout expired, but XERT could not close the pending order. Refresh before retrying.', 500],
   RECONCILIATION_AUDIT_FAILED: ['Payment was fulfilled but its admin audit marker could not be saved. Refresh before retrying.', 500],
 };
 

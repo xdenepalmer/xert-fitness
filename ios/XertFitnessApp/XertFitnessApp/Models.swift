@@ -349,6 +349,7 @@ struct AdminReconciliationResult: Decodable, Hashable {
     let status: String
     let credits_granted: Int
     let already_paid: Bool
+    let checkout_status: String?
 }
 
 struct AdminRefundResult: Decodable, Hashable {

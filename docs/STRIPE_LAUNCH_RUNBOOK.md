@@ -94,6 +94,7 @@ checkout.session.expired
 checkout.session.async_payment_failed
 charge.refunded
 charge.dispute.created
+charge.dispute.closed
 ```
 
 Copy that endpoint's `whsec_...` signing secret to Vercel and redeploy.
@@ -183,23 +184,30 @@ until this command passes.
 6. Confirm one paid order and exactly one credit batch appear.
 7. Repeat from iOS and confirm the app returns to XERT and refreshes credits.
 8. Retry or double-tap checkout and confirm XERT reuses the open unpaid session.
-9. Refund the test order from **Admin > Finance**.
+9. Start another checkout without paying, wait for Stripe to report it expired,
+   then use **Admin > Finance > Check Stripe outcome**. Confirm XERT closes the
+   pending order as failed and grants zero credits. This also recovers safely
+   when the normal `checkout.session.expired` webhook was missed.
+10. Refund the test order from **Admin > Finance**.
    If Stripe completed the refund but XERT lost the database response, repeat
    the same confirmed refund action. XERT recovers only the exact succeeded
    full refund and completes credit and booking reconciliation without issuing
    a second Stripe refund.
-10. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
-11. Confirm Operations Health remains green.
+11. Confirm Stripe, the XERT order, unused credits and future bookings reconcile.
+12. Confirm Operations Health remains green.
     If an ordinary webhook delivery is failed or has been processing for more
     than ten minutes, use **Retry safely** in web or iOS Operations Health.
     XERT retrieves the canonical event from Stripe, verifies its ID, type and
     live/test mode against the durable ledger, then reuses the idempotent
     webhook settlement path. Do not use this for partial-refund or dispute
     incidents; those remain explicit owner-review actions.
-12. In Stripe test mode, create a dispute test event for the XERT payment and
+13. In Stripe test mode, create a dispute test event for the XERT payment and
    confirm **Operations Health > Unresolved Stripe incidents** shows it.
-13. Open the matching Stripe dispute, record the evidence or response outside
+14. Open the matching Stripe dispute, record the evidence or response outside
     XERT, then use **Mark handled** only after the owner has completed that work.
+15. Close a test dispute as lost and confirm XERT creates a new linked-order
+    incident. Review member access and remaining credits before marking that
+    outcome handled. A won dispute must not create a false launch blocker.
 
 ## 6. Live Cutover
 
