@@ -481,7 +481,7 @@ struct AdminCommandCentreView: View {
         case .controls:
             return AnyView(AdminPlatformView(admin: admin, session: session))
         case .health:
-            return AnyView(AdminOperationsHealthView(admin: admin))
+            return AnyView(AdminOperationsHealthView(admin: admin, session: session))
         case .audit:
             return AnyView(AdminAuditView(admin: admin))
         }
@@ -3055,6 +3055,8 @@ private struct AdminCommunicationsView: View {
 
 private struct AdminOperationsHealthView: View {
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
 
     var body: some View {
         List {
@@ -3109,7 +3111,7 @@ private struct AdminOperationsHealthView: View {
                 }
 
                 if let incidents = commerce.webhook_delivery?.incidents, !incidents.isEmpty {
-                    Section("Recent Stripe incidents") {
+                    Section("Unresolved Stripe incidents") {
                         ForEach(incidents) { incident in
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(alignment: .firstTextBaseline) {
@@ -3155,6 +3157,12 @@ private struct AdminOperationsHealthView: View {
                                         .font(.caption)
                                         .foregroundStyle(Color.orange)
                                         .fixedSize(horizontal: false, vertical: true)
+                                    Button {
+                                        pendingResolution = incident
+                                    } label: {
+                                        Label("Mark handled", systemImage: "checkmark.seal")
+                                    }
+                                    .disabled(admin.resolvingStripeIncidentID != nil)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -3185,6 +3193,21 @@ private struct AdminOperationsHealthView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Operations Health")
+        .confirmationDialog(
+            "Mark Stripe incident handled?",
+            isPresented: Binding(
+                get: { pendingResolution != nil },
+                set: { if !$0 { pendingResolution = nil } }
+            ),
+            presenting: pendingResolution
+        ) { incident in
+            Button("Mark handled") {
+                Task { _ = await admin.resolveStripeReview(session: session, incident: incident) }
+            }
+            Button("Keep unresolved", role: .cancel) {}
+        } message: { incident in
+            Text("Confirm that \(incident.event_type) has been reviewed and any required member credit action is complete. Stripe and order records remain unchanged.")
+        }
     }
 
     private var commerceDetail: String {

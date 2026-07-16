@@ -45,4 +45,7 @@ test('operations health exposes bounded Stripe incidents with an accessible copy
   assert.match(monitor, /navigator\.clipboard\.writeText\(eventId\)/);
   assert.match(monitor, /Copy Stripe Event ID/);
   assert.match(monitor, /incident\.resolution/);
+  assert.match(monitor, /resolveStripeOperatorReview/);
+  assert.match(monitor, /Mark handled/);
+  assert.match(monitor, /AdminConfirmDialog/);
 });

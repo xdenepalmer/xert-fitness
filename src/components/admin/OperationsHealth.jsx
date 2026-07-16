@@ -3,11 +3,12 @@ import {
   AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Copy, Database, Loader2,
   RefreshCw, ShieldCheck,
 } from 'lucide-react';
-import { getOperationsHealth } from '@/lib/adminData';
+import { getOperationsHealth, resolveStripeOperatorReview } from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { orderOperationsHealthChecks } from '@/lib/adminHealth';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const STATUS_STYLE = {
   ok: {
@@ -51,6 +52,8 @@ export default function OperationsHealth({ onNavigate }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [pendingResolution, setPendingResolution] = useState(null);
+  const [resolving, setResolving] = useState(false);
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
@@ -128,6 +131,21 @@ export default function OperationsHealth({ onNavigate }) {
       });
     }
   }, []);
+
+  const markIncidentHandled = useCallback(async () => {
+    if (!pendingResolution?.event_id || !pendingResolution?.error_code) return;
+    setResolving(true);
+    try {
+      await resolveStripeOperatorReview(pendingResolution.event_id, pendingResolution.error_code);
+      setPendingResolution(null);
+      toast({ title: 'Stripe incident marked handled' });
+      await load();
+    } catch (error) {
+      toast({ title: 'Could not resolve incident', description: error.message, variant: 'destructive' });
+    } finally {
+      setResolving(false);
+    }
+  }, [load, pendingResolution]);
 
   return (
     <div className="p-6 space-y-6">
@@ -262,9 +280,16 @@ export default function OperationsHealth({ onNavigate }) {
                           )}
                         </div>
                         {incident.resolution && (
-                          <p className="mt-3 font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
-                            {incident.resolution}
-                          </p>
+                          <div className="mt-3 space-y-3">
+                            <p className="font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
+                              {incident.resolution}
+                            </p>
+                            <button type="button" onClick={() => setPendingResolution(incident)}
+                              className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
+                              <CheckCircle2 className="size-4" />
+                              Mark handled
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -284,6 +309,19 @@ export default function OperationsHealth({ onNavigate }) {
           })}
         </div>
       )}
+      <AdminConfirmDialog
+        open={Boolean(pendingResolution)}
+        onOpenChange={open => !open && setPendingResolution(null)}
+        title="Mark Stripe incident handled?"
+        description={pendingResolution
+          ? `Confirm that ${pendingResolution.event_type} (${pendingResolution.event_id}) has been reviewed and any required member credit action is complete.`
+          : ''}
+        warning="This removes the incident from launch blockers. Stripe and order records remain unchanged."
+        cancelLabel="Keep unresolved"
+        confirmLabel="Mark handled"
+        onConfirm={() => void markIncidentHandled()}
+        busy={resolving}
+      />
     </div>
   );
 }

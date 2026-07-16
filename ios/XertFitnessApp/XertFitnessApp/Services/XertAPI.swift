@@ -1024,6 +1024,19 @@ final class XertAPI {
         try await vercelGet(path: "/api/admin-commerce-health", auth: auth)
     }
 
+    func adminResolveStripeReview(session auth: AuthSession, eventID: String, errorCode: String) async throws {
+        let _: AdminStripeReviewResolutionResponse = try await vercelRequest(
+            path: "/api/admin-commerce-health",
+            body: AdminStripeReviewResolutionRequest(
+                action: "resolve_stripe_review",
+                confirmation: "MARK HANDLED",
+                event_id: eventID,
+                error_code: errorCode
+            ),
+            auth: auth
+        )
+    }
+
     func adminPushHealth(session auth: AuthSession) async throws -> AdminPushHealth {
         try await vercelGet(path: "/api/admin-push-health", auth: auth)
     }
@@ -1927,6 +1940,16 @@ private struct AdminPaymentActivationRequest: Encodable {
     let settings_id: UUID
     let expected_updated_at: String
     let settings: AdminPaymentActivationSettings
+}
+private struct AdminStripeReviewResolutionRequest: Encodable {
+    let action: String
+    let confirmation: String
+    let event_id: String
+    let error_code: String
+}
+private struct AdminStripeReviewResolutionResponse: Decodable {
+    let event_id: String
+    let status: String
 }
 private struct AdminRequestUpdate: Encodable {
     let p_request_type: String

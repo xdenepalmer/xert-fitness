@@ -14,6 +14,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var announcements: [AdminAnnouncement] = []
     @Published private(set) var schemaCapabilities: [AdminSchemaCapability] = []
     @Published private(set) var commerceHealth: AdminCommerceHealth?
+    @Published private(set) var resolvingStripeIncidentID: String?
     @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var auditEntries: [AdminAuditEntry] = []
     @Published private(set) var products: [AdminProduct] = []
@@ -606,6 +607,28 @@ final class AdminStore: ObservableObject {
             } else {
                 settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
             }
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func resolveStripeReview(
+        session: AuthSession,
+        incident: AdminCommerceHealth.WebhookDelivery.Incident
+    ) async -> Bool {
+        guard resolvingStripeIncidentID == nil, let errorCode = incident.error_code else { return false }
+        resolvingStripeIncidentID = incident.event_id
+        defer { resolvingStripeIncidentID = nil }
+        do {
+            try await api.adminResolveStripeReview(
+                session: session,
+                eventID: incident.event_id,
+                errorCode: errorCode
+            )
+            commerceHealth = try await api.adminCommerceHealth(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {

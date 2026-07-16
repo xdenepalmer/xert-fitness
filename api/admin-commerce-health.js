@@ -25,6 +25,10 @@ const REQUIRED_WEBHOOK_EVENTS = [
   'charge.refunded',
   'charge.dispute.created',
 ];
+const STRIPE_OPERATOR_REVIEW_CODES = [
+  'PARTIAL_REFUND_REQUIRES_REVIEW',
+  'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+];
 
 export function inspectCommerceEnvironment(environment = {}) {
   const missing = [];
@@ -110,6 +114,22 @@ export function normalizePaymentActivationRequest(body) {
       announcement_banner_enabled: settings.announcement_banner_enabled,
     },
   };
+}
+
+export function normalizeStripeReviewResolutionRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('INVALID_STRIPE_REVIEW_RESOLUTION');
+  const eventId = String(body.event_id || '').trim();
+  const errorCode = String(body.error_code || '').trim();
+  if (
+    body.action !== 'resolve_stripe_review'
+    || body.confirmation !== 'MARK HANDLED'
+    || !/^evt_[A-Za-z0-9_]+$/.test(eventId)
+    || eventId.length > 255
+    || !STRIPE_OPERATOR_REVIEW_CODES.includes(errorCode)
+  ) {
+    throw new Error('INVALID_STRIPE_REVIEW_RESOLUTION');
+  }
+  return { eventId, errorCode };
 }
 
 export async function schemaCapabilityIsReady(admin, capability) {
@@ -221,26 +241,40 @@ export function stripeIncidentResolution(errorCode) {
 export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const staleBefore = now.getTime() - 10 * 60 * 1000;
-  const { data, error } = await admin
-    .from('stripe_webhook_events')
-    .select('event_id,event_type,status,attempts,order_id,last_received_at,last_error_code')
-    .gte('last_received_at', since)
-    .order('last_received_at', { ascending: false })
-    .limit(500);
-  if (error) {
+  const fields = 'event_id,event_type,status,attempts,order_id,last_received_at,last_error_code';
+  const [recentResult, reviewResult] = await Promise.all([
+    admin
+      .from('stripe_webhook_events')
+      .select(fields)
+      .gte('last_received_at', since)
+      .order('last_received_at', { ascending: false })
+      .limit(500),
+    admin
+      .from('stripe_webhook_events')
+      .select(fields)
+      .eq('status', 'failed')
+      .in('last_error_code', STRIPE_OPERATOR_REVIEW_CODES)
+      .order('last_received_at', { ascending: false })
+      .limit(100),
+  ]);
+  if (recentResult.error || reviewResult.error) {
     return {
       ready: false, available: false, received: 0, failed: 0,
       stale_processing: 0, retries: 0, incidents: [],
       issue: 'Stripe webhook delivery history could not be loaded.',
     };
   }
-  const rows = data || [];
-  const failed = rows.filter(row => row.status === 'failed').length;
+  const rows = recentResult.data || [];
+  const reviewRows = reviewResult.data || [];
+  const incidentRows = [...reviewRows, ...rows].filter((row, index, all) => (
+    all.findIndex(candidate => candidate.event_id === row.event_id) === index
+  ));
+  const failed = incidentRows.filter(row => row.status === 'failed').length;
   const staleProcessing = rows.filter(row => (
     row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore
   )).length;
   const retries = rows.reduce((total, row) => total + Math.max(0, Number(row.attempts || 0) - 1), 0);
-  const incidents = rows
+  const incidents = incidentRows
     .filter(row => (
       row.status === 'failed'
       || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore)
@@ -262,7 +296,9 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
         ...(resolution ? { resolution } : {}),
       };
     });
-  const truncated = rows.length === 500;
+  const recentTruncated = rows.length === 500;
+  const reviewTruncated = reviewRows.length === 100;
+  const truncated = recentTruncated || reviewTruncated;
   const ready = failed === 0 && staleProcessing === 0 && !truncated;
   return {
     ready,
@@ -272,8 +308,10 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     stale_processing: staleProcessing,
     retries,
     incidents,
-    issue: truncated
-      ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
+    issue: reviewTruncated
+      ? 'The unresolved Stripe operator review queue reached its safety limit.'
+      : recentTruncated
+        ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
       : failed > 0
         ? `${failed} Stripe webhook deliver${failed === 1 ? 'y has' : 'ies have'} an unresolved failure.`
         : staleProcessing > 0
@@ -416,6 +454,22 @@ export async function activateSessionPackPayments(serverClient, actorId, activat
   return settings;
 }
 
+export async function resolveStripeOperatorReview(admin, review, resolvedAt = new Date()) {
+  const { data, error } = await admin
+    .from('stripe_webhook_events')
+    .update({ status: 'ignored', finished_at: resolvedAt.toISOString() })
+    .eq('event_id', review.eventId)
+    .eq('status', 'failed')
+    .eq('last_error_code', review.errorCode)
+    .select('event_id,status')
+    .maybeSingle();
+  if (error) throw new Error('STRIPE_REVIEW_RESOLUTION_FAILED');
+  if (data?.event_id !== review.eventId || data?.status !== 'ignored') {
+    throw new Error('STRIPE_REVIEW_RESOLUTION_STALE');
+  }
+  return data;
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
@@ -438,14 +492,39 @@ export default async function handler(request, response) {
   if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
 
   let activation;
+  let reviewResolution;
   if (request.method === 'POST') {
     try {
-      activation = normalizePaymentActivationRequest(await requestJson(request));
+      const body = await requestJson(request);
+      if (body?.action === 'resolve_stripe_review') {
+        reviewResolution = normalizeStripeReviewResolutionRequest(body);
+      } else {
+        activation = normalizePaymentActivationRequest(body);
+      }
     } catch (error) {
+      if (error.message === 'INVALID_STRIPE_REVIEW_RESOLUTION') {
+        return json({ error: 'Stripe incident resolution request is invalid.' }, 400);
+      }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
       }
       return json({ error: 'Payment activation request is invalid.' }, 400);
+    }
+  }
+
+  if (reviewResolution) {
+    try {
+      const resolved = await resolveStripeOperatorReview(admin, reviewResolution);
+      console.info('Stripe operator review resolved.', {
+        eventId: resolved.event_id,
+        actorId: user.id,
+      });
+      return json(resolved);
+    } catch (error) {
+      if (error.message === 'STRIPE_REVIEW_RESOLUTION_STALE') {
+        return json({ error: 'This Stripe incident changed or was already handled. Refresh before continuing.' }, 409);
+      }
+      return json({ error: 'The Stripe incident could not be marked handled.' }, 500);
     }
   }
 

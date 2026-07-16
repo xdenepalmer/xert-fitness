@@ -10,6 +10,8 @@ import adminCommerceHealthHandler, {
   inspectStripeWebhookEndpoints,
   inspectWebhookDeliveryHealth,
   normalizePaymentActivationRequest,
+  normalizeStripeReviewResolutionRequest,
+  resolveStripeOperatorReview,
   stripeIncidentResolution,
 } from '../api/admin-commerce-health.js';
 
@@ -65,6 +67,8 @@ function capabilityAdmin(capabilities, webhookRows = []) {
         const query = {
           select() { return query; },
           gte() { return query; },
+          eq() { return query; },
+          in() { return query; },
           order() { return query; },
           async limit() { return { data: webhookRows, error: null }; },
         };
@@ -355,6 +359,72 @@ test('partial-refund incidents give owners a concrete recovery instruction', asy
   assert.match(stripeIncidentResolution('PAYMENT_DISPUTE_REQUIRES_REVIEW'), /preserve the member and order evidence/i);
 });
 
+test('owner-review incidents remain visible after the 24-hour delivery window', async () => {
+  const oldReview = {
+    event_id: 'evt_old_partial_refund', event_type: 'charge.refunded', status: 'failed', attempts: 1,
+    order_id: null, last_received_at: '2026-07-10T05:59:00.000Z',
+    last_error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+  };
+  let queryNumber = 0;
+  const admin = {
+    from() {
+      queryNumber += 1;
+      const rows = queryNumber === 1 ? [] : [oldReview];
+      const query = {
+        select() { return query; }, gte() { return query; }, eq() { return query; },
+        in() { return query; }, order() { return query; },
+        async limit() { return { data: rows, error: null }; },
+      };
+      return query;
+    },
+  };
+  const result = await inspectWebhookDeliveryHealth(admin, new Date('2026-07-16T06:00:00.000Z'));
+  assert.equal(result.received, 0);
+  assert.equal(result.failed, 1);
+  assert.equal(result.ready, false);
+  assert.equal(result.incidents[0].event_id, oldReview.event_id);
+});
+
+test('Stripe review resolution is confirmed, allow-listed, and compare-and-set', async () => {
+  const review = normalizeStripeReviewResolutionRequest({
+    action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
+    event_id: 'evt_partial_123', error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+  });
+  assert.deepEqual(review, {
+    eventId: 'evt_partial_123', errorCode: 'PARTIAL_REFUND_REQUIRES_REVIEW',
+  });
+  assert.throws(() => normalizeStripeReviewResolutionRequest({
+    action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
+    event_id: 'evt_partial_123', error_code: 'DATABASE_TIMEOUT',
+  }), /INVALID_STRIPE_REVIEW_RESOLUTION/);
+
+  const calls = [];
+  const query = {
+    update(payload) { calls.push(['update', payload]); return query; },
+    eq(column, value) { calls.push(['eq', column, value]); return query; },
+    select(columns) { calls.push(['select', columns]); return query; },
+    async maybeSingle() { return { data: { event_id: review.eventId, status: 'ignored' }, error: null }; },
+  };
+  const result = await resolveStripeOperatorReview({ from() { return query; } }, review, new Date('2026-07-16T06:00:00.000Z'));
+  assert.equal(result.status, 'ignored');
+  assert.deepEqual(calls, [
+    ['update', { status: 'ignored', finished_at: '2026-07-16T06:00:00.000Z' }],
+    ['eq', 'event_id', 'evt_partial_123'],
+    ['eq', 'status', 'failed'],
+    ['eq', 'last_error_code', 'PARTIAL_REFUND_REQUIRES_REVIEW'],
+    ['select', 'event_id,status'],
+  ]);
+
+  const staleQuery = {
+    update() { return staleQuery; }, eq() { return staleQuery; }, select() { return staleQuery; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  await assert.rejects(
+    resolveStripeOperatorReview({ from() { return staleQuery; } }, review),
+    /STRIPE_REVIEW_RESOLUTION_STALE/,
+  );
+});
+
 test('commerce health reconciles Stripe-linked and dynamic active products', async () => {
   const result = await inspectCommerceProducts([
     validProduct,
@@ -531,6 +601,8 @@ test('admin operations health calls the authenticated commerce endpoint', async 
   assert.match(source, /healthCheck\('commerce-config', 'Stripe checkout'/);
   assert.match(source, /Missing server settings:/);
   assert.match(source, /Set the missing values in Vercel/);
+  assert.match(source, /action: 'resolve_stripe_review'/);
+  assert.match(source, /confirmation: 'MARK HANDLED'/);
 });
 
 test('commerce health responses are explicitly private and non-cacheable', async () => {
@@ -542,6 +614,9 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(source, /request\.method === 'POST'/);
   assert.match(source, /if \(!health\.ready\)[\s\S]*Payments remain paused/);
   assert.match(source, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
+  assert.match(source, /if \(reviewResolution\)[\s\S]*resolveStripeOperatorReview\(admin, reviewResolution\)[\s\S]*actorId: user\.id/);
+  assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.eq\('last_error_code', review\.errorCode\)/);
+  assert.match(source, /\.in\('last_error_code', STRIPE_OPERATOR_REVIEW_CODES\)/);
   assert.match(source, /createClient\(SUPABASE_URL, SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /global: \{ headers: \{ Authorization: `Bearer \$\{token\}` \} \}/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);

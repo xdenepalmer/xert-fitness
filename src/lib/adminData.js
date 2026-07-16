@@ -1278,6 +1278,27 @@ export async function getCommerceConfigurationHealth() {
   return body;
 }
 
+export async function resolveStripeOperatorReview(eventId, errorCode) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-commerce-health', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'resolve_stripe_review',
+      confirmation: 'MARK HANDLED',
+      event_id: eventId,
+      error_code: errorCode,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Stripe incident resolution failed.');
+  return body;
+}
+
 async function getPushConfigurationHealth() {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
