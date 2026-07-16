@@ -74,6 +74,10 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(swiftTests, /testPendingCheckoutRejectsAnotherUserAndExpires/);
 });
 
+test('native order fixtures preserve the purchased credit terms', () => {
+  assert.match(swiftTests, /OrderItem\([\s\S]*credit_total:\s*10,[\s\S]*credit_validity_days:\s*90,/);
+});
+
 test('cold launches and later foregrounds resume a pending native purchase', () => {
   assert.match(store, /hasBootstrapped = true\s+await reconcilePendingCheckout\(\)/);
   assert.match(store, /try KeychainStore\.saveSession\(session\)\s+await refresh\(\)\s+await reconcilePendingCheckout\(\)/);

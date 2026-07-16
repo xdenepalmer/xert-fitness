@@ -1825,6 +1825,8 @@ final class ModelsTests: XCTestCase {
             status: status,
             amount_cents: 4800,
             currency: "aud",
+            credit_total: 10,
+            credit_validity_days: 90,
             stripe_checkout_session_id: status == "failed" ? "cs_test_recover" : nil,
             stripe_payment_intent_id: status == "paid" ? "pi_test_paid" : nil,
             created_at: Date(),
