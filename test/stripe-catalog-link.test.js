@@ -319,16 +319,24 @@ test('launch preflight passes only when deployed boundaries and every catalog li
 });
 
 test('launch preflight validates the singleton payment switch for both cutover phases', () => {
-  assert.deepEqual(inspectPaymentSwitch([{ payments_enabled: false }], null, 'paused'), {
-    ready: true, state: 'paused', expected: 'paused', issue: null,
-  });
-  assert.deepEqual(inspectPaymentSwitch([{ payments_enabled: true }], null, 'enabled'), {
-    ready: true, state: 'enabled', expected: 'enabled', issue: null,
-  });
-  assert.equal(inspectPaymentSwitch([{ payments_enabled: false }], null, 'enabled').ready, false);
-  assert.equal(inspectPaymentSwitch([], null, 'paused').state, 'invalid');
-  assert.equal(inspectPaymentSwitch([{ payments_enabled: false }, { payments_enabled: false }], null, 'paused').state, 'invalid');
-  assert.equal(inspectPaymentSwitch(null, new Error('network'), 'paused').state, 'unknown');
+  const paused = {
+    payment_switch: { ready: true, state: 'paused' },
+    activation_receipt: { required: false, ready: true, activated_at: null, issue: null },
+  };
+  const enabled = {
+    payment_switch: { ready: true, state: 'enabled' },
+    activation_receipt: {
+      required: true, ready: true, activated_at: '2026-07-16T03:05:00.100Z', issue: null,
+    },
+  };
+  assert.equal(inspectPaymentSwitch(paused, 'paused').ready, true);
+  assert.equal(inspectPaymentSwitch(enabled, 'enabled').ready, true);
+  assert.equal(inspectPaymentSwitch(paused, 'enabled').ready, false);
+  assert.equal(inspectPaymentSwitch({
+    ...enabled,
+    activation_receipt: { ...enabled.activation_receipt, ready: false, issue: 'Receipt missing.' },
+  }, 'enabled').ready, false);
+  assert.equal(inspectPaymentSwitch(null, 'paused').state, 'unknown');
 });
 
 test('launch preflight observes the payment switch after all remote readiness checks settle', async () => {

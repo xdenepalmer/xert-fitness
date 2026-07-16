@@ -141,6 +141,101 @@ export async function schemaCapabilityIsReady(admin, capability) {
   return !error && data?.capability === capability;
 }
 
+export function inspectPaymentActivationReceipt(settingsRows, settingsError, auditRows = [], auditError = null) {
+  if (settingsError || !Array.isArray(settingsRows) || settingsRows.length !== 1) {
+    return {
+      payment_switch: { ready: false, state: 'unknown', updated_at: null },
+      activation_receipt: {
+        required: false, ready: false, activated_at: null, actor_recorded: false,
+        issue: 'Platform payment settings could not be verified.',
+      },
+    };
+  }
+  const settings = settingsRows[0];
+  if (!UUID_PATTERN.test(String(settings?.id || '')) || typeof settings?.payments_enabled !== 'boolean') {
+    return {
+      payment_switch: { ready: false, state: 'invalid', updated_at: null },
+      activation_receipt: {
+        required: false, ready: false, activated_at: null, actor_recorded: false,
+        issue: 'Platform payment settings are invalid.',
+      },
+    };
+  }
+
+  const updatedAt = String(settings.updated_at || '');
+  const versionTime = Date.parse(updatedAt);
+  const state = settings.payments_enabled ? 'enabled' : 'paused';
+  const paymentSwitch = {
+    ready: Number.isFinite(versionTime),
+    state,
+    updated_at: Number.isFinite(versionTime) ? new Date(versionTime).toISOString() : null,
+  };
+  if (!settings.payments_enabled) {
+    return {
+      payment_switch: paymentSwitch,
+      activation_receipt: {
+        required: false, ready: true, activated_at: null, actor_recorded: false, issue: null,
+      },
+    };
+  }
+
+  const matchingReceipt = !auditError && Array.isArray(auditRows)
+    ? auditRows.find(row => (
+        row?.resource_id === settings.id
+        && row?.action === 'updated'
+        && UUID_PATTERN.test(String(row?.changed_by || ''))
+        && row?.previous_snapshot?.payments_enabled === false
+        && row?.new_snapshot?.payments_enabled === true
+        && Number.isFinite(versionTime)
+        && Date.parse(String(row?.new_snapshot?.updated_at || '')) === versionTime
+        && Number.isFinite(Date.parse(String(row?.created_at || '')))
+      ))
+    : null;
+  return {
+    payment_switch: paymentSwitch,
+    activation_receipt: matchingReceipt
+      ? {
+          required: true,
+          ready: true,
+          activated_at: new Date(Date.parse(matchingReceipt.created_at)).toISOString(),
+          actor_recorded: true,
+          issue: null,
+        }
+      : {
+          required: true,
+          ready: false,
+          activated_at: null,
+          actor_recorded: false,
+          issue: auditError
+            ? 'The immutable payment activation ledger could not be loaded.'
+            : 'Enabled payments do not have a matching immutable activation receipt.',
+        },
+  };
+}
+
+export async function loadPaymentActivationHealth(admin) {
+  const settingsResult = await admin
+    .from('admin_settings')
+    .select('id,payments_enabled,updated_at')
+    .limit(2);
+  if (settingsResult.error || settingsResult.data?.[0]?.payments_enabled !== true) {
+    return inspectPaymentActivationReceipt(settingsResult.data, settingsResult.error);
+  }
+  const auditResult = await admin
+    .from('admin_content_changes')
+    .select('resource_id,action,changed_by,previous_snapshot,new_snapshot,created_at')
+    .eq('resource_type', 'launch_settings')
+    .eq('resource_id', settingsResult.data[0].id)
+    .order('created_at', { ascending: false })
+    .limit(25);
+  return inspectPaymentActivationReceipt(
+    settingsResult.data,
+    settingsResult.error,
+    auditResult.data,
+    auditResult.error,
+  );
+}
+
 export async function inspectCommerceProducts(products, retrieveStripePrice, options = {}) {
   const issues = [];
   let stripePriceCount = 0;
@@ -326,7 +421,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
   const [
     fulfillmentReady, refundReconciliationReady, checkoutReconciliationReady,
     activationGuardReady, settingsContractReady, pendingOrderGuardReady,
-    orderTermsReady, webhookLedgerReady,
+    orderTermsReady, webhookLedgerReady, paymentActivation,
   ] = await Promise.all([
     paymentFulfillmentIsReady(admin),
     schemaCapabilityIsReady(admin, REFUND_RECONCILIATION_CAPABILITY),
@@ -336,6 +431,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     schemaCapabilityIsReady(admin, STRIPE_PENDING_ORDER_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_ORDER_TERMS_CAPABILITY),
     schemaCapabilityIsReady(admin, STRIPE_WEBHOOK_LEDGER_CAPABILITY),
+    loadPaymentActivationHealth(admin),
   ]);
   const webhookDelivery = webhookLedgerReady
     ? await inspectWebhookDeliveryHealth(admin)
@@ -354,6 +450,9 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     ...(orderTermsReady ? [] : [{ slug: 'database', reason: 'Immutable Stripe order terms are not installed.' }]),
     ...(webhookLedgerReady ? [] : [{ slug: 'database', reason: 'Stripe webhook delivery ledger is not installed.' }]),
     ...(webhookLedgerReady && !webhookDelivery.ready ? [{ slug: 'webhook-delivery', reason: webhookDelivery.issue }].filter(issue => issue.reason) : []),
+    ...(paymentActivation.activation_receipt.required && !paymentActivation.activation_receipt.ready
+      ? [{ slug: 'activation-receipt', reason: paymentActivation.activation_receipt.issue }]
+      : []),
   ];
   if (environment.missing.includes('STRIPE_SECRET_KEY')) {
     return {
@@ -372,6 +471,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       order_terms_ready: orderTermsReady,
       webhook_ledger_ready: webhookLedgerReady,
       webhook_delivery: webhookDelivery,
+      ...paymentActivation,
     };
   }
 
@@ -404,7 +504,9 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
       && pendingOrderGuardReady
       && orderTermsReady
       && webhookLedgerReady
-      && webhookDelivery.ready,
+      && webhookDelivery.ready
+      && paymentActivation.payment_switch.ready
+      && paymentActivation.activation_receipt.ready,
     mode: stripeMode,
     account: accountHealth,
     issues: [
@@ -425,6 +527,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     order_terms_ready: orderTermsReady,
     webhook_ledger_ready: webhookLedgerReady,
     webhook_delivery: webhookDelivery,
+    ...paymentActivation,
     webhook: webhookHealth,
   };
 }

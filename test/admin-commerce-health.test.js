@@ -6,6 +6,7 @@ import adminCommerceHealthHandler, {
   inspectCommerceEnvironment,
   inspectCommerceHealth,
   inspectCommerceProducts,
+  inspectPaymentActivationReceipt,
   inspectStripeAccount,
   inspectStripeWebhookEndpoints,
   inspectWebhookDeliveryHealth,
@@ -60,7 +61,13 @@ function paymentActivationAdmin(result) {
   };
 }
 
-function capabilityAdmin(capabilities, webhookRows = []) {
+function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
+  const settingsRows = options.settingsRows || [{
+    id: validActivationBody.settings_id,
+    payments_enabled: false,
+    updated_at: validActivationBody.expected_updated_at,
+  }];
+  const auditRows = options.auditRows || [];
   return {
     from(table) {
       if (table === 'stripe_webhook_events') {
@@ -71,6 +78,22 @@ function capabilityAdmin(capabilities, webhookRows = []) {
           in() { return query; },
           order() { return query; },
           async limit() { return { data: webhookRows, error: null }; },
+        };
+        return query;
+      }
+      if (table === 'admin_settings') {
+        const query = {
+          select() { return query; },
+          async limit() { return { data: settingsRows, error: options.settingsError || null }; },
+        };
+        return query;
+      }
+      if (table === 'admin_content_changes') {
+        const query = {
+          select() { return query; },
+          eq() { return query; },
+          order() { return query; },
+          async limit() { return { data: auditRows, error: options.auditError || null }; },
         };
         return query;
       }
@@ -92,6 +115,39 @@ function capabilityAdmin(capabilities, webhookRows = []) {
     },
   };
 }
+
+test('payment activation receipt must match the enabled settings version and actor', () => {
+  const settings = [{
+    id: validActivationBody.settings_id,
+    payments_enabled: true,
+    updated_at: '2026-07-16T03:05:00.000Z',
+  }];
+  const receipt = {
+    resource_id: validActivationBody.settings_id,
+    action: 'updated',
+    changed_by: '9bb45f52-9022-4b5b-933f-d8998dbe659f',
+    previous_snapshot: { payments_enabled: false },
+    new_snapshot: { payments_enabled: true, updated_at: '2026-07-16T03:05:00.000Z' },
+    created_at: '2026-07-16T03:05:00.100Z',
+  };
+
+  const verified = inspectPaymentActivationReceipt(settings, null, [receipt], null);
+  assert.equal(verified.payment_switch.state, 'enabled');
+  assert.equal(verified.activation_receipt.ready, true);
+  assert.equal(verified.activation_receipt.actor_recorded, true);
+  assert.equal(verified.activation_receipt.activated_at, receipt.created_at);
+
+  const stale = inspectPaymentActivationReceipt(settings, null, [{
+    ...receipt,
+    new_snapshot: { ...receipt.new_snapshot, updated_at: '2026-07-16T03:04:00.000Z' },
+  }], null);
+  assert.equal(stale.activation_receipt.ready, false);
+  assert.match(stale.activation_receipt.issue, /matching immutable activation receipt/);
+
+  const paused = inspectPaymentActivationReceipt([{ ...settings[0], payments_enabled: false }], null);
+  assert.equal(paused.activation_receipt.required, false);
+  assert.equal(paused.activation_receipt.ready, true);
+});
 
 function readyStripe() {
   return {
@@ -210,6 +266,27 @@ test('commerce readiness cannot pass without the guarded activation capability',
   assert.equal(complete.order_terms_ready, true);
   assert.equal(complete.webhook_ledger_ready, true);
   assert.equal(complete.webhook_delivery.ready, true);
+  assert.equal(complete.payment_switch.state, 'paused');
+  assert.equal(complete.activation_receipt.required, false);
+
+  const enabledWithoutReceipt = await inspectCommerceHealth({
+    admin: capabilityAdmin(completeCommerceCapabilities, [], {
+      settingsRows: [{
+        id: validActivationBody.settings_id,
+        payments_enabled: true,
+        updated_at: '2026-07-16T03:05:00.000Z',
+      }],
+    }),
+    products,
+    environment,
+    stripe: readyStripe(),
+  });
+  assert.equal(enabledWithoutReceipt.ready, false);
+  assert.equal(enabledWithoutReceipt.activation_receipt.ready, false);
+  assert.match(
+    enabledWithoutReceipt.issues.find(issue => issue.slug === 'activation-receipt')?.reason || '',
+    /matching immutable activation receipt/,
+  );
 
   const missingRefundReconciliation = await inspectCommerceHealth({
     admin: capabilityAdmin(new Set([...completeCommerceCapabilities].filter(capability => capability !== 'stripe_refund_reconciliation'))),
@@ -601,6 +678,8 @@ test('admin operations health calls the authenticated commerce endpoint', async 
   assert.match(source, /healthCheck\('commerce-config', 'Stripe checkout'/);
   assert.match(source, /Missing server settings:/);
   assert.match(source, /Set the missing values in Vercel/);
+  assert.match(source, /payments \$\{paymentState\}/);
+  assert.match(source, /immutable activation receipt verified/);
   assert.match(source, /action: 'resolve_stripe_review'/);
   assert.match(source, /confirmation: 'MARK HANDLED'/);
 });

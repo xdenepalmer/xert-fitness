@@ -46,13 +46,14 @@ test('release gates require guarded payment activation everywhere', async () => 
   assert.match(runbook, /thirteen `PASS` results/);
   assert.match(runbook, /stripe:launch:check[\s\S]*payment switch is still \*\*PAUSED\*\*/);
   assert.match(runbook, /stripe:launch:verify[\s\S]*payment switch to be \*\*ENABLED\*\*/);
-  assert.match(runbook, /Do not run a real card until this command passes/);
+  assert.match(runbook, /Do not run a real card[\s\S]*until this command passes/);
   const scripts = JSON.parse(packageSource).scripts;
   assert.match(scripts['stripe:launch:check'], /--mode=live --expect-payments=paused$/);
   assert.match(scripts['stripe:launch:verify'], /--mode=live --expect-payments=enabled$/);
   assert.match(scripts['stripe:test:check'], /--mode=test --expect-payments=paused$/);
   assert.match(scripts['stripe:test:verify'], /--mode=test --expect-payments=enabled$/);
-  assert.match(preflight, /from\('admin_settings'\)[\s\S]*select\('id,payments_enabled,updated_at'\)[\s\S]*limit\(2\)/);
+  assert.match(preflight, /loadPaymentActivationHealth\(supabase\)/);
+  assert.match(preflight, /Immutable activation receipt/);
   assert.match(preflight, /boundary\.ready && catalogReady && webhook\.ready && paymentSwitch\.ready/);
   assert.match(preflight, /const \[boundary, catalog, webhook\] = await Promise\.all[\s\S]*const paymentSwitch = await inspectSwitch/);
 });

@@ -3092,6 +3092,22 @@ private struct AdminOperationsHealthView: View {
             if let commerce = admin.commerceHealth {
                 Section("Stripe launch checklist") {
                     HealthValueRow(label: "Mode", value: commerce.mode?.uppercased() ?? "Unknown")
+                    HealthValueRow(
+                        label: "Payment switch",
+                        value: commerce.payment_switch?.state.uppercased() ?? "UNKNOWN"
+                    )
+                    HealthCheckRow(
+                        label: commerce.activation_receipt?.required == true
+                            ? "Activation receipt"
+                            : "Activation receipt (when enabled)",
+                        ready: commerce.activation_receipt?.ready == true
+                    )
+                    if let activatedAt = commerce.activation_receipt?.activated_at {
+                        HealthValueRow(
+                            label: "Activated",
+                            value: activatedAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    }
                     HealthCheckRow(label: "Business verification", ready: commerce.account?.details_submitted == true)
                     HealthCheckRow(label: "Charges enabled", ready: commerce.account?.charges_enabled == true)
                     HealthCheckRow(label: "Payouts enabled", ready: commerce.account?.payouts_enabled == true)

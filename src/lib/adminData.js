@@ -1378,9 +1378,15 @@ export async function getOperationsHealth() {
             : 'Resolve each item in Stripe and Session Packs, redeploy if settings changed, then refresh this check.'
         };
       }
+      const paymentState = String(result.payment_switch?.state || 'unknown').toUpperCase();
+      const activationProof = result.activation_receipt?.required
+        ? `immutable activation receipt verified${result.activation_receipt.activated_at
+          ? ` at ${new Date(result.activation_receipt.activated_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}`
+          : ''}`
+        : 'activation receipt required when enabled';
       return {
         count: result.active_product_count,
-        detail: `${String(result.mode || 'unknown').toUpperCase()} mode: ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`,
+        detail: `${String(result.mode || 'unknown').toUpperCase()} mode: payments ${paymentState}; ${activationProof}. ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`,
         incidents: result.webhook_delivery?.incidents || []
       };
     }),

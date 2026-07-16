@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { inspectStripeReadiness, printReport } from './check-stripe-readiness.mjs';
 import { inspectCatalogLinkEnvironment, linkStripeCatalog } from './link-stripe-catalog.mjs';
-import { inspectStripeWebhookEndpoints } from '../api/admin-commerce-health.js';
+import { inspectStripeWebhookEndpoints, loadPaymentActivationHealth } from '../api/admin-commerce-health.js';
 
 export function parseStripeLaunchArgs(args) {
   const modeArgs = args.filter(arg => arg.startsWith('--mode='));
@@ -28,31 +28,21 @@ export function parseStripeLaunchArgs(args) {
   return { mode, expectPayments };
 }
 
-export function inspectPaymentSwitch(rows, error, expectedState) {
-  if (error) {
-    return {
-      ready: false,
-      state: 'unknown',
-      expected: expectedState,
-      issue: 'Platform payment settings could not be loaded.',
-    };
-  }
-  if (!Array.isArray(rows) || rows.length !== 1 || typeof rows[0]?.payments_enabled !== 'boolean') {
-    return {
-      ready: false,
-      state: 'invalid',
-      expected: expectedState,
-      issue: 'Platform payment settings must contain exactly one valid payment switch.',
-    };
-  }
-  const state = rows[0].payments_enabled ? 'enabled' : 'paused';
+export function inspectPaymentSwitch(paymentActivation, expectedState) {
+  const state = paymentActivation?.payment_switch?.state || 'unknown';
+  const receipt = paymentActivation?.activation_receipt || {
+    required: expectedState === 'enabled', ready: false, activated_at: null,
+  };
+  const stateReady = paymentActivation?.payment_switch?.ready === true && state === expectedState;
+  const receiptReady = expectedState !== 'enabled' || receipt.ready === true;
   return {
-    ready: state === expectedState,
+    ready: stateReady && receiptReady,
     state,
     expected: expectedState,
-    issue: state === expectedState
-      ? null
-      : `Platform payments are ${state}; this gate requires ${expectedState}.`,
+    receipt,
+    issue: !stateReady
+      ? `Platform payments are ${state}; this gate requires ${expectedState}.`
+      : receiptReady ? null : receipt.issue || 'Payment activation receipt is missing.',
   };
 }
 
@@ -98,11 +88,8 @@ export async function inspectStripeLaunchPreflight({
     const supabase = createClient(privateEnvironment.supabaseUrl, privateEnvironment.serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data, error } = await supabase
-      .from('admin_settings')
-      .select('id,payments_enabled,updated_at')
-      .limit(2);
-    return inspectPaymentSwitch(data, error, expectPayments);
+    const activation = await loadPaymentActivationHealth(supabase);
+    return inspectPaymentSwitch(activation, expectPayments);
   });
   const catalogMessages = [];
   const [boundary, catalog, webhook] = await Promise.all([
@@ -157,6 +144,12 @@ export function printStripeLaunchPreflight(report) {
   console.log(
     `${report.paymentSwitch.ready ? 'PASS' : 'FAIL'}  Platform payment switch: ${report.paymentSwitch.state.toUpperCase()} (expected ${report.paymentSwitch.expected.toUpperCase()}).`
   );
+  if (report.paymentSwitch.expected === 'enabled') {
+    const receipt = report.paymentSwitch.receipt;
+    console.log(
+      `${receipt?.ready ? 'PASS' : 'FAIL'}  Immutable activation receipt: ${receipt?.ready ? `verified at ${receipt.activated_at}` : receipt?.issue || 'missing'}.`
+    );
+  }
   if (!report.paymentSwitch.ready) {
     console.log(report.paymentSwitch.expected === 'enabled'
       ? '      NEXT: Use Admin > Platform Controls to complete guarded payment activation, then rerun npm run stripe:launch:verify.'

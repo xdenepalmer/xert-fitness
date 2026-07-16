@@ -126,6 +126,9 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func grantCredits/);
   assert.match(adminStore, /func setMemberRole/);
   assert.match(view, /AdminOrderDetailView/);
+  assert.match(view, /Payment switch/);
+  assert.match(view, /Activation receipt/);
+  assert.match(adminModels, /struct ActivationReceipt: Codable, Hashable/);
   assert.match(view, /Type REFUND to confirm/);
   assert.match(view, /Check and reconcile payment/);
   assert.match(api, /func adminOrders/);

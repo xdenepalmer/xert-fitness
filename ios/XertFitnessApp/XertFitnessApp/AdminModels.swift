@@ -901,6 +901,20 @@ struct AdminCommerceHealth: Codable, Hashable {
         let issue: String?
     }
 
+    struct PaymentSwitch: Codable, Hashable {
+        let ready: Bool
+        let state: String
+        let updated_at: Date?
+    }
+
+    struct ActivationReceipt: Codable, Hashable {
+        let required: Bool
+        let ready: Bool
+        let activated_at: Date?
+        let actor_recorded: Bool
+        let issue: String?
+    }
+
     let ready: Bool
     let active_product_count: Int
     let stripe_price_count: Int
@@ -915,6 +929,8 @@ struct AdminCommerceHealth: Codable, Hashable {
     let order_terms_ready: Bool?
     let webhook_ledger_ready: Bool?
     let webhook_delivery: WebhookDelivery?
+    let payment_switch: PaymentSwitch?
+    let activation_receipt: ActivationReceipt?
     let mode: String?
     let account: StripeAccount?
     let webhook: Webhook?

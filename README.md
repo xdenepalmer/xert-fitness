@@ -62,8 +62,8 @@ cutover and rollback sequence.
 
 The live cutover uses two read-only gates: `npm run stripe:launch:check` requires
 checkout to remain paused while configuration is verified, then
-`npm run stripe:launch:verify` proves guarded activation is retained before the
-first real card purchase.
+`npm run stripe:launch:verify` proves guarded activation is retained and has a
+matching immutable admin audit receipt before the first real card purchase.
 
 ## Database
 

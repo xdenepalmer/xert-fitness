@@ -160,8 +160,10 @@ because it is the pre-activation gate. Use the separate post-activation proof:
 npm run stripe:launch:verify
 ```
 
-This repeats the complete live inspection but requires the authoritative platform
-payment switch to be **ENABLED**. Do not run a real card until this command passes.
+This repeats the complete live inspection, requires the authoritative platform
+payment switch to be **ENABLED**, and matches its immutable activation receipt
+to the exact settings version and recorded admin actor. Do not run a real card
+until this command passes.
 
 ## 5. Test Purchase
 
