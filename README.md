@@ -34,6 +34,8 @@ Preview). They are secret and must never be committed or exposed to the client:
 SUPABASE_SERVICE_ROLE_KEY=...   # Supabase → Settings → API → service_role (SECRET)
 STRIPE_SECRET_KEY=sk_live_...   # or sk_test_... while testing
 STRIPE_WEBHOOK_SECRET=whsec_...  # from the Stripe webhook endpoint you create
+# Optional only during signing-secret rotation:
+STRIPE_WEBHOOK_SECRET_PREVIOUS=whsec_...
 ```
 
 Set this non-secret server configuration as well, using the canonical public
@@ -64,6 +66,13 @@ The live cutover uses two read-only gates: `npm run stripe:launch:check` require
 checkout to remain paused while configuration is verified, then
 `npm run stripe:launch:verify` proves guarded activation is retained and has a
 matching immutable admin audit receipt before the first real card purchase.
+
+For zero-downtime webhook secret rotation, first move the currently active
+secret into `STRIPE_WEBHOOK_SECRET_PREVIOUS`, install the new endpoint secret as
+`STRIPE_WEBHOOK_SECRET`, and redeploy. After Stripe deliveries verify against
+the new secret, remove `STRIPE_WEBHOOK_SECRET_PREVIOUS` and redeploy again. The
+two values must be distinct; the previous slot is optional and never a permanent
+substitute for the primary secret.
 
 ## Database
 

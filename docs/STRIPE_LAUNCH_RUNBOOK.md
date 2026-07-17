@@ -45,6 +45,8 @@ Set these in the Production environment and redeploy:
 ```text
 STRIPE_SECRET_KEY=sk_test_...       # use sk_live_... only at live cutover
 STRIPE_WEBHOOK_SECRET=whsec_...
+# Optional and temporary during signing-secret rotation only:
+STRIPE_WEBHOOK_SECRET_PREVIOUS=whsec_...
 SUPABASE_SERVICE_ROLE_KEY=...
 APP_BASE_URL=https://xert-fitness.vercel.app
 VITE_SUPABASE_URL=https://ugmkwoapjcpiucsrxwzt.supabase.co
@@ -105,6 +107,24 @@ a signed live event when the key is test. A `500` delivery mentioning an event
 mode mismatch means the Vercel key and webhook endpoint were created in
 different Stripe modes; correct the environment instead of replaying it across
 modes.
+
+### Rotate The Signing Secret
+
+Use the two-secret overlap only when replacing an active webhook signing secret:
+
+1. Copy the current `STRIPE_WEBHOOK_SECRET` value to
+   `STRIPE_WEBHOOK_SECRET_PREVIOUS`.
+2. Put the new Stripe endpoint signing secret in `STRIPE_WEBHOOK_SECRET`.
+3. Confirm the two values are distinct, then redeploy Vercel.
+4. Send or wait for a new Stripe delivery and confirm it succeeds with the new
+   primary secret.
+5. Remove `STRIPE_WEBHOOK_SECRET_PREVIOUS` and redeploy again.
+
+XERT always tries the primary secret first and attempts the previous secret at
+most once. A delivery accepted through the previous secret creates a value-free
+server warning with its request ID so the overlap can be detected and removed.
+Never store multiple secrets in one variable or leave the previous slot set
+after Stripe is delivering with the new secret.
 
 ## 4. Verify In XERT
 

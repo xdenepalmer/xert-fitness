@@ -67,6 +67,19 @@ export function inspectCommerceRuntimeEnvironment(environment = {}, options = {}
     ) {
       invalid.push('STRIPE_WEBHOOK_SECRET');
     }
+
+    const previousWebhookSecret = String(environment.STRIPE_WEBHOOK_SECRET_PREVIOUS || '');
+    if (
+      previousWebhookSecret
+      && (
+        previousWebhookSecret !== previousWebhookSecret.trim()
+        || /\s/.test(previousWebhookSecret)
+        || !/^whsec_[A-Za-z0-9_]+$/.test(previousWebhookSecret)
+        || previousWebhookSecret === webhookSecret
+      )
+    ) {
+      invalid.push('STRIPE_WEBHOOK_SECRET_PREVIOUS');
+    }
   }
 
   if (requireAppBaseURL) {

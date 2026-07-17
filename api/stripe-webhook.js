@@ -52,6 +52,28 @@ export function webhookRequestIssue({ contentType, signature, rawBody }) {
   return null;
 }
 
+export function webhookSigningSecrets(environment = {}) {
+  return [
+    String(environment.STRIPE_WEBHOOK_SECRET || ''),
+    String(environment.STRIPE_WEBHOOK_SECRET_PREVIOUS || ''),
+  ].filter(Boolean);
+}
+
+export async function constructVerifiedStripeEvent(webhooks, rawBody, signature, secrets) {
+  let verificationError;
+  for (const [index, secret] of secrets.slice(0, 2).entries()) {
+    try {
+      return {
+        event: await webhooks.constructEventAsync(rawBody, signature, secret),
+        usedPreviousSecret: index === 1,
+      };
+    } catch (error) {
+      verificationError = error;
+    }
+  }
+  throw verificationError || new Error('STRIPE_WEBHOOK_SECRET_UNAVAILABLE');
+}
+
 export { stripeModeForSecret };
 
 export function assertStripeEventMode(event, secretKey) {
@@ -450,7 +472,6 @@ export default async function handler(request, response) {
   const { json, text } = trace;
   if (request.method !== 'POST') return text('Method not allowed', 405);
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!inspectCommerceRuntimeEnvironment(process.env, { requireWebhookSecret: true }).ready) {
     return text('Webhook service is unavailable.', 503);
   }
@@ -469,7 +490,18 @@ export default async function handler(request, response) {
 
   let event;
   try {
-    event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
+    const verification = await constructVerifiedStripeEvent(
+      stripe.webhooks,
+      rawBody,
+      signature,
+      webhookSigningSecrets(process.env),
+    );
+    event = verification.event;
+    if (verification.usedPreviousSecret) {
+      console.warn('Stripe webhook verified with the previous signing secret.', {
+        requestId: trace.requestId,
+      });
+    }
   } catch (e) {
     console.warn('Stripe webhook signature rejected.', {
       requestId: trace.requestId,

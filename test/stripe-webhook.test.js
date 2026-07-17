@@ -19,7 +19,9 @@ import {
   stripeOperatorReviewForEvent,
   stripeModeForSecret,
   stripeWebhookErrorCode,
+  constructVerifiedStripeEvent,
   validStripeSignatureHeader,
+  webhookSigningSecrets,
   webhookRequestIssue,
 } from '../api/stripe-webhook.js';
 
@@ -105,6 +107,48 @@ test('webhook validates a bounded signed JSON envelope before Stripe parsing', (
     status: 413,
     message: 'Webhook body is too large.',
   });
+});
+
+test('webhook signing rotation prefers current secret and falls back once to previous', async () => {
+  assert.deepEqual(webhookSigningSecrets({
+    STRIPE_WEBHOOK_SECRET: 'whsec_current',
+    STRIPE_WEBHOOK_SECRET_PREVIOUS: 'whsec_previous',
+  }), ['whsec_current', 'whsec_previous']);
+
+  const calls = [];
+  const current = await constructVerifiedStripeEvent({
+    async constructEventAsync(_body, _signature, secret) {
+      calls.push(secret);
+      return { id: 'evt_current' };
+    },
+  }, '{}', 'signature', ['whsec_current', 'whsec_previous']);
+  assert.deepEqual(current, { event: { id: 'evt_current' }, usedPreviousSecret: false });
+  assert.deepEqual(calls, ['whsec_current']);
+
+  calls.length = 0;
+  const fallback = await constructVerifiedStripeEvent({
+    async constructEventAsync(_body, _signature, secret) {
+      calls.push(secret);
+      if (secret === 'whsec_current') throw new Error('signature mismatch');
+      return { id: 'evt_previous' };
+    },
+  }, '{}', 'signature', ['whsec_current', 'whsec_previous']);
+  assert.deepEqual(fallback, { event: { id: 'evt_previous' }, usedPreviousSecret: true });
+  assert.deepEqual(calls, ['whsec_current', 'whsec_previous']);
+});
+
+test('webhook signing rotation remains bounded and rejects when every secret fails', async () => {
+  const calls = [];
+  await assert.rejects(
+    constructVerifiedStripeEvent({
+      async constructEventAsync(_body, _signature, secret) {
+        calls.push(secret);
+        throw new Error('signature mismatch');
+      },
+    }, '{}', 'signature', ['whsec_current', 'whsec_previous', 'whsec_untrusted_third']),
+    /signature mismatch/,
+  );
+  assert.deepEqual(calls, ['whsec_current', 'whsec_previous']);
 });
 
 test('webhook public failures never echo Stripe or database exception messages', async () => {

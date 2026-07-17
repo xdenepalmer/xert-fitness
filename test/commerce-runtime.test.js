@@ -64,6 +64,27 @@ test('commerce runtime applies webhook and public URL requirements only when req
   }, { requireStripeSecret: false }).ready, true);
 });
 
+test('commerce runtime validates an optional distinct webhook rotation secret', () => {
+  assert.equal(inspectCommerceRuntimeEnvironment({
+    ...validEnvironment,
+    STRIPE_WEBHOOK_SECRET_PREVIOUS: 'whsec_previous_value',
+  }, { requireWebhookSecret: true }).ready, true);
+
+  for (const previous of [
+    validEnvironment.STRIPE_WEBHOOK_SECRET,
+    'previous_webhook_value',
+    'whsec_previous value',
+  ]) {
+    const result = inspectCommerceRuntimeEnvironment({
+      ...validEnvironment,
+      STRIPE_WEBHOOK_SECRET_PREVIOUS: previous,
+    }, { requireWebhookSecret: true });
+    assert.equal(result.ready, false);
+    assert.ok(result.invalid.includes('STRIPE_WEBHOOK_SECRET_PREVIOUS'));
+    assert.doesNotMatch(JSON.stringify(result), /previous value|previous_webhook/);
+  }
+});
+
 test('money-moving handlers enforce runtime identity before clients or authentication', async () => {
   for (const [path, guard] of [
     ['../api/checkout.js', 'inspectCheckoutEnvironment(process.env)'],
