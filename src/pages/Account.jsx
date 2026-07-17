@@ -12,6 +12,7 @@ import { announcementAction } from '@/lib/memberAnnouncements';
 import {
   clearPendingWebCheckout,
   loadPendingWebCheckout,
+  pendingWebCheckoutForReturn,
   WEB_CHECKOUT_RETRY_DELAYS_MS,
   webCheckoutSettlement,
 } from '@/lib/webCheckoutRecovery';
@@ -151,7 +152,11 @@ export default function Account() {
     if (!purchaseSuccess || !session || !user?.id) return undefined;
     let cancelled = false;
     let timeoutID;
-    const pending = loadPendingWebCheckout(user.id);
+    const pending = pendingWebCheckoutForReturn({
+      userID: user.id,
+      checkoutSessionID: searchParams.get('checkout_session_id'),
+      storedPending: loadPendingWebCheckout(user.id),
+    });
     const commerceRequestID = ++commerceRequestIDRef.current;
     setPurchaseStatus('confirming');
 
@@ -174,6 +179,7 @@ export default function Account() {
             setPurchaseStatus(settlement);
             const nextParams = new URLSearchParams(searchParams);
             nextParams.delete('purchase');
+            nextParams.delete('checkout_session_id');
             setSearchParams(nextParams, { replace: true });
             return;
           }

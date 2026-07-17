@@ -54,11 +54,11 @@ test('live checkout requires the exact canonical XERT return origin', () => {
 
 test('uses a public app-return page for native checkout without changing web returns', () => {
   assert.deepEqual(resolveCheckoutReturnURLs('https://xertfitness.app', 'ios'), {
-    success: 'https://xertfitness.app/checkout-return?status=success',
+    success: 'https://xertfitness.app/checkout-return?status=success&checkout_session_id={CHECKOUT_SESSION_ID}',
     cancel: 'https://xertfitness.app/checkout-return?status=cancelled',
   });
   assert.deepEqual(resolveCheckoutReturnURLs('https://xertfitness.app'), {
-    success: 'https://xertfitness.app/account?purchase=success',
+    success: 'https://xertfitness.app/account?purchase=success&checkout_session_id={CHECKOUT_SESSION_ID}',
     cancel: 'https://xertfitness.app/booking?purchase=cancelled',
   });
   assert.throws(

@@ -668,13 +668,17 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func reconcileCheckout() async {
+    func reconcileCheckout(callbackSessionID: String? = nil) async {
         guard
             let userID = authSession?.user?.id,
             !isReconcilingCheckout
         else { return }
         let memberVersion = memberStateVersion.snapshot
-        let pendingCheckout = PendingCheckoutStore.load(for: userID)
+        let pendingCheckout = PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: callbackSessionID,
+            baselineOrderIDs: Set(orders.map(\.id))
+        )
         isCheckoutConfirmationPending = pendingCheckout != nil
         isReconcilingCheckout = true
         defer {

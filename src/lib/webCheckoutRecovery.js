@@ -2,6 +2,13 @@ const STORAGE_KEY = 'xert:pending-web-checkout:v1';
 const MAXIMUM_AGE_MS = 24 * 60 * 60 * 1000;
 const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHECKOUT_SESSION_PATTERN = /^cs_(?:test|live)_[A-Za-z0-9]+$/;
+const CHECKOUT_SESSION_MAX_LENGTH = 255;
+
+function isCheckoutSessionID(value) {
+  return typeof value === 'string'
+    && value.length <= CHECKOUT_SESSION_MAX_LENGTH
+    && CHECKOUT_SESSION_PATTERN.test(value);
+}
 
 export const WEB_CHECKOUT_RETRY_DELAYS_MS = [0, 2_000, 3_000, 5_000];
 
@@ -12,7 +19,7 @@ export function savePendingWebCheckout(
 ) {
   const normalizedUserID = String(userID || '').trim().toLowerCase();
   const normalizedSessionID = String(checkoutSessionID || '').trim();
-  if (!USER_ID_PATTERN.test(normalizedUserID) || !CHECKOUT_SESSION_PATTERN.test(normalizedSessionID)) {
+  if (!USER_ID_PATTERN.test(normalizedUserID) || !isCheckoutSessionID(normalizedSessionID)) {
     throw new Error('Checkout returned an invalid confirmation identity. No redirect was opened.');
   }
   const pending = { userID: normalizedUserID, checkoutSessionID: normalizedSessionID, startedAt: now };
@@ -35,7 +42,7 @@ export function loadPendingWebCheckout(
     const validAge = Number.isFinite(pending?.startedAt)
       && pending.startedAt <= now
       && now - pending.startedAt <= MAXIMUM_AGE_MS;
-    if (matchesUser && validAge && CHECKOUT_SESSION_PATTERN.test(pending?.checkoutSessionID || '')) {
+    if (matchesUser && validAge && isCheckoutSessionID(pending?.checkoutSessionID)) {
       return pending;
     }
   } catch {
@@ -51,6 +58,36 @@ export function clearPendingWebCheckout(storage = globalThis.localStorage) {
   } catch {
     // No cleanup is possible when storage is unavailable.
   }
+}
+
+export function pendingWebCheckoutForReturn({
+  userID,
+  checkoutSessionID,
+  storedPending = null,
+  now = Date.now(),
+}) {
+  const normalizedUserID = String(userID || '').trim().toLowerCase();
+  const normalizedSessionID = String(checkoutSessionID || '').trim();
+  const storedAge = now - Number(storedPending?.startedAt);
+  const hasValidStoredPending = (
+    storedPending?.userID === normalizedUserID
+    && isCheckoutSessionID(storedPending?.checkoutSessionID)
+    && Number.isFinite(storedAge)
+    && storedAge >= 0
+    && storedAge <= MAXIMUM_AGE_MS
+  );
+  if (hasValidStoredPending) return storedPending;
+
+  if (
+    !USER_ID_PATTERN.test(normalizedUserID)
+    || !isCheckoutSessionID(normalizedSessionID)
+  ) return null;
+
+  return {
+    userID: normalizedUserID,
+    checkoutSessionID: normalizedSessionID,
+    startedAt: now,
+  };
 }
 
 export function webCheckoutSettlement(pending, orders) {

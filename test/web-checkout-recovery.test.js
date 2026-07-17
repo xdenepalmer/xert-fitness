@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   clearPendingWebCheckout,
   loadPendingWebCheckout,
+  pendingWebCheckoutForReturn,
   savePendingWebCheckout,
   WEB_CHECKOUT_RETRY_DELAYS_MS,
   webCheckoutSettlement,
@@ -40,6 +41,13 @@ test('web checkout recovery is user-bound, validated and expires after 24 hours'
     () => savePendingWebCheckout({ userID: USER_ID, checkoutSessionID: 'not-a-session' }, storage, startedAt),
     /invalid confirmation identity/,
   );
+  assert.throws(
+    () => savePendingWebCheckout({
+      userID: USER_ID,
+      checkoutSessionID: `cs_test_${'A'.repeat(256)}`,
+    }, storage, startedAt),
+    /invalid confirmation identity/,
+  );
   clearPendingWebCheckout(storage);
 });
 
@@ -52,6 +60,38 @@ test('web checkout recovery settles only the exact Stripe session order', () => 
   assert.equal(webCheckoutSettlement(pending, [{ stripe_checkout_session_id: SESSION_ID, status: 'refunded' }]), 'refunded');
   assert.equal(webCheckoutSettlement(pending, [{ stripe_checkout_session_id: SESSION_ID, status: 'failed' }]), 'failed');
   assert.deepEqual(WEB_CHECKOUT_RETRY_DELAYS_MS, [0, 2_000, 3_000, 5_000]);
+});
+
+test('Stripe return identity recovers without storage but cannot replace a valid stored handoff', () => {
+  const now = 1_800_000_000_000;
+  const returned = pendingWebCheckoutForReturn({
+    userID: USER_ID,
+    checkoutSessionID: SESSION_ID,
+    now,
+  });
+  assert.deepEqual(returned, {
+    userID: USER_ID,
+    checkoutSessionID: SESSION_ID,
+    startedAt: now,
+  });
+
+  const stored = {
+    userID: USER_ID,
+    checkoutSessionID: 'cs_test_StoredIdentity',
+    startedAt: now - 1_000,
+  };
+  assert.equal(pendingWebCheckoutForReturn({
+    userID: USER_ID,
+    checkoutSessionID: SESSION_ID,
+    storedPending: stored,
+    now,
+  }), stored);
+  assert.equal(pendingWebCheckoutForReturn({
+    userID: OTHER_USER_ID,
+    checkoutSessionID: 'not-a-session',
+    storedPending: stored,
+    now,
+  }), null);
 });
 
 test('web checkout handoff persists exact recovery identity and clears cancelled returns', async () => {
@@ -68,6 +108,9 @@ test('web checkout handoff persists exact recovery identity and clears cancelled
   assert.match(bookingData, /savePendingWebCheckout\(\{ userID: session\.user\.id, checkoutSessionID \}\)/);
   assert.ok(bookingData.indexOf('savePendingWebCheckout') < bookingData.indexOf('window.location.href = url'));
   assert.match(account, /webCheckoutSettlement\(pending, loadedOrders\)/);
+  assert.match(account, /pendingWebCheckoutForReturn\(/);
+  assert.match(account, /searchParams\.get\('checkout_session_id'\)/);
+  assert.match(account, /nextParams\.delete\('checkout_session_id'\)/);
   assert.match(account, /commerceRequestID === commerceRequestIDRef\.current/);
   assert.match(account, /setPurchaseStatus\('delayed'\)/);
   assert.match(account, /Payment confirmed/);

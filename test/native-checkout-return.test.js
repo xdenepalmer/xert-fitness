@@ -50,10 +50,13 @@ test('native app accepts only the XERT checkout callback and refreshes member da
   assert.match(deepLink, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
   assert.match(deepLink, /url\.host\?\.lowercased\(\) == "checkout"/);
   assert.match(deepLink, /CheckoutReturnStatus\(rawValue: value\)/);
+  assert.match(deepLink, /enum CheckoutSessionIdentity/);
+  assert.match(deepLink, /CheckoutSessionIdentity\.normalize\(suppliedSessionID\)/);
+  assert.match(deepLink, /CheckoutCallback\(status: status, checkoutSessionID: suppliedSessionID\)/);
   assert.match(root, /\.onOpenURL/);
-  assert.match(root, /CheckoutDeepLink\.status\(from: url\)/);
+  assert.match(root, /CheckoutDeepLink\.callback\(from: url\)/);
   assert.match(root, /openMemberRoute\(\.purchaseConfirmation, source: \.checkout\)/);
-  assert.match(root, /status == \.success[\s\S]*store\.reconcileCheckout\(\)/);
+  assert.match(root, /callback\.status == \.success[\s\S]*store\.reconcileCheckout\([\s\S]*callbackSessionID: callback\.checkoutSessionID/);
 });
 
 test('native app polls bounded order and credit state while Stripe fulfilment settles', () => {
@@ -72,7 +75,9 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(store, /async let orderRequest = api\.orders/);
   assert.match(store, /checkoutSessionID: checkout\.checkout_session_id/);
   assert.match(store, /PendingCheckoutStore\.save\(PendingCheckout\(/);
-  assert.match(store, /let pendingCheckout = PendingCheckoutStore\.load\(for: userID\)/);
+  assert.match(store, /let pendingCheckout = PendingCheckoutStore\.resolve\(/);
+  assert.match(store, /callbackSessionID: callbackSessionID/);
+  assert.match(store, /baselineOrderIDs: Set\(orders\.map\(\\\.id\)\)/);
   assert.match(store, /CheckoutReconciliation\.settlement\([\s\S]*pendingCheckout: pendingCheckout/);
   assert.match(store, /PendingCheckoutStore\.clear\(\)/);
   assert.match(store, /await reconcilePendingCheckout\(\)/);
@@ -80,6 +85,7 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.doesNotMatch(api, /URLQueryItem\(name: "remaining", value: "gt\.0"\)/);
   assert.match(pendingStore, /checkout\.userID == userID/);
   assert.match(pendingStore, /let checkoutSessionID: String\?/);
+  assert.match(pendingStore, /CheckoutSessionIdentity\.normalize\(callbackSessionID\)/);
   assert.match(pendingStore, /now\.timeIntervalSince\(checkout\.startedAt\) <= maximumAge/);
   assert.match(booking, /Confirming purchase\.\.\./);
   assert.match(booking, /Purchase confirmation is taking longer than usual/);
@@ -88,6 +94,7 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(swiftTests, /creditBatch\(remaining: 0, orderID: newOrderID\)/);
   assert.match(swiftTests, /testPendingCheckoutRoundTripsForTheSameUser/);
   assert.match(swiftTests, /testPendingCheckoutRejectsAnotherUserAndExpires/);
+  assert.match(swiftTests, /testPendingCheckoutRecoversFromAValidatedReturnWithoutReplacingStoredIdentity/);
 });
 
 test('native order fixtures preserve the purchased credit terms', () => {
@@ -104,7 +111,8 @@ test('cold launches and later foregrounds resume a pending native purchase', () 
 
 test('public checkout return page can reopen the app without requiring web auth', () => {
   assert.match(app, /path="\/checkout-return"/);
-  assert.match(page, /xertfitness:\/\/checkout\?status=\$\{status\}/);
+  assert.match(page, /callbackParams\.set\('checkout_session_id', checkoutSessionID\)/);
+  assert.match(page, /xertfitness:\/\/checkout\?\$\{callbackParams\.toString\(\)\}/);
   assert.match(page, /Payment received/);
   assert.match(page, /No payment was taken/);
   assert.doesNotMatch(page, /useSupabaseAuth|AdminRoute/);

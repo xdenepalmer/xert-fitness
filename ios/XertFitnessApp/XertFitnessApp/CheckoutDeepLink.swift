@@ -24,17 +24,46 @@ enum CheckoutReturnStatus: String, Identifiable {
     }
 }
 
+struct CheckoutCallback: Equatable {
+    let status: CheckoutReturnStatus
+    let checkoutSessionID: String?
+}
+
+enum CheckoutSessionIdentity {
+    private static let checkoutSessionPattern = #"^cs_(?:test|live)_[A-Za-z0-9]+$"#
+
+    static func normalize(_ value: String?) -> String? {
+        guard let value, value.count <= 255, value.range(
+            of: checkoutSessionPattern,
+            options: .regularExpression
+        ) != nil else { return nil }
+        return value
+    }
+}
+
 enum CheckoutDeepLink {
-    static func status(from url: URL) -> CheckoutReturnStatus? {
+    static func callback(from url: URL) -> CheckoutCallback? {
         guard
             url.scheme?.lowercased() == "xertfitness",
             url.host?.lowercased() == "checkout",
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            let value = components.queryItems?.first(where: { $0.name == "status" })?.value
+            let value = components.queryItems?.first(where: { $0.name == "status" })?.value,
+            let status = CheckoutReturnStatus(rawValue: value)
         else {
             return nil
         }
-        return CheckoutReturnStatus(rawValue: value)
+
+        let suppliedSessionID = components.queryItems?
+            .first(where: { $0.name == "checkout_session_id" })?
+            .value
+        if let suppliedSessionID {
+            guard CheckoutSessionIdentity.normalize(suppliedSessionID) != nil else { return nil }
+        }
+        return CheckoutCallback(status: status, checkoutSessionID: suppliedSessionID)
+    }
+
+    static func status(from url: URL) -> CheckoutReturnStatus? {
+        callback(from: url)?.status
     }
 }
 

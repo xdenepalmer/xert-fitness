@@ -8,6 +8,13 @@ export default function CheckoutReturn() {
   const [searchParams] = useSearchParams();
   const successful = searchParams.get('status') === 'success';
   const status = successful ? 'success' : 'cancelled';
+  const checkoutSessionID = searchParams.get('checkout_session_id') || '';
+  const hasValidCheckoutSession = checkoutSessionID.length <= 255
+    && /^cs_(?:test|live)_[A-Za-z0-9]+$/.test(checkoutSessionID);
+  const callbackParams = new URLSearchParams({ status });
+  if (successful && hasValidCheckoutSession) {
+    callbackParams.set('checkout_session_id', checkoutSessionID);
+  }
   const Icon = successful ? CheckCircle2 : XCircle;
 
   return (
@@ -28,7 +35,7 @@ export default function CheckoutReturn() {
               : 'No payment was taken. Return to the XERT app whenever you are ready.'}
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a className="xert-btn-primary px-5 py-3 text-center font-display text-sm uppercase" href={`xertfitness://checkout?status=${status}`}>
+            <a className="xert-btn-primary px-5 py-3 text-center font-display text-sm uppercase" href={`xertfitness://checkout?${callbackParams.toString()}`}>
               Return to XERT app
             </a>
             <Link className="xert-btn-ghost px-5 py-3 text-center font-display text-sm uppercase" to="/booking">

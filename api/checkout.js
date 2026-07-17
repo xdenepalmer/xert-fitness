@@ -183,13 +183,13 @@ export function resolveCheckoutOrigin(requestUrl, appBaseUrl = '', options = {})
 export function resolveCheckoutReturnURLs(origin, returnTarget = 'web') {
   if (returnTarget === 'ios') {
     return {
-      success: `${origin}/checkout-return?status=success`,
+      success: `${origin}/checkout-return?status=success&checkout_session_id={CHECKOUT_SESSION_ID}`,
       cancel: `${origin}/checkout-return?status=cancelled`,
     };
   }
   if (returnTarget === 'web') {
     return {
-      success: `${origin}/account?purchase=success`,
+      success: `${origin}/account?purchase=success&checkout_session_id={CHECKOUT_SESSION_ID}`,
       cancel: `${origin}/booking?purchase=cancelled`,
     };
   }

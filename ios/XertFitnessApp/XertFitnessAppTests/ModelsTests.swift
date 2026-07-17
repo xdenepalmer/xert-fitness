@@ -1368,6 +1368,43 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
     }
 
+    func testPendingCheckoutRecoversFromAValidatedReturnWithoutReplacingStoredIdentity() throws {
+        let suiteName = "PendingCheckoutReturnTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let baselineOrderIDs: Set<UUID> = [UUID()]
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let recovered = try XCTUnwrap(PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: "cs_test_ReturnRecovery123",
+            baselineOrderIDs: baselineOrderIDs,
+            now: now,
+            defaults: defaults
+        ))
+        XCTAssertEqual(recovered.checkoutSessionID, "cs_test_ReturnRecovery123")
+        XCTAssertEqual(recovered.baselineOrderIDs, baselineOrderIDs)
+
+        let stored = try XCTUnwrap(PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: "cs_test_DifferentReturn456",
+            baselineOrderIDs: [],
+            now: now.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertEqual(stored, recovered)
+
+        PendingCheckoutStore.clear(defaults: defaults)
+        XCTAssertNil(PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: "not-stripe",
+            baselineOrderIDs: baselineOrderIDs,
+            now: now,
+            defaults: defaults
+        ))
+    }
+
     func testPrivacyLockPreferenceRoundTripsAndOnlyLocksSignedInMembers() throws {
         let suiteName = "AppPrivacyLockTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1720,6 +1757,28 @@ final class ModelsTests: XCTestCase {
             credits: [],
             orders: [order(id: expectedOrderID, status: "refunded", checkoutSessionID: "cs_test_exact")]
         ), .refunded)
+    }
+
+    func testCheckoutCallbackCarriesOnlyAValidatedStripeSessionIdentity() throws {
+        let callback = try XCTUnwrap(CheckoutDeepLink.callback(from: try XCTUnwrap(
+            URL(string: "xertfitness://checkout?status=success&checkout_session_id=cs_test_XertReturn123")
+        )))
+        XCTAssertEqual(callback.status, .success)
+        XCTAssertEqual(callback.checkoutSessionID, "cs_test_XertReturn123")
+
+        let legacy = try XCTUnwrap(CheckoutDeepLink.callback(from: try XCTUnwrap(
+            URL(string: "xertfitness://checkout?status=cancelled")
+        )))
+        XCTAssertEqual(legacy.status, .cancelled)
+        XCTAssertNil(legacy.checkoutSessionID)
+
+        XCTAssertNil(CheckoutDeepLink.callback(from: try XCTUnwrap(
+            URL(string: "xertfitness://checkout?status=success&checkout_session_id=not-stripe")
+        )))
+        XCTAssertNil(CheckoutSessionIdentity.normalize("cs_test_" + String(repeating: "A", count: 256)))
+        XCTAssertNil(CheckoutDeepLink.callback(from: try XCTUnwrap(
+            URL(string: "other://checkout?status=success&checkout_session_id=cs_test_XertReturn123")
+        )))
     }
 
     func testOrderDecodesPurchaseHistoryAndFormatsMemberFacingValues() throws {

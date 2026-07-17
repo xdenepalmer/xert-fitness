@@ -49,6 +49,29 @@ enum PendingCheckoutStore {
         return checkout
     }
 
+    static func resolve(
+        for userID: UUID,
+        callbackSessionID: String?,
+        baselineOrderIDs: Set<UUID>,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard
+    ) -> PendingCheckout? {
+        if let stored = load(for: userID, now: now, defaults: defaults) {
+            return stored
+        }
+        guard let checkoutSessionID = CheckoutSessionIdentity.normalize(callbackSessionID) else {
+            return nil
+        }
+        let recovered = PendingCheckout(
+            userID: userID,
+            baselineOrderIDs: baselineOrderIDs,
+            startedAt: now,
+            checkoutSessionID: checkoutSessionID
+        )
+        save(recovered, defaults: defaults)
+        return recovered
+    }
+
     static func clear(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: storageKey)
     }

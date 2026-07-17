@@ -653,12 +653,16 @@ struct RootView: View {
     }
 
     private func handleOpenURL(_ url: URL) {
-        if let status = CheckoutDeepLink.status(from: url) {
-            checkoutReturnStatus = status
+        if let callback = CheckoutDeepLink.callback(from: url) {
+            checkoutReturnStatus = callback.status
             let canReconcile = openMemberRoute(.purchaseConfirmation, source: .checkout)
             Task {
-                if status == .success {
-                    if canReconcile { await store.reconcileCheckout() }
+                if callback.status == .success {
+                    if canReconcile {
+                        await store.reconcileCheckout(
+                            callbackSessionID: callback.checkoutSessionID
+                        )
+                    }
                 } else {
                     store.cancelPendingCheckout()
                     await store.refresh()

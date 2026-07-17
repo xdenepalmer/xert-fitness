@@ -555,7 +555,7 @@ test('external native navigation defers private member tasks until authenticatio
   assert.match(root, /resumePendingProtectedNavigation\(\)[\s\S]*lockAndAuthenticate\(\)/);
   assert.match(root, /onContinueUserActivity[\s\S]*openMemberRoute\(route, source: \.handoff\)/);
   assert.match(root, /consumePendingQuickActionRoute[\s\S]*openMemberRoute\(route, source: \.quickAction\)/);
-  assert.match(root, /if canReconcile \{ await store\.reconcileCheckout\(\) \}/);
+  assert.match(root, /if canReconcile \{[\s\S]*store\.reconcileCheckout\([\s\S]*callbackSessionID: callback\.checkoutSessionID/);
   assert.match(root, /AccountView\([\s\S]*pendingNavigationTitle: pendingProtectedNavigation\?\.route\.navigationTitle/);
   assert.match(root, /private func selectMemberDestination\([\s\S]*guard navigation\.select\([\s\S]*allowsProtectedRoutes: store\.isSignedIn[\s\S]*else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);
   assert.match(root, /handleNavigationStep[\s\S]*guard navigation\.step\([\s\S]*allowsProtectedRoutes: store\.isSignedIn[\s\S]*else \{ return \}[\s\S]*cancelPendingProtectedNavigation\(\)/);

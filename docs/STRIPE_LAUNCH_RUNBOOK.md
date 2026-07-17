@@ -214,6 +214,12 @@ until this command passes.
 6. Confirm one paid order and exactly one credit batch appear.
 7. Repeat from iOS and confirm the app returns to XERT and refreshes credits.
 8. Retry or double-tap checkout and confirm XERT reuses the open unpaid session.
+   Complete one checkout after clearing or blocking browser storage and confirm
+   the account still resolves the exact order from Stripe's validated
+   `checkout_session_id` return value. On iOS, confirm the same server-authored
+   identity returns through the XERT callback and opens Purchase Confirmation.
+   The return identity selects only an order already owned by the signed-in
+   member; it never controls pricing, ownership, credits, or fulfilment.
 9. Start another checkout without paying, wait for Stripe to report it expired,
    then use **Admin > Finance > Check Stripe outcome**. Confirm XERT closes the
    pending order as failed and grants zero credits. This also recovers safely
