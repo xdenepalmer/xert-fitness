@@ -9,6 +9,7 @@ struct RootView: View {
     @SceneStorage("xert.memberRoute") private var restoredMemberRoute = XertMemberRoute.home.restorationValue
     @SceneStorage("xert.memberWorkspace") private var restoredMemberWorkspace = ""
     @StateObject private var navigation = XertNavigationCoordinator()
+    @StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
@@ -41,6 +42,7 @@ struct RootView: View {
         .onChange(of: scenePhase, perform: handleScenePhase)
         .onChange(of: store.isSignedIn) { isSignedIn in
             guard isSignedIn else {
+                ownerNavigationPulse.reset()
                 pinnedMemberRoutes = []
                 memberWorkspaceOrder = XertPrimaryDestination.dockOrder
                 isPrivacyUnlocked = true
@@ -61,10 +63,17 @@ struct RootView: View {
         }
         .onChange(of: store.profile?.role) { _ in
             resumePendingOwnerNavigation()
+            refreshOwnerNavigationPulse()
+        }
+        .onChange(of: showingAdminCommandCentre) { isPresented in
+            guard !isPresented else { return }
+            requestedAdminWorkspace = nil
+            refreshOwnerNavigationPulse(force: true)
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
             guard hasBootstrapped else { return }
             restoreMemberWorkspaceWhenReady()
+            refreshOwnerNavigationPulse()
             if !store.isSignedIn, navigation.containsProtectedHistory {
                 resetMemberNavigationAfterSignOut(clearPendingIntent: false)
             }
@@ -95,6 +104,7 @@ struct RootView: View {
             consumePendingReminderRoute()
             consumePendingAnnouncementRoute()
             consumePendingQuickActionRoute()
+            refreshOwnerNavigationPulse()
         }
         .onChange(of: navigation.route) { route in
             restoredMemberRoute = route.restorationValue
@@ -271,6 +281,7 @@ struct RootView: View {
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
             statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
+            ownerPulse: ownerNavigationPulse.snapshot,
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
@@ -292,6 +303,7 @@ struct RootView: View {
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
             statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
+            ownerPulse: ownerNavigationPulse.snapshot,
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
             pinnedRoutes: pinnedMemberRoutes,
@@ -496,8 +508,22 @@ struct RootView: View {
             Task {
                 await store.refresh()
                 await store.reconcilePendingCheckout()
+                await refreshOwnerNavigationPulseNow(force: true)
             }
         }
+    }
+
+    private func refreshOwnerNavigationPulse(force: Bool = false) {
+        Task { await refreshOwnerNavigationPulseNow(force: force) }
+    }
+
+    @MainActor
+    private func refreshOwnerNavigationPulseNow(force: Bool = false) async {
+        guard store.profile?.isAdmin == true, let session = store.authSession else {
+            ownerNavigationPulse.reset()
+            return
+        }
+        await ownerNavigationPulse.refresh(session: session, force: force)
     }
 
     private func lockAndAuthenticate() {
@@ -688,6 +714,7 @@ private struct XertNavigationRail: View {
     let currentRoute: XertMemberRoute
     let isAdmin: Bool
     let statusSnapshot: XertNavigationStatusSnapshot
+    let ownerPulse: XertOwnerNavigationPulse
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
@@ -799,8 +826,12 @@ private struct XertNavigationRail: View {
             if isAdmin {
                 Button(action: onOpenAdmin) {
                     VStack(spacing: 7) {
-                        Image(systemName: "waveform.path.ecg.rectangle")
-                            .font(.system(size: 20, weight: .semibold))
+                        ZStack {
+                            Image(systemName: "waveform.path.ecg.rectangle")
+                                .font(.system(size: 20, weight: .semibold))
+                            XertOwnerNavigationPulseBadge(pulse: ownerPulse)
+                                .offset(x: 19, y: -12)
+                        }
                         Text("Owner")
                             .font(.caption2.weight(.bold))
                             .textCase(.uppercase)
@@ -818,6 +849,7 @@ private struct XertNavigationRail: View {
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .hoverEffect(.highlight)
                 .accessibilityLabel("Owner Command Centre")
+                .accessibilityValue(ownerPulse.accessibilityLabel)
                 .accessibilityHint("Opens protected gym operations and platform controls")
                 .accessibilityIdentifier("xert-navigation-owner")
             }
@@ -954,6 +986,7 @@ private struct XertNavigationDock: View {
     let currentRoute: XertMemberRoute
     let isAdmin: Bool
     let statusSnapshot: XertNavigationStatusSnapshot
+    let ownerPulse: XertOwnerNavigationPulse
     let previousRoute: XertMemberRoute?
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
@@ -973,16 +1006,20 @@ private struct XertNavigationDock: View {
             if isAdmin {
                 Button(action: onOpenAdmin) {
                     HStack(spacing: 10) {
-                        Image(systemName: "waveform.path.ecg.rectangle")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Color.xertSteel)
+                        ZStack {
+                            Image(systemName: "waveform.path.ecg.rectangle")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.xertSteel)
+                            XertOwnerNavigationPulseBadge(pulse: ownerPulse)
+                                .offset(x: 15, y: -10)
+                        }
                         Text("Owner Command Centre")
                             .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
                             .textCase(.uppercase)
                             .tracking(1.2)
                             .foregroundStyle(Color.xertOffWhite)
                         Spacer()
-                        Text("Open")
+                        Text(ownerPulse.shortStatus)
                             .font(.caption2.weight(.bold))
                             .textCase(.uppercase)
                             .tracking(1.1)
@@ -1002,6 +1039,7 @@ private struct XertNavigationDock: View {
                     Rectangle().fill(Color.xertSteel.opacity(0.48)).frame(height: 1)
                 }
                 .accessibilityHint("Opens protected gym operations and platform controls")
+                .accessibilityValue(ownerPulse.accessibilityLabel)
             }
 
             taskStrip
@@ -1242,6 +1280,29 @@ private struct XertNavigationDock: View {
     }
 }
 
+private struct XertOwnerNavigationPulseBadge: View {
+    let pulse: XertOwnerNavigationPulse
+
+    var body: some View {
+        if pulse.attentionCount > 0 {
+            Text(pulse.badgeText)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Color.xertNavy)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 16, minHeight: 16)
+                .background(pulse.healthIssueCount > 0 ? Color.red : Color.xertSteel)
+                .clipShape(Capsule())
+                .accessibilityHidden(true)
+        } else if pulse.isPartial || !pulse.isAvailable {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color.red)
+                .background(Color.xertNavy.clipShape(Circle()))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 private enum XertNavigationUtilityLayout {
     case rail
     case compact
@@ -1317,12 +1378,12 @@ private struct XertNavigationStatusControl: View {
                     .textCase(.uppercase)
                     .tracking(0.7)
             }
-            .foregroundStyle(Color.xertConcrete.opacity(0.42))
+            .foregroundStyle(Color.xertPale.opacity(0.42))
             .frame(maxWidth: .infinity, minHeight: 48)
         case .compact:
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.xertConcrete.opacity(0.42))
+                .foregroundStyle(Color.xertPale.opacity(0.42))
                 .frame(width: 44, height: 44)
         }
     }
@@ -1390,12 +1451,12 @@ private struct XertNavigationShareControl: View {
                     .textCase(.uppercase)
                     .tracking(0.7)
             }
-            .foregroundStyle(Color.xertConcrete.opacity(0.5))
+            .foregroundStyle(Color.xertPale.opacity(0.5))
             .frame(maxWidth: .infinity, minHeight: 48)
         case .compact:
             Image(systemName: "lock.fill")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.xertConcrete.opacity(0.5))
+                .foregroundStyle(Color.xertPale.opacity(0.5))
                 .frame(width: 44, height: 44)
         }
     }
@@ -1637,7 +1698,7 @@ private struct XertNavigationCommandPalette: View {
                 } label: {
                     Label("Unpin", systemImage: "pin.slash")
                 }
-                .tint(Color.xertRed)
+                .tint(Color.red)
             }
         }
         .contextMenu {

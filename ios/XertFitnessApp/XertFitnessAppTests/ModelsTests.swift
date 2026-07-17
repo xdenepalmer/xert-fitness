@@ -2470,6 +2470,65 @@ final class ModelsTests: XCTestCase {
         XCTAssertThrowsError(try MemberInterestSubmission(member))
     }
 
+    func testOwnerNavigationPulseBoundsCountsAndExplainsAttention() {
+        let now = Date()
+        let pulse = XertOwnerNavigationPulse(
+            actionCount: 140,
+            healthIssueCount: 2,
+            loadedSourceCount: 99,
+            failedSourceCount: -3,
+            updatedAt: now
+        )
+
+        XCTAssertEqual(pulse.attentionCount, 142)
+        XCTAssertEqual(pulse.badgeText, "99+")
+        XCTAssertEqual(pulse.shortStatus, "99+ OPEN")
+        XCTAssertEqual(pulse.loadedSourceCount, XertOwnerNavigationPulse.sourceCount)
+        XCTAssertEqual(pulse.failedSourceCount, 0)
+        XCTAssertTrue(pulse.accessibilityLabel.contains("140 open operational actions"))
+        XCTAssertTrue(pulse.accessibilityLabel.contains("2 platform health issues"))
+    }
+
+    func testOwnerNavigationPulseDistinguishesClearPartialAndUnavailableStates() {
+        let now = Date()
+        let clear = XertOwnerNavigationPulse(
+            actionCount: 0,
+            healthIssueCount: 0,
+            loadedSourceCount: XertOwnerNavigationPulse.sourceCount,
+            failedSourceCount: 0,
+            updatedAt: now
+        )
+        let partial = XertOwnerNavigationPulse(
+            actionCount: 0,
+            healthIssueCount: 0,
+            loadedSourceCount: 4,
+            failedSourceCount: 2,
+            updatedAt: now
+        )
+
+        XCTAssertEqual(clear.shortStatus, "CLEAR")
+        XCTAssertEqual(clear.accessibilityLabel, "No open owner actions")
+        XCTAssertEqual(partial.shortStatus, "PARTIAL")
+        XCTAssertTrue(partial.accessibilityLabel.contains("some status sources are unavailable"))
+        XCTAssertEqual(XertOwnerNavigationPulse.empty.shortStatus, "CHECK")
+        XCTAssertFalse(XertOwnerNavigationPulse.empty.isAvailable)
+    }
+
+    func testOwnerNavigationPulseFreshnessRejectsFutureAndExpiredSnapshots() {
+        let updatedAt = Date(timeIntervalSince1970: 1_000)
+        let pulse = XertOwnerNavigationPulse(
+            actionCount: 1,
+            healthIssueCount: 0,
+            loadedSourceCount: 6,
+            failedSourceCount: 0,
+            updatedAt: updatedAt
+        )
+
+        XCTAssertTrue(pulse.isFresh(at: Date(timeIntervalSince1970: 1_059), maximumAge: 60))
+        XCTAssertFalse(pulse.isFresh(at: Date(timeIntervalSince1970: 1_061), maximumAge: 60))
+        XCTAssertFalse(pulse.isFresh(at: Date(timeIntervalSince1970: 999), maximumAge: 60))
+    }
+
     private func creditBatch(remaining: Int, orderID: UUID? = nil) -> CreditBatch {
         CreditBatch(
             id: UUID(),
