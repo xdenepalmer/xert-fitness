@@ -1,10 +1,10 @@
-import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { createRequestTrace, requestHeader, requestText } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
 } from '../src/lib/commerceRuntime.js';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
@@ -476,7 +476,7 @@ export default async function handler(request, response) {
     return text('Webhook service is unavailable.', 503);
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = createXertStripeClient(process.env.STRIPE_SECRET_KEY);
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   const signature = requestHeader(request, 'stripe-signature');

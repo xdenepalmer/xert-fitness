@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { createRequestTrace, requestHeader, requestJson } from './http.js';
@@ -16,6 +15,7 @@ import {
   loadPaymentActivationHealth,
   paymentActivationAllowsCheckout,
 } from '../src/lib/paymentActivation.js';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
 // Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
@@ -602,7 +602,7 @@ export default async function handler(request, response) {
     }
     const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
     if (stripeMode === 'unknown') return json({ error: 'Stripe key mode is not recognized.' }, 500);
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripe = createXertStripeClient(process.env.STRIPE_SECRET_KEY);
 
     let checkoutRequest;
     try {

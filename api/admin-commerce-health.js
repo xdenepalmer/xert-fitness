@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady } from './checkout.js';
 import { createRequestTrace, requestHeader, requestJson } from './http.js';
@@ -11,6 +10,7 @@ import {
   loadPaymentActivationHealth,
 } from '../src/lib/paymentActivation.js';
 import { processStripeEvent } from './stripe-webhook.js';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
 export { inspectPaymentActivationReceipt, loadPaymentActivationHealth };
 
@@ -390,7 +390,7 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
     };
   }
 
-  const stripe = stripeClient || new Stripe(runtimeEnvironment.STRIPE_SECRET_KEY);
+  const stripe = stripeClient || createXertStripeClient(runtimeEnvironment.STRIPE_SECRET_KEY);
   const stripeMode = stripeModeForSecret(runtimeEnvironment.STRIPE_SECRET_KEY);
   const [productHealth, webhookHealth, accountHealth] = await Promise.all([
     inspectCommerceProducts(activeProducts, priceId => stripe.prices.retrieve(priceId), {
@@ -596,7 +596,7 @@ export default async function handler(request, response) {
       return json({ error: 'Stripe event recovery is unavailable.' }, 503);
     }
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { maxNetworkRetries: 2, timeout: 20_000 });
+      const stripe = createXertStripeClient(process.env.STRIPE_SECRET_KEY);
       const result = await retryStripeWebhookEvent(admin, stripe, webhookRetry);
       console.info('Stripe webhook event retried by owner.', {
         requestId: trace.requestId,

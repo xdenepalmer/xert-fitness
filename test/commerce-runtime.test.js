@@ -99,6 +99,7 @@ test('money-moving handlers enforce runtime identity before clients or authentic
     const clientIndexes = [
       handler.indexOf('createClient('),
       handler.indexOf('new Stripe('),
+      handler.indexOf('createXertStripeClient('),
       handler.indexOf("requestHeader(request, 'authorization')"),
     ].filter(index => index >= 0);
     assert.ok(guardIndex >= 0, `${path} has no commerce runtime guard`);

@@ -4,6 +4,12 @@ Use this sequence for the first Stripe integration and again before switching
 from test mode to live payments. Never place secret keys in Git, Vite variables,
 the iOS project, or Codemagic build logs.
 
+All XERT server handlers and launch scripts use one shared Stripe client policy:
+the API version supplied by the lockfile-pinned Stripe SDK, two bounded network
+retries, a 20-second request timeout, and XERT application identity. Keep payment
+code on `createXertStripeClient` so checkout, recovery, refunds, health checks,
+and launch verification cannot drift onto different Stripe behavior.
+
 ## 1. Prepare Stripe
 
 1. Apply `supabase/migrations/20260715010000_stripe_payment_fulfillment.sql`

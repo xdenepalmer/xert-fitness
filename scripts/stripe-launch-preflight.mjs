@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import Stripe from 'stripe';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import { inspectStripeReadiness, printReport } from './check-stripe-readiness.mjs';
 import { inspectCatalogLinkEnvironment, linkStripeCatalog } from './link-stripe-catalog.mjs';
 import { inspectStripeWebhookEndpoints, loadPaymentActivationHealth } from '../api/admin-commerce-health.js';
@@ -73,14 +73,14 @@ export async function inspectStripeLaunchPreflight({
   }
 
   const inspectCatalog = catalogInspector || (async ({ log }) => {
-    const stripe = new Stripe(privateEnvironment.stripeSecretKey, { maxNetworkRetries: 2, timeout: 20_000 });
+    const stripe = createXertStripeClient(privateEnvironment.stripeSecretKey);
     const supabase = createClient(privateEnvironment.supabaseUrl, privateEnvironment.serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     return linkStripeCatalog({ stripe, supabase, mode, apply: false, replaceExisting: false, log });
   });
   const inspectWebhook = webhookInspector || (async () => {
-    const stripe = new Stripe(privateEnvironment.stripeSecretKey, { maxNetworkRetries: 2, timeout: 20_000 });
+    const stripe = createXertStripeClient(privateEnvironment.stripeSecretKey);
     const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
     return inspectStripeWebhookEndpoints(endpoints.data, environment.APP_BASE_URL || '');
   });

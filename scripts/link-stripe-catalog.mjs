@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import Stripe from 'stripe';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
 const XERT_SUPABASE_URL = 'https://ugmkwoapjcpiucsrxwzt.supabase.co';
 const PRICE_ID_PATTERN = /^price_[A-Za-z0-9]+$/;
@@ -231,7 +231,7 @@ async function main() {
   const options = parseCatalogLinkArgs(process.argv.slice(2));
   const environment = inspectCatalogLinkEnvironment(process.env, options.mode);
   if (!environment.ready) throw new Error(environment.issues.join('\n'));
-  const stripe = new Stripe(environment.stripeSecretKey, { maxNetworkRetries: 2, timeout: 20_000 });
+  const stripe = createXertStripeClient(environment.stripeSecretKey);
   const supabase = createClient(environment.supabaseUrl, environment.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

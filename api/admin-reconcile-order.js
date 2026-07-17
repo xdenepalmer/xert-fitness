@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import {
   checkoutFulfillmentForSession,
@@ -6,6 +5,7 @@ import {
 } from './stripe-webhook.js';
 import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
+import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -155,7 +155,7 @@ export default async function handler(request, response) {
     const { orderId } = normalizeReconciliationRequest(await requestJson(request));
     const result = await reconcileCheckoutOrder({
       admin,
-      stripe: new Stripe(process.env.STRIPE_SECRET_KEY),
+      stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
       orderId,
       userId: user.id,
     });
