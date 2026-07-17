@@ -98,6 +98,36 @@ final class ModelsTests: XCTestCase {
         ), .deny)
     }
 
+    func testOwnerWorkspaceRecencyIsBoundedDeduplicatedAndRestorable() {
+        var recency = XertOwnerWorkspaceRecency(workspaces: [
+            .overview, .finance, .members, .finance, .health, .products,
+            .events, .team, .audit,
+        ])
+
+        XCTAssertEqual(recency.workspaces, [.finance, .members, .health, .products, .events, .team])
+        recency.record(.audit)
+        XCTAssertEqual(recency.workspaces, [.audit, .finance, .members, .health, .products, .events])
+        recency.record(.overview)
+        XCTAssertEqual(recency.workspaces, [.audit, .finance, .members, .health, .products, .events])
+        XCTAssertEqual(
+            XertOwnerWorkspaceRecency(restorationValue: recency.restorationValue),
+            recency
+        )
+        XCTAssertEqual(
+            XertOwnerWorkspaceRecency(restorationValue: "unknown,finance,finance,members").workspaces,
+            [.finance, .members]
+        )
+    }
+
+    func testOwnerWorkspaceSearchMatchesTasksAcrossBusinessAreas() {
+        XCTAssertTrue(XertOwnerWorkspace.finance.matches("stripe refund"))
+        XCTAssertTrue(XertOwnerWorkspace.siteContent.matches("homepage hero"))
+        XCTAssertTrue(XertOwnerWorkspace.classDesk.matches("roll waitlist"))
+        XCTAssertTrue(XertOwnerWorkspace.members.matches("MEMBER credit"))
+        XCTAssertFalse(XertOwnerWorkspace.events.matches("refund"))
+        XCTAssertTrue(XertOwnerWorkspace.events.matches("   "))
+    }
+
     func testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins() throws {
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000024"))

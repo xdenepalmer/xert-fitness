@@ -211,6 +211,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   ]) assert.match(ownerNavigation, new RegExp(`case ${workspace}`));
   assert.match(view, /@Environment\(\\\.horizontalSizeClass\) private var horizontalSizeClass/);
   assert.match(view, /@SceneStorage\("xert\.adminWorkspace"\)/);
+  assert.match(view, /@SceneStorage\("xert\.adminRecentWorkspaces"\)/);
   assert.match(view, /horizontalSizeClass == \.regular[\s\S]*ownerSplitWorkspace/);
   assert.match(view, /NavigationSplitView \{/);
   assert.match(view, /List\(selection: workspaceSelection\)/);
@@ -225,7 +226,17 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /return AnyView\(dashboard\(session: session\)/);
   assert.match(view, /managementDirectory/);
   assert.match(view, /let target = workspace \?\? currentWorkspace/);
-  assert.match(view, /onChange\(of: compactPath\)[\s\S]*restoredWorkspace = \(path\.last \?\? \.overview\)\.rawValue/);
+  assert.match(view, /private func openWorkspace\(_ workspace: XertOwnerWorkspace\)/);
+  assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
+  assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);
+  assert.match(view, /private struct AdminWorkspaceSwitcher: View/);
+  assert.match(view, /\.searchable\(text: \$query, prompt: "Members, finance, health\.\.\."\)/);
+  assert.match(view, /\.keyboardShortcut\("k", modifiers: \.command\)/);
+  assert.match(view, /workspaceSection\("Needs attention", workspaces: attentionWorkspaces\)/);
+  assert.match(view, /workspaceSection\("Recent", workspaces: matchingRecent\)/);
+  assert.match(ownerNavigation, /struct XertOwnerWorkspaceRecency: Equatable/);
+  assert.match(ownerNavigation, /static let maximumCount = 6/);
+  assert.match(ownerNavigation, /func matches\(_ query: String\) -> Bool/);
   assert.match(view, /private func classSummary\(_ item: AdminClassSession\) -> String/);
   assert.match(view, /private func classDay\(_ item: AdminClassSession\) -> String/);
   assert.match(view, /private func classMonth\(_ item: AdminClassSession\) -> String/);

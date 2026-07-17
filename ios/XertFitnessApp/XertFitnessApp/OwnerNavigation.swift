@@ -144,6 +144,49 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     static func workspaces(in section: XertOwnerWorkspaceSection) -> [Self] {
         allCases.filter { $0.section == section }
     }
+
+    func matches(_ query: String) -> Bool {
+        let terms = query
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !terms.isEmpty else { return true }
+        let searchableText = ([title, detail, section?.rawValue ?? ""] + searchKeywords)
+            .joined(separator: " ")
+            .lowercased()
+        return terms.allSatisfy(searchableText.contains)
+    }
+}
+
+struct XertOwnerWorkspaceRecency: Equatable {
+    static let maximumCount = 6
+    private(set) var workspaces: [XertOwnerWorkspace]
+
+    init(workspaces: [XertOwnerWorkspace] = []) {
+        self.workspaces = Self.normalized(workspaces)
+    }
+
+    init(restorationValue: String) {
+        self.init(workspaces: restorationValue
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .compactMap { XertOwnerWorkspace(rawValue: String($0)) })
+    }
+
+    var restorationValue: String {
+        workspaces.map(\.rawValue).joined(separator: ",")
+    }
+
+    mutating func record(_ workspace: XertOwnerWorkspace) {
+        workspaces = Self.normalized([workspace] + workspaces)
+    }
+
+    private static func normalized(_ workspaces: [XertOwnerWorkspace]) -> [XertOwnerWorkspace] {
+        var seen = Set<XertOwnerWorkspace>()
+        return workspaces
+            .filter { $0 != .overview && seen.insert($0).inserted }
+            .prefix(maximumCount)
+            .map { $0 }
+    }
 }
 
 struct XertOwnerRoute: Equatable, Hashable {

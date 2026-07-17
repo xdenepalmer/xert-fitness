@@ -8,7 +8,9 @@ struct AdminCommandCentreView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @StateObject private var admin = AdminStore()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
+    @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
     @State private var compactPath: [XertOwnerWorkspace] = []
+    @State private var showingWorkspaceSwitcher = false
     let requestedWorkspace: XertOwnerWorkspace?
     var onClose: (() -> Void)? = nil
 
@@ -41,6 +43,15 @@ struct AdminCommandCentreView: View {
         .onChange(of: requestedWorkspace) { workspace in
             applyRequestedWorkspace(workspace)
         }
+        .sheet(isPresented: $showingWorkspaceSwitcher) {
+            AdminWorkspaceSwitcher(
+                recent: recentWorkspaces.workspaces,
+                badges: workspaceBadges
+            ) { workspace in
+                showingWorkspaceSwitcher = false
+                openWorkspace(workspace)
+            }
+        }
         .alert("Command Centre", isPresented: Binding(
             get: { admin.errorMessage != nil },
             set: { if !$0 { admin.errorMessage = nil } }
@@ -58,14 +69,33 @@ struct AdminCommandCentreView: View {
     private var workspaceSelection: Binding<XertOwnerWorkspace?> {
         Binding(
             get: { currentWorkspace },
-            set: { restoredWorkspace = ($0 ?? .overview).rawValue }
+            set: { openWorkspace($0 ?? .overview) }
         )
+    }
+
+    private var recentWorkspaces: XertOwnerWorkspaceRecency {
+        XertOwnerWorkspaceRecency(restorationValue: restoredRecentWorkspaces)
+    }
+
+    private var workspaceBadges: [XertOwnerWorkspace: Int] {
+        let pairs: [(XertOwnerWorkspace, Int)] = XertOwnerWorkspace.allCases.compactMap { workspace in
+            guard let badge = workspaceBadge(workspace), badge > 0 else { return nil }
+            return (workspace, badge)
+        }
+        return Dictionary(uniqueKeysWithValues: pairs)
+    }
+
+    private func openWorkspace(_ workspace: XertOwnerWorkspace) {
+        restoredWorkspace = workspace.rawValue
+        var recency = recentWorkspaces
+        recency.record(workspace)
+        restoredRecentWorkspaces = recency.restorationValue
+        compactPath = workspace == .overview ? [] : [workspace]
     }
 
     private func applyRequestedWorkspace(_ workspace: XertOwnerWorkspace?) {
         let target = workspace ?? currentWorkspace
-        restoredWorkspace = target.rawValue
-        compactPath = target == .overview ? [] : [target]
+        openWorkspace(target)
     }
 
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
@@ -73,13 +103,18 @@ struct AdminCommandCentreView: View {
             dashboard(session: session)
                 .navigationTitle("Command Centre")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { closeToolbar }
+                .toolbar { ownerWorkspaceToolbar }
                 .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
                     workspaceDestination(workspace, session: session)
+                        .toolbar { ownerWorkspaceToolbar }
                 }
         }
         .onChange(of: compactPath) { path in
-            restoredWorkspace = (path.last ?? .overview).rawValue
+            let workspace = path.last ?? .overview
+            restoredWorkspace = workspace.rawValue
+            var recency = recentWorkspaces
+            recency.record(workspace)
+            restoredRecentWorkspaces = recency.restorationValue
         }
     }
 
@@ -115,6 +150,7 @@ struct AdminCommandCentreView: View {
             .navigationTitle("Command Centre")
             .toolbar {
                 closeToolbar
+                workspaceSwitcherToolbar
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await admin.refresh(session: session) } } label: {
                         Image(systemName: "arrow.clockwise")
@@ -128,6 +164,7 @@ struct AdminCommandCentreView: View {
             NavigationStack {
                 workspaceDestination(currentWorkspace, session: session)
                     .id(currentWorkspace)
+                    .toolbar { workspaceSwitcherToolbar }
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -179,6 +216,23 @@ struct AdminCommandCentreView: View {
                 .foregroundStyle(Color.xertSteel)
             }
         }
+    }
+
+    @ToolbarContentBuilder
+    private var workspaceSwitcherToolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button { showingWorkspaceSwitcher = true } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            .accessibilityLabel("Switch owner workspace")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var ownerWorkspaceToolbar: some ToolbarContent {
+        closeToolbar
+        workspaceSwitcherToolbar
     }
 
     private var ownerHeader: some View {
@@ -389,6 +443,126 @@ struct AdminCommandCentreView: View {
         case .audit:
             return AnyView(AdminAuditView(admin: admin))
         }
+    }
+}
+
+private struct AdminWorkspaceSwitcher: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    let recent: [XertOwnerWorkspace]
+    let badges: [XertOwnerWorkspace: Int]
+    let onSelect: (XertOwnerWorkspace) -> Void
+
+    private var matchingWorkspaces: [XertOwnerWorkspace] {
+        XertOwnerWorkspace.allCases.filter { $0.matches(query) }
+    }
+
+    private var attentionWorkspaces: [XertOwnerWorkspace] {
+        matchingWorkspaces
+            .filter { badges[$0, default: 0] > 0 }
+            .sorted { badges[$0, default: 0] > badges[$1, default: 0] }
+    }
+
+    private var matchingRecent: [XertOwnerWorkspace] {
+        recent.filter { $0.matches(query) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !query.isEmpty {
+                    workspaceSection("Results", workspaces: matchingWorkspaces)
+                } else {
+                    workspaceSection("Needs attention", workspaces: attentionWorkspaces)
+                    workspaceSection("Recent", workspaces: matchingRecent)
+
+                    Section("All workspaces") {
+                        workspaceRow(.overview)
+                    }
+                    ForEach(XertOwnerWorkspaceSection.allCases) { section in
+                        workspaceSection(section.rawValue, workspaces: XertOwnerWorkspace.workspaces(in: section))
+                    }
+                }
+
+                if matchingWorkspaces.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(Color.xertSteel)
+                        Text("No matching workspace")
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Try a tool, task or business area.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.xertNavy)
+            .navigationTitle("Switch workspace")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, prompt: "Members, finance, health...")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close workspace switcher")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private func workspaceSection(_ title: String, workspaces: [XertOwnerWorkspace]) -> some View {
+        if !workspaces.isEmpty {
+            Section(title) {
+                ForEach(workspaces) { workspace in
+                    workspaceRow(workspace)
+                }
+            }
+        }
+    }
+
+    private func workspaceRow(_ workspace: XertOwnerWorkspace) -> some View {
+        Button { onSelect(workspace) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: workspace.icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(workspace.title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text(workspace.detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.65))
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if let badge = badges[workspace], badge > 0 {
+                    Text(badge > 99 ? "99+" : "\(badge)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.xertNavy)
+                        .padding(.horizontal, 7)
+                        .frame(minHeight: 20)
+                        .background(Color.xertSteel)
+                        .clipShape(Capsule())
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.xertPale.opacity(0.35))
+            }
+            .padding(.vertical, 3)
+        }
+        .listRowBackground(Color.xertInk)
     }
 }
 
