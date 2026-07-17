@@ -59,16 +59,23 @@ struct AdminCommandCentreView: View {
             applyRequestedRoute(route)
         }
         .sheet(isPresented: $showingWorkspaceSwitcher) {
-            AdminWorkspaceSwitcher(
-                current: currentWorkspace,
-                recent: recentWorkspaces.workspaces,
-                pinned: pinnedWorkspaces,
-                badges: workspaceBadges
-            ) { workspace in
-                showingWorkspaceSwitcher = false
-                openWorkspace(workspace)
-            } onTogglePin: { workspace in
-                togglePinnedWorkspace(workspace)
+            if let session = store.authSession, store.profile?.isAdmin == true {
+                AdminWorkspaceSwitcher(
+                    admin: admin,
+                    session: session,
+                    current: currentWorkspace,
+                    recent: recentWorkspaces.workspaces,
+                    pinned: pinnedWorkspaces,
+                    badges: workspaceBadges
+                ) { workspace in
+                    showingWorkspaceSwitcher = false
+                    openWorkspace(workspace)
+                } onOpenRoute: { route in
+                    showingWorkspaceSwitcher = false
+                    openOwnerRoute(route)
+                } onTogglePin: { workspace in
+                    togglePinnedWorkspace(workspace)
+                }
             }
         }
         .sheet(item: $presentedOwnerTask, onDismiss: closePresentedOwnerTask) { task in
@@ -658,13 +665,20 @@ struct AdminCommandCentreView: View {
 
 private struct AdminWorkspaceSwitcher: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
     @State private var query = ""
     let current: XertOwnerWorkspace
     let recent: [XertOwnerWorkspace]
     let pinned: [XertOwnerWorkspace]
     let badges: [XertOwnerWorkspace: Int]
     let onSelect: (XertOwnerWorkspace) -> Void
+    let onOpenRoute: (XertOwnerRoute) -> Void
     let onTogglePin: (XertOwnerWorkspace) -> Void
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private var matchingWorkspaces: [XertOwnerWorkspace] {
         XertOwnerWorkspace.allCases.filter { $0.matches(query) }
@@ -684,11 +698,47 @@ private struct AdminWorkspaceSwitcher: View {
         pinned.filter { $0.matches(query) }
     }
 
+    private var matchingRecords: [XertOwnerRecordCommand] {
+        XertOwnerCommandIndex.matches(
+            query: query,
+            members: admin.ownerMemberSearchResults,
+            orders: admin.orders,
+            events: admin.events
+        )
+    }
+
+    private var hasNoResults: Bool {
+        !normalizedQuery.isEmpty
+            && matchingWorkspaces.isEmpty
+            && matchingRecords.isEmpty
+            && !admin.isSearchingOwnerMembers
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                if !query.isEmpty {
+                if !normalizedQuery.isEmpty {
                     workspaceSection("Results", workspaces: matchingWorkspaces)
+                    ForEach(XertOwnerRecordKind.allCases) { kind in
+                        recordSection(
+                            kind.rawValue,
+                            records: matchingRecords.filter { $0.kind == kind }
+                        )
+                    }
+                    if admin.isSearchingOwnerMembers {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(Color.xertSteel)
+                            Text("Searching member accounts...")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.xertPale.opacity(0.7))
+                        }
+                        .listRowBackground(Color.xertInk)
+                    } else if let error = admin.ownerMemberSearchError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(Color.orange)
+                            .listRowBackground(Color.xertInk)
+                    }
                 } else {
                     workspaceSection("Needs attention", workspaces: attentionWorkspaces)
                     workspaceSection("Pinned", workspaces: matchingPinned)
@@ -702,12 +752,12 @@ private struct AdminWorkspaceSwitcher: View {
                     }
                 }
 
-                if matchingWorkspaces.isEmpty {
+                if hasNoResults {
                     VStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(Color.xertSteel)
-                        Text("No matching workspace")
+                        Text("No matching command")
                             .font(.headline)
                             .foregroundStyle(Color.xertOffWhite)
                         Text("Try a tool, task or business area.")
@@ -721,9 +771,9 @@ private struct AdminWorkspaceSwitcher: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.xertNavy)
-            .navigationTitle("Switch workspace")
+            .navigationTitle("Owner commands")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: "Members, finance, health...")
+            .searchable(text: $query, prompt: "Workspace, member, order or event")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
@@ -735,6 +785,20 @@ private struct AdminWorkspaceSwitcher: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .task(id: normalizedQuery) {
+            guard normalizedQuery.count >= 2 else {
+                admin.resetOwnerMemberSearch()
+                return
+            }
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await admin.searchOwnerMembers(session: session, query: normalizedQuery)
+        }
+        .onDisappear { admin.resetOwnerMemberSearch() }
     }
 
     @ViewBuilder
@@ -797,6 +861,41 @@ private struct AdminWorkspaceSwitcher: View {
         }
         .padding(.vertical, 3)
         .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private func recordSection(_ title: String, records: [XertOwnerRecordCommand]) -> some View {
+        if !records.isEmpty {
+            Section(title) {
+                ForEach(records) { record in
+                    Button { onOpenRoute(record.route) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: record.icon)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color.xertSteel)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(record.title)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(Color.xertOffWhite)
+                                Text(record.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.xertPale.opacity(0.65))
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "arrow.up.forward.square")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the exact protected \(record.kind.rawValue.lowercased()) record")
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+        }
     }
 }
 

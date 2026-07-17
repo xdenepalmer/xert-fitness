@@ -493,6 +493,151 @@ struct XertOwnerRoute: Equatable, Hashable {
     }
 }
 
+enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
+    case member = "Members"
+    case order = "Orders"
+    case event = "Events"
+
+    var id: Self { self }
+}
+
+struct XertOwnerRecordCommand: Identifiable, Equatable {
+    let kind: XertOwnerRecordKind
+    let route: XertOwnerRoute
+    let title: String
+    let subtitle: String
+    let icon: String
+
+    var id: String { route.restorationValue }
+}
+
+enum XertOwnerCommandIndex {
+    static let maximumResultsPerKind = 8
+
+    private struct Candidate {
+        let command: XertOwnerRecordCommand
+        let title: String
+        let identifiers: [String]
+        let searchableValues: [String]
+    }
+
+    static func matches(
+        query: String,
+        members: [AdminMemberSummary],
+        orders: [OrderItem],
+        events: [AdminEvent]
+    ) -> [XertOwnerRecordCommand] {
+        let normalizedQuery = normalize(query)
+        guard normalizedQuery.count >= 2 else { return [] }
+
+        let candidates = members.map(memberCandidate)
+            + orders.map(orderCandidate)
+            + events.map(eventCandidate)
+        return XertOwnerRecordKind.allCases.flatMap { kind in
+            candidates
+                .filter { $0.command.kind == kind }
+                .compactMap { candidate -> (Candidate, Int)? in
+                    guard let score = score(candidate, query: normalizedQuery) else { return nil }
+                    return (candidate, score)
+                }
+                .sorted {
+                    if $0.1 != $1.1 { return $0.1 < $1.1 }
+                    return $0.0.title.localizedCaseInsensitiveCompare($1.0.title) == .orderedAscending
+                }
+                .prefix(maximumResultsPerKind)
+                .map { $0.0.command }
+        }
+    }
+
+    private static func memberCandidate(_ member: AdminMemberSummary) -> Candidate {
+        let contact = [member.email, member.phone]
+            .compactMap(clean)
+            .joined(separator: " · ")
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .member,
+                route: XertOwnerRoute(task: .member(member.id)),
+                title: member.displayName,
+                subtitle: contact.isEmpty ? "Member account" : contact,
+                icon: "person.crop.circle"
+            ),
+            title: member.displayName,
+            identifiers: [member.id.uuidString],
+            searchableValues: [member.displayName, member.email, member.phone, member.role]
+                .compactMap { $0 }
+        )
+    }
+
+    private static func orderCandidate(_ order: OrderItem) -> Candidate {
+        let title = order.products?.name ?? "Session pack"
+        let buyer = clean(order.email) ?? "Anonymized buyer"
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .order,
+                route: XertOwnerRoute(task: .order(order.id)),
+                title: title,
+                subtitle: "\(order.displayAmount) · \(order.displayStatus) · \(buyer)",
+                icon: order.isRecoverable ? "exclamationmark.arrow.circlepath" : "creditcard"
+            ),
+            title: title,
+            identifiers: [
+                order.id.uuidString,
+                order.stripe_checkout_session_id,
+                order.stripe_payment_intent_id,
+            ].compactMap { $0 },
+            searchableValues: [
+                title,
+                order.email,
+                order.status,
+                order.stripe_checkout_session_id,
+                order.stripe_payment_intent_id,
+            ].compactMap { $0 }
+        )
+    }
+
+    private static func eventCandidate(_ event: AdminEvent) -> Candidate {
+        let context = [event.event_date, event.location, event.region]
+            .compactMap(clean)
+            .joined(separator: " · ")
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .event,
+                route: XertOwnerRoute(task: .event(event.id)),
+                title: event.name,
+                subtitle: context.isEmpty ? "Calendar event" : context,
+                icon: "trophy"
+            ),
+            title: event.name,
+            identifiers: [event.id.uuidString],
+            searchableValues: [event.name, event.category, event.location, event.region, event.event_date]
+                .compactMap { $0 }
+        )
+    }
+
+    private static func score(_ candidate: Candidate, query: String) -> Int? {
+        let identifiers = candidate.identifiers.map(normalize)
+        if identifiers.contains(query) { return 0 }
+        let title = normalize(candidate.title)
+        if title == query { return 1 }
+        if title.hasPrefix(query) { return 2 }
+        let values = candidate.searchableValues.map(normalize)
+        if values.contains(where: { $0.hasPrefix(query) }) { return 3 }
+        if identifiers.contains(where: { $0.contains(query) }) { return 4 }
+        if values.contains(where: { $0.contains(query) }) { return 5 }
+        return nil
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+}
+
 enum XertOwnerNavigationDisposition: Equatable {
     case requireAuthentication
     case waitForProfile

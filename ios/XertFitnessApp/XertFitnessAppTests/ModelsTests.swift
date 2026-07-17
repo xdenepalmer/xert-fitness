@@ -246,6 +246,115 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOwnerCommandIndexRanksAndBoundsProtectedBusinessRecords() throws {
+        let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a1"))
+        let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2"))
+        let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a3"))
+        let member = AdminMemberSummary(
+            id: memberID,
+            full_name: "Alex Runner",
+            email: "alex@example.com",
+            phone: "0400000000",
+            role: "member",
+            joined_at: Date(timeIntervalSince1970: 0),
+            credits_remaining: 4,
+            bookings_count: 2,
+            orders_count: 1,
+            total_spent_cents: 4800,
+            total_count: 1
+        )
+        let order = OrderItem(
+            id: orderID,
+            user_id: memberID,
+            product_id: nil,
+            email: "alex@example.com",
+            status: "paid",
+            amount_cents: 4800,
+            currency: "aud",
+            credit_total: 4,
+            credit_validity_days: 28,
+            stripe_checkout_session_id: "cs_test_owner_command",
+            stripe_payment_intent_id: "pi_test_owner_command",
+            created_at: Date(timeIntervalSince1970: 0),
+            paid_at: Date(timeIntervalSince1970: 1),
+            refunded_at: nil,
+            refunded_amount_cents: nil,
+            reconciled_at: nil,
+            reconciled_by: nil,
+            products: OrderProduct(name: "Starter 4"),
+            stripe_refunds: nil
+        )
+        let event = AdminEvent(
+            id: eventID,
+            name: "Gold Coast Marathon",
+            category: "marathon",
+            event_date: "2026-07-04",
+            end_date: "2026-07-05",
+            location: "Gold Coast",
+            region: "South East Queensland",
+            url: nil,
+            published: true,
+            sort_order: 1,
+            updated_at: "2026-07-17T00:00:00Z"
+        )
+
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: orderID.uuidString,
+                members: [member],
+                orders: [order],
+                events: [event]
+            ).map(\.route),
+            [XertOwnerRoute(task: .order(orderID))]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "alex",
+                members: [member],
+                orders: [order],
+                events: [event]
+            ).map(\.kind),
+            [.member, .order]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "gold coast",
+                members: [member],
+                orders: [order],
+                events: [event]
+            ).first?.route,
+            XertOwnerRoute(task: .event(eventID))
+        )
+        XCTAssertTrue(XertOwnerCommandIndex.matches(
+            query: " ", members: [member], orders: [order], events: [event]
+        ).isEmpty)
+
+        let manyEvents = (0..<(XertOwnerCommandIndex.maximumResultsPerKind + 3)).map { index in
+            AdminEvent(
+                id: UUID(),
+                name: "Race \(index)",
+                category: "run",
+                event_date: "2026-08-01",
+                end_date: nil,
+                location: "Queensland",
+                region: "Queensland",
+                url: nil,
+                published: true,
+                sort_order: index,
+                updated_at: "2026-07-17T00:00:00Z"
+            )
+        }
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "race",
+                members: [],
+                orders: [],
+                events: manyEvents
+            ).count,
+            XertOwnerCommandIndex.maximumResultsPerKind
+        )
+    }
+
     func testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped() throws {
         let suiteName = "XertOwnerWorkspacePinsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

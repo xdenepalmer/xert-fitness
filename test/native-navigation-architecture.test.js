@@ -291,6 +291,44 @@ test('owner navigation restores exact record routes with back, forward, and v1 m
   assert.match(modelsTests, /XertOwnerRouteHistory\.maximumEncodedLength \+ 1/);
 });
 
+test('owner command search ranks bounded exact records without replacing workspace data', async () => {
+  const [ownerView, ownerNavigation, adminStore, modelsTests] = await Promise.all([
+    readFile(viewURL('AdminCommandCentreView'), 'utf8'),
+    readFile(ownerNavigationURL, 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift', import.meta.url), 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+
+  assert.match(ownerNavigation, /enum XertOwnerRecordKind: String, CaseIterable, Identifiable/);
+  assert.match(ownerNavigation, /struct XertOwnerRecordCommand: Identifiable, Equatable/);
+  assert.match(ownerNavigation, /enum XertOwnerCommandIndex/);
+  assert.match(ownerNavigation, /static let maximumResultsPerKind = 8/);
+  assert.match(ownerNavigation, /if identifiers\.contains\(query\) \{ return 0 \}/);
+  assert.match(ownerNavigation, /if title\.hasPrefix\(query\) \{ return 2 \}/);
+  assert.match(ownerNavigation, /\.prefix\(maximumResultsPerKind\)/);
+
+  assert.match(adminStore, /@Published private\(set\) var ownerMemberSearchResults: \[AdminMemberSummary\] = \[\]/);
+  assert.match(adminStore, /private var ownerMemberSearchGeneration: UInt = 0/);
+  assert.match(adminStore, /func searchOwnerMembers\(session: AuthSession, query: String\) async/);
+  assert.match(adminStore, /ownerMemberSearchGeneration &\+= 1/);
+  assert.match(adminStore, /limit: XertOwnerCommandIndex\.maximumResultsPerKind/);
+  assert.match(adminStore, /guard generation == ownerMemberSearchGeneration else \{ return \}/);
+  const ownerSearch = adminStore.slice(
+    adminStore.indexOf('func searchOwnerMembers'),
+    adminStore.indexOf('func resetOwnerMemberSearch'),
+  );
+  assert.doesNotMatch(ownerSearch, /members =/);
+
+  assert.match(ownerView, /private struct AdminWorkspaceSwitcher:[\s\S]*@ObservedObject var admin: AdminStore/);
+  assert.match(ownerView, /XertOwnerCommandIndex\.matches\([\s\S]*admin\.ownerMemberSearchResults[\s\S]*admin\.orders[\s\S]*admin\.events/);
+  assert.match(ownerView, /ForEach\(XertOwnerRecordKind\.allCases\)/);
+  assert.match(ownerView, /Button \{ onOpenRoute\(record\.route\) \}/);
+  assert.match(ownerView, /\.task\(id: normalizedQuery\)[\s\S]*Task\.sleep\(nanoseconds: 300_000_000\)[\s\S]*searchOwnerMembers/);
+  assert.match(ownerView, /\.onDisappear \{ admin\.resetOwnerMemberSearch\(\) \}/);
+  assert.match(modelsTests, /testOwnerCommandIndexRanksAndBoundsProtectedBusinessRecords/);
+  assert.match(modelsTests, /XertOwnerCommandIndex\.maximumResultsPerKind \+ 3/);
+});
+
 test('owner favorites are account-scoped and every overview shortcut uses the central router', async () => {
   const [ownerNavigation, ownerView, modelsTests] = await Promise.all([
     readFile(ownerNavigationURL, 'utf8'),

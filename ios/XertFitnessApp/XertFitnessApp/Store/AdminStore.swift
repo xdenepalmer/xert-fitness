@@ -33,6 +33,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
+    @Published private(set) var ownerMemberSearchResults: [AdminMemberSummary] = []
+    @Published private(set) var isSearchingOwnerMembers = false
+    @Published private(set) var ownerMemberSearchError: String?
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var loggingFollowUpMemberID: UUID?
@@ -68,6 +71,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var lastUpdatedAt: Date?
 
     private let api = XertAPI()
+    private var ownerMemberSearchGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -178,6 +182,46 @@ final class AdminStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func searchOwnerMembers(session: AuthSession, query: String) async {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        ownerMemberSearchGeneration &+= 1
+        let generation = ownerMemberSearchGeneration
+        guard normalized.count >= 2 else {
+            ownerMemberSearchResults = []
+            ownerMemberSearchError = nil
+            isSearchingOwnerMembers = false
+            return
+        }
+
+        isSearchingOwnerMembers = true
+        ownerMemberSearchError = nil
+        do {
+            let results = try await api.adminMembers(
+                session: session,
+                search: normalized,
+                limit: XertOwnerCommandIndex.maximumResultsPerKind
+            )
+            guard generation == ownerMemberSearchGeneration else { return }
+            ownerMemberSearchResults = results
+            isSearchingOwnerMembers = false
+        } catch is CancellationError {
+            guard generation == ownerMemberSearchGeneration else { return }
+            isSearchingOwnerMembers = false
+        } catch {
+            guard generation == ownerMemberSearchGeneration else { return }
+            ownerMemberSearchResults = []
+            ownerMemberSearchError = "Member search is unavailable. Try again."
+            isSearchingOwnerMembers = false
+        }
+    }
+
+    func resetOwnerMemberSearch() {
+        ownerMemberSearchGeneration &+= 1
+        ownerMemberSearchResults = []
+        ownerMemberSearchError = nil
+        isSearchingOwnerMembers = false
     }
 
     func resolveOwnerTask(session: AuthSession, task: XertOwnerTask) async {
