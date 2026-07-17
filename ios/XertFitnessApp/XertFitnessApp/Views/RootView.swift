@@ -213,11 +213,16 @@ struct RootView: View {
                     orderedDestinations: memberWorkspaceOrder
                 ),
                 workspace: navigation.workspaceOverview,
+                workspaceNodes: navigation.workspaceNodes(
+                    order: memberWorkspaceOrder,
+                    allowsProtectedRoutes: store.isSignedIn
+                ),
                 pinnedRoutes: pinnedMemberRoutes,
                 workspaceOrder: memberWorkspaceOrder,
                 canCustomizeWorkspaceOrder: store.isSignedIn,
                 onTogglePin: togglePinnedMemberRoute,
                 onSaveWorkspaceOrder: saveMemberWorkspaceOrder,
+                onSelectWorkspace: openWorkspaceFromMap,
                 onSelect: executeNavigationCommand
             )
             .presentationDetents([.medium, .large])
@@ -327,6 +332,14 @@ struct RootView: View {
 
     private func navigate(to destination: XertPrimaryDestination) {
         selectMemberDestination(destination, source: .content)
+    }
+
+    private func openWorkspaceFromMap(_ destination: XertPrimaryDestination) {
+        if navigation.selection == destination {
+            handleReselection(destination)
+        } else {
+            selectMemberDestination(destination, source: .commandPalette)
+        }
     }
 
     private func selectMemberDestination(
@@ -1542,16 +1555,19 @@ private struct XertPinnedWorkspaceBadge: View {
 
 private struct XertNavigationCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
     @State private var showingWorkspaceOrderEditor = false
     @FocusState private var searchFocused: Bool
     let commands: [XertNavigationCommand]
     let workspace: XertNavigationWorkspaceOverview
+    let workspaceNodes: [XertNavigationWorkspaceNode]
     let pinnedRoutes: [XertMemberRoute]
     let workspaceOrder: [XertPrimaryDestination]
     let canCustomizeWorkspaceOrder: Bool
     let onTogglePin: (XertMemberRoute) -> Void
     let onSaveWorkspaceOrder: ([XertPrimaryDestination]) -> Void
+    let onSelectWorkspace: (XertPrimaryDestination) -> Void
     let onSelect: (XertNavigationCommand) -> Void
 
     private var filteredCommands: [XertNavigationCommand] {
@@ -1562,6 +1578,9 @@ private struct XertNavigationCommandPalette: View {
         NavigationStack {
             VStack(spacing: 0) {
                 workspaceHeader
+                if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    workspaceMap
+                }
                 Group {
                     if filteredCommands.isEmpty {
                         VStack(spacing: 12) {
@@ -1628,6 +1647,101 @@ private struct XertNavigationCommandPalette: View {
         }
         .tint(Color.xertSteel)
         .preferredColorScheme(.dark)
+    }
+
+    private var workspaceMap: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 8) {
+                    ForEach(workspaceNodes) { node in
+                        workspaceNode(node)
+                            .id(node.id)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 130 : 102)
+            .background(Color.xertInk.opacity(0.98))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.xertSteel.opacity(0.14)).frame(height: 1)
+            }
+            .onAppear {
+                guard let current = workspaceNodes.first(where: { $0.isCurrent }) else { return }
+                proxy.scrollTo(current.id, anchor: .center)
+            }
+            .onChange(of: workspace.currentRoute.destination) { destination in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(destination, anchor: .center)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("XERT workspace map")
+            .accessibilityIdentifier("xert-navigation-workspace-map")
+        }
+    }
+
+    private func workspaceNode(_ node: XertNavigationWorkspaceNode) -> some View {
+        let pinnableRoute = node.route.pinnableRoute
+        let isPinned = pinnableRoute.map { pinnedRoutes.contains($0) } ?? false
+        return Button {
+            dismiss()
+            onSelectWorkspace(node.destination)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Image(systemName: node.isCurrent ? node.destination.selectedIcon : node.destination.icon)
+                        .font(.system(size: 16, weight: .semibold))
+                    Spacer(minLength: 4)
+                    if isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption2.weight(.bold))
+                    }
+                    if node.isCurrent {
+                        Circle()
+                            .fill(Color.xertSteel)
+                            .frame(width: 7, height: 7)
+                    }
+                }
+                Text(node.destination.title.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.8)
+                Text(node.route.isContextualTask ? node.route.navigationTitle : "Overview")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(node.isCurrent ? Color.xertOffWhite : Color.xertPale.opacity(0.62))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(node.isCurrent ? Color.xertSteel : Color.xertPale)
+            .frame(
+                width: dynamicTypeSize.isAccessibilitySize ? 156 : 126,
+                height: dynamicTypeSize.isAccessibilitySize ? 98 : 70,
+                alignment: .leading
+            )
+            .padding(.horizontal, 12)
+            .background(node.isCurrent ? Color.xertDeep : Color.xertNavy)
+            .overlay {
+                Rectangle().stroke(
+                    node.isCurrent ? Color.xertSteel.opacity(0.7) : Color.xertSteel.opacity(0.16),
+                    lineWidth: node.isCurrent ? 1.5 : 1
+                )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(node.destination.title), \(node.route.navigationTitle)")
+        .accessibilityValue(node.isCurrent ? "Current workspace" : "Saved workspace state")
+        .accessibilityHint(node.isCurrent ? "Refreshes this workspace" : "Resumes this exact workspace task")
+        .contextMenu {
+            if let pinnableRoute {
+                Button(action: { onTogglePin(pinnableRoute) }) {
+                    Label(
+                        isPinned ? "Unpin workspace" : "Pin workspace",
+                        systemImage: isPinned ? "pin.slash" : "pin"
+                    )
+                }
+            }
+        }
     }
 
     private var workspaceHeader: some View {

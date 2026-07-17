@@ -140,9 +140,19 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(navigation, /enum XertNavigationCommandSection: String, CaseIterable, Identifiable/);
   assert.match(navigation, /func commandPaletteCommands\([\s\S]*context: XertNavigationContext = \.empty/);
   assert.match(navigation, /static func filteredCommands/);
+  assert.match(navigation, /struct XertNavigationWorkspaceNode: Identifiable, Equatable/);
+  assert.match(navigation, /func workspaceNodes\([\s\S]*allowsProtectedRoutes: Bool = true/);
+  assert.match(navigation, /visibleRoute = allowsProtectedRoutes \|\| !rememberedRoute\.requiresAuthentication/);
   assert.match(navigation, /terms\.allSatisfy \{ command\.searchIndex\.contains\(\$0\) \}/);
   assert.match(navigation, /if isAdmin \{[\s\S]*XertOwnerWorkspace\.allCases\.map[\s\S]*action: \.owner\(workspace\)/);
   assert.match(root, /XertNavigationCommandPalette/);
+  assert.match(root, /workspaceNodes: navigation\.workspaceNodes\([\s\S]*order: memberWorkspaceOrder[\s\S]*allowsProtectedRoutes: store\.isSignedIn/);
+  assert.match(root, /private var workspaceMap: some View/);
+  assert.match(root, /ScrollView\(\.horizontal, showsIndicators: false\)/);
+  assert.match(root, /ForEach\(workspaceNodes\)/);
+  assert.match(root, /xert-navigation-workspace-map/);
+  assert.match(root, /private func openWorkspaceFromMap/);
+  assert.match(root, /navigation\.selection == destination[\s\S]*handleReselection\(destination\)[\s\S]*selectMemberDestination\(destination, source: \.commandPalette\)/);
   assert.match(root, /context: navigationContext/);
   assert.match(root, /XertNavigationCommandSection\.allCases/);
   assert.match(root, /Section \{[\s\S]*Text\(section\.rawValue\)/);
@@ -159,6 +169,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(modelsTests, /testNavigationCommandPaletteIsContextualRoleAwareAndSearchable/);
   assert.match(modelsTests, /testNavigationCommandPalettePromotesLiveMemberActivity/);
   assert.match(modelsTests, /testNavigationCommandPaletteOffersBoundedDirectWorkspaceTimeline/);
+  assert.match(modelsTests, /testNavigationWorkspaceMapOrdersAndProtectsRememberedTasks/);
 });
 
 test('quick switcher exposes a bounded authorization-aware exact-task timeline', async () => {

@@ -651,6 +651,29 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testNavigationWorkspaceMapOrdersAndProtectsRememberedTasks() throws {
+        let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000072"))
+        let navigation = XertNavigationCoordinator(initial: .home)
+        XCTAssertTrue(navigation.open(.notices(noticeID), source: .pushNotification))
+        XCTAssertTrue(navigation.open(.sessionPacks, source: .content))
+        XCTAssertTrue(navigation.open(.eventGoals, source: .content))
+
+        let order: [XertPrimaryDestination] = [.account, .events, .booking, .home, .explore]
+        let signedIn = navigation.workspaceNodes(order: order, allowsProtectedRoutes: true)
+        XCTAssertEqual(signedIn.map(\.destination), order)
+        XCTAssertEqual(signedIn.first { $0.destination == .home }?.route, .notices(noticeID))
+        XCTAssertEqual(signedIn.first { $0.destination == .booking }?.route, .sessionPacks)
+        XCTAssertEqual(signedIn.first { $0.destination == .events }?.route, .eventGoals)
+        XCTAssertEqual(signedIn.filter(\.isCurrent).map(\.destination), [.events])
+
+        let signedOut = navigation.workspaceNodes(order: order, allowsProtectedRoutes: false)
+        XCTAssertEqual(signedOut.map(\.destination), order)
+        XCTAssertEqual(signedOut.first { $0.destination == .home }?.route, .home)
+        XCTAssertEqual(signedOut.first { $0.destination == .booking }?.route, .sessionPacks)
+        XCTAssertEqual(signedOut.first { $0.destination == .events }?.route, .events)
+        XCTAssertFalse(signedOut.contains { $0.route.requiresAuthentication })
+    }
+
     func testNavigationHistoryReturnsToExactTasksAcrossAndWithinTabs() throws {
         let noticeID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000031"))
         let navigation = XertNavigationCoordinator(initial: .home, historyLimit: 6)

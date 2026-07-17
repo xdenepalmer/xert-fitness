@@ -726,6 +726,14 @@ struct XertNavigationWorkspaceOverview: Equatable {
     let forwardCount: Int
 }
 
+struct XertNavigationWorkspaceNode: Identifiable, Equatable {
+    let destination: XertPrimaryDestination
+    let route: XertMemberRoute
+    let isCurrent: Bool
+
+    var id: XertPrimaryDestination { destination }
+}
+
 final class XertNavigationCoordinator: ObservableObject {
     @Published private(set) var selection: XertPrimaryDestination
     @Published private(set) var route: XertMemberRoute
@@ -787,6 +795,23 @@ final class XertNavigationCoordinator: ObservableObject {
             backCount: max(0, routeHistory.count - 1),
             forwardCount: forwardRouteHistory.count
         )
+    }
+
+    func workspaceNodes(
+        order: [XertPrimaryDestination] = XertPrimaryDestination.dockOrder,
+        allowsProtectedRoutes: Bool = true
+    ) -> [XertNavigationWorkspaceNode] {
+        XertWorkspaceOrderStore.normalized(order).map { destination in
+            let rememberedRoute = rememberedRoute(for: destination)
+            let visibleRoute = allowsProtectedRoutes || !rememberedRoute.requiresAuthentication
+                ? rememberedRoute
+                : .primary(destination)
+            return XertNavigationWorkspaceNode(
+                destination: destination,
+                route: visibleRoute,
+                isCurrent: destination == selection
+            )
+        }
     }
 
     var containsContextualHistory: Bool {
