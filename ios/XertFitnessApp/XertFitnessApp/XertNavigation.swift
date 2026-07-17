@@ -64,6 +64,7 @@ enum XertMemberRoute: Hashable {
     case home
     case notices(UUID?)
     case booking
+    case classSession(UUID)
     case sessionPacks
     case purchaseConfirmation
     case events
@@ -75,7 +76,7 @@ enum XertMemberRoute: Hashable {
     var destination: XertPrimaryDestination {
         switch self {
         case .home, .notices(_): return .home
-        case .booking, .sessionPacks, .purchaseConfirmation: return .booking
+        case .booking, .classSession(_), .sessionPacks, .purchaseConfirmation: return .booking
         case .events, .eventGoals: return .events
         case .explore: return .explore
         case .account, .upcomingBookings(_): return .account
@@ -87,6 +88,7 @@ enum XertMemberRoute: Hashable {
         case .home: return "Home"
         case .notices(_): return "Member Notices"
         case .booking: return "Book"
+        case .classSession(_): return "Class Details"
         case .sessionPacks: return "Session Packs"
         case .purchaseConfirmation: return "Purchase Confirmation"
         case .events: return "Events"
@@ -99,7 +101,7 @@ enum XertMemberRoute: Hashable {
 
     var isContextualTask: Bool {
         switch self {
-        case .notices(_), .sessionPacks, .purchaseConfirmation, .eventGoals, .upcomingBookings(_):
+        case .notices(_), .classSession(_), .sessionPacks, .purchaseConfirmation, .eventGoals, .upcomingBookings(_):
             return true
         case .home, .booking, .events, .explore, .account:
             return false
@@ -110,7 +112,7 @@ enum XertMemberRoute: Hashable {
         switch self {
         case .notices(_), .purchaseConfirmation, .eventGoals, .upcomingBookings(_):
             return true
-        case .home, .booking, .sessionPacks, .events, .explore, .account:
+        case .home, .booking, .classSession(_), .sessionPacks, .events, .explore, .account:
             return false
         }
     }
@@ -119,7 +121,7 @@ enum XertMemberRoute: Hashable {
         switch self {
         case .notices(_): return .notices(nil)
         case .upcomingBookings(_): return .upcomingBookings(nil)
-        case .purchaseConfirmation: return nil
+        case .classSession(_), .purchaseConfirmation: return nil
         case .home, .booking, .sessionPacks, .events, .eventGoals, .explore, .account:
             return self
         }
@@ -140,6 +142,7 @@ enum XertMemberRoute: Hashable {
         case .home: return "home"
         case .notices(let id): return ["home", "notices", id?.uuidString.lowercased()].compactMap { $0 }.joined(separator: "/")
         case .booking: return "booking"
+        case .classSession(let id): return "booking/classes/\(id.uuidString.lowercased())"
         case .sessionPacks: return "booking/packs"
         case .purchaseConfirmation: return "booking/purchase-confirmation"
         case .events: return "events"
@@ -159,7 +162,7 @@ enum XertMemberRoute: Hashable {
 
     var shareDestination: XertRouteShareDestination? {
         switch self {
-        case .home, .booking, .sessionPacks, .events, .explore:
+        case .home, .booking, .classSession(_), .sessionPacks, .events, .explore:
             return XertRouteShareDestination(route: self, isExactTask: true)
         case .notices(_):
             return XertRouteShareDestination(route: .home, isExactTask: false)
@@ -240,6 +243,10 @@ enum XertMemberRoute: Hashable {
                let id = UUID(uuidString: parts[2]) {
                 return .notices(id)
             }
+            if parts.count == 3, parts[0] == "booking", parts[1] == "classes",
+               let id = UUID(uuidString: parts[2]) {
+                return .classSession(id)
+            }
             if parts.count == 3, parts[0] == "account", parts[1] == "bookings",
                let id = UUID(uuidString: parts[2]) {
                 return .upcomingBookings(id)
@@ -303,7 +310,7 @@ enum XertRouteUserActivity {
         isPrivacyLocked: Bool
     ) -> Bool {
         guard !isPrivacyLocked else { return false }
-        return !route.isContextualTask || isSignedIn
+        return !route.requiresAuthentication || isSignedIn
     }
 
     static func configure(_ activity: NSUserActivity, route: XertMemberRoute) {
@@ -548,6 +555,7 @@ enum XertNavigationCommandAction: Hashable {
 enum XertNavigationActivity: Hashable {
     case notices
     case notice(UUID)
+    case classSession(UUID)
     case upcomingBookings(UUID?)
     case eventGoals
     case pendingCheckout
@@ -555,6 +563,7 @@ enum XertNavigationActivity: Hashable {
 
 enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     case now = "Now"
+    case discover = "Available Classes"
     case pinned = "Pinned Workspaces"
     case recent = "Workspace History"
     case navigate = "Navigate"
@@ -580,12 +589,14 @@ struct XertNextBookingNavigationContext: Equatable {
 
 enum XertMemberRecordKind: Int, CaseIterable, Hashable {
     case booking
+    case classSession
     case notice
 }
 
 struct XertMemberRecordNavigationContext: Identifiable, Equatable {
     static let maximumRecordsPerKind = 4
     static let maximumTitleLength = 120
+    static let maximumDetailLength = 160
 
     let id: UUID
     let kind: XertMemberRecordKind
@@ -593,6 +604,7 @@ struct XertMemberRecordNavigationContext: Identifiable, Equatable {
     let detail: String
     let timestamp: Date
     let priority: Int
+    let requiresAuthentication: Bool
 
     static func booking(
         id: UUID,
@@ -604,9 +616,41 @@ struct XertMemberRecordNavigationContext: Identifiable, Equatable {
             id: id,
             kind: .booking,
             title: normalizedTitle(title, fallback: "XERT class"),
-            detail: status.trimmingCharacters(in: .whitespacesAndNewlines),
+            detail: normalizedDetail(status, fallback: "Upcoming booking"),
             timestamp: startTime,
-            priority: 0
+            priority: 0,
+            requiresAuthentication: true
+        )
+    }
+
+    static func classSession(
+        id: UUID,
+        title: String,
+        coach: String?,
+        location: String?,
+        spotsLeft: Int?,
+        startTime: Date
+    ) -> Self {
+        let availability: String?
+        if let spotsLeft {
+            availability = spotsLeft > 0
+                ? "\(spotsLeft) \(spotsLeft == 1 ? "spot" : "spots")"
+                : "Waitlist"
+        } else {
+            availability = nil
+        }
+        let detail = [coach, location, availability]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        return Self(
+            id: id,
+            kind: .classSession,
+            title: normalizedTitle(title, fallback: "XERT class"),
+            detail: normalizedDetail(detail, fallback: "Class details and availability"),
+            timestamp: startTime,
+            priority: 0,
+            requiresAuthentication: false
         )
     }
 
@@ -627,9 +671,10 @@ struct XertMemberRecordNavigationContext: Identifiable, Equatable {
             id: id,
             kind: .notice,
             title: normalizedTitle(title, fallback: "Member update"),
-            detail: normalizedTone,
+            detail: normalizedDetail(normalizedTone, fallback: "update"),
             timestamp: publishedAt,
-            priority: priority
+            priority: priority,
+            requiresAuthentication: true
         )
     }
 
@@ -637,6 +682,12 @@ struct XertMemberRecordNavigationContext: Identifiable, Equatable {
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return fallback }
         return String(normalized.prefix(maximumTitleLength))
+    }
+
+    private static func normalizedDetail(_ value: String, fallback: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = normalized.isEmpty ? fallback : normalized
+        return String(resolved.prefix(maximumDetailLength))
     }
 }
 
@@ -667,9 +718,10 @@ struct XertNavigationContext: Equatable {
         self.eventGoalCount = eventGoalCount
         self.hasPendingCheckout = hasPendingCheckout
         self.nextBooking = isSignedIn ? nextBooking : nil
+        let normalizedRecords = Self.normalizedRecords(memberRecords)
         self.memberRecords = isSignedIn
-            ? Self.normalizedRecords(memberRecords)
-            : []
+            ? normalizedRecords
+            : normalizedRecords.filter { !$0.requiresAuthentication }
     }
 
     static let empty = XertNavigationContext(
@@ -695,8 +747,12 @@ struct XertNavigationContext: Equatable {
                 .filter { $0.kind == kind }
                 .sorted { lhs, rhs in
                     if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
-                    if kind == .booking { return lhs.timestamp < rhs.timestamp }
-                    return lhs.timestamp > rhs.timestamp
+                    switch kind {
+                    case .booking, .classSession:
+                        return lhs.timestamp < rhs.timestamp
+                    case .notice:
+                        return lhs.timestamp > rhs.timestamp
+                    }
                 }
                 .prefix(XertMemberRecordNavigationContext.maximumRecordsPerKind)
         }
@@ -1363,8 +1419,20 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     private func activityCommands(context: XertNavigationContext) -> [XertNavigationCommand] {
-        guard context.isSignedIn else { return [] }
-        var commands: [XertNavigationCommand] = []
+        var commands = context.memberRecords
+            .filter { $0.kind == .classSession }
+            .map { record in
+                XertNavigationCommand(
+                    id: "discover-class-\(record.id.uuidString.lowercased())",
+                    title: record.title,
+                    subtitle: "\(bookingScheduleLabel(record.timestamp)) · \(record.detail)",
+                    icon: "figure.strengthtraining.traditional",
+                    keywords: ["class", "book", "coach", "location", "spots", record.title, record.detail],
+                    section: .discover,
+                    action: .activity(.classSession(record.id))
+                )
+            }
+        guard context.isSignedIn else { return commands }
 
         if context.hasPendingCheckout {
             commands.append(XertNavigationCommand(

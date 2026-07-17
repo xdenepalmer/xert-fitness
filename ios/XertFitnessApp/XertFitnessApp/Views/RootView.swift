@@ -288,6 +288,19 @@ struct RootView: View {
     private func memberNavigationRecords(
         from bookings: [BookingItem]
     ) -> [XertMemberRecordNavigationContext] {
+        let now = Date()
+        let classRecords = ClassSessionDiscovery.sessions(from: store.sessions, now: now)
+            .filter { $0.start_time >= now }
+            .map {
+                XertMemberRecordNavigationContext.classSession(
+                    id: $0.id,
+                    title: $0.title,
+                    coach: $0.coach_name,
+                    location: $0.location_zone,
+                    spotsLeft: $0.spots_left,
+                    startTime: $0.start_time
+                )
+            }
         let bookingRecords = bookings.map {
             XertMemberRecordNavigationContext.booking(
                 id: $0.booking_id,
@@ -304,7 +317,7 @@ struct RootView: View {
                 publishedAt: $0.published_at
             )
         }
-        return bookingRecords + noticeRecords
+        return classRecords + bookingRecords + noticeRecords
     }
 
     private var navigationCommandContext: XertNavigationCommandContext {
@@ -465,6 +478,8 @@ struct RootView: View {
             openMemberRoute(.notices(nil), source: .commandPalette)
         case .notice(let noticeID):
             openMemberRoute(.notices(noticeID), source: .commandPalette)
+        case .classSession(let sessionID):
+            openMemberRoute(.classSession(sessionID), source: .commandPalette)
         case .upcomingBookings(let bookingID):
             openMemberRoute(.upcomingBookings(bookingID), source: .commandPalette)
         case .eventGoals:

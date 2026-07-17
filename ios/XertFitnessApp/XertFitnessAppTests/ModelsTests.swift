@@ -21,8 +21,9 @@ final class ModelsTests: XCTestCase {
     func testMemberSubroutesRoundTripAndRejectAmbiguousDeepLinks() throws {
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000021"))
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000022"))
+        let sessionID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000027"))
         let routes: [XertMemberRoute] = [
-            .home, .notices(nil), .notices(announcementID), .booking, .sessionPacks,
+            .home, .notices(nil), .notices(announcementID), .booking, .classSession(sessionID), .sessionPacks,
             .purchaseConfirmation, .events, .eventGoals, .explore, .account,
             .upcomingBookings(nil), .upcomingBookings(bookingID),
         ]
@@ -31,6 +32,7 @@ final class ModelsTests: XCTestCase {
             XCTAssertEqual(XertMemberRoute.restore(route.restorationValue), route)
         }
         XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/packs"))), .sessionPacks)
+        XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://booking/classes/\(sessionID.uuidString)"))), .classSession(sessionID))
         XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://events/goals"))), .eventGoals)
         XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://account/bookings/\(bookingID.uuidString)"))), .upcomingBookings(bookingID))
         XCTAssertEqual(XertMemberRoute.route(for: try XCTUnwrap(URL(string: "xertfitness://home/notices/\(announcementID.uuidString)"))), .notices(announcementID))
@@ -409,8 +411,9 @@ final class ModelsTests: XCTestCase {
     func testCanonicalWebTaskLinksRoundTripAndRejectUntrustedOrigins() throws {
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000023"))
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000024"))
+        let sessionID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000028"))
         let routes: [XertMemberRoute] = [
-            .home, .notices(nil), .notices(announcementID), .booking, .sessionPacks,
+            .home, .notices(nil), .notices(announcementID), .booking, .classSession(sessionID), .sessionPacks,
             .purchaseConfirmation, .events, .eventGoals, .explore, .account,
             .upcomingBookings(nil), .upcomingBookings(bookingID),
         ]
@@ -435,8 +438,9 @@ final class ModelsTests: XCTestCase {
     func testRouteSharingNeverExportsPrivateMemberTaskIdentity() throws {
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000025"))
         let bookingID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000026"))
+        let sessionID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000029"))
 
-        let exactRoutes: [XertMemberRoute] = [.home, .booking, .sessionPacks, .events, .explore]
+        let exactRoutes: [XertMemberRoute] = [.home, .booking, .classSession(sessionID), .sessionPacks, .events, .explore]
         for route in exactRoutes {
             XCTAssertEqual(route.shareDestination?.route, route)
             XCTAssertEqual(route.shareDestination?.isExactTask, true)
@@ -486,8 +490,14 @@ final class ModelsTests: XCTestCase {
     }
 
     func testRouteUserActivityAdvertisingProtectsSignedOutAndLockedMemberContext() {
+        let sessionID = UUID()
         XCTAssertTrue(XertRouteUserActivity.shouldAdvertise(
             route: .events,
+            isSignedIn: false,
+            isPrivacyLocked: false
+        ))
+        XCTAssertTrue(XertRouteUserActivity.shouldAdvertise(
+            route: .classSession(sessionID),
             isSignedIn: false,
             isPrivacyLocked: false
         ))
@@ -509,8 +519,9 @@ final class ModelsTests: XCTestCase {
     }
 
     func testNavigationIntentsDeferOnlyMemberPrivateRoutesUntilAuthentication() {
+        let sessionID = UUID()
         let publicRoutes: [XertMemberRoute] = [
-            .home, .booking, .sessionPacks, .events, .explore, .account
+            .home, .booking, .classSession(sessionID), .sessionPacks, .events, .explore, .account
         ]
         let protectedRoutes: [XertMemberRoute] = [
             .notices(nil), .purchaseConfirmation, .eventGoals, .upcomingBookings(nil)
@@ -1145,6 +1156,16 @@ final class ModelsTests: XCTestCase {
                 publishedAt: baseDate.addingTimeInterval(3_600)
             ),
         ]
+        let publicSessions = (0..<6).reversed().map { offset in
+            XertMemberRecordNavigationContext.classSession(
+                id: UUID(),
+                title: "Open Class \(offset)",
+                coach: "Coach Morgan",
+                location: "Floor",
+                spotsLeft: offset,
+                startTime: baseDate.addingTimeInterval(Double(offset) * 1_800)
+            )
+        }
         let signedInContext = XertNavigationContext(
             isSignedIn: true,
             noticeCount: notices.count,
@@ -1152,7 +1173,7 @@ final class ModelsTests: XCTestCase {
             creditCount: 0,
             eventGoalCount: 0,
             hasPendingCheckout: false,
-            memberRecords: bookings + [duplicateBooking] + notices
+            memberRecords: bookings + [duplicateBooking] + notices + publicSessions
         )
 
         XCTAssertEqual(
@@ -1166,6 +1187,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(
             signedInContext.memberRecords.filter { $0.kind == .notice }.map(\.priority),
             [0, 1, 2]
+        )
+        XCTAssertEqual(
+            signedInContext.memberRecords.filter { $0.kind == .classSession }.count,
+            XertMemberRecordNavigationContext.maximumRecordsPerKind
         )
         XCTAssertEqual(
             signedInContext.memberRecords.first { $0.kind == .notice }?.title.count,
@@ -1199,12 +1224,27 @@ final class ModelsTests: XCTestCase {
             creditCount: 0,
             eventGoalCount: 0,
             hasPendingCheckout: false,
-            memberRecords: bookings + notices
+            memberRecords: bookings + notices + publicSessions
         )
-        XCTAssertTrue(signedOutContext.memberRecords.isEmpty)
-        XCTAssertFalse(
-            navigation.commandPaletteCommands(isAdmin: false, context: signedOutContext)
-                .contains { $0.section == .now }
+        XCTAssertEqual(
+            signedOutContext.memberRecords.map(\.kind),
+            Array(
+                repeating: XertMemberRecordKind.classSession,
+                count: XertMemberRecordNavigationContext.maximumRecordsPerKind
+            )
+        )
+        let guestCommands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: signedOutContext
+        )
+        XCTAssertFalse(guestCommands.contains { $0.section == .now })
+        XCTAssertEqual(
+            guestCommands.filter { $0.section == .discover }.count,
+            XertMemberRecordNavigationContext.maximumRecordsPerKind
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(guestCommands, query: "coach morgan").first?.action,
+            .activity(.classSession(publicSessions.last!.id))
         )
     }
 

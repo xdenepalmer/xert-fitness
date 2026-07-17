@@ -15,6 +15,10 @@ const exactFallbacks = new Map([
 
 const contextualFallbacks = [
   {
+    pattern: new RegExp(`^/open/booking/classes/(${UUID_PATTERN})$`, 'i'),
+    destination: match => `/booking?session=${match[1].toLowerCase()}`,
+  },
+  {
     pattern: new RegExp(`^/open/home/notices/${UUID_PATTERN}$`, 'i'),
     destination: '/account#notices',
   },
@@ -29,5 +33,9 @@ export function nativeTaskFallback(pathname) {
   const normalized = pathname.toLowerCase().replace(/\/+$/, '') || '/';
   const exact = exactFallbacks.get(normalized);
   if (exact) return exact;
-  return contextualFallbacks.find(({ pattern }) => pattern.test(normalized))?.destination || '/app';
+  for (const { pattern, destination } of contextualFallbacks) {
+    const match = normalized.match(pattern);
+    if (match) return typeof destination === 'function' ? destination(match) : destination;
+  }
+  return '/app';
 }

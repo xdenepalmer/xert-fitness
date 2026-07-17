@@ -23,6 +23,7 @@ const steps = [
 ];
 
 const cardStyle = { borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formatDay(iso) {
   return new Date(iso).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -49,6 +50,10 @@ export default function Booking() {
   const [buyingSlug, setBuyingSlug] = useState(null);
   const [bookingId, setBookingId] = useState(null);
   const [loadErrors, setLoadErrors] = useState([]);
+  const requestedSession = searchParams.get('session');
+  const targetSessionId = requestedSession && UUID_PATTERN.test(requestedSession)
+    ? requestedSession.toLowerCase()
+    : null;
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'cancelled') return;
@@ -104,6 +109,41 @@ export default function Booking() {
 
   const memberBookingsBySession = useMemo(() => activeBookingsBySession(myBookings), [myBookings]);
   const timetableUnavailable = loadErrors.some(error => error.startsWith('Timetable:'));
+
+  useEffect(() => {
+    if (!requestedSession || loading || timetableUnavailable) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('session');
+
+    if (!targetSessionId) {
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    const targetExists = sessions.some(item => item.id?.toLowerCase() === targetSessionId);
+    const target = document.getElementById(`class-session-${targetSessionId}`);
+    if (!targetExists || !target) {
+      setSearchParams(nextParams, { replace: true });
+      toast({
+        title: 'Class no longer available',
+        description: 'The timetable has changed. Explore the latest available sessions below.',
+      });
+      return;
+    }
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    loading,
+    requestedSession,
+    searchParams,
+    sessions,
+    setSearchParams,
+    targetSessionId,
+    timetableUnavailable,
+    toast,
+  ]);
 
   const handleBuy = async (product) => {
     if (!paymentsEnabled) {
@@ -354,7 +394,13 @@ export default function Booking() {
                         const timeConflict = !full && !existingBooking ? bookingTimeConflict(s, myBookings) : null;
                         const actionLabel = classActionLabel({ booking: existingBooking, conflict: timeConflict, full, bookingMode: s.booking_mode });
                         return (
-                          <div key={s.id} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
+                          <div
+                            key={s.id}
+                            id={`class-session-${s.id.toLowerCase()}`}
+                            tabIndex={-1}
+                            className="border p-4 flex flex-wrap items-center gap-4 focus:outline-none focus:ring-2 focus:ring-xert-steel"
+                            style={cardStyle}
+                          >
                             <p className="font-display text-lg uppercase tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
                               {formatTime(s.start_time)}
                             </p>

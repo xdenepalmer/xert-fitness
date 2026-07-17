@@ -18,7 +18,7 @@ struct BookingView: View {
     let onNavigate: (XertPrimaryDestination) -> Void
 
     private enum ScrollTarget: Hashable {
-        case credits, packs
+        case credits, packs, session(UUID)
     }
 
     var body: some View {
@@ -64,6 +64,7 @@ struct BookingView: View {
                 }
                 .onAppear { focusRoute(using: proxy) }
                 .onChange(of: routeSequence) { _ in focusRoute(using: proxy) }
+                .onChange(of: store.sessions) { _ in focusRoute(using: proxy) }
                 .sheet(item: $activeSheet) { sheet in
                     switch sheet {
                     case .privateSession:
@@ -101,6 +102,13 @@ struct BookingView: View {
         switch route {
         case .sessionPacks: target = .packs
         case .purchaseConfirmation: target = .credits
+        case .classSession(let sessionID):
+            guard store.sessions.contains(where: { $0.id == sessionID }) else { return }
+            classSearch = ""
+            classDateWindow = .all
+            classFit = .all
+            expandedSessionIDs.insert(sessionID)
+            target = .session(sessionID)
         default: return
         }
         handledRouteSequence = routeSequence
@@ -355,6 +363,8 @@ struct BookingView: View {
         }
         .padding(14)
         .xertCardStyle()
+        .id(ScrollTarget.session(session.id))
+        .accessibilityIdentifier("xert-class-session-\(session.id.uuidString.lowercased())")
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))

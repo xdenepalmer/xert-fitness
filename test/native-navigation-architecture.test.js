@@ -84,12 +84,15 @@ test('member routing is typed, task-restorable, and owns native deep-link mappin
   assert.match(navigation, /url\.user == nil[\s\S]*url\.password == nil[\s\S]*url\.query == nil[\s\S]*url\.fragment == nil/);
   assert.match(navigation, /enum XertMemberRoute: Hashable/);
   assert.match(navigation, /case notices\(UUID\?\)/);
+  assert.match(navigation, /case classSession\(UUID\)/);
   assert.match(navigation, /case upcomingBookings\(UUID\?\)/);
   assert.match(navigation, /case sessionPacks/);
   assert.match(navigation, /case purchaseConfirmation/);
   assert.match(navigation, /case eventGoals/);
   assert.match(navigation, /var restorationValue: String/);
+  assert.match(navigation, /case \.classSession\(let id\): return "booking\/classes\//);
   assert.match(navigation, /static func restore\(_ value: String\)/);
+  assert.match(navigation, /return !route\.requiresAuthentication \|\| isSignedIn/);
   assert.match(navigation, /final class XertNavigationCoordinator: ObservableObject/);
   assert.match(navigation, /@Published private\(set\) var route: XertMemberRoute/);
   assert.match(navigation, /func open\(_ targetRoute: XertMemberRoute/);
@@ -123,6 +126,9 @@ test('contextual member routes focus the exact native task instead of only its t
   assert.match(home, /case \.notices\(let announcementID\) = route[\s\S]*showingNoticeCenter = true/);
   assert.match(booking, /case \.sessionPacks: target = \.packs/);
   assert.match(booking, /case \.purchaseConfirmation: target = \.credits/);
+  assert.match(booking, /case \.classSession\(let sessionID\):[\s\S]*expandedSessionIDs\.insert\(sessionID\)[\s\S]*target = \.session\(sessionID\)/);
+  assert.match(booking, /\.onChange\(of: store\.sessions\) \{ _ in focusRoute\(using: proxy\) \}/);
+  assert.match(booking, /\.id\(ScrollTarget\.session\(session\.id\)\)/);
   assert.match(events, /route == \.eventGoals[\s\S]*proxy\.scrollTo\(ScrollTarget\.goals/);
   assert.match(account, /case \.upcomingBookings\(let bookingID\) = route[\s\S]*proxy\.scrollTo\(target/);
 });
@@ -138,8 +144,9 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(navigation, /struct XertNavigationContext: Equatable/);
   assert.match(navigation, /struct XertMemberRecordNavigationContext: Identifiable, Equatable/);
   assert.match(navigation, /static let maximumRecordsPerKind = 4/);
-  assert.match(navigation, /memberRecords = isSignedIn[\s\S]*Self\.normalizedRecords\(memberRecords\)[\s\S]*: \[\]/);
+  assert.match(navigation, /normalizedRecords = Self\.normalizedRecords\(memberRecords\)[\s\S]*normalizedRecords\.filter \{ !\$0\.requiresAuthentication \}/);
   assert.match(navigation, /case notice\(UUID\)/);
+  assert.match(navigation, /case classSession\(UUID\)/);
   assert.match(navigation, /enum XertNavigationActivity: Hashable/);
   assert.match(navigation, /enum XertNavigationCommandSection: String, CaseIterable, Identifiable/);
   assert.match(navigation, /func commandPaletteCommands\([\s\S]*context: XertNavigationContext = \.empty/);
@@ -160,6 +167,9 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /context: navigationContext/);
   assert.match(root, /memberRecords: memberNavigationRecords\(from: activeBookings\)/);
   assert.match(root, /case \.notice\(let noticeID\):[\s\S]*openMemberRoute\(\.notices\(noticeID\), source: \.commandPalette\)/);
+  assert.match(root, /case \.classSession\(let sessionID\):[\s\S]*openMemberRoute\(\.classSession\(sessionID\), source: \.commandPalette\)/);
+  assert.match(navigation, /case discover = "Available Classes"/);
+  assert.match(navigation, /section: \.discover,[\s\S]*action: \.activity\(\.classSession\(record\.id\)\)/);
   assert.match(root, /XertNavigationCommandSection\.allCases/);
   assert.match(root, /Section \{[\s\S]*Text\(section\.rawValue\)/);
   assert.match(root, /\.searchable\(text: \$query/);
@@ -473,7 +483,7 @@ test('quick switcher persists bounded account-scoped pinned workspaces without t
   assert.match(navigation, /keyPrefix = "xert\.navigation\.pins\.v1\."/);
   assert.match(navigation, /case \.notices\(_\): return \.notices\(nil\)/);
   assert.match(navigation, /case \.upcomingBookings\(_\): return \.upcomingBookings\(nil\)/);
-  assert.match(navigation, /case \.purchaseConfirmation: return nil/);
+  assert.match(navigation, /case \.classSession\(_\), \.purchaseConfirmation: return nil/);
   assert.match(navigation, /case pinned\(XertMemberRoute\)/);
   assert.match(navigation, /case pinned = "Pinned Workspaces"/);
   assert.match(navigation, /allowsProtectedRoutes \|\| !\$0\.requiresAuthentication/);

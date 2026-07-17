@@ -22,7 +22,7 @@ test('native exact-task routes participate in privacy-safe Handoff continuation'
   assert.match(navigation, /activity\.isEligibleForSearch = !route\.isContextualTask/);
   assert.match(navigation, /activity\.isEligibleForPrediction = !route\.isContextualTask/);
   assert.match(navigation, /activity\.isEligibleForPublicIndexing = false/);
-  assert.match(navigation, /func shouldAdvertise\([\s\S]*!route\.isContextualTask \|\| isSignedIn/);
+  assert.match(navigation, /func shouldAdvertise\([\s\S]*!route\.requiresAuthentication \|\| isSignedIn/);
   assert.match(navigation, /version\.intValue == currentVersion/);
   assert.match(navigation, /restoredRoute != webRoute/);
   assert.match(navigation, /case handoff/);
@@ -32,5 +32,6 @@ test('native exact-task routes participate in privacy-safe Handoff continuation'
   assert.match(root, /openMemberRoute\(route, source: \.handoff\)/);
   assert.match(modelsTests, /testRouteUserActivityRoundTripsExactTasksWithoutIndexingPrivateContext/);
   assert.match(modelsTests, /testRouteUserActivityAdvertisingProtectsSignedOutAndLockedMemberContext/);
+  assert.match(modelsTests, /route: \.classSession\(sessionID\),[\s\S]*isSignedIn: false/);
   assert.match(modelsTests, /testRouteUserActivityRejectsWrongMalformedAndConflictingPayloads/);
 });
