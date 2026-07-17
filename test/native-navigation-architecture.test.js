@@ -111,7 +111,7 @@ test('contextual member routes focus the exact native task instead of only its t
     readFile(viewURL('AccountView'), 'utf8'),
   ]);
   assert.match(root, /openMemberRoute\(\.notices\(nil\), source: \.commandPalette\)/);
-  assert.match(root, /openMemberRoute\(\.upcomingBookings\(nil\), source: \.commandPalette\)/);
+  assert.match(root, /openMemberRoute\(\.upcomingBookings\(bookingID\), source: \.commandPalette\)/);
   assert.match(root, /openMemberRoute\(\.eventGoals, source: \.commandPalette\)/);
   assert.match(root, /openMemberRoute\(\.purchaseConfirmation, source: \.commandPalette\)/);
   assert.match(root, /openMemberRoute\(\.notices\(pendingAnnouncementID\), source: \.pushNotification\)/);
@@ -399,14 +399,16 @@ test('navigation carries operational state and native interaction feedback', asy
     readFile(modelsTestsURL, 'utf8'),
   ]);
   assert.match(root, /noticeCount: store\.announcements\.count/);
-  assert.match(root, /bookingCount: activeBookingCount/);
+  assert.match(root, /let activeBookings = activeUpcomingBookings/);
+  assert.match(root, /bookingCount: activeBookings\.count/);
+  assert.match(root, /nextBooking: nextBookingNavigationContext\(from: activeBookings\)/);
   assert.match(root, /creditCount: store\.creditTotal/);
   assert.match(root, /eventGoalCount: store\.eventGoalIDs\.count/);
   assert.match(root, /hasPendingCheckout: store\.isCheckoutConfirmationPending \|\| store\.isReconcilingCheckout/);
   assert.match(root, /UISelectionFeedbackGenerator\(\)\.selectionChanged\(\)/);
   assert.match(root, /matchedGeometryEffect\(id: "primary-navigation-selection"/);
   assert.match(root, /dynamicTypeSize\.isAccessibilitySize \? 80 : 66/);
-  assert.match(root, /activeBookingCount[\s\S]*isActiveClassPlace[\s\S]*start_time >= Date\(\)/);
+  assert.match(root, /activeUpcomingBookings[\s\S]*let now = Date\(\)[\s\S]*isActiveClassPlace[\s\S]*start_time >= now/);
   assert.match(root, /guard selection != item else \{[\s\S]*onReselect\(item\)/);
   assert.match(root, /handleReselection[\s\S]*store\.refresh\(\)/);
   assert.match(root, /DragGesture\(minimumDistance: 36\)/);
@@ -423,15 +425,19 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(navigation, /active member notices/);
   assert.match(root, /Refreshes this workspace/);
   assert.match(navigation, /struct XertNavigationStatusSnapshot: Equatable/);
+  assert.match(navigation, /self\.nextBooking = isSignedIn \? nextBooking : nil/);
   assert.match(navigation, /destination: \.booking,[\s\S]*kind: \.attention,[\s\S]*Purchase confirmation needs attention/);
   assert.match(navigation, /var priorityStatus: XertNavigationStatus\?/);
-  assert.match(navigation, /statuses\.first \{ \$0\.kind == \.attention \} \?\? statuses\.first/);
+  assert.match(navigation, /statuses\.min \{ \$0\.priority < \$1\.priority \}/);
   assert.match(navigation, /activity: \.notices/);
   assert.match(navigation, /activity: \.pendingCheckout/);
   assert.match(navigation, /activity: \.eventGoals/);
-  assert.match(navigation, /activity: \.upcomingBookings/);
+  assert.match(navigation, /activity: \.upcomingBookings\(nextBooking\?\.id\)/);
   assert.match(navigation, /destination: \.events,[\s\S]*selected event goals/);
   assert.match(navigation, /destination: \.account,[\s\S]*upcoming bookings/);
+  assert.match(root, /nextBookingNavigationContext[\s\S]*\.min \{ \$0\.start_time < \$1\.start_time \}/);
+  assert.match(root, /openMemberRoute\(\.upcomingBookings\(bookingID\), source: \.commandPalette\)/);
+  assert.match(modelsTests, /priorityStatus\?\.activity, \.upcomingBookings\(bookingID\)/);
   assert.match(root, /statusSnapshot: XertNavigationStatusSnapshot\(context: navigationContext\)/);
   assert.ok((root.match(/let statusSnapshot: XertNavigationStatusSnapshot/g) || []).length === 2);
   assert.match(root, /XertNavigationStatusBadge\(status: status\)/);

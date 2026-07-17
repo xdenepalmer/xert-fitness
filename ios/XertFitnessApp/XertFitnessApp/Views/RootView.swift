@@ -247,8 +247,24 @@ struct RootView: View {
         }
     }
 
-    private var activeBookingCount: Int {
-        store.bookings.filter { $0.isActiveClassPlace && $0.start_time >= Date() }.count
+    private var activeUpcomingBookings: [BookingItem] {
+        let now = Date()
+        return store.bookings.filter { $0.isActiveClassPlace && $0.start_time >= now }
+    }
+
+    private func nextBookingNavigationContext(
+        from bookings: [BookingItem]
+    ) -> XertNextBookingNavigationContext? {
+        bookings
+            .min { $0.start_time < $1.start_time }
+            .map {
+                let title = $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                XertNextBookingNavigationContext(
+                    id: $0.booking_id,
+                    title: title.isEmpty ? "XERT class" : title,
+                    startTime: $0.start_time
+                )
+            }
     }
 
     private var navigationPresentation: XertNavigationPresentation {
@@ -256,13 +272,15 @@ struct RootView: View {
     }
 
     private var navigationContext: XertNavigationContext {
-        XertNavigationContext(
+        let activeBookings = activeUpcomingBookings
+        return XertNavigationContext(
             isSignedIn: store.isSignedIn,
             noticeCount: store.announcements.count,
-            bookingCount: activeBookingCount,
+            bookingCount: activeBookings.count,
             creditCount: store.creditTotal,
             eventGoalCount: store.eventGoalIDs.count,
-            hasPendingCheckout: store.isCheckoutConfirmationPending || store.isReconcilingCheckout
+            hasPendingCheckout: store.isCheckoutConfirmationPending || store.isReconcilingCheckout,
+            nextBooking: nextBookingNavigationContext(from: activeBookings)
         )
     }
 
@@ -422,8 +440,8 @@ struct RootView: View {
         switch activity {
         case .notices:
             openMemberRoute(.notices(nil), source: .commandPalette)
-        case .upcomingBookings:
-            openMemberRoute(.upcomingBookings(nil), source: .commandPalette)
+        case .upcomingBookings(let bookingID):
+            openMemberRoute(.upcomingBookings(bookingID), source: .commandPalette)
         case .eventGoals:
             openMemberRoute(.eventGoals, source: .commandPalette)
         case .pendingCheckout:

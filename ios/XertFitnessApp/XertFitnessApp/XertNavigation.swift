@@ -547,7 +547,7 @@ enum XertNavigationCommandAction: Hashable {
 
 enum XertNavigationActivity: Hashable {
     case notices
-    case upcomingBookings
+    case upcomingBookings(UUID?)
     case eventGoals
     case pendingCheckout
 }
@@ -563,6 +563,20 @@ enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+struct XertNextBookingNavigationContext: Equatable {
+    let id: UUID
+    let title: String
+    let startTime: Date
+
+    var scheduleLabel: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
+        formatter.dateFormat = "EEE d MMM, h:mm a"
+        return formatter.string(from: startTime)
+    }
+}
+
 struct XertNavigationContext: Equatable {
     let isSignedIn: Bool
     let noticeCount: Int
@@ -570,6 +584,25 @@ struct XertNavigationContext: Equatable {
     let creditCount: Int
     let eventGoalCount: Int
     let hasPendingCheckout: Bool
+    let nextBooking: XertNextBookingNavigationContext?
+
+    init(
+        isSignedIn: Bool,
+        noticeCount: Int,
+        bookingCount: Int,
+        creditCount: Int,
+        eventGoalCount: Int,
+        hasPendingCheckout: Bool,
+        nextBooking: XertNextBookingNavigationContext? = nil
+    ) {
+        self.isSignedIn = isSignedIn
+        self.noticeCount = noticeCount
+        self.bookingCount = bookingCount
+        self.creditCount = creditCount
+        self.eventGoalCount = eventGoalCount
+        self.hasPendingCheckout = hasPendingCheckout
+        self.nextBooking = isSignedIn ? nextBooking : nil
+    }
 
     static let empty = XertNavigationContext(
         isSignedIn: false,
@@ -577,7 +610,8 @@ struct XertNavigationContext: Equatable {
         bookingCount: 0,
         creditCount: 0,
         eventGoalCount: 0,
-        hasPendingCheckout: false
+        hasPendingCheckout: false,
+        nextBooking: nil
     )
 }
 
@@ -595,6 +629,7 @@ struct XertNavigationStatus: Identifiable, Equatable {
     let actionTitle: String
     let shortTitle: String
     let icon: String
+    fileprivate let priority: Int
 
     var id: XertPrimaryDestination { destination }
     var badgeText: String {
@@ -622,7 +657,8 @@ struct XertNavigationStatusSnapshot: Equatable {
                 activity: .notices,
                 actionTitle: "Review member notices",
                 shortTitle: "Notices",
-                icon: "bell.badge"
+                icon: "bell.badge",
+                priority: 20
             ))
         }
         if context.hasPendingCheckout {
@@ -634,7 +670,8 @@ struct XertNavigationStatusSnapshot: Equatable {
                 activity: .pendingCheckout,
                 actionTitle: "Check purchase confirmation",
                 shortTitle: "Purchase",
-                icon: "clock.arrow.circlepath"
+                icon: "clock.arrow.circlepath",
+                priority: 0
             ))
         }
         if context.eventGoalCount > 0 {
@@ -646,19 +683,23 @@ struct XertNavigationStatusSnapshot: Equatable {
                 activity: .eventGoals,
                 actionTitle: "Review event goals",
                 shortTitle: "Goals",
-                icon: "target"
+                icon: "target",
+                priority: 30
             ))
         }
         if context.bookingCount > 0 {
+            let nextBooking = context.nextBooking
             current.append(Self.activity(
                 destination: .account,
                 count: context.bookingCount,
                 singular: "upcoming booking",
                 plural: "upcoming bookings",
-                activity: .upcomingBookings,
-                actionTitle: "View upcoming bookings",
-                shortTitle: "Bookings",
-                icon: "calendar.badge.clock"
+                activity: .upcomingBookings(nextBooking?.id),
+                actionTitle: nextBooking.map { "Open next class: \($0.title)" } ?? "View upcoming bookings",
+                shortTitle: nextBooking == nil ? "Bookings" : "Next class",
+                icon: "calendar.badge.clock",
+                priority: 10,
+                accessibilityDetail: nextBooking.map { "Next booking is \($0.title), \($0.scheduleLabel)" }
             ))
         }
         statuses = current
@@ -669,7 +710,7 @@ struct XertNavigationStatusSnapshot: Equatable {
     }
 
     var priorityStatus: XertNavigationStatus? {
-        statuses.first { $0.kind == .attention } ?? statuses.first
+        statuses.min { $0.priority < $1.priority }
     }
 
     private static func activity(
@@ -680,18 +721,22 @@ struct XertNavigationStatusSnapshot: Equatable {
         activity: XertNavigationActivity,
         actionTitle: String,
         shortTitle: String,
-        icon: String
+        icon: String,
+        priority: Int,
+        accessibilityDetail: String? = nil
     ) -> XertNavigationStatus {
         let boundedCount = max(1, count)
         return XertNavigationStatus(
             destination: destination,
             kind: .activity,
             count: boundedCount,
-            accessibilityLabel: "\(boundedCount) \(boundedCount == 1 ? singular : plural)",
+            accessibilityLabel: accessibilityDetail
+                ?? "\(boundedCount) \(boundedCount == 1 ? singular : plural)",
             activity: activity,
             actionTitle: actionTitle,
             shortTitle: shortTitle,
-            icon: icon
+            icon: icon,
+            priority: priority
         )
     }
 }
@@ -1244,6 +1289,20 @@ final class XertNavigationCoordinator: ObservableObject {
                 action: .activity(.pendingCheckout)
             ))
         }
+        if context.bookingCount > 0 {
+            let nextBooking = context.nextBooking
+            commands.append(XertNavigationCommand(
+                id: "activity-upcoming-bookings",
+                title: nextBooking.map { "Open next class: \($0.title)" }
+                    ?? "View \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))",
+                subtitle: nextBooking.map { "\($0.scheduleLabel) · \(context.bookingCount) upcoming" }
+                    ?? "Review class details, reminders and cancellations",
+                icon: "calendar.badge.clock",
+                keywords: ["class", "schedule", "reminder", "cancel", nextBooking?.title ?? ""],
+                section: .now,
+                action: .activity(.upcomingBookings(nextBooking?.id))
+            ))
+        }
         if context.noticeCount > 0 {
             commands.append(XertNavigationCommand(
                 id: "activity-notices",
@@ -1253,17 +1312,6 @@ final class XertNavigationCoordinator: ObservableObject {
                 keywords: ["announcement", "message", "update", "news"],
                 section: .now,
                 action: .activity(.notices)
-            ))
-        }
-        if context.bookingCount > 0 {
-            commands.append(XertNavigationCommand(
-                id: "activity-upcoming-bookings",
-                title: "View \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))",
-                subtitle: "Review class details, reminders and cancellations",
-                icon: "calendar.badge.clock",
-                keywords: ["class", "schedule", "reminder", "cancel"],
-                section: .now,
-                action: .activity(.upcomingBookings)
             ))
         }
         if context.eventGoalCount > 0 {

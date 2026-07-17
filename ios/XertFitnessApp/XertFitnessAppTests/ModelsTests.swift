@@ -1050,13 +1050,19 @@ final class ModelsTests: XCTestCase {
 
     func testNavigationCommandPalettePromotesLiveMemberActivity() {
         let navigation = XertNavigationCoordinator(initial: .home)
+        let bookingID = UUID(uuidString: "00000000-0000-0000-0000-000000000071")!
         let context = XertNavigationContext(
             isSignedIn: true,
             noticeCount: 2,
             bookingCount: 1,
             creditCount: 7,
             eventGoalCount: 3,
-            hasPendingCheckout: true
+            hasPendingCheckout: true,
+            nextBooking: XertNextBookingNavigationContext(
+                id: bookingID,
+                title: "Engine Room",
+                startTime: Date(timeIntervalSince1970: 1_800_000_000)
+            )
         )
 
         let commands = navigation.commandPaletteCommands(isAdmin: false, context: context)
@@ -1064,8 +1070,8 @@ final class ModelsTests: XCTestCase {
             commands.filter { $0.section == .now }.map(\.action),
             [
                 .activity(.pendingCheckout),
+                .activity(.upcomingBookings(bookingID)),
                 .activity(.notices),
-                .activity(.upcomingBookings),
                 .activity(.eventGoals),
             ]
         )
@@ -1076,6 +1082,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(commands.contains {
             $0.action == .destination(.booking) && $0.subtitle.contains("7 credits available")
         })
+        XCTAssertTrue(commands.contains {
+            $0.action == .activity(.upcomingBookings(bookingID))
+                && $0.title == "Open next class: Engine Room"
+        })
         XCTAssertFalse(
             navigation.commandPaletteCommands(isAdmin: false, context: .empty)
                 .contains { $0.section == .now }
@@ -1083,13 +1093,19 @@ final class ModelsTests: XCTestCase {
     }
 
     func testNavigationStatusSignalsRouteToTheirOwningWorkspaces() {
+        let bookingID = UUID(uuidString: "00000000-0000-0000-0000-000000000072")!
         let context = XertNavigationContext(
             isSignedIn: true,
             noticeCount: 120,
             bookingCount: 2,
             creditCount: 7,
             eventGoalCount: 3,
-            hasPendingCheckout: true
+            hasPendingCheckout: true,
+            nextBooking: XertNextBookingNavigationContext(
+                id: bookingID,
+                title: "Performance Lab",
+                startTime: Date(timeIntervalSince1970: 1_800_000_000)
+            )
         )
         let snapshot = XertNavigationStatusSnapshot(context: context)
 
@@ -1102,18 +1118,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.priorityStatus?.destination, .booking)
         XCTAssertEqual(snapshot.status(for: .events)?.badgeText, "3")
         XCTAssertEqual(snapshot.status(for: .events)?.activity, .eventGoals)
-        XCTAssertEqual(snapshot.status(for: .account)?.accessibilityLabel, "2 upcoming bookings")
-        XCTAssertEqual(snapshot.status(for: .account)?.activity, .upcomingBookings)
+        XCTAssertTrue(snapshot.status(for: .account)?.accessibilityLabel.contains("Performance Lab") == true)
+        XCTAssertEqual(snapshot.status(for: .account)?.activity, .upcomingBookings(bookingID))
+        XCTAssertEqual(snapshot.status(for: .account)?.actionTitle, "Open next class: Performance Lab")
         XCTAssertNil(snapshot.status(for: .explore))
 
-        let signedOut = XertNavigationStatusSnapshot(context: XertNavigationContext(
+        let withoutCheckout = XertNavigationStatusSnapshot(context: XertNavigationContext(
+            isSignedIn: true,
+            noticeCount: 1,
+            bookingCount: 1,
+            creditCount: 0,
+            eventGoalCount: 1,
+            hasPendingCheckout: false,
+            nextBooking: context.nextBooking
+        ))
+        XCTAssertEqual(withoutCheckout.priorityStatus?.destination, .account)
+        XCTAssertEqual(withoutCheckout.priorityStatus?.activity, .upcomingBookings(bookingID))
+
+        let signedOutContext = XertNavigationContext(
             isSignedIn: false,
             noticeCount: 1,
             bookingCount: 1,
             creditCount: 1,
             eventGoalCount: 1,
-            hasPendingCheckout: true
-        ))
+            hasPendingCheckout: true,
+            nextBooking: context.nextBooking
+        )
+        XCTAssertNil(signedOutContext.nextBooking)
+        let signedOut = XertNavigationStatusSnapshot(context: signedOutContext)
         for destination in XertPrimaryDestination.allCases {
             XCTAssertNil(signedOut.status(for: destination))
         }
