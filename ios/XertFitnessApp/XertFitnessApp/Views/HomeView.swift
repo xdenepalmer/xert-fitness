@@ -368,6 +368,8 @@ struct HomeView: View {
 }
 
 private struct NativeHomeHero: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var photoIndex = 0
     let content: AdminSiteContentData
     let isSignedIn: Bool
     let noticeCount: Int
@@ -444,6 +446,28 @@ private struct NativeHomeHero: View {
                         .accessibilityLabel("Refresh XERT home")
                     }
 
+                    if heroPhotoURLs.count > 1 {
+                        HStack(spacing: 0) {
+                            ForEach(heroPhotoURLs.indices, id: \.self) { index in
+                                Button {
+                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.45)) {
+                                        photoIndex = index
+                                    }
+                                } label: {
+                                    Circle()
+                                        .fill(index == photoIndex ? Color.xertSteel : Color.xertPale.opacity(0.32))
+                                        .frame(width: index == photoIndex ? 8 : 6, height: index == photoIndex ? 8 : 6)
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Show training photo \(index + 1) of \(heroPhotoURLs.count)")
+                                .accessibilityAddTraits(index == photoIndex ? .isSelected : [])
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, 8)
+                    }
+
                     Spacer(minLength: 24)
 
                     HStack(spacing: 10) {
@@ -499,18 +523,47 @@ private struct NativeHomeHero: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .task(id: carouselTaskID) {
+            if photoIndex >= heroPhotoURLs.count { photoIndex = 0 }
+            guard heroPhotoURLs.count > 1, !reduceMotion else { return }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 1.2)) {
+                photoIndex = (photoIndex + 1) % heroPhotoURLs.count
+            }
+        }
     }
 
     @ViewBuilder
     private var heroImage: some View {
-        if let raw = content.photos?.first, let url = publicPhotoURL(raw) {
+        if let url = currentHeroPhotoURL {
             AsyncImage(url: url) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
                 else { fallbackImage }
             }
+            .id(url)
+            .transition(.opacity)
         } else {
             fallbackImage
         }
+    }
+
+    private var heroPhotoURLs: [URL] {
+        guard let photos = content.photos else { return [] }
+        var seen = Set<URL>()
+        return photos.compactMap { value in
+            guard let url = publicPhotoURL(value), seen.insert(url).inserted else { return nil }
+            return url
+        }
+    }
+
+    private var currentHeroPhotoURL: URL? {
+        guard heroPhotoURLs.indices.contains(photoIndex) else { return heroPhotoURLs.first }
+        return heroPhotoURLs[photoIndex]
+    }
+
+    private var carouselTaskID: String {
+        "\(reduceMotion)-\(photoIndex)-" + heroPhotoURLs.map(\.absoluteString).joined(separator: "|")
     }
 
     private var fallbackImage: some View {
@@ -518,7 +571,9 @@ private struct NativeHomeHero: View {
     }
 
     private func publicPhotoURL(_ value: String) -> URL? {
-        value.hasPrefix("/") ? AppConfig.webURL(path: value) : URL(string: value)
+        let url = value.hasPrefix("/") ? AppConfig.webURL(path: value) : URL(string: value)
+        guard let url, ["https", "http"].contains(url.scheme?.lowercased()) else { return nil }
+        return url
     }
 
     @ViewBuilder

@@ -23,7 +23,7 @@ test('native Explore mirrors public CMS, team, training and acquisition workflow
   for (const kind of ['\.member', '\.trainer', '\.partner']) assert.match(explore, new RegExp(`NativeInterestFormView\\(kind: ${kind}\\)`));
   assert.match(explore, /NativeMultiSelect/);
   assert.match(home, /content: store\.publicContent\(for: \.hero\)/);
-  assert.match(home, /content\.photos\?\.first/);
+  assert.match(home, /content\.photos[\s\S]*compactMap[\s\S]*publicPhotoURL/);
   assert.match(booking, /store\.publicContent\(for: \.booking\)\.intro/);
   assert.match(store, /func submitInterest\(kind: NativeInterestKind/);
   assert.match(api, /func coaches\(\)/);

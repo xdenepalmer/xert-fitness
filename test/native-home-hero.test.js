@@ -20,6 +20,15 @@ test('native home opens with the photographic XERT website hero language', async
   assert.match(home, /Booking-based semi-private classes · Kingaroy QLD/);
   assert.match(home, /Book Your First Session/);
   assert.match(home, /View Event Calendar/);
+  assert.match(home, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
+  assert.match(home, /@State private var photoIndex = 0/);
+  assert.match(home, /heroPhotoURLs\.indices/);
+  assert.match(home, /\.frame\(width: 44, height: 44\)/);
+  assert.match(home, /Task\.sleep\(nanoseconds: 5_000_000_000\)/);
+  assert.match(home, /withAnimation\(\.easeInOut\(duration: 1\.2\)\)/);
+  assert.ok(home.includes('Show training photo \\(index + 1) of \\(heroPhotoURLs.count)'));
+  assert.match(home, /guard heroPhotoURLs\.count > 1, !reduceMotion else \{ return \}/);
+  assert.match(home, /\["https", "http"\]\.contains\(url\.scheme\?\.lowercased\(\)\)/);
 });
 
 test('native hero stays functional and leaves member operations directly below it', async () => {
