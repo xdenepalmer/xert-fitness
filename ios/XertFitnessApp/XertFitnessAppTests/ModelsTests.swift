@@ -1053,7 +1053,11 @@ final class ModelsTests: XCTestCase {
             XertOwnerWorkspace.allCases
         )
         XCTAssertEqual(
-            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "refund revenue").map(\.action),
+            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "stripe refund").map(\.action),
+            [.owner(.orders)]
+        )
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(ownerCommands, query: "stripe revenue").map(\.action),
             [.owner(.finance)]
         )
         XCTAssertEqual(
