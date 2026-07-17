@@ -4,7 +4,7 @@ import {
   checkoutFulfillmentForSession,
   persistCheckoutFulfillment,
 } from './stripe-webhook.js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -131,7 +131,8 @@ const SAFE_ERRORS = {
 };
 
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!inspectCommerceRuntimeEnvironment(process.env).ready) {
     return json({ error: 'Payment operations are unavailable.' }, 503);
@@ -161,6 +162,13 @@ export default async function handler(request, response) {
     return json(result);
   } catch (error) {
     const [message, status] = SAFE_ERRORS[error.message] || ['Order reconciliation failed.', 500];
+    if (status >= 500) {
+      console.error('Admin order reconciliation failed.', {
+        requestId: trace.requestId,
+        code: String(error?.code || error?.message || 'UNEXPECTED_RECONCILIATION_ERROR'),
+        stripeRequestId: String(error?.requestId || ''),
+      });
+    }
     return json({ error: message }, status);
   }
 }

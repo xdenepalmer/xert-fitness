@@ -41,9 +41,12 @@ private struct SupabaseErrorResponse: Decodable {
     let message: String?
     let error: String?
     let error_description: String?
+    let request_id: String?
 
     var displayMessage: String? {
-        message ?? error_description ?? error
+        guard let message = message ?? error_description ?? error else { return nil }
+        guard let requestID = request_id.flatMap(UUID.init(uuidString:)) else { return message }
+        return "\(message) Reference: \(requestID.uuidString.prefix(8).lowercased())."
     }
 }
 

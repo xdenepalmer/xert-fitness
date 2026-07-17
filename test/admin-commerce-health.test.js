@@ -820,11 +820,13 @@ test('commerce health responses are explicitly private and non-cacheable', async
 test('commerce health fails closed before authentication when runtime identity is invalid', async () => {
   const response = {
     statusCode: 200,
-    setHeader() {},
+    headers: {},
+    setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
   };
   await adminCommerceHealthHandler({ method: 'GET', headers: {} }, response);
   assert.equal(response.statusCode, 503);
-  assert.deepEqual(response.body, { error: 'Commerce health service is unavailable.' });
+  assert.equal(response.body.error, 'Commerce health service is unavailable.');
+  assert.equal(response.body.request_id, response.headers['x-request-id']);
 });

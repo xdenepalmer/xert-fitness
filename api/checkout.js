@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
@@ -372,8 +372,9 @@ export function pendingOrderForCheckout(checkout, user, product) {
 }
 
 export default async function handler(request, response) {
+  const trace = createRequestTrace(response);
   response.setHeader(XERT_PAYMENT_CONTRACT_HEADER, XERT_PAYMENT_CONTRACT_VERSION);
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const { json } = trace;
   if (request.method === 'HEAD') return sendCheckoutEnvironmentStatus(response);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!inspectCheckoutEnvironment(process.env).ready) {
@@ -605,10 +606,11 @@ export default async function handler(request, response) {
   } catch (e) {
     const failure = publicCheckoutFailure(e);
     console.error('Checkout request failed.', {
+      requestId: trace.requestId,
       name: String(e?.name || 'Error'),
       code: String(e?.code || 'UNEXPECTED_CHECKOUT_ERROR'),
       type: String(e?.type || ''),
-      requestId: String(e?.requestId || ''),
+      stripeRequestId: String(e?.requestId || ''),
     });
     return json({ error: failure.message }, failure.status);
   }

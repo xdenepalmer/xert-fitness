@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady } from './checkout.js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
@@ -525,7 +525,8 @@ export async function retryStripeWebhookEvent(admin, stripe, retry, {
 }
 
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
   if (!inspectCommerceRuntimeEnvironment(process.env, { requireStripeSecret: false }).ready) {
     return json({ error: 'Commerce health service is unavailable.' }, 503);
@@ -577,6 +578,7 @@ export default async function handler(request, response) {
     try {
       const resolved = await resolveStripeOperatorReview(admin, reviewResolution);
       console.info('Stripe operator review resolved.', {
+        requestId: trace.requestId,
         eventId: resolved.event_id,
         actorId: user.id,
       });
@@ -597,6 +599,7 @@ export default async function handler(request, response) {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { maxNetworkRetries: 2, timeout: 20_000 });
       const result = await retryStripeWebhookEvent(admin, stripe, webhookRetry);
       console.info('Stripe webhook event retried by owner.', {
+        requestId: trace.requestId,
         eventId: webhookRetry.eventId,
         actorId: user.id,
         duplicate: result.duplicate,

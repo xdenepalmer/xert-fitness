@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { requestHeader, requestText, sendJson, sendText } from './http.js';
+import { createRequestTrace, requestHeader, requestText } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
@@ -446,7 +446,8 @@ export async function processStripeEvent(admin, event, {
 }
 
 export default async function handler(request, response) {
-  const text = (body, status = 200) => sendText(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json, text } = trace;
   if (request.method !== 'POST') return text('Method not allowed', 405);
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -471,6 +472,7 @@ export default async function handler(request, response) {
     event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
   } catch (e) {
     console.warn('Stripe webhook signature rejected.', {
+      requestId: trace.requestId,
       name: String(e?.name || 'Error'),
       type: String(e?.type || ''),
       code: String(e?.code || ''),
@@ -480,13 +482,14 @@ export default async function handler(request, response) {
 
   try {
     const result = await processStripeEvent(admin, event);
-    return sendJson(response, {
+    return json({
       received: true,
       ...(result.duplicate ? { duplicate: true } : {}),
       ...(result.requiresReview ? { requires_review: true } : {}),
     });
   } catch (e) {
     console.error('Stripe webhook processing failed.', {
+      requestId: trace.requestId,
       eventId: String(event?.id || ''),
       eventType: String(event?.type || ''),
       name: String(e?.name || 'Error'),

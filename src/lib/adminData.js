@@ -19,6 +19,7 @@ import { dashboardMetricsFromSettled } from './adminMetrics';
 import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
 import { adminAuditRangeStart } from './adminAudit.js';
+import { apiErrorMessage } from './apiError.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -468,7 +469,7 @@ export async function activateSessionPackPayments(settings, baseline) {
     }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Payment activation failed. Payments remain paused.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Payment activation failed. Payments remain paused.'));
   if (body?.payments_enabled !== true || body?.id !== baseline.id) {
     throw new Error('Payment activation could not be confirmed. Payments remain paused.');
   }
@@ -1114,7 +1115,7 @@ export async function refundOrder(orderId, reason, confirmation) {
     body: JSON.stringify({ order_id: orderId, reason, confirmation }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Refund could not be completed.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Refund could not be completed.'));
   return body;
 }
 
@@ -1130,7 +1131,7 @@ export async function reconcileOrder(orderId) {
     body: JSON.stringify({ order_id: orderId }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Payment could not be reconciled.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Payment could not be reconciled.'));
   return body;
 }
 
@@ -1274,7 +1275,7 @@ export async function getCommerceConfigurationHealth() {
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Commerce health check failed.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Commerce health check failed.'));
   return body;
 }
 
@@ -1295,7 +1296,7 @@ export async function resolveStripeOperatorReview(eventId, errorCode) {
     }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Stripe incident resolution failed.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Stripe incident resolution failed.'));
   return body;
 }
 
@@ -1315,7 +1316,7 @@ export async function retryStripeWebhookEvent(eventId) {
     }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Stripe event retry failed.');
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Stripe event retry failed.'));
   return body;
 }
 

@@ -3,6 +3,7 @@ import { XERT_2026_EVENTS, sortEvents } from './eventCalendar';
 import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkoutAttempt';
 import { sessionPackPaymentsEnabled } from './launchSettings';
 import { savePendingWebCheckout } from './webCheckoutRecovery';
+import { apiErrorMessage } from './apiError';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ export async function startCheckout(productSlug) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Could not start checkout. Please try again.');
+    throw new Error(apiErrorMessage(body, 'Could not start checkout. Please try again.'));
   }
   const { url, checkout_session_id: checkoutSessionID } = await res.json();
   if (!url || !checkoutSessionID) throw new Error('Checkout session did not return a complete handoff.');
