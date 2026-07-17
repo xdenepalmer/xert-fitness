@@ -251,9 +251,11 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerNavigation, /enum XertOwnerTask: Equatable, Hashable, Identifiable/);
   assert.match(ownerNavigation, /case member\(UUID\)/);
   assert.match(ownerNavigation, /case order\(UUID\)/);
+  assert.match(ownerNavigation, /case product\(UUID\)/);
   assert.match(ownerNavigation, /case event\(UUID\)/);
   assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
   assert.match(ownerNavigation, /case \(\.orders, "order"\), \(\.finance, "order"\): return \.order\(id\)/);
+  assert.match(ownerNavigation, /case \(\.products, "product"\): return \.product\(id\)/);
   assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
   assert.match(ownerNavigation, /parts\.count == 2 \|\| parts\.count == 4/);
   assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);
@@ -263,13 +265,15 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /AdminOwnerTaskSheet/);
   assert.match(ownerView, /admin\.members\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.orders\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /admin\.products\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
   assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
   assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
-  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length === 3);
+  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length === 5);
   assert.match(ownerView, /Button \{ onOpenTask\(\.member\(member\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.order\(order\.id\)\) \}/);
+  assert.match(ownerView, /Button \{ onOpenTask\(\.product\(product\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.event\(event\.id\)\) \}/);
   assert.doesNotMatch(ownerView, /@State private var selectedOrder: OrderItem\?/);
   assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
@@ -349,7 +353,7 @@ test('owner command search ranks bounded exact records without replacing workspa
   assert.doesNotMatch(ownerSearch, /members =/);
 
   assert.match(ownerView, /private struct AdminWorkspaceSwitcher:[\s\S]*@ObservedObject var admin: AdminStore/);
-  assert.match(ownerView, /XertOwnerCommandIndex\.matches\([\s\S]*admin\.ownerMemberSearchResults[\s\S]*admin\.orders[\s\S]*admin\.events/);
+  assert.match(ownerView, /XertOwnerCommandIndex\.matches\([\s\S]*admin\.ownerMemberSearchResults[\s\S]*admin\.orders[\s\S]*admin\.products[\s\S]*admin\.events/);
   assert.match(ownerView, /ForEach\(XertOwnerRecordKind\.allCases\)/);
   assert.match(ownerView, /Button \{ onOpenRoute\(record\.route\) \}/);
   assert.match(ownerView, /\.task\(id: normalizedQuery\)[\s\S]*Task\.sleep\(nanoseconds: 300_000_000\)[\s\S]*searchOwnerMembers/);

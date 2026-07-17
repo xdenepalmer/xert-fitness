@@ -221,10 +221,10 @@ until this command passes.
    The return identity selects only an order already owned by the signed-in
    member; it never controls pricing, ownership, credits, or fulfilment.
 9. Start another checkout without paying, wait for Stripe to report it expired,
-   then use **Admin > Finance > Check Stripe outcome**. Confirm XERT closes the
+   then use **Admin > Orders > Check Stripe outcome**. Confirm XERT closes the
    pending order as failed and grants zero credits. This also recovers safely
    when the normal `checkout.session.expired` webhook was missed.
-10. Refund the test order from **Admin > Finance**.
+10. Refund the test order from **Admin > Orders**.
    If Stripe completed the refund but XERT lost the database response, repeat
    the same confirmed refund action. XERT recovers only the exact succeeded
    full refund and completes credit and booking reconciliation without issuing
@@ -272,7 +272,7 @@ If any live check fails, disable **Session pack payments** in **Admin > Platform
 Controls**. This server-side switch blocks new website and iOS Checkout sessions;
 do not delete Stripe records. Preserve orders and webhook history for
 reconciliation. Restore the previous Vercel deployment or correct the affected
-secret/Price, redeploy, then use **Admin > Finance > Check and reconcile payment**
+secret/Price, redeploy, then use **Admin > Orders > Check and reconcile payment**
 for any customer whose payment status is uncertain. A failed or ten-minute-stalled
 paid-session delivery also activates the automatic Checkout circuit breaker. Use
 **Operations Health > Retry safely** to settle the canonical event; do not bypass

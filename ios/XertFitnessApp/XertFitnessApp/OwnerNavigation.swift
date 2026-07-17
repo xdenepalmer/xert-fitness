@@ -384,6 +384,7 @@ enum XertOwnerWorkspacePinsStore {
 enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case member(UUID)
     case order(UUID)
+    case product(UUID)
     case event(UUID)
 
     var id: String { restorationValue }
@@ -392,6 +393,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member: return .members
         case .order: return .orders
+        case .product: return .products
         case .event: return .events
         }
     }
@@ -400,6 +402,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member: return "Member Record"
         case .order: return "Order Detail"
+        case .product: return "Session Pack"
         case .event: return "Event Detail"
         }
     }
@@ -408,6 +411,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member(let id): return "member/\(id.uuidString.lowercased())"
         case .order(let id): return "order/\(id.uuidString.lowercased())"
+        case .product(let id): return "product/\(id.uuidString.lowercased())"
         case .event(let id): return "event/\(id.uuidString.lowercased())"
         }
     }
@@ -421,6 +425,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch (workspace, kind) {
         case (.members, "member"): return .member(id)
         case (.orders, "order"), (.finance, "order"): return .order(id)
+        case (.products, "product"): return .product(id)
         case (.events, "event"): return .event(id)
         default: return nil
         }
@@ -501,6 +506,7 @@ struct XertOwnerRoute: Equatable, Hashable {
 enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
     case member = "Members"
     case order = "Orders"
+    case product = "Session Packs"
     case event = "Events"
 
     var id: Self { self }
@@ -530,6 +536,7 @@ enum XertOwnerCommandIndex {
         query: String,
         members: [AdminMemberSummary],
         orders: [OrderItem],
+        products: [AdminProduct],
         events: [AdminEvent]
     ) -> [XertOwnerRecordCommand] {
         let normalizedQuery = normalize(query)
@@ -537,6 +544,7 @@ enum XertOwnerCommandIndex {
 
         let candidates = members.map(memberCandidate)
             + orders.map(orderCandidate)
+            + products.map(productCandidate)
             + events.map(eventCandidate)
         return XertOwnerRecordKind.allCases.flatMap { kind in
             candidates
@@ -616,6 +624,39 @@ enum XertOwnerCommandIndex {
             identifiers: [event.id.uuidString],
             searchableValues: [event.name, event.category, event.location, event.region, event.event_date]
                 .compactMap { $0 }
+        )
+    }
+
+    private static func productCandidate(_ product: AdminProduct) -> Candidate {
+        let stripeState: String
+        if !product.active {
+            stripeState = "Inactive"
+        } else if product.hasStableStripePriceID {
+            stripeState = "Stripe linked"
+        } else {
+            stripeState = "Blocks live checkout"
+        }
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .product,
+                route: XertOwnerRoute(task: .product(product.id)),
+                title: product.name,
+                subtitle: "\(product.displayPrice) · \(product.sessions_count) sessions · \(stripeState)",
+                icon: product.active && !product.hasStableStripePriceID
+                    ? "exclamationmark.triangle"
+                    : "ticket"
+            ),
+            title: product.name,
+            identifiers: [product.id.uuidString, product.slug, product.stripe_price_id]
+                .compactMap { $0 },
+            searchableValues: [
+                product.name,
+                product.slug,
+                product.description,
+                product.currency,
+                product.stripe_price_id,
+                stripeState,
+            ].compactMap { $0 }
         )
     }
 

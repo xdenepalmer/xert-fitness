@@ -104,9 +104,11 @@ final class ModelsTests: XCTestCase {
         let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000081"))
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000082"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000083"))
+        let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000084"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
             XertOwnerRoute(task: .order(orderID)),
+            XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
         ]
 
@@ -129,6 +131,7 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/finance/order/\(orderID.uuidString)"),
             XertOwnerRoute(task: .order(orderID))
@@ -256,6 +259,7 @@ final class ModelsTests: XCTestCase {
         let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a1"))
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a3"))
+        let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a4"))
         let member = AdminMemberSummary(
             id: memberID,
             full_name: "Alex Runner",
@@ -303,12 +307,28 @@ final class ModelsTests: XCTestCase {
             sort_order: 1,
             updated_at: "2026-07-17T00:00:00Z"
         )
+        let product = AdminProduct(
+            id: productID,
+            slug: "starter-4",
+            name: "Starter 4",
+            description: "Four coached sessions",
+            price_cents: 4800,
+            currency: "aud",
+            sessions_count: 4,
+            validity_days: 28,
+            stripe_price_id: "price_live_owner_command",
+            featured: true,
+            active: true,
+            sort_order: 1,
+            updated_at: "2026-07-17T00:00:00Z"
+        )
 
         XCTAssertEqual(
             XertOwnerCommandIndex.matches(
                 query: orderID.uuidString,
                 members: [member],
                 orders: [order],
+                products: [product],
                 events: [event]
             ).map(\.route),
             [XertOwnerRoute(task: .order(orderID))]
@@ -318,6 +338,7 @@ final class ModelsTests: XCTestCase {
                 query: "alex",
                 members: [member],
                 orders: [order],
+                products: [product],
                 events: [event]
             ).map(\.kind),
             [.member, .order]
@@ -327,13 +348,34 @@ final class ModelsTests: XCTestCase {
                 query: "gold coast",
                 members: [member],
                 orders: [order],
+                products: [product],
                 events: [event]
             ).first?.route,
             XertOwnerRoute(task: .event(eventID))
         )
         XCTAssertTrue(XertOwnerCommandIndex.matches(
-            query: " ", members: [member], orders: [order], events: [event]
+            query: " ", members: [member], orders: [order], products: [product], events: [event]
         ).isEmpty)
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "price_live_owner_command",
+                members: [member],
+                orders: [order],
+                products: [product],
+                events: [event]
+            ).map(\.route),
+            [XertOwnerRoute(task: .product(productID))]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "starter-4",
+                members: [],
+                orders: [],
+                products: [product],
+                events: []
+            ).first?.kind,
+            .product
+        )
 
         let manyEvents = (0..<(XertOwnerCommandIndex.maximumResultsPerKind + 3)).map { index in
             AdminEvent(
@@ -355,6 +397,7 @@ final class ModelsTests: XCTestCase {
                 query: "race",
                 members: [],
                 orders: [],
+                products: [],
                 events: manyEvents
             ).count,
             XertOwnerCommandIndex.maximumResultsPerKind

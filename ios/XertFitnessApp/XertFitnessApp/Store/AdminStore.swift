@@ -133,7 +133,7 @@ final class AdminStore: ObservableObject {
         do { members = try await memberRequest; loadedSource = true }
         catch { failures.append("members") }
         do { orders = try await orderRequest; loadedSource = true }
-        catch { failures.append("finance") }
+        catch { failures.append("orders") }
         do { settings = try await settingsRequest; loadedSource = true }
         catch { failures.append("platform controls") }
         do { ptRequests = try await ptRequest; loadedSource = true }
@@ -226,14 +226,29 @@ final class AdminStore: ObservableObject {
 
     func resolveOwnerTask(session: AuthSession, task: XertOwnerTask) async {
         guard resolvingOwnerTask == nil else { return }
-        guard case .member(let memberID) = task,
-              !members.contains(where: { $0.id == memberID }) else { return }
+        switch task {
+        case .member(let memberID):
+            guard !members.contains(where: { $0.id == memberID }) else { return }
+        case .product(let productID):
+            guard !products.contains(where: { $0.id == productID }) else { return }
+        case .order, .event:
+            return
+        }
         resolvingOwnerTask = task
         defer { resolvingOwnerTask = nil }
         do {
-            let member = try await api.adminMember(session: session, id: memberID)
-            members.removeAll(where: { $0.id == memberID })
-            members.insert(member, at: 0)
+            switch task {
+            case .member(let memberID):
+                let member = try await api.adminMember(session: session, id: memberID)
+                members.removeAll(where: { $0.id == memberID })
+                members.insert(member, at: 0)
+            case .product(let productID):
+                let refreshedProducts = try await api.adminProducts(session: session)
+                guard refreshedProducts.contains(where: { $0.id == productID }) else { return }
+                products = refreshedProducts
+            case .order, .event:
+                break
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

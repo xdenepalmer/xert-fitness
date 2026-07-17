@@ -83,6 +83,8 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminAuditView/);
   assert.match(view, /AdminProductsView/);
   assert.match(view, /AdminProductEditor/);
+  assert.match(view, /accessibilityHint\("Opens the exact session pack blocking Stripe launch"\)/);
+  assert.match(view, /issue\.slug == "activation-receipt"[\s\S]*onOpenWorkspace\(\.controls\)/);
   assert.match(view, /LIVE STRIPE READINESS/);
   assert.match(view, /liveBlockedProducts/);
   assert.match(view, /This active pack blocks live Stripe checkout/);
@@ -235,7 +237,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);
   assert.match(view, /private struct AdminWorkspaceSwitcher: View/);
-  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, member, order or event"\)/);
+  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, member, order, pack or event"\)/);
   assert.match(view, /\.keyboardShortcut\("k", modifiers: \.command\)/);
   assert.match(view, /workspaceSection\("Needs attention", workspaces: attentionWorkspaces\)/);
   assert.match(view, /workspaceSection\("Recent", workspaces: matchingRecent\)/);

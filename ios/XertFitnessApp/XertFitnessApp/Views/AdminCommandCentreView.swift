@@ -664,11 +664,20 @@ struct AdminCommandCentreView: View {
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
             ))
         case .products:
-            return AnyView(AdminProductsView(admin: admin, session: session))
+            return AnyView(AdminProductsView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
+            ))
         case .controls:
             return AnyView(AdminPlatformView(admin: admin, session: session))
         case .health:
-            return AnyView(AdminOperationsHealthView(admin: admin, session: session))
+            return AnyView(AdminOperationsHealthView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) },
+                onOpenWorkspace: openWorkspace
+            ))
         case .audit:
             return AnyView(AdminAuditView(admin: admin))
         }
@@ -715,6 +724,7 @@ private struct AdminWorkspaceSwitcher: View {
             query: query,
             members: admin.ownerMemberSearchResults,
             orders: admin.orders,
+            products: admin.products,
             events: admin.events
         )
     }
@@ -785,7 +795,7 @@ private struct AdminWorkspaceSwitcher: View {
             .background(Color.xertNavy)
             .navigationTitle("Owner commands")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: "Workspace, member, order or event")
+            .searchable(text: $query, prompt: "Workspace, member, order, pack or event")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
@@ -938,6 +948,13 @@ private struct AdminOwnerTaskSheet: View {
                 AdminOrderDetailView(admin: admin, session: session, order: order)
             } else {
                 resolutionView(recordName: "order")
+            }
+        case .product(let id):
+            if let product = admin.products.first(where: { $0.id == id }) {
+                AdminProductEditor(admin: admin, session: session, product: product)
+                    .toolbar { closeToolbar }
+            } else {
+                resolutionView(recordName: "session pack")
             }
         case .event(let id):
             if let event = admin.events.first(where: { $0.id == id }) {
@@ -3620,6 +3637,8 @@ private struct AdminCommunicationsView: View {
 private struct AdminOperationsHealthView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
+    let onOpenWorkspace: (XertOwnerWorkspace) -> Void
     @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
     @State private var pendingRetry: AdminCommerceHealth.WebhookDelivery.Incident?
 
@@ -3766,10 +3785,39 @@ private struct AdminOperationsHealthView: View {
                 if let issues = commerce.issues, !issues.isEmpty {
                     Section("Stripe actions required") {
                         ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                            Label(issue.reason, systemImage: "exclamationmark.triangle")
-                                .font(.subheadline)
-                                .foregroundStyle(Color.orange)
+                            if let product = product(for: issue) {
+                                Button { onOpenTask(.product(product.id)) } label: {
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Image(systemName: "exclamationmark.triangle")
+                                            .foregroundStyle(Color.orange)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(product.name)
+                                                .font(.headline)
+                                                .foregroundStyle(Color.xertOffWhite)
+                                            Text(issue.reason)
+                                                .font(.caption)
+                                                .foregroundStyle(Color.xertPale.opacity(0.68))
+                                        }
+                                        Spacer()
+                                        Image(systemName: "arrow.up.forward.square")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(Color.xertSteel)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Opens the exact session pack blocking Stripe launch")
                                 .listRowBackground(Color.xertInk)
+                            } else if issue.slug == "activation-receipt" {
+                                Button { onOpenWorkspace(.controls) } label: {
+                                    launchIssueRow(issue, actionIcon: "switch.2")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Opens Platform Controls")
+                                .listRowBackground(Color.xertInk)
+                            } else {
+                                launchIssueRow(issue)
+                                    .listRowBackground(Color.xertInk)
+                            }
                         }
                     }
                 }
@@ -3825,6 +3873,31 @@ private struct AdminOperationsHealthView: View {
         let mode = health.mode?.uppercased() ?? "UNKNOWN"
         let payout = health.account?.payouts_enabled == true ? "payouts ready" : "payouts need attention"
         return "\(mode): \(health.active_product_count) active packs; \(health.stripe_price_count) Stripe-linked, \(health.dynamic_price_count) dynamic; \(payout)."
+    }
+
+    private func product(for issue: AdminCommerceHealth.Issue) -> AdminProduct? {
+        admin.products.first {
+            $0.slug.caseInsensitiveCompare(issue.slug) == .orderedSame
+        }
+    }
+
+    private func launchIssueRow(
+        _ issue: AdminCommerceHealth.Issue,
+        actionIcon: String? = nil
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(Color.orange)
+            Text(issue.reason)
+                .font(.subheadline)
+                .foregroundStyle(Color.xertPale)
+            Spacer(minLength: 8)
+            if let actionIcon {
+                Image(systemName: actionIcon)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.xertSteel)
+            }
+        }
     }
 
     private var pushDetail: String {
@@ -3971,6 +4044,7 @@ private struct AdminAuditView: View {
 private struct AdminProductsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
 
     private var activeProducts: [AdminProduct] { admin.products.filter(\.active) }
     private var liveBlockedProducts: [AdminProduct] { activeProducts.filter { !$0.hasStableStripePriceID } }
@@ -4002,9 +4076,7 @@ private struct AdminProductsView: View {
             }
             if admin.products.isEmpty { Text("No session packs configured.").listRowBackground(Color.xertInk) }
             ForEach(admin.products) { product in
-                NavigationLink {
-                    AdminProductEditor(admin: admin, session: session, product: product)
-                } label: {
+                Button { onOpenTask(.product(product.id)) } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -4032,6 +4104,8 @@ private struct AdminProductsView: View {
                     .foregroundStyle(Color.xertOffWhite)
                     .padding(.vertical, 6)
                 }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens this exact session pack in owner navigation")
                 .listRowBackground(Color.xertInk)
             }
         }
