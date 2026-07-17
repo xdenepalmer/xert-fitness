@@ -63,7 +63,8 @@ test('web checkout handoff persists exact recovery identity and clears cancelled
   ]);
 
   assert.match(checkoutAPI, /checkout_session_id: reusableCheckout\.checkoutSessionID/);
-  assert.match(checkoutAPI, /json\(\{ url: session\.url, checkout_session_id: session\.id \}\)/);
+  assert.match(checkoutAPI, /verifiedCreatedCheckoutURL\(session, user, product/);
+  assert.match(checkoutAPI, /json\(\{ url: checkoutURL, checkout_session_id: session\.id \}\)/);
   assert.match(bookingData, /savePendingWebCheckout\(\{ userID: session\.user\.id, checkoutSessionID \}\)/);
   assert.ok(bookingData.indexOf('savePendingWebCheckout') < bookingData.indexOf('window.location.href = url'));
   assert.match(account, /webCheckoutSettlement\(pending, loadedOrders\)/);

@@ -293,7 +293,12 @@ export function reusableCheckoutURL(checkout, user, product, options = {}) {
     checkout?.status !== 'open'
     || checkout?.payment_status !== 'unpaid'
     || checkout?.livemode !== expectedLivemode
-    || !url || url.protocol !== 'https:'
+    || !url
+    || url.protocol !== 'https:'
+    || url.hostname !== 'checkout.stripe.com'
+    || url.username !== ''
+    || url.password !== ''
+    || (url.port !== '' && url.port !== '443')
     || metadata.user_id !== user?.id
     || metadata.product_id !== product?.id
     || metadata.product_slug !== product?.slug
@@ -306,6 +311,107 @@ export function reusableCheckoutURL(checkout, user, product, options = {}) {
     || String(checkout.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
   ) return null;
   return url.toString();
+}
+
+export function buildCheckoutSessionParameters({
+  user,
+  product,
+  lineItem,
+  returnTarget,
+  returnURLs,
+  receiptDetails,
+  checkoutAttemptID,
+  now = Date.now(),
+}) {
+  assertCheckoutProduct(product);
+  const attemptID = normalizeCheckoutAttemptID(checkoutAttemptID);
+  if (!user?.id || !lineItem || typeof lineItem !== 'object') {
+    throw new Error('Checkout session identity is incomplete.');
+  }
+  if (returnTarget !== 'web' && returnTarget !== 'ios') {
+    throw new Error('Unsupported checkout return target.');
+  }
+  if (
+    !receiptDetails?.email
+    || !receiptDetails?.terms
+    || !receiptDetails?.description
+    || !receiptDetails?.contractVersion
+  ) {
+    throw new Error('Checkout receipt details are incomplete.');
+  }
+  for (const value of [returnURLs?.success, returnURLs?.cancel]) {
+    let url;
+    try {
+      url = new URL(value || '');
+    } catch {
+      throw new Error('Checkout return URL is invalid.');
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error('Checkout return URL must use HTTP or HTTPS.');
+    }
+  }
+  const nowMilliseconds = Number(now);
+  if (!Number.isFinite(nowMilliseconds) || nowMilliseconds < 0) {
+    throw new Error('Checkout session time is invalid.');
+  }
+
+  return {
+    mode: 'payment',
+    customer_creation: 'if_required',
+    origin_context: returnTarget === 'ios' ? 'mobile_app' : 'web',
+    billing_address_collection: 'auto',
+    line_items: [lineItem],
+    customer_email: receiptDetails.email,
+    client_reference_id: user.id,
+    success_url: returnURLs.success,
+    cancel_url: returnURLs.cancel,
+    // Stripe accepts 30 minutes to 24 hours. Five minutes of margin protects
+    // against transit time and clock skew at the lower boundary.
+    expires_at: Math.floor(nowMilliseconds / 1000) + 35 * 60,
+    custom_text: {
+      submit: { message: receiptDetails.terms },
+    },
+    payment_intent_data: {
+      description: receiptDetails.description,
+      receipt_email: receiptDetails.email,
+      metadata: {
+        xert_user_id: user.id,
+        xert_product_id: product.id,
+        xert_product_slug: product.slug,
+        xert_checkout_attempt_id: attemptID,
+      },
+    },
+    metadata: {
+      xert_checkout_attempt_id: attemptID,
+      user_id: user.id,
+      product_id: product.id,
+      product_slug: product.slug,
+      sessions_count: String(product.sessions_count),
+      validity_days: String(product.validity_days),
+      return_target: returnTarget,
+      checkout_contract: receiptDetails.contractVersion,
+      checkout_attempt_id: attemptID,
+    },
+  };
+}
+
+export function verifiedCreatedCheckoutURL(checkout, user, product, options = {}) {
+  const url = reusableCheckoutURL(checkout, user, product, options);
+  const metadata = checkout?.metadata || {};
+  const expectedOriginContext = options.returnTarget === 'ios' ? 'mobile_app' : 'web';
+  if (
+    !url
+    || !/^cs_(?:test|live)_[A-Za-z0-9]+$/.test(String(checkout?.id || ''))
+    || checkout.client_reference_id !== user?.id
+    || checkout.origin_context !== expectedOriginContext
+    || checkout.success_url !== options.returnURLs?.success
+    || checkout.cancel_url !== options.returnURLs?.cancel
+    || metadata.xert_checkout_attempt_id !== options.checkoutAttemptID
+    || metadata.checkout_attempt_id !== options.checkoutAttemptID
+  ) {
+    throw new Error('Stripe Checkout Session did not match the requested purchase.');
+  }
+  return url;
 }
 
 async function findReusableCheckout({
@@ -541,44 +647,15 @@ export default async function handler(request, response) {
       };
     }
 
-    const checkoutParameters = {
-      mode: 'payment',
-      customer_creation: 'if_required',
-      origin_context: returnTarget === 'ios' ? 'mobile_app' : 'web',
-      billing_address_collection: 'auto',
-      line_items: [lineItem],
-      customer_email: receiptDetails.email,
-      client_reference_id: user.id,
-      success_url: returnURLs.success,
-      cancel_url: returnURLs.cancel,
-      // Stripe requires at least 30 minutes. The extra five minutes avoids a
-      // boundary rejection caused by network transit or clock skew.
-      expires_at: Math.floor(Date.now() / 1000) + 35 * 60,
-      custom_text: {
-        submit: { message: receiptDetails.terms },
-      },
-      payment_intent_data: {
-        description: receiptDetails.description,
-        receipt_email: receiptDetails.email,
-        metadata: {
-          xert_user_id: user.id,
-          xert_product_id: product.id,
-          xert_product_slug: product.slug,
-          xert_checkout_attempt_id: checkoutAttemptID,
-        },
-      },
-      metadata: {
-        xert_checkout_attempt_id: checkoutAttemptID,
-        user_id: user.id,
-        product_id: product.id,
-        product_slug: product.slug,
-        sessions_count: String(product.sessions_count),
-        validity_days: String(product.validity_days),
-        return_target: returnTarget,
-        checkout_contract: receiptDetails.contractVersion,
-        checkout_attempt_id: checkoutAttemptID,
-      },
-    };
+    const checkoutParameters = buildCheckoutSessionParameters({
+      user,
+      product,
+      lineItem,
+      returnTarget,
+      returnURLs,
+      receiptDetails,
+      checkoutAttemptID,
+    });
     const session = await stripe.checkout.sessions.create(checkoutParameters, {
       idempotencyKey: checkoutIdempotencyKey({
         attemptID: checkoutAttemptID,
@@ -587,6 +664,20 @@ export default async function handler(request, response) {
         returnTarget,
       }),
     });
+
+    let checkoutURL;
+    try {
+      checkoutURL = verifiedCreatedCheckoutURL(session, user, product, {
+        returnTarget,
+        returnURLs,
+        stripeMode,
+        memberEmail: receiptDetails.email,
+        checkoutAttemptID,
+      });
+    } catch (error) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => {});
+      throw error;
+    }
 
     try {
       const { error: pendingOrderError } = await admin
@@ -602,7 +693,7 @@ export default async function handler(request, response) {
       throw recordingError;
     }
 
-    return json({ url: session.url, checkout_session_id: session.id });
+    return json({ url: checkoutURL, checkout_session_id: session.id });
   } catch (e) {
     const failure = publicCheckoutFailure(e);
     console.error('Checkout request failed.', {

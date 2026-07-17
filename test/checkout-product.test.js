@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
   assertCheckoutProduct,
+  buildCheckoutSessionParameters,
   checkoutReceiptDetails,
   stripePendingOrderGuardIsReady,
   stripeOrderTermsSnapshotIsReady,
@@ -19,6 +20,7 @@ import {
   reusableCheckoutURL,
   sessionPackPaymentsAreEnabled,
   stripeModeForSecret,
+  verifiedCreatedCheckoutURL,
 } from '../api/checkout.js';
 
 const checkoutAttemptID = '7b464e63-6e3f-4f7d-94be-d8ef4231d589';
@@ -410,6 +412,8 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
     { ...checkout, livemode: true },
     { ...checkout, amount_total: 4900 },
     { ...checkout, url: 'javascript:alert(1)' },
+    { ...checkout, url: 'https://checkout.stripe.com.attacker.example/c/pay/cs_test_xert' },
+    { ...checkout, url: 'https://member:secret@checkout.stripe.com/c/pay/cs_test_xert' },
     { ...checkout, metadata: { ...checkout.metadata, user_id: 'another-member' } },
     { ...checkout, metadata: { ...checkout.metadata, product_id: 'another-product' } },
     { ...checkout, metadata: { ...checkout.metadata, product_slug: 'another-pack' } },
@@ -419,6 +423,89 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
     { ...checkout, metadata: { ...checkout.metadata, checkout_contract: 'legacy' } },
     { ...checkout, customer_email: 'another@example.com' },
   ]) assert.equal(reusableCheckoutURL(invalid, user, product, options), null);
+});
+
+test('builds and verifies the complete Stripe Checkout handoff contract', () => {
+  const now = Date.parse('2026-07-17T00:00:00Z');
+  const user = { id: 'member-xert', email: 'member@example.com' };
+  const product = { id: 'product-xert', slug: 'starter-4', ...validProduct };
+  const lineItem = { price: 'price_XERT4800', quantity: 1 };
+  const returnURLs = {
+    success: 'https://xert-fitness.vercel.app/payment/success?platform=ios&session_id={CHECKOUT_SESSION_ID}',
+    cancel: 'https://xert-fitness.vercel.app/payment/cancel?platform=ios',
+  };
+  const receiptDetails = checkoutReceiptDetails(user, product);
+  const parameters = buildCheckoutSessionParameters({
+    user,
+    product,
+    lineItem,
+    returnTarget: 'ios',
+    returnURLs,
+    receiptDetails,
+    checkoutAttemptID,
+    now,
+  });
+
+  assert.equal(parameters.mode, 'payment');
+  assert.equal(parameters.origin_context, 'mobile_app');
+  assert.equal(parameters.customer_email, user.email);
+  assert.equal(parameters.client_reference_id, user.id);
+  assert.deepEqual(parameters.line_items, [lineItem]);
+  assert.equal(parameters.expires_at, Math.floor(now / 1000) + 35 * 60);
+  assert.equal(parameters.custom_text.submit.message, receiptDetails.terms);
+  assert.equal(parameters.payment_intent_data.receipt_email, user.email);
+  assert.equal(
+    parameters.payment_intent_data.metadata.xert_checkout_attempt_id,
+    checkoutAttemptID,
+  );
+  assert.equal(parameters.metadata.xert_checkout_attempt_id, checkoutAttemptID);
+  assert.equal(parameters.metadata.checkout_attempt_id, checkoutAttemptID);
+  assert.equal(parameters.metadata.checkout_contract, receiptDetails.contractVersion);
+
+  const checkout = {
+    id: 'cs_test_xert123',
+    status: 'open',
+    payment_status: 'unpaid',
+    livemode: false,
+    url: 'https://checkout.stripe.com/c/pay/cs_test_xert123',
+    amount_total: product.price_cents,
+    currency: product.currency,
+    customer_email: user.email,
+    client_reference_id: user.id,
+    origin_context: 'mobile_app',
+    success_url: returnURLs.success,
+    cancel_url: returnURLs.cancel,
+    metadata: parameters.metadata,
+  };
+  const options = {
+    returnTarget: 'ios',
+    returnURLs,
+    stripeMode: 'test',
+    memberEmail: user.email,
+    checkoutAttemptID,
+  };
+
+  assert.equal(verifiedCreatedCheckoutURL(checkout, user, product, options), checkout.url);
+  for (const invalid of [
+    { ...checkout, id: 'not_a_checkout_session' },
+    { ...checkout, client_reference_id: 'another-member' },
+    { ...checkout, origin_context: 'web' },
+    { ...checkout, success_url: 'https://attacker.example/success' },
+    { ...checkout, cancel_url: 'https://attacker.example/cancel' },
+    {
+      ...checkout,
+      metadata: { ...checkout.metadata, xert_checkout_attempt_id: crypto.randomUUID() },
+    },
+    {
+      ...checkout,
+      metadata: { ...checkout.metadata, checkout_attempt_id: crypto.randomUUID() },
+    },
+  ]) {
+    assert.throws(
+      () => verifiedCreatedCheckoutURL(invalid, user, product, options),
+      /did not match the requested purchase/i,
+    );
+  }
 });
 
 test('rejects invalid pricing, credits, expiry, and currency before Checkout', () => {
@@ -463,10 +550,11 @@ test('records a member-bound pending order before handing off to Stripe', async 
   assert.match(source, /checkout_contract: receiptDetails\.contractVersion/);
   assert.match(source, /payment_intent_data:/);
   assert.match(source, /checkout\.sessions\.create\(checkoutParameters, \{[\s\S]*idempotencyKey:/);
-  assert.equal(
-    (source.match(/xert_checkout_attempt_id: checkoutAttemptID/g) || []).length,
-    2,
-    'Checkout Session and PaymentIntent must carry the XERT attempt identity',
+  assert.match(source, /verifiedCreatedCheckoutURL\(session, user, product/);
+  assert.ok(
+    source.indexOf('verifiedCreatedCheckoutURL(session, user, product')
+      < source.indexOf(".upsert(pendingOrderForCheckout(session, user, product)"),
+    'Stripe session verification must happen before persistence and handoff',
   );
   assert.throws(
     () => pendingOrderForCheckout(
