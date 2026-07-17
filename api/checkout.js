@@ -5,6 +5,8 @@ import { requestHeader, requestJson, sendJson } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
+  XERT_PAYMENT_CONTRACT_HEADER,
+  XERT_PAYMENT_CONTRACT_VERSION,
 } from '../src/lib/commerceRuntime.js';
 import {
   validateCanonicalServiceURL,
@@ -47,10 +49,14 @@ function sendCheckoutEnvironmentStatus(response, environment = process.env) {
   if (!response) {
     return new Response(null, {
       status,
-      headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+      headers: {
+        'Cache-Control': 'private, no-store, max-age=0',
+        [XERT_PAYMENT_CONTRACT_HEADER]: XERT_PAYMENT_CONTRACT_VERSION,
+      },
     });
   }
   response.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  response.setHeader(XERT_PAYMENT_CONTRACT_HEADER, XERT_PAYMENT_CONTRACT_VERSION);
   return response.status(status).end();
 }
 
@@ -366,6 +372,7 @@ export function pendingOrderForCheckout(checkout, user, product) {
 }
 
 export default async function handler(request, response) {
+  response.setHeader(XERT_PAYMENT_CONTRACT_HEADER, XERT_PAYMENT_CONTRACT_VERSION);
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method === 'HEAD') return sendCheckoutEnvironmentStatus(response);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);

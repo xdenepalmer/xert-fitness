@@ -87,4 +87,5 @@ test('checkout HEAD completes a body-free private commerce readiness probe', asy
   assert.equal(response.statusCode, 503);
   assert.equal(response.body, undefined);
   assert.equal(response.headers['cache-control'], 'private, no-store, max-age=0');
+  assert.equal(response.headers['x-xert-payment-contract'], 'stripe-launch-2026-07-17');
 });

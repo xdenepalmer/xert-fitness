@@ -151,9 +151,17 @@ workflows:
           ws_guard SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
 
           curl --silent --show-error --fail --max-time 20 "$VERCEL_BASE_URL/" >/dev/null
+          EXPECTED_PAYMENT_CONTRACT="stripe-launch-2026-07-17"
+          COMMERCE_HEADERS="$(mktemp)"
           COMMERCE_CODE="$(curl --silent --show-error --max-time 20 \
+            --dump-header "$COMMERCE_HEADERS" \
             --output /dev/null --write-out '%{http_code}' \
             --request HEAD "$VERCEL_BASE_URL/api/checkout")" || COMMERCE_CODE=000
+          PAYMENT_CONTRACT="$(tr -d '\r' < "$COMMERCE_HEADERS" | awk 'tolower($1) == "x-xert-payment-contract:" { value=$2 } END { print value }')"
+          rm -f "$COMMERCE_HEADERS"
+          if [ "$PAYMENT_CONTRACT" != "$EXPECTED_PAYMENT_CONTRACT" ]; then
+            report_service_issue "Production is stale: expected payment contract $EXPECTED_PAYMENT_CONTRACT but received ${PAYMENT_CONTRACT:-no contract header}. Redeploy current main."
+          fi
           if [ "$COMMERCE_CODE" != "204" ]; then
             case "$COMMERCE_CODE" in
               503) echo "Add APP_BASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET to Vercel Production, then redeploy." ;;

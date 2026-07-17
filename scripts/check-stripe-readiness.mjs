@@ -5,6 +5,10 @@ import {
   XERT_SUPABASE_HOST,
   XERT_VERCEL_HOST,
 } from '../src/lib/publicRuntimeConfig.js';
+import {
+  XERT_PAYMENT_CONTRACT_HEADER,
+  XERT_PAYMENT_CONTRACT_VERSION,
+} from '../src/lib/commerceRuntime.js';
 
 const DEFAULT_VERCEL_BASE_URL = 'https://xert-fitness.vercel.app';
 const REFUND_RECONCILIATION_CAPABILITY = 'stripe_refund_reconciliation';
@@ -25,9 +29,13 @@ async function probe(fetchImpl, url, { responseLimit = RESPONSE_PREVIEW_LIMIT, .
       signal: AbortSignal.timeout(20_000),
     });
     const body = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, responseLimit);
-    return { status: response.status, body };
+    return {
+      status: response.status,
+      body,
+      paymentContract: response.headers.get(XERT_PAYMENT_CONTRACT_HEADER),
+    };
   } catch (error) {
-    return { status: 0, body: error?.message || 'No response received.' };
+    return { status: 0, body: error?.message || 'No response received.', paymentContract: null };
   }
 }
 
@@ -87,6 +95,17 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
   ]);
 
   const checks = [
+    {
+      key: 'deployment-contract',
+      label: 'Current payment deployment contract',
+      ready: environmentGate.paymentContract === XERT_PAYMENT_CONTRACT_VERSION,
+      detail: environmentGate.paymentContract === XERT_PAYMENT_CONTRACT_VERSION
+        ? XERT_PAYMENT_CONTRACT_VERSION
+        : `Expected ${XERT_PAYMENT_CONTRACT_VERSION}; received ${environmentGate.paymentContract || 'no contract header'}`,
+      remediation: environmentGate.paymentContract === XERT_PAYMENT_CONTRACT_VERSION
+        ? null
+        : 'Redeploy the current main branch to the canonical XERT Vercel Production project.',
+    },
     statusCheck(
       'environment',
       'Commerce environment gate',

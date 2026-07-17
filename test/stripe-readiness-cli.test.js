@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { inspectStripeReadiness } from '../scripts/check-stripe-readiness.mjs';
+import { XERT_PAYMENT_CONTRACT_VERSION } from '../src/lib/commerceRuntime.js';
 
 const environment = {
   VERCEL_BASE_URL: 'https://xert-fitness.vercel.app',
@@ -9,14 +10,14 @@ const environment = {
   SUPABASE_ANON_KEY: `sb_publishable_${'a'.repeat(24)}`,
 };
 
-function response(status, body = '') {
+function response(status, body = '', headers = {}) {
   const responseBody = [204, 205, 304].includes(status)
     ? null
     : typeof body === 'string' ? body : JSON.stringify(body);
-  return new Response(responseBody, { status });
+  return new Response(responseBody, { status, headers });
 }
 
-function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilities = [
+function readinessFetch({ commerceStatus = 204, paymentContract = XERT_PAYMENT_CONTRACT_VERSION, webhookStatus = 400, capabilities = [
   { capability: 'stripe_refund_reconciliation' },
   { capability: 'checkout_reconciliation' },
   { capability: 'stripe_payment_fulfillment' },
@@ -29,7 +30,9 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
 ] } = {}) {
   return async (url, options = {}) => {
     const path = new URL(url).pathname;
-    if (path === '/api/checkout' && options.method === 'HEAD') return response(commerceStatus);
+    if (path === '/api/checkout' && options.method === 'HEAD') {
+      return response(commerceStatus, '', { 'X-Xert-Payment-Contract': paymentContract });
+    }
     if (path === '/api/checkout') return response(401, { error: 'Not authenticated.' });
     if (path === '/api/admin-refund-order') return response(401, { error: 'Not authenticated.' });
     if (path === '/api/admin-reconcile-order') return response(401, { error: 'Not authenticated.' });
@@ -42,8 +45,20 @@ function readinessFetch({ commerceStatus = 204, webhookStatus = 400, capabilitie
 test('Stripe readiness requires every safe production boundary and database activation guard', async () => {
   const report = await inspectStripeReadiness({ environment, fetchImpl: readinessFetch() });
   assert.equal(report.ready, true);
-  assert.equal(report.checks.length, 14);
+  assert.equal(report.checks.length, 15);
   assert.ok(report.checks.every(check => check.ready));
+});
+
+test('Stripe readiness rejects a stale production payment deployment', async () => {
+  const report = await inspectStripeReadiness({
+    environment,
+    fetchImpl: readinessFetch({ paymentContract: 'stripe-launch-stale' }),
+  });
+  const deployment = report.checks.find(check => check.key === 'deployment-contract');
+  assert.equal(report.ready, false);
+  assert.equal(deployment.ready, false);
+  assert.match(deployment.detail, /stripe-launch-stale/);
+  assert.match(deployment.remediation, /current main branch/);
 });
 
 test('Stripe readiness cannot pass when the private commerce environment is incomplete', async () => {
@@ -100,6 +115,9 @@ test('Stripe readiness rejects unsafe endpoints and malformed keys before networ
 test('Codemagic requires the same body-free commerce environment gate before TestFlight', async () => {
   const yaml = await readFile(new URL('../codemagic.yaml', import.meta.url), 'utf8');
   assert.match(yaml, /--request HEAD "\$VERCEL_BASE_URL\/api\/checkout"/);
+  assert.match(yaml, /EXPECTED_PAYMENT_CONTRACT="stripe-launch-2026-07-17"/);
+  assert.match(yaml, /x-xert-payment-contract:/);
+  assert.match(yaml, /Production is stale/);
   assert.match(yaml, /COMMERCE_CODE" != "204"/);
   assert.match(yaml, /APP_BASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET/);
 });

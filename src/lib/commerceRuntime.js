@@ -4,6 +4,9 @@ import {
   XERT_VERCEL_HOST,
 } from './publicRuntimeConfig.js';
 
+export const XERT_PAYMENT_CONTRACT_HEADER = 'X-Xert-Payment-Contract';
+export const XERT_PAYMENT_CONTRACT_VERSION = 'stripe-launch-2026-07-17';
+
 export function stripeModeForSecret(secret = '') {
   const value = String(secret).trim();
   if (/^(sk|rk)_live_/.test(value)) return 'live';
