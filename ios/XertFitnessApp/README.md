@@ -121,7 +121,7 @@ The app expects the same Supabase schema used by the web app in `src/supabase/bo
 
 The repository-root `codemagic.yaml` has two macOS workflows:
 
-- `ios-verify` runs on pushes and pull requests to `main`; it generates the XcodeGen project and executes the Swift unit tests on an available iPhone simulator without code signing.
+- `ios-verify` runs on every push to `main`; it generates the XcodeGen project and executes the Swift unit tests on an available iPhone simulator without code signing.
 - `ios-testflight` is a manual, signed TestFlight release workflow. It runs the same tests, increments the App Store build number, creates an IPA, and uploads it to TestFlight.
 
 Both workflows use `ci/run-swift-tests.sh`, which explicitly boots the selected iPhone simulator and bounds simulator startup and test execution. A stalled test host now fails with a clear timeout instead of consuming the full build duration.
@@ -137,6 +137,14 @@ VERCEL_BASE_URL    # deployed Vercel https:// URL
 `ios-verify` can run without these variables: it uses compile-only placeholders and never makes a service request. `ios-testflight` requires the real values and stops with a clear setup error when one is absent.
 
 Codemagic discovers the repository configuration from the root-level `codemagic.yaml` filename. A separate `config.yaml` is not a Codemagic workflow file and is intentionally not used.
+
+Automatic verification also requires the shared-team app webhook. A Codemagic
+team admin must open **XERT Fitness > App settings > Webhooks**, choose
+**Update webhook**, and confirm that a push to `main` appears under recent
+deliveries. The repository workflow deliberately matches the pushed `main`
+source branch; it does not rely on a pull-request target event. If GitHub shows
+the Vercel status but no Codemagic build after a push, repair this webhook before
+interpreting the missing check as a Swift result.
 
 The signed release workflow also loads the shared `appstore` group. It expects the secure `CERTIFICATE_PRIVATE_KEY` supplied by the team (with compatible legacy fallback names) and reuses that key to fetch the existing App Store distribution certificate rather than creating another certificate.
 

@@ -6,11 +6,12 @@ workflows:
     triggering:
       events:
         - push
-        - pull_request
       branch_patterns:
         - pattern: main
           include: true
-          source: false
+          # Verify the commit actually pushed to main rather than filtering on
+          # a pull request's destination branch.
+          source: true
       cancel_previous_builds: true
     environment:
       xcode: latest
