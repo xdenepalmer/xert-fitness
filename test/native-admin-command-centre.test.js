@@ -17,6 +17,9 @@ test('native app exposes the command centre only to admin profiles', async () =>
   assert.match(root, /if store\.profile\?\.isAdmin == true[\s\S]*AdminCommandCentreView\([\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
   assert.match(view, /Owner access required/);
+  assert.match(view, /private var authorizedOwnerSession: AuthSession\?/);
+  assert.match(view, /store\.profile\?\.isAdmin == true,[\s\S]*session\.user\?\.id != nil/);
+  assert.doesNotMatch(view, /session\.user\.id/);
   assert.match(api, /select", value: "id,full_name,phone,email,role"/);
 });
 

@@ -304,7 +304,7 @@ test('owner navigation restores exact record routes with back, forward, and v1 m
   assert.match(ownerView, /previousTitle: isAvailable \? ownerRouteHistory\.previous\?\.navigationTitle/);
   assert.match(ownerView, /nextTitle: isAvailable \? ownerRouteHistory\.next\?\.navigationTitle/);
   assert.match(ownerView, /applyOwnerRoute\(ownerRouteHistory\.current\)/);
-  assert.match(ownerView, /prepareOwnerNavigation\(for: session\.user\.id\)/);
+  assert.match(ownerView, /let userID = session\.user\?\.id[\s\S]*prepareOwnerNavigation\(for: userID\)/);
   assert.match(ownerView, /private func prepareOwnerNavigation\(for userID: UUID\)[\s\S]*restoredNavigationUserID != accountID[\s\S]*restoredWorkspaceHistory = ""[\s\S]*presentedOwnerTask = nil/);
   assert.match(ownerView, /onChange\(of: store\.authSession\?\.user\?\.id\)[\s\S]*prepareOwnerNavigation\(for: userID\)/);
   assert.match(ownerView, /pendingCompactPathWorkspace/);
@@ -370,7 +370,7 @@ test('owner favorites are account-scoped and every overview shortcut uses the ce
   assert.match(ownerNavigation, /guard workspace != \.overview/);
   assert.match(ownerNavigation, /Set\(workspaces\)\.count == workspaces\.count/);
   assert.match(ownerView, /@State private var pinnedWorkspaces: \[XertOwnerWorkspace\] = \[\]/);
-  assert.match(ownerView, /XertOwnerWorkspacePinsStore\.load\([\s\S]*store\.authSession\?\.user\?\.id/);
+  assert.match(ownerView, /XertOwnerWorkspacePinsStore\.load\([\s\S]*authorizedOwnerSession\?\.user\?\.id/);
   assert.match(ownerView, /XertOwnerWorkspacePinsStore\.toggle\(workspace, for: userID\)/);
   assert.match(ownerView, /Section\("Pinned"\)/);
   assert.match(ownerView, /adminHeading\("Pinned Workspaces"\)/);

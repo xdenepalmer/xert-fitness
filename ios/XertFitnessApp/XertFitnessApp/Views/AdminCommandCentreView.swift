@@ -29,7 +29,7 @@ struct AdminCommandCentreView: View {
 
     var body: some View {
         Group {
-            if let session = store.authSession, store.profile?.isAdmin == true {
+            if let session = authorizedOwnerSession {
                 if horizontalSizeClass == .regular {
                     ownerSplitWorkspace(session: session)
                 } else {
@@ -42,8 +42,8 @@ struct AdminCommandCentreView: View {
         .focusedSceneValue(\.xertNavigationCommandContext, ownerNavigationCommandContext)
         .background(Color.xertNavy.ignoresSafeArea())
         .task {
-            guard let session = store.authSession, store.profile?.isAdmin == true else { return }
-            prepareOwnerNavigation(for: session.user.id)
+            guard let session = authorizedOwnerSession, let userID = session.user?.id else { return }
+            prepareOwnerNavigation(for: userID)
             reloadPinnedWorkspaces()
             applyRequestedRoute(requestedRoute, resolvesTask: false)
             await admin.refresh(session: session)
@@ -59,7 +59,7 @@ struct AdminCommandCentreView: View {
             applyRequestedRoute(route)
         }
         .sheet(isPresented: $showingWorkspaceSwitcher) {
-            if let session = store.authSession, store.profile?.isAdmin == true {
+            if let session = authorizedOwnerSession {
                 AdminWorkspaceSwitcher(
                     admin: admin,
                     session: session,
@@ -79,7 +79,7 @@ struct AdminCommandCentreView: View {
             }
         }
         .sheet(item: $presentedOwnerTask, onDismiss: closePresentedOwnerTask) { task in
-            if let session = store.authSession, store.profile?.isAdmin == true {
+            if let session = authorizedOwnerSession {
                 AdminOwnerTaskSheet(admin: admin, session: session, task: task)
             }
         }
@@ -91,6 +91,13 @@ struct AdminCommandCentreView: View {
         } message: {
             Text(admin.errorMessage ?? "")
         }
+    }
+
+    private var authorizedOwnerSession: AuthSession? {
+        guard store.profile?.isAdmin == true,
+              let session = store.authSession,
+              session.user?.id != nil else { return nil }
+        return session
     }
 
     private var currentWorkspace: XertOwnerWorkspace {
@@ -124,8 +131,7 @@ struct AdminCommandCentreView: View {
     }
 
     private var ownerNavigationCommandContext: XertNavigationCommandContext {
-        let isAvailable = store.authSession != nil
-            && store.profile?.isAdmin == true
+        let isAvailable = authorizedOwnerSession != nil
             && !showingWorkspaceSwitcher
         return XertNavigationCommandContext(
             isAvailable: isAvailable,
@@ -146,13 +152,13 @@ struct AdminCommandCentreView: View {
         history.visit(route)
         restoredWorkspaceHistory = history.restorationValue
         applyOwnerRoute(route)
-        guard resolvesTask, let task = route.task, let session = store.authSession else { return }
+        guard resolvesTask, let task = route.task, let session = authorizedOwnerSession else { return }
         Task { await admin.resolveOwnerTask(session: session, task: task) }
     }
 
     private func reloadPinnedWorkspaces() {
         pinnedWorkspaces = XertOwnerWorkspacePinsStore.load(
-            for: store.authSession?.user?.id
+            for: authorizedOwnerSession?.user?.id
         )
     }
 
@@ -169,7 +175,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func togglePinnedWorkspace(_ workspace: XertOwnerWorkspace) {
-        guard let userID = store.authSession?.user?.id else { return }
+        guard let userID = authorizedOwnerSession?.user?.id else { return }
         pinnedWorkspaces = XertOwnerWorkspacePinsStore.toggle(workspace, for: userID)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -219,7 +225,7 @@ struct AdminCommandCentreView: View {
         case .quickSwitcher:
             showingWorkspaceSwitcher = true
         case .refresh:
-            guard let session = store.authSession else { return }
+            guard let session = authorizedOwnerSession else { return }
             Task { await admin.refresh(session: session) }
         case .closeOwner:
             onClose?()
@@ -240,7 +246,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func resolveOwnerTask(_ task: XertOwnerTask?) {
-        guard let task, let session = store.authSession else { return }
+        guard let task, let session = authorizedOwnerSession else { return }
         Task { await admin.resolveOwnerTask(session: session, task: task) }
     }
 
