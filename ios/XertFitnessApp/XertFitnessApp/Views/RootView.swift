@@ -259,7 +259,7 @@ struct RootView: View {
             .min { $0.start_time < $1.start_time }
             .map {
                 let title = $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                XertNextBookingNavigationContext(
+                return XertNextBookingNavigationContext(
                     id: $0.booking_id,
                     title: title.isEmpty ? "XERT class" : title,
                     startTime: $0.start_time

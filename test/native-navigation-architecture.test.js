@@ -166,6 +166,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /navigation\.selection == destination[\s\S]*handleReselection\(destination\)[\s\S]*selectMemberDestination\(destination, source: \.commandPalette\)/);
   assert.match(root, /context: navigationContext/);
   assert.match(root, /memberRecords: memberNavigationRecords\(from: activeBookings\)/);
+  assert.match(root, /let title = \$0\.title\.trimmingCharacters[\s\S]*return XertNextBookingNavigationContext\(/);
   assert.match(root, /case \.notice\(let noticeID\):[\s\S]*openMemberRoute\(\.notices\(noticeID\), source: \.commandPalette\)/);
   assert.match(root, /case \.classSession\(let sessionID\):[\s\S]*openMemberRoute\(\.classSession\(sessionID\), source: \.commandPalette\)/);
   assert.match(navigation, /case discover = "Available Classes"/);
