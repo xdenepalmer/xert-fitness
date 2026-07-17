@@ -171,51 +171,78 @@ final class ModelsTests: XCTestCase {
         )
     }
 
-    func testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration() {
-        var history = XertOwnerWorkspaceHistory(
-            workspaces: [.overview, .members, .finance],
+    func testOwnerRouteHistoryPreservesExactTasksForwardStateAndMigration() throws {
+        let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000091"))
+        let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000092"))
+        let overview = XertOwnerRoute(workspace: .overview)
+        let members = XertOwnerRoute(workspace: .members)
+        let finance = XertOwnerRoute(workspace: .finance)
+        let health = XertOwnerRoute(workspace: .health)
+        let memberTask = XertOwnerRoute(task: .member(memberID))
+        let orderTask = XertOwnerRoute(task: .order(orderID))
+        var history = XertOwnerRouteHistory(
+            routes: [overview, members, orderTask],
             currentIndex: 2
         )
 
-        XCTAssertEqual(history.current, .finance)
-        XCTAssertEqual(history.previous, .members)
+        XCTAssertEqual(history.current, orderTask)
+        XCTAssertEqual(history.current.navigationTitle, "Order Detail")
+        XCTAssertEqual(history.previous, members)
         XCTAssertNil(history.next)
-        XCTAssertEqual(history.goBack(), .members)
-        XCTAssertEqual(history.previous, .overview)
-        XCTAssertEqual(history.next, .finance)
-        XCTAssertEqual(history.goForward(), .finance)
+        XCTAssertEqual(history.goBack(), members)
+        XCTAssertEqual(history.previous, overview)
+        XCTAssertEqual(history.next, orderTask)
+        XCTAssertEqual(history.goForward(), orderTask)
 
-        XCTAssertEqual(history.goBack(), .members)
-        history.visit(.health)
-        XCTAssertEqual(history.workspaces, [.overview, .members, .health])
-        XCTAssertEqual(history.current, .health)
+        XCTAssertEqual(history.goBack(), members)
+        history.visit(health)
+        XCTAssertEqual(history.routes, [overview, members, health])
+        XCTAssertEqual(history.current, health)
         XCTAssertNil(history.next)
 
-        history.visit(.members)
-        XCTAssertEqual(history.workspaces, [.overview, .members, .health, .members])
-        let restored = XertOwnerWorkspaceHistory(
+        history.visit(memberTask)
+        XCTAssertEqual(history.routes, [overview, members, health, memberTask])
+        let restored = XertOwnerRouteHistory(
             restorationValue: history.restorationValue,
-            fallback: .audit
+            fallback: XertOwnerRoute(workspace: .audit)
         )
         XCTAssertEqual(restored, history)
+        XCTAssertTrue(restored.restorationValue.hasPrefix("v2|"))
 
-        var bounded = XertOwnerWorkspaceHistory()
-        for index in 0..<(XertOwnerWorkspaceHistory.maximumCount + 5) {
-            bounded.visit(index.isMultiple(of: 2) ? .members : .finance)
+        var bounded = XertOwnerRouteHistory()
+        for index in 0..<(XertOwnerRouteHistory.maximumCount + 5) {
+            bounded.visit(index.isMultiple(of: 2) ? members : finance)
         }
-        XCTAssertEqual(bounded.workspaces.count, XertOwnerWorkspaceHistory.maximumCount)
-        XCTAssertEqual(bounded.currentIndex, bounded.workspaces.count - 1)
+        XCTAssertEqual(bounded.routes.count, XertOwnerRouteHistory.maximumCount)
+        XCTAssertEqual(bounded.currentIndex, bounded.routes.count - 1)
         XCTAssertEqual(
-            XertOwnerWorkspaceHistory(restorationValue: "broken", fallback: .audit).current,
-            .audit
+            XertOwnerRouteHistory(
+                restorationValue: "broken",
+                fallback: XertOwnerRoute(workspace: .audit)
+            ).current,
+            XertOwnerRoute(workspace: .audit)
         )
         XCTAssertEqual(
-            XertOwnerWorkspaceHistory(restorationValue: "v1|99|members,finance").current,
-            .overview
+            XertOwnerRouteHistory(restorationValue: "v2|99|owner/members,owner/finance").current,
+            overview
         )
         XCTAssertEqual(
-            XertOwnerWorkspaceHistory(restorationValue: "v1|0|unknown,finance", fallback: .audit).current,
-            .audit
+            XertOwnerRouteHistory(
+                restorationValue: "v2|0|owner/unknown,owner/finance",
+                fallback: XertOwnerRoute(workspace: .audit)
+            ).current,
+            XertOwnerRoute(workspace: .audit)
+        )
+        let migrated = XertOwnerRouteHistory(restorationValue: "v1|1|members,finance")
+        XCTAssertEqual(migrated.routes, [members, finance])
+        XCTAssertEqual(migrated.current, finance)
+        XCTAssertTrue(migrated.restorationValue.hasPrefix("v2|"))
+        XCTAssertEqual(
+            XertOwnerRouteHistory(
+                restorationValue: String(repeating: "x", count: XertOwnerRouteHistory.maximumEncodedLength + 1),
+                fallback: XertOwnerRoute(workspace: .audit)
+            ).current,
+            XertOwnerRoute(workspace: .audit)
         )
     }
 

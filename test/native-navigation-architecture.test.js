@@ -230,13 +230,19 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);
   assert.match(root, /requestedAdminRoute = route[\s\S]*showingAdminCommandCentre = true/);
   assert.match(ownerView, /@State private var presentedOwnerTask: XertOwnerTask\?/);
-  assert.match(ownerView, /\.sheet\(item: \$presentedOwnerTask\)/);
+  assert.match(ownerView, /\.sheet\(item: \$presentedOwnerTask, onDismiss: closePresentedOwnerTask\)/);
   assert.match(ownerView, /AdminOwnerTaskSheet/);
   assert.match(ownerView, /admin\.members\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.orders\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
-  assert.match(ownerView, /presentedOwnerTask = nil[\s\S]*history\.visit\(workspace\)/);
+  assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
+  assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
+  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length === 3);
+  assert.match(ownerView, /Button \{ onOpenTask\(\.member\(member\.id\)\) \}/);
+  assert.match(ownerView, /Button \{ onOpenTask\(\.order\(order\.id\)\) \}/);
+  assert.match(ownerView, /Button \{ onOpenTask\(\.event\(event\.id\)\) \}/);
+  assert.doesNotMatch(ownerView, /@State private var selectedOrder: OrderItem\?/);
   assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
   assert.match(api, /p_limit: 1,[\s\S]*p_user_id: id/);
   assert.match(api, /guard rows\.count == 1, rows\[0\]\.id == id/);
@@ -248,28 +254,41 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(modelsTests, /\.deny/);
 });
 
-test('owner navigation restores a bounded workspace timeline with back and forward recovery', async () => {
+test('owner navigation restores exact record routes with back, forward, and v1 migration', async () => {
   const [ownerView, ownerNavigation, modelsTests] = await Promise.all([
     readFile(viewURL('AdminCommandCentreView'), 'utf8'),
     readFile(ownerNavigationURL, 'utf8'),
     readFile(modelsTestsURL, 'utf8'),
   ]);
-  assert.match(ownerNavigation, /struct XertOwnerWorkspaceHistory: Equatable/);
+  assert.match(ownerNavigation, /struct XertOwnerRouteHistory: Equatable/);
   assert.match(ownerNavigation, /static let maximumCount = 16/);
-  assert.match(ownerNavigation, /private static let restorationVersion = "v1"/);
-  assert.match(ownerNavigation, /mutating func visit\(_ workspace: XertOwnerWorkspace\)/);
-  assert.match(ownerNavigation, /workspaces = Array\(workspaces\.prefix\(currentIndex \+ 1\)\) \+ \[workspace\]/);
-  assert.match(ownerNavigation, /mutating func goBack\(\) -> XertOwnerWorkspace\?/);
-  assert.match(ownerNavigation, /mutating func goForward\(\) -> XertOwnerWorkspace\?/);
+  assert.match(ownerNavigation, /static let maximumEncodedLength = 2_048/);
+  assert.match(ownerNavigation, /private static let restorationVersion = "v2"/);
+  assert.match(ownerNavigation, /private static let legacyWorkspaceVersion = "v1"/);
+  assert.match(ownerNavigation, /XertOwnerRoute\.restore\(String\(\$0\)\)/);
+  assert.match(ownerNavigation, /mutating func visit\(_ route: XertOwnerRoute\)/);
+  assert.match(ownerNavigation, /routes = Array\(routes\.prefix\(currentIndex \+ 1\)\) \+ \[route\]/);
+  assert.match(ownerNavigation, /mutating func goBack\(\) -> XertOwnerRoute\?/);
+  assert.match(ownerNavigation, /mutating func goForward\(\) -> XertOwnerRoute\?/);
   assert.match(ownerView, /@SceneStorage\("xert\.adminWorkspaceHistory"\)/);
+  assert.match(ownerView, /@SceneStorage\("xert\.adminNavigationUserID"\)/);
+  assert.match(ownerView, /private var ownerRouteHistory: XertOwnerRouteHistory/);
+  assert.match(ownerView, /previousTitle: isAvailable \? ownerRouteHistory\.previous\?\.navigationTitle/);
+  assert.match(ownerView, /nextTitle: isAvailable \? ownerRouteHistory\.next\?\.navigationTitle/);
+  assert.match(ownerView, /applyOwnerRoute\(ownerRouteHistory\.current\)/);
+  assert.match(ownerView, /prepareOwnerNavigation\(for: session\.user\.id\)/);
+  assert.match(ownerView, /private func prepareOwnerNavigation\(for userID: UUID\)[\s\S]*restoredNavigationUserID != accountID[\s\S]*restoredWorkspaceHistory = ""[\s\S]*presentedOwnerTask = nil/);
+  assert.match(ownerView, /onChange\(of: store\.authSession\?\.user\?\.id\)[\s\S]*prepareOwnerNavigation\(for: userID\)/);
   assert.match(ownerView, /pendingCompactPathWorkspace/);
-  assert.match(ownerView, /private func returnToPreviousWorkspace\(\)/);
-  assert.match(ownerView, /private func advanceToNextWorkspace\(\)/);
+  assert.match(ownerView, /private func returnToPreviousOwnerRoute\(\)/);
+  assert.match(ownerView, /private func advanceToNextOwnerRoute\(\)/);
   assert.match(ownerView, /keyboardShortcut\("\[", modifiers: \.command\)/);
   assert.match(ownerView, /keyboardShortcut\("\]", modifiers: \.command\)/);
-  assert.match(ownerView, /accessibilityLabel\("Owner workspace history"\)/);
+  assert.match(ownerView, /accessibilityLabel\("Owner navigation history"\)/);
   assert.match(ownerView, /workspace == current \? "checkmark" : "chevron\.right"/);
-  assert.match(modelsTests, /testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration/);
+  assert.match(modelsTests, /testOwnerRouteHistoryPreservesExactTasksForwardStateAndMigration/);
+  assert.match(modelsTests, /v1\|1\|members,finance/);
+  assert.match(modelsTests, /XertOwnerRouteHistory\.maximumEncodedLength \+ 1/);
 });
 
 test('owner favorites are account-scoped and every overview shortcut uses the central router', async () => {

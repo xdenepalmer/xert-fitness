@@ -10,6 +10,7 @@ struct AdminCommandCentreView: View {
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
     @SceneStorage("xert.adminWorkspaceHistory") private var restoredWorkspaceHistory = ""
+    @SceneStorage("xert.adminNavigationUserID") private var restoredNavigationUserID = ""
     @State private var compactPath: [XertOwnerWorkspace] = []
     @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
@@ -42,20 +43,20 @@ struct AdminCommandCentreView: View {
         .background(Color.xertNavy.ignoresSafeArea())
         .task {
             guard let session = store.authSession, store.profile?.isAdmin == true else { return }
+            prepareOwnerNavigation(for: session.user.id)
             reloadPinnedWorkspaces()
-            applyRequestedRoute(requestedRoute)
+            applyRequestedRoute(requestedRoute, resolvesTask: false)
             await admin.refresh(session: session)
-            if let task = requestedRoute?.task {
+            if let task = presentedOwnerTask {
                 await admin.resolveOwnerTask(session: session, task: task)
             }
         }
-        .onChange(of: store.authSession?.user?.id) { _ in
+        .onChange(of: store.authSession?.user?.id) { userID in
+            if let userID { prepareOwnerNavigation(for: userID) }
             reloadPinnedWorkspaces()
         }
         .onChange(of: requestedRoute) { route in
             applyRequestedRoute(route)
-            guard let task = route?.task, let session = store.authSession else { return }
-            Task { await admin.resolveOwnerTask(session: session, task: task) }
         }
         .sheet(isPresented: $showingWorkspaceSwitcher) {
             AdminWorkspaceSwitcher(
@@ -70,7 +71,7 @@ struct AdminCommandCentreView: View {
                 togglePinnedWorkspace(workspace)
             }
         }
-        .sheet(item: $presentedOwnerTask) { task in
+        .sheet(item: $presentedOwnerTask, onDismiss: closePresentedOwnerTask) { task in
             if let session = store.authSession, store.profile?.isAdmin == true {
                 AdminOwnerTaskSheet(admin: admin, session: session, task: task)
             }
@@ -100,10 +101,10 @@ struct AdminCommandCentreView: View {
         XertOwnerWorkspaceRecency(restorationValue: restoredRecentWorkspaces)
     }
 
-    private var workspaceHistory: XertOwnerWorkspaceHistory {
-        XertOwnerWorkspaceHistory(
+    private var ownerRouteHistory: XertOwnerRouteHistory {
+        XertOwnerRouteHistory(
             restorationValue: restoredWorkspaceHistory,
-            fallback: currentWorkspace
+            fallback: XertOwnerRoute(workspace: currentWorkspace)
         )
     }
 
@@ -122,25 +123,42 @@ struct AdminCommandCentreView: View {
         return XertNavigationCommandContext(
             isAvailable: isAvailable,
             scope: .owner(currentWorkspace),
-            previousTitle: isAvailable ? workspaceHistory.previous?.title : nil,
-            nextTitle: isAvailable ? workspaceHistory.next?.title : nil,
+            previousTitle: isAvailable ? ownerRouteHistory.previous?.navigationTitle : nil,
+            nextTitle: isAvailable ? ownerRouteHistory.next?.navigationTitle : nil,
             isAdmin: isAvailable,
             perform: executeOwnerSceneNavigationCommand
         )
     }
 
     private func openWorkspace(_ workspace: XertOwnerWorkspace) {
-        presentedOwnerTask = nil
-        var history = workspaceHistory
-        history.visit(workspace)
+        openOwnerRoute(XertOwnerRoute(workspace: workspace))
+    }
+
+    private func openOwnerRoute(_ route: XertOwnerRoute, resolvesTask: Bool = true) {
+        var history = ownerRouteHistory
+        history.visit(route)
         restoredWorkspaceHistory = history.restorationValue
-        applyWorkspace(workspace)
+        applyOwnerRoute(route)
+        guard resolvesTask, let task = route.task, let session = store.authSession else { return }
+        Task { await admin.resolveOwnerTask(session: session, task: task) }
     }
 
     private func reloadPinnedWorkspaces() {
         pinnedWorkspaces = XertOwnerWorkspacePinsStore.load(
             for: store.authSession?.user?.id
         )
+    }
+
+    private func prepareOwnerNavigation(for userID: UUID) {
+        let accountID = userID.uuidString.lowercased()
+        guard restoredNavigationUserID != accountID else { return }
+        restoredNavigationUserID = accountID
+        restoredWorkspace = XertOwnerWorkspace.overview.rawValue
+        restoredRecentWorkspaces = ""
+        restoredWorkspaceHistory = ""
+        compactPath = []
+        pendingCompactPathWorkspace = nil
+        presentedOwnerTask = nil
     }
 
     private func togglePinnedWorkspace(_ workspace: XertOwnerWorkspace) {
@@ -161,18 +179,25 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func returnToPreviousWorkspace() {
-        var history = workspaceHistory
-        guard let workspace = history.goBack() else { return }
-        restoredWorkspaceHistory = history.restorationValue
-        applyWorkspace(workspace)
+    private func applyOwnerRoute(_ route: XertOwnerRoute) {
+        presentedOwnerTask = route.task
+        applyWorkspace(route.workspace)
     }
 
-    private func advanceToNextWorkspace() {
-        var history = workspaceHistory
-        guard let workspace = history.goForward() else { return }
+    private func returnToPreviousOwnerRoute() {
+        var history = ownerRouteHistory
+        guard let route = history.goBack() else { return }
         restoredWorkspaceHistory = history.restorationValue
-        applyWorkspace(workspace)
+        applyOwnerRoute(route)
+        resolveOwnerTask(route.task)
+    }
+
+    private func advanceToNextOwnerRoute() {
+        var history = ownerRouteHistory
+        guard let route = history.goForward() else { return }
+        restoredWorkspaceHistory = history.restorationValue
+        applyOwnerRoute(route)
+        resolveOwnerTask(route.task)
     }
 
     private func executeOwnerSceneNavigationCommand(_ command: XertSceneNavigationCommand) {
@@ -181,9 +206,9 @@ struct AdminCommandCentreView: View {
         case .ownerWorkspace(let workspace):
             openWorkspace(workspace)
         case .previous:
-            returnToPreviousWorkspace()
+            returnToPreviousOwnerRoute()
         case .next:
-            advanceToNextWorkspace()
+            advanceToNextOwnerRoute()
         case .quickSwitcher:
             showingWorkspaceSwitcher = true
         case .refresh:
@@ -196,9 +221,25 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func applyRequestedRoute(_ route: XertOwnerRoute?) {
-        openWorkspace(route?.workspace ?? currentWorkspace)
-        presentedOwnerTask = route?.task
+    private func applyRequestedRoute(
+        _ route: XertOwnerRoute?,
+        resolvesTask: Bool = true
+    ) {
+        if let route {
+            openOwnerRoute(route, resolvesTask: resolvesTask)
+        } else {
+            applyOwnerRoute(ownerRouteHistory.current)
+        }
+    }
+
+    private func resolveOwnerTask(_ task: XertOwnerTask?) {
+        guard let task, let session = store.authSession else { return }
+        Task { await admin.resolveOwnerTask(session: session, task: task) }
+    }
+
+    private func closePresentedOwnerTask() {
+        guard ownerRouteHistory.current.task != nil else { return }
+        openWorkspace(currentWorkspace)
     }
 
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
@@ -336,28 +377,28 @@ struct AdminCommandCentreView: View {
     private var workspaceSwitcherToolbar: some ToolbarContent {
         ToolbarItem(placement: .secondaryAction) {
             Menu {
-                Button { returnToPreviousWorkspace() } label: {
+                Button { returnToPreviousOwnerRoute() } label: {
                     Label(
-                        workspaceHistory.previous.map { "Back to \($0.title)" } ?? "No previous workspace",
+                        ownerRouteHistory.previous.map { "Back to \($0.navigationTitle)" } ?? "No previous workspace",
                         systemImage: "arrow.left"
                     )
                 }
                 .keyboardShortcut("[", modifiers: .command)
-                .disabled(workspaceHistory.previous == nil)
+                .disabled(ownerRouteHistory.previous == nil)
 
-                Button { advanceToNextWorkspace() } label: {
+                Button { advanceToNextOwnerRoute() } label: {
                     Label(
-                        workspaceHistory.next.map { "Forward to \($0.title)" } ?? "No next workspace",
+                        ownerRouteHistory.next.map { "Forward to \($0.navigationTitle)" } ?? "No next workspace",
                         systemImage: "arrow.right"
                     )
                 }
                 .keyboardShortcut("]", modifiers: .command)
-                .disabled(workspaceHistory.next == nil)
+                .disabled(ownerRouteHistory.next == nil)
             } label: {
                 Image(systemName: "clock.arrow.circlepath")
             }
-            .accessibilityLabel("Owner workspace history")
-            .accessibilityHint("Returns to previous or forward owner workspaces")
+            .accessibilityLabel("Owner navigation history")
+            .accessibilityHint("Returns to previous or forward owner workspaces and records")
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -564,7 +605,11 @@ struct AdminCommandCentreView: View {
         case .overview:
             return AnyView(dashboard(session: session).navigationTitle("Overview"))
         case .members:
-            return AnyView(AdminMembersView(admin: admin, session: session))
+            return AnyView(AdminMembersView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
+            ))
         case .classDesk:
             return AnyView(AdminClassesView(admin: admin, session: session))
         case .bookingRequests:
@@ -586,11 +631,19 @@ struct AdminCommandCentreView: View {
         case .notices:
             return AnyView(AdminCommunicationsView(admin: admin, session: session))
         case .events:
-            return AnyView(AdminEventsView(admin: admin, session: session))
+            return AnyView(AdminEventsView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
+            ))
         case .team:
             return AnyView(AdminCoachesView(admin: admin, session: session))
         case .finance:
-            return AnyView(AdminFinanceView(admin: admin, session: session))
+            return AnyView(AdminFinanceView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
+            ))
         case .products:
             return AnyView(AdminProductsView(admin: admin, session: session))
         case .controls:
@@ -833,6 +886,7 @@ private struct AdminOwnerTaskSheet: View {
 private struct AdminMembersView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
 
     var body: some View {
@@ -842,9 +896,7 @@ private struct AdminMembersView: View {
                     .listRowBackground(Color.xertInk)
             }
             ForEach(admin.members) { member in
-                NavigationLink {
-                    AdminMemberDetailView(admin: admin, session: session, member: member)
-                } label: {
+                Button { onOpenTask(.member(member.id)) } label: {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -853,8 +905,12 @@ private struct AdminMembersView: View {
                                     .font(.caption).foregroundStyle(Color.xertPale.opacity(0.58))
                             }
                             Spacer()
-                            Text(member.role.uppercased())
-                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                            HStack(spacing: 8) {
+                                Text(member.role.uppercased())
+                                    .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                            }
                         }
                         HStack(spacing: 18) {
                             Label("\(member.credits_remaining) credits", systemImage: "ticket")
@@ -866,6 +922,7 @@ private struct AdminMembersView: View {
                     }
                     .padding(.vertical, 6)
                 }
+                .buttonStyle(.plain)
                 .listRowBackground(Color.xertInk)
             }
         }
@@ -1776,9 +1833,9 @@ private struct AdminRetentionView: View {
 private struct AdminFinanceView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
     @State private var status = "all"
-    @State private var selectedOrder: OrderItem?
 
     private var filteredOrders: [OrderItem] {
         admin.orders.filter { order in
@@ -1822,7 +1879,7 @@ private struct AdminFinanceView: View {
                         .listRowBackground(Color.xertInk)
                 }
                 ForEach(filteredOrders) { order in
-                    Button { selectedOrder = order } label: {
+                    Button { onOpenTask(.order(order.id)) } label: {
                         HStack(spacing: 12) {
                             Image(systemName: order.isRecoverable ? "exclamationmark.arrow.circlepath" : "creditcard")
                                 .foregroundStyle(order.isRecoverable ? Color.orange : Color.xertSteel)
@@ -1854,11 +1911,6 @@ private struct AdminFinanceView: View {
         .background(Color.xertNavy)
         .navigationTitle("Finance")
         .searchable(text: $query, prompt: "Email, pack or Stripe ID")
-        .sheet(item: $selectedOrder) { order in
-            NavigationStack {
-                AdminOrderDetailView(admin: admin, session: session, order: order)
-            }
-        }
     }
 
     private func financeStatusColour(_ value: String) -> Color {
@@ -3908,6 +3960,7 @@ private struct AdminProductEditor: View {
 private struct AdminEventsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
     @State private var showingCreate = false
     @State private var rosterEvent: AdminEvent?
@@ -3926,9 +3979,7 @@ private struct AdminEventsView: View {
             if rows.isEmpty { Text("No matching calendar events.").listRowBackground(Color.xertInk) }
             ForEach(rows) { event in
                 VStack(alignment: .leading, spacing: 10) {
-                    NavigationLink {
-                        AdminEventEditor(admin: admin, session: session, event: event)
-                    } label: {
+                    Button { onOpenTask(.event(event.id)) } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(event.name).font(.headline)
@@ -3936,12 +3987,16 @@ private struct AdminEventsView: View {
                                 Text(event.published ? "LIVE" : "HIDDEN")
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(event.published ? Color.green : Color.xertPale.opacity(0.45))
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(Color.xertSteel)
                             }
                             Text([event.event_date ?? "Date TBC", event.location].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
                         }
                         .foregroundStyle(Color.xertOffWhite)
                     }
+                    .buttonStyle(.plain)
                     HStack(spacing: 18) {
                         Button {
                             rosterEvent = event

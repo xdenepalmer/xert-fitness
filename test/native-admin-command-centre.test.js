@@ -218,14 +218,15 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
   assert.match(view, /NavigationStack\(path: \$compactPath\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
-  assert.match(view, /applyRequestedRoute\(requestedRoute\)/);
+  assert.match(view, /applyRequestedRoute\(requestedRoute, resolvesTask: false\)/);
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
   assert.match(view, /private func workspaceBadge/);
   assert.match(view, /private func workspaceDestination[\s\S]*-> AnyView/);
   assert.match(view, /return AnyView\(dashboard\(session: session\)/);
   assert.match(view, /managementDirectory/);
-  assert.match(view, /openWorkspace\(route\?\.workspace \?\? currentWorkspace\)/);
+  assert.match(view, /private func openOwnerRoute\(_ route: XertOwnerRoute/);
+  assert.match(view, /applyOwnerRoute\(ownerRouteHistory\.current\)/);
   assert.match(view, /private func openWorkspace\(_ workspace: XertOwnerWorkspace\)/);
   assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);

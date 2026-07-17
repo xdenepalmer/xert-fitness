@@ -189,33 +189,42 @@ struct XertOwnerWorkspaceRecency: Equatable {
     }
 }
 
-struct XertOwnerWorkspaceHistory: Equatable {
+struct XertOwnerRouteHistory: Equatable {
     static let maximumCount = 16
-    private static let restorationVersion = "v1"
+    static let maximumEncodedLength = 2_048
+    private static let restorationVersion = "v2"
+    private static let legacyWorkspaceVersion = "v1"
 
-    private(set) var workspaces: [XertOwnerWorkspace]
+    private(set) var routes: [XertOwnerRoute]
     private(set) var currentIndex: Int
 
     init(
-        workspaces: [XertOwnerWorkspace] = [.overview],
+        routes: [XertOwnerRoute] = [XertOwnerRoute(workspace: .overview)],
         currentIndex: Int = 0
     ) {
-        let retained = Array(workspaces.suffix(Self.maximumCount))
+        let retained = Array(routes.suffix(Self.maximumCount))
         guard !retained.isEmpty else {
-            self.workspaces = [.overview]
+            self.routes = [XertOwnerRoute(workspace: .overview)]
             self.currentIndex = 0
             return
         }
 
-        let removedCount = max(0, workspaces.count - retained.count)
-        self.workspaces = retained
+        let removedCount = max(0, routes.count - retained.count)
+        self.routes = retained
         self.currentIndex = min(
             max(0, currentIndex - removedCount),
             retained.count - 1
         )
     }
 
-    init(restorationValue: String, fallback: XertOwnerWorkspace = .overview) {
+    init(
+        restorationValue: String,
+        fallback: XertOwnerRoute = XertOwnerRoute(workspace: .overview)
+    ) {
+        guard restorationValue.utf8.count <= Self.maximumEncodedLength else {
+            self.init(routes: [fallback])
+            return
+        }
         let parts = restorationValue.split(
             separator: "|",
             maxSplits: 2,
@@ -223,61 +232,70 @@ struct XertOwnerWorkspaceHistory: Equatable {
         )
         guard
             parts.count == 3,
-            parts[0] == Self.restorationVersion,
             let restoredIndex = Int(parts[1])
         else {
-            self.init(workspaces: [fallback])
+            self.init(routes: [fallback])
             return
         }
 
-        let workspaceTokens = parts[2]
+        let routeTokens = parts[2]
             .split(separator: ",", omittingEmptySubsequences: true)
-        let restoredWorkspaces = workspaceTokens
-            .compactMap { XertOwnerWorkspace(rawValue: String($0)) }
-        guard !restoredWorkspaces.isEmpty else {
-            self.init(workspaces: [fallback])
+        let restoredRoutes: [XertOwnerRoute]
+        switch parts[0] {
+        case Self.restorationVersion:
+            restoredRoutes = routeTokens.compactMap { XertOwnerRoute.restore(String($0)) }
+        case Self.legacyWorkspaceVersion:
+            restoredRoutes = routeTokens.compactMap { token in
+                XertOwnerWorkspace(rawValue: String(token)).map { XertOwnerRoute(workspace: $0) }
+            }
+        default:
+            self.init(routes: [fallback])
+            return
+        }
+        guard !restoredRoutes.isEmpty else {
+            self.init(routes: [fallback])
             return
         }
         guard
-            workspaceTokens.count <= Self.maximumCount,
-            restoredWorkspaces.count == workspaceTokens.count,
-            restoredWorkspaces.indices.contains(restoredIndex)
+            routeTokens.count <= Self.maximumCount,
+            restoredRoutes.count == routeTokens.count,
+            restoredRoutes.indices.contains(restoredIndex)
         else {
-            self.init(workspaces: [fallback])
+            self.init(routes: [fallback])
             return
         }
-        self.init(workspaces: restoredWorkspaces, currentIndex: restoredIndex)
+        self.init(routes: restoredRoutes, currentIndex: restoredIndex)
     }
 
     var restorationValue: String {
-        "\(Self.restorationVersion)|\(currentIndex)|\(workspaces.map(\.rawValue).joined(separator: ","))"
+        "\(Self.restorationVersion)|\(currentIndex)|\(routes.map(\.restorationValue).joined(separator: ","))"
     }
 
-    var current: XertOwnerWorkspace { workspaces[currentIndex] }
-    var previous: XertOwnerWorkspace? {
-        currentIndex > 0 ? workspaces[currentIndex - 1] : nil
+    var current: XertOwnerRoute { routes[currentIndex] }
+    var previous: XertOwnerRoute? {
+        currentIndex > 0 ? routes[currentIndex - 1] : nil
     }
-    var next: XertOwnerWorkspace? {
-        currentIndex + 1 < workspaces.count ? workspaces[currentIndex + 1] : nil
+    var next: XertOwnerRoute? {
+        currentIndex + 1 < routes.count ? routes[currentIndex + 1] : nil
     }
 
-    mutating func visit(_ workspace: XertOwnerWorkspace) {
-        guard workspace != current else { return }
-        workspaces = Array(workspaces.prefix(currentIndex + 1)) + [workspace]
-        if workspaces.count > Self.maximumCount {
-            workspaces.removeFirst(workspaces.count - Self.maximumCount)
+    mutating func visit(_ route: XertOwnerRoute) {
+        guard route != current else { return }
+        routes = Array(routes.prefix(currentIndex + 1)) + [route]
+        if routes.count > Self.maximumCount {
+            routes.removeFirst(routes.count - Self.maximumCount)
         }
-        currentIndex = workspaces.count - 1
+        currentIndex = routes.count - 1
     }
 
-    mutating func goBack() -> XertOwnerWorkspace? {
+    mutating func goBack() -> XertOwnerRoute? {
         guard currentIndex > 0 else { return nil }
         currentIndex -= 1
         return current
     }
 
-    mutating func goForward() -> XertOwnerWorkspace? {
-        guard currentIndex + 1 < workspaces.count else { return nil }
+    mutating func goForward() -> XertOwnerRoute? {
+        guard currentIndex + 1 < routes.count else { return nil }
         currentIndex += 1
         return current
     }
@@ -417,6 +435,10 @@ struct XertOwnerRoute: Equatable, Hashable {
     init(task: XertOwnerTask) {
         workspace = task.workspace
         self.task = task
+    }
+
+    var navigationTitle: String {
+        task?.title ?? workspace.title
     }
 
     var restorationValue: String {
