@@ -136,6 +136,10 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(navigation, /enum XertNavigationCommandAction: Hashable/);
   assert.match(navigation, /case timeline\(Int\)/);
   assert.match(navigation, /struct XertNavigationContext: Equatable/);
+  assert.match(navigation, /struct XertMemberRecordNavigationContext: Identifiable, Equatable/);
+  assert.match(navigation, /static let maximumRecordsPerKind = 4/);
+  assert.match(navigation, /memberRecords = isSignedIn[\s\S]*Self\.normalizedRecords\(memberRecords\)[\s\S]*: \[\]/);
+  assert.match(navigation, /case notice\(UUID\)/);
   assert.match(navigation, /enum XertNavigationActivity: Hashable/);
   assert.match(navigation, /enum XertNavigationCommandSection: String, CaseIterable, Identifiable/);
   assert.match(navigation, /func commandPaletteCommands\([\s\S]*context: XertNavigationContext = \.empty/);
@@ -154,6 +158,8 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /private func openWorkspaceFromMap/);
   assert.match(root, /navigation\.selection == destination[\s\S]*handleReselection\(destination\)[\s\S]*selectMemberDestination\(destination, source: \.commandPalette\)/);
   assert.match(root, /context: navigationContext/);
+  assert.match(root, /memberRecords: memberNavigationRecords\(from: activeBookings\)/);
+  assert.match(root, /case \.notice\(let noticeID\):[\s\S]*openMemberRoute\(\.notices\(noticeID\), source: \.commandPalette\)/);
   assert.match(root, /XertNavigationCommandSection\.allCases/);
   assert.match(root, /Section \{[\s\S]*Text\(section\.rawValue\)/);
   assert.match(root, /\.searchable\(text: \$query/);
@@ -168,6 +174,7 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /executeNavigationActivity[\s\S]*case \.pendingCheckout:[\s\S]*store\.reconcilePendingCheckout\(\)/);
   assert.match(modelsTests, /testNavigationCommandPaletteIsContextualRoleAwareAndSearchable/);
   assert.match(modelsTests, /testNavigationCommandPalettePromotesLiveMemberActivity/);
+  assert.match(modelsTests, /testNavigationMemberRecordIndexIsBoundedRankedAndPrivate/);
   assert.match(modelsTests, /testNavigationCommandPaletteOffersBoundedDirectWorkspaceTimeline/);
   assert.match(modelsTests, /testNavigationWorkspaceMapOrdersAndProtectsRememberedTasks/);
 });

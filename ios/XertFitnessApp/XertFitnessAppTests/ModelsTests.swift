@@ -1051,6 +1051,7 @@ final class ModelsTests: XCTestCase {
     func testNavigationCommandPalettePromotesLiveMemberActivity() {
         let navigation = XertNavigationCoordinator(initial: .home)
         let bookingID = UUID(uuidString: "00000000-0000-0000-0000-000000000071")!
+        let noticeID = UUID(uuidString: "00000000-0000-0000-0000-000000000073")!
         let context = XertNavigationContext(
             isSignedIn: true,
             noticeCount: 2,
@@ -1062,7 +1063,21 @@ final class ModelsTests: XCTestCase {
                 id: bookingID,
                 title: "Engine Room",
                 startTime: Date(timeIntervalSince1970: 1_800_000_000)
-            )
+            ),
+            memberRecords: [
+                .booking(
+                    id: bookingID,
+                    title: "Engine Room",
+                    status: "Booked",
+                    startTime: Date(timeIntervalSince1970: 1_800_000_000)
+                ),
+                .notice(
+                    id: noticeID,
+                    title: "Friday floor closure",
+                    tone: "urgent",
+                    publishedAt: Date(timeIntervalSince1970: 1_799_000_000)
+                ),
+            ]
         )
 
         let commands = navigation.commandPaletteCommands(isAdmin: false, context: context)
@@ -1071,6 +1086,7 @@ final class ModelsTests: XCTestCase {
             [
                 .activity(.pendingCheckout),
                 .activity(.upcomingBookings(bookingID)),
+                .activity(.notice(noticeID)),
                 .activity(.notices),
                 .activity(.eventGoals),
             ]
@@ -1084,10 +1100,110 @@ final class ModelsTests: XCTestCase {
         })
         XCTAssertTrue(commands.contains {
             $0.action == .activity(.upcomingBookings(bookingID))
-                && $0.title == "Open next class: Engine Room"
+                && $0.title == "Open class: Engine Room"
+        })
+        XCTAssertTrue(commands.contains {
+            $0.action == .activity(.notice(noticeID))
+                && $0.title == "Friday floor closure"
+                && $0.subtitle.contains("Urgent")
         })
         XCTAssertFalse(
             navigation.commandPaletteCommands(isAdmin: false, context: .empty)
+                .contains { $0.section == .now }
+        )
+    }
+
+    func testNavigationMemberRecordIndexIsBoundedRankedAndPrivate() {
+        let navigation = XertNavigationCoordinator(initial: .home)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let bookings = (0..<6).reversed().map { offset in
+            XertMemberRecordNavigationContext.booking(
+                id: UUID(),
+                title: offset == 0 ? "   " : "Class \(offset)",
+                status: "Booked",
+                startTime: baseDate.addingTimeInterval(Double(offset) * 3_600)
+            )
+        }
+        let duplicateBooking = bookings[0]
+        let notices = [
+            XertMemberRecordNavigationContext.notice(
+                id: UUID(),
+                title: "General update",
+                tone: "info",
+                publishedAt: baseDate
+            ),
+            XertMemberRecordNavigationContext.notice(
+                id: UUID(),
+                title: String(repeating: "U", count: 180),
+                tone: "urgent",
+                publishedAt: baseDate.addingTimeInterval(-3_600)
+            ),
+            XertMemberRecordNavigationContext.notice(
+                id: UUID(),
+                title: "Action needed",
+                tone: "action",
+                publishedAt: baseDate.addingTimeInterval(3_600)
+            ),
+        ]
+        let signedInContext = XertNavigationContext(
+            isSignedIn: true,
+            noticeCount: notices.count,
+            bookingCount: bookings.count,
+            creditCount: 0,
+            eventGoalCount: 0,
+            hasPendingCheckout: false,
+            memberRecords: bookings + [duplicateBooking] + notices
+        )
+
+        XCTAssertEqual(
+            signedInContext.memberRecords.filter { $0.kind == .booking }.count,
+            XertMemberRecordNavigationContext.maximumRecordsPerKind
+        )
+        XCTAssertEqual(
+            signedInContext.memberRecords.filter { $0.kind == .booking }.map(\.timestamp),
+            Array(bookings.map(\.timestamp).sorted().prefix(4))
+        )
+        XCTAssertEqual(
+            signedInContext.memberRecords.filter { $0.kind == .notice }.map(\.priority),
+            [0, 1, 2]
+        )
+        XCTAssertEqual(
+            signedInContext.memberRecords.first { $0.kind == .notice }?.title.count,
+            XertMemberRecordNavigationContext.maximumTitleLength
+        )
+
+        let commands = navigation.commandPaletteCommands(
+            isAdmin: false,
+            context: signedInContext
+        )
+        XCTAssertEqual(
+            commands.filter {
+                if case .activity(.upcomingBookings(let id)) = $0.action { return id != nil }
+                return false
+            }.count,
+            XertMemberRecordNavigationContext.maximumRecordsPerKind
+        )
+        XCTAssertTrue(commands.contains {
+            $0.action == .activity(.upcomingBookings(nil))
+                && $0.title == "View all 6 upcoming bookings"
+        })
+        XCTAssertEqual(
+            XertNavigationCoordinator.filteredCommands(commands, query: "urgent").first?.action,
+            .activity(.notice(notices[1].id))
+        )
+
+        let signedOutContext = XertNavigationContext(
+            isSignedIn: false,
+            noticeCount: notices.count,
+            bookingCount: bookings.count,
+            creditCount: 0,
+            eventGoalCount: 0,
+            hasPendingCheckout: false,
+            memberRecords: bookings + notices
+        )
+        XCTAssertTrue(signedOutContext.memberRecords.isEmpty)
+        XCTAssertFalse(
+            navigation.commandPaletteCommands(isAdmin: false, context: signedOutContext)
                 .contains { $0.section == .now }
         )
     }

@@ -547,6 +547,7 @@ enum XertNavigationCommandAction: Hashable {
 
 enum XertNavigationActivity: Hashable {
     case notices
+    case notice(UUID)
     case upcomingBookings(UUID?)
     case eventGoals
     case pendingCheckout
@@ -577,6 +578,68 @@ struct XertNextBookingNavigationContext: Equatable {
     }
 }
 
+enum XertMemberRecordKind: Int, CaseIterable, Hashable {
+    case booking
+    case notice
+}
+
+struct XertMemberRecordNavigationContext: Identifiable, Equatable {
+    static let maximumRecordsPerKind = 4
+    static let maximumTitleLength = 120
+
+    let id: UUID
+    let kind: XertMemberRecordKind
+    let title: String
+    let detail: String
+    let timestamp: Date
+    let priority: Int
+
+    static func booking(
+        id: UUID,
+        title: String,
+        status: String,
+        startTime: Date
+    ) -> Self {
+        Self(
+            id: id,
+            kind: .booking,
+            title: normalizedTitle(title, fallback: "XERT class"),
+            detail: status.trimmingCharacters(in: .whitespacesAndNewlines),
+            timestamp: startTime,
+            priority: 0
+        )
+    }
+
+    static func notice(
+        id: UUID,
+        title: String,
+        tone: String,
+        publishedAt: Date
+    ) -> Self {
+        let normalizedTone = tone.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let priority: Int
+        switch normalizedTone {
+        case "urgent": priority = 0
+        case "action": priority = 1
+        default: priority = 2
+        }
+        return Self(
+            id: id,
+            kind: .notice,
+            title: normalizedTitle(title, fallback: "Member update"),
+            detail: normalizedTone,
+            timestamp: publishedAt,
+            priority: priority
+        )
+    }
+
+    private static func normalizedTitle(_ value: String, fallback: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return fallback }
+        return String(normalized.prefix(maximumTitleLength))
+    }
+}
+
 struct XertNavigationContext: Equatable {
     let isSignedIn: Bool
     let noticeCount: Int
@@ -585,6 +648,7 @@ struct XertNavigationContext: Equatable {
     let eventGoalCount: Int
     let hasPendingCheckout: Bool
     let nextBooking: XertNextBookingNavigationContext?
+    let memberRecords: [XertMemberRecordNavigationContext]
 
     init(
         isSignedIn: Bool,
@@ -593,7 +657,8 @@ struct XertNavigationContext: Equatable {
         creditCount: Int,
         eventGoalCount: Int,
         hasPendingCheckout: Bool,
-        nextBooking: XertNextBookingNavigationContext? = nil
+        nextBooking: XertNextBookingNavigationContext? = nil,
+        memberRecords: [XertMemberRecordNavigationContext] = []
     ) {
         self.isSignedIn = isSignedIn
         self.noticeCount = noticeCount
@@ -602,6 +667,9 @@ struct XertNavigationContext: Equatable {
         self.eventGoalCount = eventGoalCount
         self.hasPendingCheckout = hasPendingCheckout
         self.nextBooking = isSignedIn ? nextBooking : nil
+        self.memberRecords = isSignedIn
+            ? Self.normalizedRecords(memberRecords)
+            : []
     }
 
     static let empty = XertNavigationContext(
@@ -611,8 +679,28 @@ struct XertNavigationContext: Equatable {
         creditCount: 0,
         eventGoalCount: 0,
         hasPendingCheckout: false,
-        nextBooking: nil
+        nextBooking: nil,
+        memberRecords: []
     )
+
+    private static func normalizedRecords(
+        _ records: [XertMemberRecordNavigationContext]
+    ) -> [XertMemberRecordNavigationContext] {
+        var seen = Set<String>()
+        let unique = records.filter {
+            seen.insert("\($0.kind.rawValue):\($0.id.uuidString.lowercased())").inserted
+        }
+        return XertMemberRecordKind.allCases.flatMap { kind in
+            unique
+                .filter { $0.kind == kind }
+                .sorted { lhs, rhs in
+                    if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+                    if kind == .booking { return lhs.timestamp < rhs.timestamp }
+                    return lhs.timestamp > rhs.timestamp
+                }
+                .prefix(XertMemberRecordNavigationContext.maximumRecordsPerKind)
+        }
+    }
 }
 
 enum XertNavigationStatusKind: Equatable {
@@ -1289,21 +1377,64 @@ final class XertNavigationCoordinator: ObservableObject {
                 action: .activity(.pendingCheckout)
             ))
         }
-        if context.bookingCount > 0 {
+        let bookingRecords = context.memberRecords.filter { $0.kind == .booking }
+        if !bookingRecords.isEmpty {
+            commands.append(contentsOf: bookingRecords.map { record in
+                XertNavigationCommand(
+                    id: "activity-booking-\(record.id.uuidString.lowercased())",
+                    title: "Open class: \(record.title)",
+                    subtitle: "\(bookingScheduleLabel(record.timestamp)) · \(record.detail)",
+                    icon: "calendar.badge.clock",
+                    keywords: ["class", "booking", "schedule", "reminder", "cancel", record.title, record.detail],
+                    section: .now,
+                    action: .activity(.upcomingBookings(record.id))
+                )
+            })
+        }
+        if context.bookingCount > bookingRecords.count {
             let nextBooking = context.nextBooking
+            let hasExactRecords = !bookingRecords.isEmpty
+            let title: String
+            let subtitle: String
+            let activity: XertNavigationActivity
+            if hasExactRecords {
+                title = "View all \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))"
+                subtitle = "Open the complete booking timeline"
+                activity = .upcomingBookings(nil)
+            } else if let nextBooking {
+                title = "Open next class: \(nextBooking.title)"
+                subtitle = "\(nextBooking.scheduleLabel) · \(context.bookingCount) upcoming"
+                activity = .upcomingBookings(nextBooking.id)
+            } else {
+                title = "View \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))"
+                subtitle = "Review class details, reminders and cancellations"
+                activity = .upcomingBookings(nil)
+            }
             commands.append(XertNavigationCommand(
                 id: "activity-upcoming-bookings",
-                title: nextBooking.map { "Open next class: \($0.title)" }
-                    ?? "View \(context.bookingCount) upcoming \(noun(context.bookingCount, singular: "booking", plural: "bookings"))",
-                subtitle: nextBooking.map { "\($0.scheduleLabel) · \(context.bookingCount) upcoming" }
-                    ?? "Review class details, reminders and cancellations",
+                title: title,
+                subtitle: subtitle,
                 icon: "calendar.badge.clock",
                 keywords: ["class", "schedule", "reminder", "cancel", nextBooking?.title ?? ""],
                 section: .now,
-                action: .activity(.upcomingBookings(nextBooking?.id))
+                action: .activity(activity)
             ))
         }
-        if context.noticeCount > 0 {
+        let noticeRecords = context.memberRecords.filter { $0.kind == .notice }
+        if !noticeRecords.isEmpty {
+            commands.append(contentsOf: noticeRecords.map { record in
+                XertNavigationCommand(
+                    id: "activity-notice-\(record.id.uuidString.lowercased())",
+                    title: record.title,
+                    subtitle: noticeDetailLabel(record),
+                    icon: record.priority == 0 ? "exclamationmark.bubble.fill" : "bell.badge",
+                    keywords: ["announcement", "message", "update", "news", record.title, record.detail],
+                    section: .now,
+                    action: .activity(.notice(record.id))
+                )
+            })
+        }
+        if context.noticeCount > noticeRecords.count {
             commands.append(XertNavigationCommand(
                 id: "activity-notices",
                 title: "Review \(context.noticeCount) member \(noun(context.noticeCount, singular: "notice", plural: "notices"))",
@@ -1326,6 +1457,25 @@ final class XertNavigationCoordinator: ObservableObject {
             ))
         }
         return commands
+    }
+
+    private func bookingScheduleLabel(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
+        formatter.dateFormat = "EEE d MMM, h:mm a"
+        return formatter.string(from: date)
+    }
+
+    private func noticeDetailLabel(_ record: XertMemberRecordNavigationContext) -> String {
+        let published = record.timestamp.formatted(
+            .relative(presentation: .named, unitsStyle: .wide)
+        )
+        switch record.detail {
+        case "urgent": return "Urgent member notice · \(published)"
+        case "action": return "Action requested · \(published)"
+        default: return "Member update · \(published)"
+        }
     }
 
     private func pinnedCommands(

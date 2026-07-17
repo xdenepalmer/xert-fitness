@@ -280,8 +280,31 @@ struct RootView: View {
             creditCount: store.creditTotal,
             eventGoalCount: store.eventGoalIDs.count,
             hasPendingCheckout: store.isCheckoutConfirmationPending || store.isReconcilingCheckout,
-            nextBooking: nextBookingNavigationContext(from: activeBookings)
+            nextBooking: nextBookingNavigationContext(from: activeBookings),
+            memberRecords: memberNavigationRecords(from: activeBookings)
         )
+    }
+
+    private func memberNavigationRecords(
+        from bookings: [BookingItem]
+    ) -> [XertMemberRecordNavigationContext] {
+        let bookingRecords = bookings.map {
+            XertMemberRecordNavigationContext.booking(
+                id: $0.booking_id,
+                title: $0.title,
+                status: $0.stateLabel,
+                startTime: $0.start_time
+            )
+        }
+        let noticeRecords = store.announcements.map {
+            XertMemberRecordNavigationContext.notice(
+                id: $0.id,
+                title: $0.title,
+                tone: $0.tone,
+                publishedAt: $0.published_at
+            )
+        }
+        return bookingRecords + noticeRecords
     }
 
     private var navigationCommandContext: XertNavigationCommandContext {
@@ -440,6 +463,8 @@ struct RootView: View {
         switch activity {
         case .notices:
             openMemberRoute(.notices(nil), source: .commandPalette)
+        case .notice(let noticeID):
+            openMemberRoute(.notices(noticeID), source: .commandPalette)
         case .upcomingBookings(let bookingID):
             openMemberRoute(.upcomingBookings(bookingID), source: .commandPalette)
         case .eventGoals:
