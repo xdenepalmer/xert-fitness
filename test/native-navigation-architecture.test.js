@@ -208,6 +208,30 @@ test('owner command access is role-aware, full-screen, and never buried in tab o
   assert.match(root, /resumePendingOwnerNavigation/);
 });
 
+test('owner navigation restores a bounded workspace timeline with back and forward recovery', async () => {
+  const [ownerView, ownerNavigation, modelsTests] = await Promise.all([
+    readFile(viewURL('AdminCommandCentreView'), 'utf8'),
+    readFile(ownerNavigationURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(ownerNavigation, /struct XertOwnerWorkspaceHistory: Equatable/);
+  assert.match(ownerNavigation, /static let maximumCount = 16/);
+  assert.match(ownerNavigation, /private static let restorationVersion = "v1"/);
+  assert.match(ownerNavigation, /mutating func visit\(_ workspace: XertOwnerWorkspace\)/);
+  assert.match(ownerNavigation, /workspaces = Array\(workspaces\.prefix\(currentIndex \+ 1\)\) \+ \[workspace\]/);
+  assert.match(ownerNavigation, /mutating func goBack\(\) -> XertOwnerWorkspace\?/);
+  assert.match(ownerNavigation, /mutating func goForward\(\) -> XertOwnerWorkspace\?/);
+  assert.match(ownerView, /@SceneStorage\("xert\.adminWorkspaceHistory"\)/);
+  assert.match(ownerView, /pendingCompactPathWorkspace/);
+  assert.match(ownerView, /private func returnToPreviousWorkspace\(\)/);
+  assert.match(ownerView, /private func advanceToNextWorkspace\(\)/);
+  assert.match(ownerView, /keyboardShortcut\("\[", modifiers: \.command\)/);
+  assert.match(ownerView, /keyboardShortcut\("\]", modifiers: \.command\)/);
+  assert.match(ownerView, /accessibilityLabel\("Owner workspace history"\)/);
+  assert.match(ownerView, /workspace == current \? "checkmark" : "chevron\.right"/);
+  assert.match(modelsTests, /testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration/);
+});
+
 test('navigation carries operational state and native interaction feedback', async () => {
   const [root, navigation, modelsTests] = await Promise.all([
     readFile(rootURL, 'utf8'),

@@ -119,6 +119,54 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration() {
+        var history = XertOwnerWorkspaceHistory(
+            workspaces: [.overview, .members, .finance],
+            currentIndex: 2
+        )
+
+        XCTAssertEqual(history.current, .finance)
+        XCTAssertEqual(history.previous, .members)
+        XCTAssertNil(history.next)
+        XCTAssertEqual(history.goBack(), .members)
+        XCTAssertEqual(history.previous, .overview)
+        XCTAssertEqual(history.next, .finance)
+        XCTAssertEqual(history.goForward(), .finance)
+
+        XCTAssertEqual(history.goBack(), .members)
+        history.visit(.health)
+        XCTAssertEqual(history.workspaces, [.overview, .members, .health])
+        XCTAssertEqual(history.current, .health)
+        XCTAssertNil(history.next)
+
+        history.visit(.members)
+        XCTAssertEqual(history.workspaces, [.overview, .members, .health, .members])
+        let restored = XertOwnerWorkspaceHistory(
+            restorationValue: history.restorationValue,
+            fallback: .audit
+        )
+        XCTAssertEqual(restored, history)
+
+        var bounded = XertOwnerWorkspaceHistory()
+        for index in 0..<(XertOwnerWorkspaceHistory.maximumCount + 5) {
+            bounded.visit(index.isMultiple(of: 2) ? .members : .finance)
+        }
+        XCTAssertEqual(bounded.workspaces.count, XertOwnerWorkspaceHistory.maximumCount)
+        XCTAssertEqual(bounded.currentIndex, bounded.workspaces.count - 1)
+        XCTAssertEqual(
+            XertOwnerWorkspaceHistory(restorationValue: "broken", fallback: .audit).current,
+            .audit
+        )
+        XCTAssertEqual(
+            XertOwnerWorkspaceHistory(restorationValue: "v1|99|members,finance").current,
+            .overview
+        )
+        XCTAssertEqual(
+            XertOwnerWorkspaceHistory(restorationValue: "v1|0|unknown,finance", fallback: .audit).current,
+            .audit
+        )
+    }
+
     func testOwnerWorkspaceSearchMatchesTasksAcrossBusinessAreas() {
         XCTAssertTrue(XertOwnerWorkspace.finance.matches("stripe refund"))
         XCTAssertTrue(XertOwnerWorkspace.siteContent.matches("homepage hero"))

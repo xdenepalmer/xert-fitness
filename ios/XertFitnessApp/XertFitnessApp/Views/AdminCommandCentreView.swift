@@ -9,7 +9,9 @@ struct AdminCommandCentreView: View {
     @StateObject private var admin = AdminStore()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
+    @SceneStorage("xert.adminWorkspaceHistory") private var restoredWorkspaceHistory = ""
     @State private var compactPath: [XertOwnerWorkspace] = []
+    @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
     let requestedWorkspace: XertOwnerWorkspace?
     var onClose: (() -> Void)? = nil
@@ -45,6 +47,7 @@ struct AdminCommandCentreView: View {
         }
         .sheet(isPresented: $showingWorkspaceSwitcher) {
             AdminWorkspaceSwitcher(
+                current: currentWorkspace,
                 recent: recentWorkspaces.workspaces,
                 badges: workspaceBadges
             ) { workspace in
@@ -77,6 +80,13 @@ struct AdminCommandCentreView: View {
         XertOwnerWorkspaceRecency(restorationValue: restoredRecentWorkspaces)
     }
 
+    private var workspaceHistory: XertOwnerWorkspaceHistory {
+        XertOwnerWorkspaceHistory(
+            restorationValue: restoredWorkspaceHistory,
+            fallback: currentWorkspace
+        )
+    }
+
     private var workspaceBadges: [XertOwnerWorkspace: Int] {
         let pairs: [(XertOwnerWorkspace, Int)] = XertOwnerWorkspace.allCases.compactMap { workspace in
             guard let badge = workspaceBadge(workspace), badge > 0 else { return nil }
@@ -86,11 +96,36 @@ struct AdminCommandCentreView: View {
     }
 
     private func openWorkspace(_ workspace: XertOwnerWorkspace) {
+        var history = workspaceHistory
+        history.visit(workspace)
+        restoredWorkspaceHistory = history.restorationValue
+        applyWorkspace(workspace)
+    }
+
+    private func applyWorkspace(_ workspace: XertOwnerWorkspace) {
         restoredWorkspace = workspace.rawValue
         var recency = recentWorkspaces
         recency.record(workspace)
         restoredRecentWorkspaces = recency.restorationValue
-        compactPath = workspace == .overview ? [] : [workspace]
+        let targetPath = workspace == .overview ? [] : [workspace]
+        if compactPath != targetPath {
+            pendingCompactPathWorkspace = workspace
+            compactPath = targetPath
+        }
+    }
+
+    private func returnToPreviousWorkspace() {
+        var history = workspaceHistory
+        guard let workspace = history.goBack() else { return }
+        restoredWorkspaceHistory = history.restorationValue
+        applyWorkspace(workspace)
+    }
+
+    private func advanceToNextWorkspace() {
+        var history = workspaceHistory
+        guard let workspace = history.goForward() else { return }
+        restoredWorkspaceHistory = history.restorationValue
+        applyWorkspace(workspace)
     }
 
     private func applyRequestedWorkspace(_ workspace: XertOwnerWorkspace?) {
@@ -111,10 +146,11 @@ struct AdminCommandCentreView: View {
         }
         .onChange(of: compactPath) { path in
             let workspace = path.last ?? .overview
-            restoredWorkspace = workspace.rawValue
-            var recency = recentWorkspaces
-            recency.record(workspace)
-            restoredRecentWorkspaces = recency.restorationValue
+            if pendingCompactPathWorkspace == workspace {
+                pendingCompactPathWorkspace = nil
+                return
+            }
+            openWorkspace(workspace)
         }
     }
 
@@ -220,6 +256,32 @@ struct AdminCommandCentreView: View {
 
     @ToolbarContentBuilder
     private var workspaceSwitcherToolbar: some ToolbarContent {
+        ToolbarItem(placement: .secondaryAction) {
+            Menu {
+                Button { returnToPreviousWorkspace() } label: {
+                    Label(
+                        workspaceHistory.previous.map { "Back to \($0.title)" } ?? "No previous workspace",
+                        systemImage: "arrow.left"
+                    )
+                }
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(workspaceHistory.previous == nil)
+
+                Button { advanceToNextWorkspace() } label: {
+                    Label(
+                        workspaceHistory.next.map { "Forward to \($0.title)" } ?? "No next workspace",
+                        systemImage: "arrow.right"
+                    )
+                }
+                .keyboardShortcut("]", modifiers: .command)
+                .disabled(workspaceHistory.next == nil)
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+            }
+            .accessibilityLabel("Owner workspace history")
+            .accessibilityHint("Returns to previous or forward owner workspaces")
+        }
+
         ToolbarItem(placement: .primaryAction) {
             Button { showingWorkspaceSwitcher = true } label: {
                 Image(systemName: "magnifyingglass")
@@ -449,6 +511,7 @@ struct AdminCommandCentreView: View {
 private struct AdminWorkspaceSwitcher: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    let current: XertOwnerWorkspace
     let recent: [XertOwnerWorkspace]
     let badges: [XertOwnerWorkspace: Int]
     let onSelect: (XertOwnerWorkspace) -> Void
@@ -556,9 +619,9 @@ private struct AdminWorkspaceSwitcher: View {
                         .background(Color.xertSteel)
                         .clipShape(Capsule())
                 }
-                Image(systemName: "chevron.right")
+                Image(systemName: workspace == current ? "checkmark" : "chevron.right")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.xertPale.opacity(0.35))
+                    .foregroundStyle(workspace == current ? Color.xertSteel : Color.xertPale.opacity(0.35))
             }
             .padding(.vertical, 3)
         }

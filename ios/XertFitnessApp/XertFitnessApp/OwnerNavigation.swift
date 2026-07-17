@@ -189,6 +189,100 @@ struct XertOwnerWorkspaceRecency: Equatable {
     }
 }
 
+struct XertOwnerWorkspaceHistory: Equatable {
+    static let maximumCount = 16
+    private static let restorationVersion = "v1"
+
+    private(set) var workspaces: [XertOwnerWorkspace]
+    private(set) var currentIndex: Int
+
+    init(
+        workspaces: [XertOwnerWorkspace] = [.overview],
+        currentIndex: Int = 0
+    ) {
+        let retained = Array(workspaces.suffix(Self.maximumCount))
+        guard !retained.isEmpty else {
+            self.workspaces = [.overview]
+            self.currentIndex = 0
+            return
+        }
+
+        let removedCount = max(0, workspaces.count - retained.count)
+        self.workspaces = retained
+        self.currentIndex = min(
+            max(0, currentIndex - removedCount),
+            retained.count - 1
+        )
+    }
+
+    init(restorationValue: String, fallback: XertOwnerWorkspace = .overview) {
+        let parts = restorationValue.split(
+            separator: "|",
+            maxSplits: 2,
+            omittingEmptySubsequences: false
+        )
+        guard
+            parts.count == 3,
+            parts[0] == Self.restorationVersion,
+            let restoredIndex = Int(parts[1])
+        else {
+            self.init(workspaces: [fallback])
+            return
+        }
+
+        let workspaceTokens = parts[2]
+            .split(separator: ",", omittingEmptySubsequences: true)
+        let restoredWorkspaces = workspaceTokens
+            .compactMap { XertOwnerWorkspace(rawValue: String($0)) }
+        guard !restoredWorkspaces.isEmpty else {
+            self.init(workspaces: [fallback])
+            return
+        }
+        guard
+            workspaceTokens.count <= Self.maximumCount,
+            restoredWorkspaces.count == workspaceTokens.count,
+            restoredWorkspaces.indices.contains(restoredIndex)
+        else {
+            self.init(workspaces: [fallback])
+            return
+        }
+        self.init(workspaces: restoredWorkspaces, currentIndex: restoredIndex)
+    }
+
+    var restorationValue: String {
+        "\(Self.restorationVersion)|\(currentIndex)|\(workspaces.map(\.rawValue).joined(separator: ","))"
+    }
+
+    var current: XertOwnerWorkspace { workspaces[currentIndex] }
+    var previous: XertOwnerWorkspace? {
+        currentIndex > 0 ? workspaces[currentIndex - 1] : nil
+    }
+    var next: XertOwnerWorkspace? {
+        currentIndex + 1 < workspaces.count ? workspaces[currentIndex + 1] : nil
+    }
+
+    mutating func visit(_ workspace: XertOwnerWorkspace) {
+        guard workspace != current else { return }
+        workspaces = Array(workspaces.prefix(currentIndex + 1)) + [workspace]
+        if workspaces.count > Self.maximumCount {
+            workspaces.removeFirst(workspaces.count - Self.maximumCount)
+        }
+        currentIndex = workspaces.count - 1
+    }
+
+    mutating func goBack() -> XertOwnerWorkspace? {
+        guard currentIndex > 0 else { return nil }
+        currentIndex -= 1
+        return current
+    }
+
+    mutating func goForward() -> XertOwnerWorkspace? {
+        guard currentIndex + 1 < workspaces.count else { return nil }
+        currentIndex += 1
+        return current
+    }
+}
+
 struct XertOwnerRoute: Equatable, Hashable {
     static let canonicalWebHost = AppConfig.vercelHost
     let workspace: XertOwnerWorkspace
