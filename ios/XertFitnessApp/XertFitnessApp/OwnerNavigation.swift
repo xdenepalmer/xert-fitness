@@ -26,6 +26,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     case events
     case team
     case finance
+    case orders
     case products
     case controls
     case health
@@ -50,6 +51,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .events: return "Event Calendar"
         case .team: return "Team Directory"
         case .finance: return "Finance"
+        case .orders: return "Orders"
         case .products: return "Session Packs"
         case .controls: return "Platform Controls"
         case .health: return "Operations Health"
@@ -73,7 +75,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .notices: return "Publish updates to web and iOS"
         case .events: return "Coordinate the annual training calendar"
         case .team: return "Manage coaches and practitioners"
-        case .finance: return "Track pack sales, revenue and refunds"
+        case .finance: return "Review revenue and sales performance"
+        case .orders: return "Recover payments, fulfil sales and issue refunds"
         case .products: return "Control pricing, credits and Stripe links"
         case .controls: return "Control launch, bookings and messaging"
         case .health: return "Verify Stripe, schema and APNs readiness"
@@ -98,6 +101,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .events: return "trophy"
         case .team: return "person.crop.rectangle.stack"
         case .finance: return "chart.line.uptrend.xyaxis"
+        case .orders: return "creditcard.and.123"
         case .products: return "ticket"
         case .controls: return "switch.2"
         case .health: return "checkmark.shield"
@@ -112,7 +116,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
             return .operate
         case .retention, .leads, .campaigns: return .grow
         case .siteContent, .notices, .events, .team: return .publish
-        case .finance, .products: return .commerce
+        case .finance, .orders, .products: return .commerce
         case .controls, .health, .audit: return .platform
         }
     }
@@ -133,7 +137,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .notices: return ["announcement", "push", "message", "notification"]
         case .events: return ["event", "race", "competition", "calendar"]
         case .team: return ["coach", "practitioner", "trainer", "team"]
-        case .finance: return ["payment", "order", "revenue", "refund", "Stripe"]
+        case .finance: return ["revenue", "sales", "performance", "income", "Stripe"]
+        case .orders: return ["payment", "order", "checkout", "recovery", "refund", "fulfilment", "Stripe"]
         case .products: return ["pack", "price", "credit", "Stripe", "product"]
         case .controls: return ["launch", "payment", "booking", "platform", "settings"]
         case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
@@ -386,7 +391,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     var workspace: XertOwnerWorkspace {
         switch self {
         case .member: return .members
-        case .order: return .finance
+        case .order: return .orders
         case .event: return .events
         }
     }
@@ -415,7 +420,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         guard let id = UUID(uuidString: identifier) else { return nil }
         switch (workspace, kind) {
         case (.members, "member"): return .member(id)
-        case (.finance, "order"): return .order(id)
+        case (.orders, "order"), (.finance, "order"): return .order(id)
         case (.events, "event"): return .event(id)
         default: return nil
         }

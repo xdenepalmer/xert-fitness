@@ -606,6 +606,8 @@ struct AdminCommandCentreView: View {
             return admin.followUps.count
         case .notices:
             return admin.liveAnnouncements
+        case .orders:
+            return admin.orders.filter(\.isRecoverable).count
         case .health:
             return admin.hasHealthSnapshot ? admin.healthIssues : nil
         default:
@@ -654,7 +656,11 @@ struct AdminCommandCentreView: View {
         case .finance:
             return AnyView(AdminFinanceView(
                 admin: admin,
-                session: session,
+                onOpenOrders: { openWorkspace(.orders) }
+            ))
+        case .orders:
+            return AnyView(AdminOrdersView(
+                admin: admin,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
             ))
         case .products:
@@ -1937,7 +1943,74 @@ private struct AdminRetentionView: View {
 
 private struct AdminFinanceView: View {
     @ObservedObject var admin: AdminStore
-    let session: AuthSession
+    let onOpenOrders: () -> Void
+
+    private var pendingOrders: Int {
+        admin.orders.filter { $0.status == "pending" }.count
+    }
+
+    private var refundedOrders: Int {
+        admin.orders.filter { $0.status == "refunded" }.count
+    }
+
+    private var recoverableOrders: Int {
+        admin.orders.filter(\.isRecoverable).count
+    }
+
+    var body: some View {
+        List {
+            Section("Revenue") {
+                FinanceSummaryRow(label: "This month", cents: admin.monthRevenueCents)
+                FinanceSummaryRow(label: "All paid orders", cents: admin.totalRevenueCents)
+            }
+            Section("Sales performance") {
+                financeCount("Paid orders", value: admin.paidOrders.count, icon: "checkmark.circle")
+                financeCount("Pending checkouts", value: pendingOrders, icon: "clock")
+                financeCount("Refunded orders", value: refundedOrders, icon: "arrow.uturn.backward.circle")
+            }
+            Section("Order operations") {
+                Button(action: onOpenOrders) {
+                    HStack(spacing: 12) {
+                        Image(systemName: recoverableOrders > 0 ? "exclamationmark.arrow.circlepath" : "creditcard")
+                            .foregroundStyle(recoverableOrders > 0 ? Color.orange : Color.xertSteel)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Open orders")
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Text(recoverableOrders > 0
+                                 ? "\(recoverableOrders) payment\(recoverableOrders == 1 ? "" : "s") need recovery"
+                                 : "Search sales, reconcile payments and manage refunds")
+                                .font(.caption)
+                                .foregroundStyle(Color.xertPale.opacity(0.65))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Finance")
+    }
+
+    private func financeCount(_ label: String, value: Int, icon: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+            Spacer()
+            Text(value.formatted()).fontWeight(.bold)
+        }
+        .foregroundStyle(Color.xertOffWhite)
+        .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct AdminOrdersView: View {
+    @ObservedObject var admin: AdminStore
     let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
     @State private var status = "all"
@@ -1956,17 +2029,6 @@ private struct AdminFinanceView: View {
 
     var body: some View {
         List {
-            Section("Revenue") {
-                FinanceSummaryRow(label: "This month", cents: admin.monthRevenueCents)
-                FinanceSummaryRow(label: "All paid orders", cents: admin.totalRevenueCents)
-                HStack {
-                    Text("Paid orders")
-                    Spacer()
-                    Text(admin.paidOrders.count.formatted()).fontWeight(.bold)
-                }
-                .foregroundStyle(Color.xertOffWhite)
-                .listRowBackground(Color.xertInk)
-            }
             Section("Order operations") {
                 Picker("Order status", selection: $status) {
                     Text("All").tag("all")
@@ -2014,7 +2076,7 @@ private struct AdminFinanceView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
-        .navigationTitle("Finance")
+        .navigationTitle("Orders")
         .searchable(text: $query, prompt: "Email, pack or Stripe ID")
     }
 

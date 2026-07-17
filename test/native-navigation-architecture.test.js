@@ -253,7 +253,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerNavigation, /case order\(UUID\)/);
   assert.match(ownerNavigation, /case event\(UUID\)/);
   assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
-  assert.match(ownerNavigation, /case \(\.finance, "order"\): return \.order\(id\)/);
+  assert.match(ownerNavigation, /case \(\.orders, "order"\), \(\.finance, "order"\): return \.order\(id\)/);
   assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
   assert.match(ownerNavigation, /parts\.count == 2 \|\| parts\.count == 4/);
   assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);

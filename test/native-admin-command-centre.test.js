@@ -49,6 +49,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminClassesView/);
   assert.match(view, /AdminRetentionView/);
   assert.match(view, /AdminFinanceView/);
+  assert.match(view, /AdminOrdersView/);
   assert.match(view, /AdminPlatformView/);
   assert.match(view, /AdminPTRequestsView/);
   assert.match(view, /AdminCommunicationsView/);
@@ -210,7 +211,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   for (const workspace of [
     'overview', 'members', 'classDesk', 'bookingRequests', 'timetable', 'availability',
     'ptRequests', 'retention', 'leads', 'campaigns', 'siteContent', 'notices', 'events',
-    'team', 'finance', 'products', 'controls', 'health', 'audit',
+    'team', 'finance', 'orders', 'products', 'controls', 'health', 'audit',
   ]) assert.match(ownerNavigation, new RegExp(`case ${workspace}`));
   assert.match(view, /@Environment\(\\\.horizontalSizeClass\) private var horizontalSizeClass/);
   assert.match(view, /@SceneStorage\("xert\.adminWorkspace"\)/);

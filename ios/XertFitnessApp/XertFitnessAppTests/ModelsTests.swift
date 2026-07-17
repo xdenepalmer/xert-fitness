@@ -129,6 +129,10 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/finance/order/\(orderID.uuidString)"),
+            XertOwnerRoute(task: .order(orderID))
+        )
         XCTAssertNil(XertOwnerRoute.restore("owner/events/event/not-a-uuid"))
         XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(
             string: "xertfitness://owner/finance/order/\(orderID.uuidString)?action=refund"
@@ -400,7 +404,9 @@ final class ModelsTests: XCTestCase {
     }
 
     func testOwnerWorkspaceSearchMatchesTasksAcrossBusinessAreas() {
-        XCTAssertTrue(XertOwnerWorkspace.finance.matches("stripe refund"))
+        XCTAssertTrue(XertOwnerWorkspace.finance.matches("stripe revenue"))
+        XCTAssertTrue(XertOwnerWorkspace.orders.matches("stripe refund"))
+        XCTAssertFalse(XertOwnerWorkspace.finance.matches("refund"))
         XCTAssertTrue(XertOwnerWorkspace.siteContent.matches("homepage hero"))
         XCTAssertTrue(XertOwnerWorkspace.classDesk.matches("roll waitlist"))
         XCTAssertTrue(XertOwnerWorkspace.members.matches("MEMBER credit"))
