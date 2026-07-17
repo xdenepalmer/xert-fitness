@@ -28,6 +28,11 @@ const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
+const PAYMENT_FULFILLMENT_EVENT_TYPES = [
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+];
+const PAYMENT_FULFILLMENT_STALE_MS = 10 * 60 * 1000;
 const ADMIN_SETTINGS_SINGLETON_CAPABILITY = 'admin_settings_singleton';
 const PAYMENT_ACTIVATION_DRIFT_CAPABILITY = 'payment_activation_drift_guard';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -118,6 +123,34 @@ export async function stripeWebhookLedgerIsReady(admin) {
     .maybeSingle();
   if (error) return false;
   return data?.capability === STRIPE_WEBHOOK_LEDGER_CAPABILITY;
+}
+
+/**
+ * Stop new purchases when Stripe has already reported a paid Checkout Session
+ * that XERT failed to settle. This limits one delivery outage to the members
+ * already in flight instead of continuing to accept charges without credits.
+ */
+export async function paymentFulfillmentDeliveryIsHealthy(admin, now = new Date()) {
+  const nowTime = now instanceof Date ? now.getTime() : Number.NaN;
+  if (!Number.isFinite(nowTime)) return false;
+  const staleBefore = new Date(nowTime - PAYMENT_FULFILLMENT_STALE_MS).toISOString();
+  const count = status => admin
+    .from('stripe_webhook_events')
+    .select('event_id', { count: 'exact', head: true })
+    .in('event_type', PAYMENT_FULFILLMENT_EVENT_TYPES)
+    .eq('status', status);
+  try {
+    const [failed, stalled] = await Promise.all([
+      count('failed'),
+      count('processing').lt('last_received_at', staleBefore),
+    ]);
+    return !failed.error
+      && !stalled.error
+      && failed.count === 0
+      && stalled.count === 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function sessionPackPaymentsAreEnabled(admin) {
@@ -501,6 +534,7 @@ export default async function handler(request, response) {
       pendingOrderGuardReady,
       orderTermsReady,
       webhookLedgerReady,
+      paymentDeliveryHealthy,
       settingsContractReady,
       activationDriftGuardReady,
       paymentActivationReady,
@@ -509,6 +543,7 @@ export default async function handler(request, response) {
       stripePendingOrderGuardIsReady(admin),
       stripeOrderTermsSnapshotIsReady(admin),
       stripeWebhookLedgerIsReady(admin),
+      paymentFulfillmentDeliveryIsHealthy(admin),
       adminSettingsContractIsReady(admin),
       paymentActivationDriftGuardIsReady(admin),
       sessionPackPaymentsAreEnabled(admin),
@@ -535,6 +570,12 @@ export default async function handler(request, response) {
     if (!webhookLedgerReady) {
       return json({
         error: 'Checkout is temporarily unavailable while payment delivery monitoring is being installed.',
+      }, 503);
+    }
+
+    if (!paymentDeliveryHealthy) {
+      return json({
+        error: 'Checkout is temporarily paused while a payment delivery issue is being resolved.',
       }, 503);
     }
 

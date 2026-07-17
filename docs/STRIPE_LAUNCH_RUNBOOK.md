@@ -221,6 +221,10 @@ until this command passes.
 12. Confirm Operations Health remains green.
     If an ordinary webhook delivery is failed or has been processing for more
     than ten minutes, use **Retry safely** in web or iOS Operations Health.
+    XERT automatically pauses all new Checkout sessions while a paid-session
+    delivery is failed or stalled beyond ten minutes, so an outage cannot keep
+    accepting payments without granting credits. The circuit breaker reopens
+    only after the durable ledger has no failed or stalled paid deliveries.
     XERT retrieves the canonical event from Stripe, verifies its ID, type and
     live/test mode against the durable ledger, then reuses the idempotent
     webhook settlement path. Do not use this for partial-refund or dispute
@@ -257,4 +261,7 @@ Controls**. This server-side switch blocks new website and iOS Checkout sessions
 do not delete Stripe records. Preserve orders and webhook history for
 reconciliation. Restore the previous Vercel deployment or correct the affected
 secret/Price, redeploy, then use **Admin > Finance > Check and reconcile payment**
-for any customer whose payment status is uncertain.
+for any customer whose payment status is uncertain. A failed or ten-minute-stalled
+paid-session delivery also activates the automatic Checkout circuit breaker. Use
+**Operations Health > Retry safely** to settle the canonical event; do not bypass
+or delete its ledger record to reopen sales.

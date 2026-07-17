@@ -66,6 +66,9 @@ The live cutover uses two read-only gates: `npm run stripe:launch:check` require
 checkout to remain paused while configuration is verified, then
 `npm run stripe:launch:verify` proves guarded activation is retained and has a
 matching immutable admin audit receipt before the first real card purchase.
+Checkout also pauses automatically when a paid-session webhook has failed or
+remained in processing for ten minutes, and resumes only after Operations Health
+has safely settled the durable delivery record.
 
 For zero-downtime webhook secret rotation, first move the currently active
 secret into `STRIPE_WEBHOOK_SECRET_PREVIOUS`, install the new endpoint secret as

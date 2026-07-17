@@ -14,6 +14,7 @@ import {
   normalizeCheckoutAttemptID,
   normalizeCheckoutRequest,
   pendingOrderForCheckout,
+  paymentFulfillmentDeliveryIsHealthy,
   paymentFulfillmentIsReady,
   paymentActivationDriftGuardIsReady,
   publicCheckoutFailure,
@@ -160,6 +161,101 @@ test('checkout fails closed until Stripe delivery monitoring is installed', asyn
   const sessionCreation = source.indexOf('stripe.checkout.sessions.create');
   assert.ok(guard >= 0 && paymentSwitch > guard && sessionCreation > paymentSwitch);
   assert.match(source, /payment delivery monitoring is being installed[\s\S]*503/);
+});
+
+function paymentDeliveryAdmin(results) {
+  let resultIndex = 0;
+  const calls = [];
+  return {
+    calls,
+    admin: {
+      from(table) {
+        const result = results[resultIndex];
+        resultIndex += 1;
+        const query = {
+          select(fields, options) {
+            calls.push(['select', table, fields, options]);
+            return query;
+          },
+          in(field, values) {
+            calls.push(['in', field, values]);
+            return query;
+          },
+          eq(field, value) {
+            calls.push(['eq', field, value]);
+            return query;
+          },
+          lt(field, value) {
+            calls.push(['lt', field, value]);
+            return query;
+          },
+          then(resolve, reject) {
+            return Promise.resolve(result).then(resolve, reject);
+          },
+        };
+        return query;
+      },
+    },
+  };
+}
+
+test('checkout pauses when paid Stripe fulfillment is failed or stalled', async () => {
+  const now = new Date('2026-07-17T00:20:00.000Z');
+  const healthy = paymentDeliveryAdmin([
+    { count: 0, error: null },
+    { count: 0, error: null },
+  ]);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(healthy.admin, now), true);
+  assert.deepEqual(healthy.calls.filter(([method]) => method === 'eq'), [
+    ['eq', 'status', 'failed'],
+    ['eq', 'status', 'processing'],
+  ]);
+  assert.deepEqual(healthy.calls.filter(([method]) => method === 'in'), [
+    ['in', 'event_type', [
+      'checkout.session.completed',
+      'checkout.session.async_payment_succeeded',
+    ]],
+    ['in', 'event_type', [
+      'checkout.session.completed',
+      'checkout.session.async_payment_succeeded',
+    ]],
+  ]);
+  assert.deepEqual(healthy.calls.filter(([method]) => method === 'lt'), [
+    ['lt', 'last_received_at', '2026-07-17T00:10:00.000Z'],
+  ]);
+
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
+    { count: 1, error: null },
+    { count: 0, error: null },
+  ]).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
+    { count: 0, error: null },
+    { count: 1, error: null },
+  ]).admin, now), false);
+});
+
+test('checkout delivery circuit breaker fails closed on uncertain ledger health', async () => {
+  const now = new Date('2026-07-17T00:20:00.000Z');
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
+    { count: null, error: new Error('ledger unavailable') },
+    { count: 0, error: null },
+  ]).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy({
+    from() {
+      throw new Error('database unavailable');
+    },
+  }, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy({}, new Date('invalid')), false);
+});
+
+test('checkout delivery circuit breaker runs before reuse and Stripe operations', async () => {
+  const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
+  const circuitBreaker = source.indexOf('paymentFulfillmentDeliveryIsHealthy(admin)');
+  assert.ok(circuitBreaker >= 0);
+  assert.ok(circuitBreaker < source.indexOf('await findReusableCheckout({'));
+  assert.ok(circuitBreaker < source.indexOf('stripe.prices.retrieve'));
+  assert.ok(circuitBreaker < source.indexOf('stripe.checkout.sessions.create'));
+  assert.match(source, /payment delivery issue is being resolved[\s\S]*503/);
 });
 
 test('checkout has a fail-closed owner payment switch before any Stripe operation', async () => {
