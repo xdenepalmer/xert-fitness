@@ -53,7 +53,7 @@ After deploying, create a Stripe webhook endpoint pointing at
 `https://<your-domain>/api/stripe-webhook` for both
 `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
 `checkout.session.expired`, `checkout.session.async_payment_failed`,
-`charge.refunded`, and `charge.dispute.created`,
+`charge.refunded`, `charge.dispute.created`, and `charge.dispute.closed`,
 then copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the

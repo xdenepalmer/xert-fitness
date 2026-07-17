@@ -257,9 +257,9 @@ struct RootView: View {
             && !showingNavigationCommands
         return XertNavigationCommandContext(
             isAvailable: isAvailable,
-            selection: isAvailable ? navigation.selection : .home,
-            previousRoute: isAvailable ? navigation.previousRoute : nil,
-            nextRoute: isAvailable ? navigation.nextRoute : nil,
+            scope: .member(isAvailable ? navigation.selection : .home),
+            previousTitle: isAvailable ? navigation.previousRoute?.navigationTitle : nil,
+            nextTitle: isAvailable ? navigation.nextRoute?.navigationTitle : nil,
             isAdmin: isAvailable && store.profile?.isAdmin == true,
             perform: executeSceneNavigationCommand
         )
@@ -461,6 +461,8 @@ struct RootView: View {
         case .owner:
             guard store.profile?.isAdmin == true, !showingNavigationCommands else { return }
             openOwnerCommandCentre()
+        case .ownerWorkspace(_), .closeOwner:
+            return
         }
     }
 

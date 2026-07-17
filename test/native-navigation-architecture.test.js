@@ -5,6 +5,7 @@ import test from 'node:test';
 const rootURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url);
 const navigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift', import.meta.url);
 const ownerNavigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift', import.meta.url);
+const sceneCommandsURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertNavigationCommands.swift', import.meta.url);
 const modelsTestsURL = new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url);
 const viewURL = name => new URL(`../ios/XertFitnessApp/XertFitnessApp/Views/${name}.swift`, import.meta.url);
 
@@ -230,6 +231,32 @@ test('owner navigation restores a bounded workspace timeline with back and forwa
   assert.match(ownerView, /accessibilityLabel\("Owner workspace history"\)/);
   assert.match(ownerView, /workspace == current \? "checkmark" : "chevron\.right"/);
   assert.match(modelsTests, /testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration/);
+});
+
+test('scene commands follow the active member or owner navigation scope', async () => {
+  const [root, ownerView, sceneCommands] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(viewURL('AdminCommandCentreView'), 'utf8'),
+    readFile(sceneCommandsURL, 'utf8'),
+  ]);
+  assert.match(sceneCommands, /enum XertSceneNavigationScope: Equatable/);
+  assert.match(sceneCommands, /case member\(XertPrimaryDestination\)/);
+  assert.match(sceneCommands, /case owner\(XertOwnerWorkspace\)/);
+  assert.match(sceneCommands, /case ownerWorkspace\(XertOwnerWorkspace\)/);
+  assert.match(sceneCommands, /if let ownerSelection \{[\s\S]*ownerCommands\(selection: ownerSelection\)[\s\S]*else \{[\s\S]*memberCommands/);
+  assert.match(sceneCommands, /Button\("Owner Workspace Switcher"[\s\S]*keyboardShortcut\("k", modifiers: \.command\)/);
+  assert.match(sceneCommands, /historyCommands\(taskNoun: "Workspace"\)/);
+  assert.match(sceneCommands, /Button\("Refresh Owner Workspace"[\s\S]*keyboardShortcut\("r", modifiers: \.command\)/);
+  assert.match(sceneCommands, /Menu\("Open Owner Workspace", systemImage: "square\.grid\.2x2"\)/);
+  assert.match(sceneCommands, /XertOwnerWorkspace\.workspaces\(in: section\)/);
+  assert.match(sceneCommands, /Button\("Close Owner Command Centre", systemImage: "xmark"\)/);
+  assert.match(root, /scope: \.member\(isAvailable \? navigation\.selection : \.home\)/);
+  assert.match(ownerView, /\.focusedSceneValue\(\\\.xertNavigationCommandContext, ownerNavigationCommandContext\)/);
+  assert.match(ownerView, /scope: \.owner\(currentWorkspace\)/);
+  assert.match(ownerView, /private func executeOwnerSceneNavigationCommand/);
+  assert.match(ownerView, /case \.ownerWorkspace\(let workspace\):[\s\S]*openWorkspace\(workspace\)/);
+  assert.match(ownerView, /case \.refresh:[\s\S]*admin\.refresh\(session: session\)/);
+  assert.match(ownerView, /case \.closeOwner:[\s\S]*onClose\?\(\)/);
 });
 
 test('navigation carries operational state and native interaction feedback', async () => {

@@ -36,6 +36,7 @@ struct AdminCommandCentreView: View {
                 NavigationStack { accessDenied }
             }
         }
+        .focusedSceneValue(\.xertNavigationCommandContext, ownerNavigationCommandContext)
         .background(Color.xertNavy.ignoresSafeArea())
         .task {
             guard let session = store.authSession, store.profile?.isAdmin == true else { return }
@@ -95,6 +96,20 @@ struct AdminCommandCentreView: View {
         return Dictionary(uniqueKeysWithValues: pairs)
     }
 
+    private var ownerNavigationCommandContext: XertNavigationCommandContext {
+        let isAvailable = store.authSession != nil
+            && store.profile?.isAdmin == true
+            && !showingWorkspaceSwitcher
+        return XertNavigationCommandContext(
+            isAvailable: isAvailable,
+            scope: .owner(currentWorkspace),
+            previousTitle: isAvailable ? workspaceHistory.previous?.title : nil,
+            nextTitle: isAvailable ? workspaceHistory.next?.title : nil,
+            isAdmin: isAvailable,
+            perform: executeOwnerSceneNavigationCommand
+        )
+    }
+
     private func openWorkspace(_ workspace: XertOwnerWorkspace) {
         var history = workspaceHistory
         history.visit(workspace)
@@ -126,6 +141,27 @@ struct AdminCommandCentreView: View {
         guard let workspace = history.goForward() else { return }
         restoredWorkspaceHistory = history.restorationValue
         applyWorkspace(workspace)
+    }
+
+    private func executeOwnerSceneNavigationCommand(_ command: XertSceneNavigationCommand) {
+        guard store.profile?.isAdmin == true else { return }
+        switch command {
+        case .ownerWorkspace(let workspace):
+            openWorkspace(workspace)
+        case .previous:
+            returnToPreviousWorkspace()
+        case .next:
+            advanceToNextWorkspace()
+        case .quickSwitcher:
+            showingWorkspaceSwitcher = true
+        case .refresh:
+            guard let session = store.authSession else { return }
+            Task { await admin.refresh(session: session) }
+        case .closeOwner:
+            onClose?()
+        case .destination(_), .owner:
+            return
+        }
     }
 
     private func applyRequestedWorkspace(_ workspace: XertOwnerWorkspace?) {
