@@ -1,0 +1,78 @@
+name: Quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+
+  ios:
+    name: Swift unit tests
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      BUNDLE_ID: com.xertfitness.app
+      IOS_DIRECTORY: ios/XertFitnessApp
+      XCODE_PROJECT: XertFitness.xcodeproj
+      XCODE_SCHEME: XertFitness
+      ENABLE_UNIVERSAL_LINKS: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Prepare compile-only configuration
+        working-directory: ${{ env.IOS_DIRECTORY }}
+        run: cp Config.example.xcconfig Config.xcconfig
+      - name: Generate Xcode project
+        working-directory: ${{ env.IOS_DIRECTORY }}
+        run: |
+          bash ci/configure-universal-links.sh
+          xcodegen generate
+      - name: Run Swift unit tests
+        working-directory: ${{ env.IOS_DIRECTORY }}
+        run: bash ci/run-swift-tests.sh
+      - name: Retain Swift diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-test-diagnostics-${{ github.run_attempt }}
+          path: |
+            ios/XertFitnessApp/build/test-results.xcresult
+            /tmp/xcodebuild_logs/*.log
+          if-no-files-found: warn
+          retention-days: 7

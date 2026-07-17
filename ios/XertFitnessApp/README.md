@@ -127,6 +127,14 @@ The repository-root `codemagic.yaml` has two macOS workflows:
 
 Both workflows use `ci/run-swift-tests.sh`, which explicitly boots the selected iPhone simulator and bounds simulator startup and test execution. A stalled test host now fails with a clear timeout instead of consuming the full build duration.
 
+The independent **GitHub Quality workflow** also runs on pushes and pull requests
+to `main`. It executes the locked web lint, typecheck, test and production-build
+contracts on Linux, then generates the native project and runs the same unsigned
+Swift test harness on a GitHub macOS runner. Swift result bundles and Xcode logs
+are retained for seven days even when the job fails. This provides a visible
+source-control check when a Codemagic team webhook is delayed or disconnected;
+Codemagic remains the only workflow that signs or publishes the app.
+
 Create the XERT-specific Codemagic environment group named `xert_env` and add these variables to it. The same group is loaded by both workflows:
 
 ```text
