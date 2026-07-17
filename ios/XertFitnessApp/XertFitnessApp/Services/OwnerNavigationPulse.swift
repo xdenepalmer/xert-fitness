@@ -1,6 +1,87 @@
 import Combine
 import Foundation
 
+enum XertOwnerNavigationPriority: Equatable {
+    case platformHealth(Int)
+    case attendance(Int)
+    case bookingRequests(Int)
+    case waitlist(Int)
+    case ptRequests(Int)
+    case retention(Int)
+
+    var workspace: XertOwnerWorkspace {
+        switch self {
+        case .platformHealth: return .health
+        case .attendance, .waitlist: return .classDesk
+        case .bookingRequests: return .bookingRequests
+        case .ptRequests: return .ptRequests
+        case .retention: return .retention
+        }
+    }
+
+    var count: Int {
+        let rawCount: Int
+        switch self {
+        case .platformHealth(let value),
+             .attendance(let value),
+             .bookingRequests(let value),
+             .waitlist(let value),
+             .ptRequests(let value),
+             .retention(let value):
+            rawCount = value
+        }
+        return min(999, max(0, rawCount))
+    }
+
+    var compactLabel: String {
+        let value = count > 99 ? "99+" : String(count)
+        switch self {
+        case .platformHealth: return "\(value) HEALTH"
+        case .attendance: return "\(value) ROLL CALL"
+        case .bookingRequests: return "\(value) REQUESTS"
+        case .waitlist: return "\(value) WAITING"
+        case .ptRequests: return "\(value) PT"
+        case .retention: return "\(value) FOLLOW-UP"
+        }
+    }
+
+    var actionTitle: String {
+        let noun: String
+        switch self {
+        case .platformHealth:
+            noun = count == 1 ? "platform health issue" : "platform health issues"
+        case .attendance:
+            noun = count == 1 ? "roll call" : "roll calls"
+        case .bookingRequests:
+            noun = count == 1 ? "booking request" : "booking requests"
+        case .waitlist:
+            noun = count == 1 ? "waitlisted member" : "waitlisted members"
+        case .ptRequests:
+            noun = count == 1 ? "PT request" : "PT requests"
+        case .retention:
+            noun = count == 1 ? "retention follow-up" : "retention follow-ups"
+        }
+        return "Open \(count) \(noun)"
+    }
+
+    static func resolve(
+        healthIssueCount: Int,
+        attendanceDue: Int,
+        bookingRequests: Int,
+        waitingMembers: Int,
+        pendingPT: Int,
+        followUps: Int
+    ) -> Self? {
+        if healthIssueCount > 0 { return .platformHealth(healthIssueCount) }
+        if attendanceDue > 0 { return .attendance(attendanceDue) }
+        if bookingRequests > 0 { return .bookingRequests(bookingRequests) }
+        if waitingMembers > 0 { return .waitlist(waitingMembers) }
+        if pendingPT > 0 { return .ptRequests(pendingPT) }
+        if followUps > 0 { return .retention(followUps) }
+        return nil
+    }
+}
+
 struct XertOwnerNavigationPulse: Equatable {
     static let sourceCount = 6
     static let empty = XertOwnerNavigationPulse(
@@ -16,19 +97,22 @@ struct XertOwnerNavigationPulse: Equatable {
     let loadedSourceCount: Int
     let failedSourceCount: Int
     let updatedAt: Date?
+    let priority: XertOwnerNavigationPriority?
 
     init(
         actionCount: Int,
         healthIssueCount: Int,
         loadedSourceCount: Int,
         failedSourceCount: Int,
-        updatedAt: Date?
+        updatedAt: Date?,
+        priority: XertOwnerNavigationPriority? = nil
     ) {
         self.actionCount = max(0, actionCount)
         self.healthIssueCount = max(0, healthIssueCount)
         self.loadedSourceCount = min(Self.sourceCount, max(0, loadedSourceCount))
         self.failedSourceCount = min(Self.sourceCount, max(0, failedSourceCount))
         self.updatedAt = updatedAt
+        self.priority = priority
     }
 
     var isAvailable: Bool { loadedSourceCount > 0 && updatedAt != nil }
@@ -86,13 +170,23 @@ struct XertOwnerNavigationPulse: Equatable {
         let pendingPT = ptRequests?.filter(\.isPending).count ?? 0
         let healthIssues = (commerceHealth?.ready == false ? 1 : 0)
             + (pushHealth?.ready == false ? 1 : 0)
+        let followUpCount = followUps?.count ?? 0
+        let priority = XertOwnerNavigationPriority.resolve(
+            healthIssueCount: healthIssues,
+            attendanceDue: attendanceDue,
+            bookingRequests: requestedPlaces,
+            waitingMembers: waitingMembers,
+            pendingPT: pendingPT,
+            followUps: followUpCount
+        )
 
         return Self(
-            actionCount: requestedPlaces + attendanceDue + waitingMembers + (followUps?.count ?? 0) + pendingPT,
+            actionCount: requestedPlaces + attendanceDue + waitingMembers + followUpCount + pendingPT,
             healthIssueCount: healthIssues,
             loadedSourceCount: loadedSourceCount,
             failedSourceCount: Self.sourceCount - loadedSourceCount,
-            updatedAt: loadedSourceCount > 0 ? updatedAt : nil
+            updatedAt: loadedSourceCount > 0 ? updatedAt : nil,
+            priority: priority
         )
     }
 }

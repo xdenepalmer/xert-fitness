@@ -37,11 +37,31 @@ test('owner pulse store is account scoped, freshness bounded, and resistant to s
   assert.match(pulse, /func reset\(\)[\s\S]*snapshot = \.empty/);
 });
 
+test('owner pulse retains a deterministic exact workspace for the next best action', () => {
+  assert.match(pulse, /enum XertOwnerNavigationPriority: Equatable/);
+  assert.match(pulse, /case platformHealth\(Int\)/);
+  assert.match(pulse, /case attendance\(Int\)/);
+  assert.match(pulse, /case bookingRequests\(Int\)/);
+  assert.match(pulse, /case waitlist\(Int\)/);
+  assert.match(pulse, /case ptRequests\(Int\)/);
+  assert.match(pulse, /case retention\(Int\)/);
+  assert.match(pulse, /case \.platformHealth: return \.health/);
+  assert.match(pulse, /case \.attendance, \.waitlist: return \.classDesk/);
+  assert.match(pulse, /static func resolve\([\s\S]*if healthIssueCount > 0[\s\S]*if attendanceDue > 0[\s\S]*if bookingRequests > 0[\s\S]*if waitingMembers > 0[\s\S]*if pendingPT > 0[\s\S]*if followUps > 0/);
+  assert.match(pulse, /priority: priority/);
+  assert.match(swiftTests, /testOwnerNavigationPriorityRoutesTheMostUrgentWorkExactly/);
+});
+
 test('iPhone and iPad owner entry points expose the same operational pulse', () => {
   assert.match(root, /@StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore\(\)/);
   assert.equal((root.match(/ownerPulse: ownerNavigationPulse\.snapshot/g) || []).length, 2);
   assert.equal((root.match(/XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/g) || []).length, 2);
   assert.equal((root.match(/\.accessibilityValue\(ownerPulse\.accessibilityLabel\)/g) || []).length, 2);
+  assert.equal((root.match(/onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/g) || []).length, 2);
+  assert.equal((root.match(/\.contextMenu \{ ownerWorkspaceMenu \}/g) || []).length, 2);
+  assert.match(root, /private func openOwnerCommandCentre\(_ workspace: XertOwnerWorkspace\? = nil\)/);
+  assert.match(root, /requestedAdminWorkspace = workspace/);
+  assert.match(root, /Label\("Open owner overview", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /refreshOwnerNavigationPulse\(force: true\)/);
   assert.match(root, /ownerNavigationPulse\.reset\(\)/);
   assert.match(swiftTests, /testOwnerNavigationPulseBoundsCountsAndExplainsAttention/);

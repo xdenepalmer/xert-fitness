@@ -2529,6 +2529,52 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(pulse.isFresh(at: Date(timeIntervalSince1970: 999), maximumAge: 60))
     }
 
+    func testOwnerNavigationPriorityRoutesTheMostUrgentWorkExactly() {
+        let health = XertOwnerNavigationPriority.resolve(
+            healthIssueCount: 2,
+            attendanceDue: 4,
+            bookingRequests: 8,
+            waitingMembers: 5,
+            pendingPT: 3,
+            followUps: 12
+        )
+        XCTAssertEqual(health, .platformHealth(2))
+        XCTAssertEqual(health?.workspace, .health)
+        XCTAssertEqual(health?.compactLabel, "2 HEALTH")
+        XCTAssertEqual(health?.actionTitle, "Open 2 platform health issues")
+
+        let attendance = XertOwnerNavigationPriority.resolve(
+            healthIssueCount: 0,
+            attendanceDue: 4,
+            bookingRequests: 8,
+            waitingMembers: 5,
+            pendingPT: 3,
+            followUps: 12
+        )
+        XCTAssertEqual(attendance, .attendance(4))
+        XCTAssertEqual(attendance?.workspace, .classDesk)
+
+        let requests = XertOwnerNavigationPriority.resolve(
+            healthIssueCount: 0,
+            attendanceDue: 0,
+            bookingRequests: 8,
+            waitingMembers: 5,
+            pendingPT: 3,
+            followUps: 12
+        )
+        XCTAssertEqual(requests, .bookingRequests(8))
+        XCTAssertEqual(requests?.workspace, .bookingRequests)
+
+        XCTAssertNil(XertOwnerNavigationPriority.resolve(
+            healthIssueCount: 0,
+            attendanceDue: 0,
+            bookingRequests: 0,
+            waitingMembers: 0,
+            pendingPT: 0,
+            followUps: 0
+        ))
+    }
+
     private func creditBatch(remaining: Int, orderID: UUID? = nil) -> CreditBatch {
         CreditBatch(
             id: UUID(),

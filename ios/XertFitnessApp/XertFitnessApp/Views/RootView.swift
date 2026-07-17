@@ -643,9 +643,9 @@ struct RootView: View {
         openMemberRoute(route, source: .deepLink)
     }
 
-    private func openOwnerCommandCentre() {
+    private func openOwnerCommandCentre(_ workspace: XertOwnerWorkspace? = nil) {
         guard store.profile?.isAdmin == true else { return }
-        requestedAdminWorkspace = nil
+        requestedAdminWorkspace = workspace
         showingAdminCommandCentre = true
     }
 
@@ -719,7 +719,7 @@ private struct XertNavigationRail: View {
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
     let items: [XertPrimaryDestination]
-    let onOpenAdmin: () -> Void
+    let onOpenAdmin: (XertOwnerWorkspace?) -> Void
     let onOpenCommands: () -> Void
     let onOpenPinned: (XertMemberRoute) -> Void
     let onOpenStatus: (XertNavigationStatus) -> Void
@@ -824,7 +824,9 @@ private struct XertNavigationRail: View {
             Spacer(minLength: 12)
 
             if isAdmin {
-                Button(action: onOpenAdmin) {
+                Button {
+                    onOpenAdmin(ownerPulse.priority?.workspace)
+                } label: {
                     VStack(spacing: 7) {
                         ZStack {
                             Image(systemName: "waveform.path.ecg.rectangle")
@@ -836,6 +838,13 @@ private struct XertNavigationRail: View {
                             .font(.caption2.weight(.bold))
                             .textCase(.uppercase)
                             .tracking(0.8)
+                        if let priority = ownerPulse.priority {
+                            Text(priority.compactLabel)
+                                .font(.system(size: 8, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                                .foregroundStyle(Color.xertSteel)
+                        }
                     }
                     .foregroundStyle(Color.xertOffWhite)
                     .frame(maxWidth: .infinity, minHeight: 66)
@@ -850,8 +859,9 @@ private struct XertNavigationRail: View {
                 .hoverEffect(.highlight)
                 .accessibilityLabel("Owner Command Centre")
                 .accessibilityValue(ownerPulse.accessibilityLabel)
-                .accessibilityHint("Opens protected gym operations and platform controls")
+                .accessibilityHint(ownerAccessibilityHint)
                 .accessibilityIdentifier("xert-navigation-owner")
+                .contextMenu { ownerWorkspaceMenu }
             }
         }
         .frame(width: dynamicTypeSize.isAccessibilitySize ? 136 : 104)
@@ -977,6 +987,23 @@ private struct XertNavigationRail: View {
         case .account: return "5"
         }
     }
+
+    private var ownerAccessibilityHint: String {
+        ownerPulse.priority.map { "\($0.actionTitle) in the protected Owner Command Centre" }
+            ?? "Opens protected gym operations and platform controls"
+    }
+
+    @ViewBuilder
+    private var ownerWorkspaceMenu: some View {
+        if let priority = ownerPulse.priority {
+            Button { onOpenAdmin(priority.workspace) } label: {
+                Label(priority.actionTitle, systemImage: priority.workspace.icon)
+            }
+        }
+        Button { onOpenAdmin(nil) } label: {
+            Label("Open owner overview", systemImage: XertOwnerWorkspace.overview.icon)
+        }
+    }
 }
 
 private struct XertNavigationDock: View {
@@ -991,7 +1018,7 @@ private struct XertNavigationDock: View {
     let nextRoute: XertMemberRoute?
     let pinnedRoutes: [XertMemberRoute]
     let items: [XertPrimaryDestination]
-    let onOpenAdmin: () -> Void
+    let onOpenAdmin: (XertOwnerWorkspace?) -> Void
     let onOpenCommands: () -> Void
     let onOpenPinned: (XertMemberRoute) -> Void
     let onOpenStatus: (XertNavigationStatus) -> Void
@@ -1004,7 +1031,9 @@ private struct XertNavigationDock: View {
     var body: some View {
         VStack(spacing: 0) {
             if isAdmin {
-                Button(action: onOpenAdmin) {
+                Button {
+                    onOpenAdmin(ownerPulse.priority?.workspace)
+                } label: {
                     HStack(spacing: 10) {
                         ZStack {
                             Image(systemName: "waveform.path.ecg.rectangle")
@@ -1019,7 +1048,7 @@ private struct XertNavigationDock: View {
                             .tracking(1.2)
                             .foregroundStyle(Color.xertOffWhite)
                         Spacer()
-                        Text(ownerPulse.shortStatus)
+                        Text(ownerPulse.priority?.compactLabel ?? ownerPulse.shortStatus)
                             .font(.caption2.weight(.bold))
                             .textCase(.uppercase)
                             .tracking(1.1)
@@ -1038,8 +1067,9 @@ private struct XertNavigationDock: View {
                 .overlay(alignment: .top) {
                     Rectangle().fill(Color.xertSteel.opacity(0.48)).frame(height: 1)
                 }
-                .accessibilityHint("Opens protected gym operations and platform controls")
+                .accessibilityHint(ownerAccessibilityHint)
                 .accessibilityValue(ownerPulse.accessibilityLabel)
+                .contextMenu { ownerWorkspaceMenu }
             }
 
             taskStrip
@@ -1165,6 +1195,23 @@ private struct XertNavigationDock: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Color.xertSteel.opacity(0.2)).frame(height: 1)
         }
+    }
+
+    @ViewBuilder
+    private var ownerWorkspaceMenu: some View {
+        if let priority = ownerPulse.priority {
+            Button { onOpenAdmin(priority.workspace) } label: {
+                Label(priority.actionTitle, systemImage: priority.workspace.icon)
+            }
+        }
+        Button { onOpenAdmin(nil) } label: {
+            Label("Open owner overview", systemImage: XertOwnerWorkspace.overview.icon)
+        }
+    }
+
+    private var ownerAccessibilityHint: String {
+        ownerPulse.priority.map { "\($0.actionTitle) in the protected Owner Command Centre" }
+            ?? "Opens protected gym operations and platform controls"
     }
 
     private func navigationButton(_ item: XertPrimaryDestination) -> some View {
