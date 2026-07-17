@@ -60,7 +60,7 @@ test('iPhone and iPad owner entry points expose the same operational pulse', () 
   assert.equal((root.match(/onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/g) || []).length, 2);
   assert.equal((root.match(/\.contextMenu \{ ownerWorkspaceMenu \}/g) || []).length, 2);
   assert.match(root, /private func openOwnerCommandCentre\(_ workspace: XertOwnerWorkspace\? = nil\)/);
-  assert.match(root, /requestedAdminWorkspace = workspace/);
+  assert.match(root, /requestedAdminRoute = workspace\.map \{ XertOwnerRoute\(workspace: \$0\) \}/);
   assert.match(root, /Label\("Open owner overview", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /refreshOwnerNavigationPulse\(force: true\)/);
   assert.match(root, /ownerNavigationPulse\.reset\(\)/);

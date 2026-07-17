@@ -14,14 +14,15 @@ struct AdminCommandCentreView: View {
     @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
-    let requestedWorkspace: XertOwnerWorkspace?
+    @State private var presentedOwnerTask: XertOwnerTask?
+    let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
 
     init(
-        requestedWorkspace: XertOwnerWorkspace? = nil,
+        requestedRoute: XertOwnerRoute? = nil,
         onClose: (() -> Void)? = nil
     ) {
-        self.requestedWorkspace = requestedWorkspace
+        self.requestedRoute = requestedRoute
         self.onClose = onClose
     }
 
@@ -42,14 +43,19 @@ struct AdminCommandCentreView: View {
         .task {
             guard let session = store.authSession, store.profile?.isAdmin == true else { return }
             reloadPinnedWorkspaces()
-            applyRequestedWorkspace(requestedWorkspace)
+            applyRequestedRoute(requestedRoute)
             await admin.refresh(session: session)
+            if let task = requestedRoute?.task {
+                await admin.resolveOwnerTask(session: session, task: task)
+            }
         }
         .onChange(of: store.authSession?.user?.id) { _ in
             reloadPinnedWorkspaces()
         }
-        .onChange(of: requestedWorkspace) { workspace in
-            applyRequestedWorkspace(workspace)
+        .onChange(of: requestedRoute) { route in
+            applyRequestedRoute(route)
+            guard let task = route?.task, let session = store.authSession else { return }
+            Task { await admin.resolveOwnerTask(session: session, task: task) }
         }
         .sheet(isPresented: $showingWorkspaceSwitcher) {
             AdminWorkspaceSwitcher(
@@ -62,6 +68,11 @@ struct AdminCommandCentreView: View {
                 openWorkspace(workspace)
             } onTogglePin: { workspace in
                 togglePinnedWorkspace(workspace)
+            }
+        }
+        .sheet(item: $presentedOwnerTask) { task in
+            if let session = store.authSession, store.profile?.isAdmin == true {
+                AdminOwnerTaskSheet(admin: admin, session: session, task: task)
             }
         }
         .alert("Command Centre", isPresented: Binding(
@@ -119,6 +130,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func openWorkspace(_ workspace: XertOwnerWorkspace) {
+        presentedOwnerTask = nil
         var history = workspaceHistory
         history.visit(workspace)
         restoredWorkspaceHistory = history.restorationValue
@@ -184,9 +196,9 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func applyRequestedWorkspace(_ workspace: XertOwnerWorkspace?) {
-        let target = workspace ?? currentWorkspace
-        openWorkspace(target)
+    private func applyRequestedRoute(_ route: XertOwnerRoute?) {
+        openWorkspace(route?.workspace ?? currentWorkspace)
+        presentedOwnerTask = route?.task
     }
 
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
@@ -732,6 +744,89 @@ private struct AdminWorkspaceSwitcher: View {
         }
         .padding(.vertical, 3)
         .listRowBackground(Color.xertInk)
+    }
+}
+
+private struct AdminOwnerTaskSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let task: XertOwnerTask
+
+    var body: some View {
+        NavigationStack {
+            taskDestination
+        }
+    }
+
+    @ViewBuilder
+    private var taskDestination: some View {
+        switch task {
+        case .member(let id):
+            if let member = admin.members.first(where: { $0.id == id }) {
+                AdminMemberDetailView(admin: admin, session: session, member: member)
+                    .toolbar { closeToolbar }
+            } else {
+                resolutionView(recordName: "member")
+            }
+        case .order(let id):
+            if let order = admin.orders.first(where: { $0.id == id }) {
+                AdminOrderDetailView(admin: admin, session: session, order: order)
+            } else {
+                resolutionView(recordName: "order")
+            }
+        case .event(let id):
+            if let event = admin.events.first(where: { $0.id == id }) {
+                AdminEventEditor(admin: admin, session: session, event: event)
+                    .toolbar { closeToolbar }
+            } else {
+                resolutionView(recordName: "event")
+            }
+        }
+    }
+
+    private func resolutionView(recordName: String) -> some View {
+        VStack(spacing: 16) {
+            if admin.isLoading || admin.resolvingOwnerTask == task || admin.lastUpdatedAt == nil {
+                ProgressView()
+                    .tint(Color.xertSteel)
+                Text("Opening \(task.title.lowercased())...")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+            } else {
+                Image(systemName: "questionmark.folder")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(Color.xertSteel)
+                Text("\(recordName.capitalized) unavailable")
+                    .xertDisplay(28)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("This protected link no longer matches a \(recordName) visible to your administrator account.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.xertPale.opacity(0.68))
+                Button {
+                    Task { await admin.refresh(session: session) }
+                } label: {
+                    Label("Refresh owner data", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.xertNavy)
+        .navigationTitle(task.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { closeToolbar }
+    }
+
+    @ToolbarContentBuilder
+    private var closeToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Close") { dismiss() }
+        }
     }
 }
 

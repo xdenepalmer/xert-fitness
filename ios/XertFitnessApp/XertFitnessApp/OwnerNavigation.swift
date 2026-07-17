@@ -358,11 +358,72 @@ enum XertOwnerWorkspacePinsStore {
     }
 }
 
+enum XertOwnerTask: Equatable, Hashable, Identifiable {
+    case member(UUID)
+    case order(UUID)
+    case event(UUID)
+
+    var id: String { restorationValue }
+
+    var workspace: XertOwnerWorkspace {
+        switch self {
+        case .member: return .members
+        case .order: return .finance
+        case .event: return .events
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .member: return "Member Record"
+        case .order: return "Order Detail"
+        case .event: return "Event Detail"
+        }
+    }
+
+    fileprivate var restorationValue: String {
+        switch self {
+        case .member(let id): return "member/\(id.uuidString.lowercased())"
+        case .order(let id): return "order/\(id.uuidString.lowercased())"
+        case .event(let id): return "event/\(id.uuidString.lowercased())"
+        }
+    }
+
+    fileprivate static func restore(
+        workspace: XertOwnerWorkspace,
+        kind: String,
+        identifier: String
+    ) -> Self? {
+        guard let id = UUID(uuidString: identifier) else { return nil }
+        switch (workspace, kind) {
+        case (.members, "member"): return .member(id)
+        case (.finance, "order"): return .order(id)
+        case (.events, "event"): return .event(id)
+        default: return nil
+        }
+    }
+}
+
 struct XertOwnerRoute: Equatable, Hashable {
     static let canonicalWebHost = AppConfig.vercelHost
     let workspace: XertOwnerWorkspace
+    let task: XertOwnerTask?
 
-    var restorationValue: String { "owner/\(workspace.rawValue)" }
+    init(workspace: XertOwnerWorkspace) {
+        self.workspace = workspace
+        task = nil
+    }
+
+    init(task: XertOwnerTask) {
+        workspace = task.workspace
+        self.task = task
+    }
+
+    var restorationValue: String {
+        ["owner", workspace.rawValue, task?.restorationValue]
+            .compactMap { $0 }
+            .joined(separator: "/")
+    }
 
     static func restore(_ value: String) -> Self? {
         let parts = value
@@ -370,13 +431,19 @@ struct XertOwnerRoute: Equatable, Hashable {
             .split(separator: "/", omittingEmptySubsequences: true)
             .map(String.init)
         guard
-            parts.count == 2,
+            parts.count == 2 || parts.count == 4,
             parts[0] == "owner",
             let workspace = XertOwnerWorkspace.allCases.first(where: {
                 $0.rawValue.lowercased() == parts[1]
             })
         else { return nil }
-        return XertOwnerRoute(workspace: workspace)
+        if parts.count == 2 { return XertOwnerRoute(workspace: workspace) }
+        guard let task = XertOwnerTask.restore(
+            workspace: workspace,
+            kind: parts[2],
+            identifier: parts[3]
+        ) else { return nil }
+        return XertOwnerRoute(task: task)
     }
 
     static func route(for url: URL) -> Self? {

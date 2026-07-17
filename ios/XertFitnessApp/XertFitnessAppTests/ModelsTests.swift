@@ -98,6 +98,58 @@ final class ModelsTests: XCTestCase {
         ), .deny)
     }
 
+    func testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound() throws {
+        let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000081"))
+        let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000082"))
+        let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000083"))
+        let routes = [
+            XertOwnerRoute(task: .member(memberID)),
+            XertOwnerRoute(task: .order(orderID)),
+            XertOwnerRoute(task: .event(eventID)),
+        ]
+
+        for route in routes {
+            XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
+            XCTAssertEqual(
+                XertOwnerRoute.route(for: try XCTUnwrap(URL(
+                    string: "xertfitness://\(route.restorationValue)"
+                ))),
+                route
+            )
+            XCTAssertEqual(
+                XertOwnerRoute.route(for: try XCTUnwrap(URL(
+                    string: "https://xert-fitness.vercel.app/open/\(route.restorationValue)"
+                ))),
+                route
+            )
+            XCTAssertEqual(route.task?.workspace, route.workspace)
+        }
+
+        XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/events/event/not-a-uuid"))
+        XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(
+            string: "xertfitness://owner/finance/order/\(orderID.uuidString)?action=refund"
+        ))))
+
+        let intent = XertOwnerNavigationIntent(route: XertOwnerRoute(task: .order(orderID)))
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: false,
+            isProfileLoaded: false,
+            isAdmin: false
+        ), .requireAuthentication)
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: true,
+            isProfileLoaded: true,
+            isAdmin: true
+        ), .open)
+        XCTAssertEqual(intent.disposition(
+            isSignedIn: true,
+            isProfileLoaded: true,
+            isAdmin: false
+        ), .deny)
+    }
+
     func testOwnerWorkspaceRecencyIsBoundedDeduplicatedAndRestorable() {
         var recency = XertOwnerWorkspaceRecency(workspaces: [
             .overview, .finance, .members, .finance, .health, .products,

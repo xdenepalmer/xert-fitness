@@ -14,7 +14,7 @@ test('native app exposes the command centre only to admin profiles', async () =>
 
   assert.match(models, /let role: String\?/);
   assert.match(models, /var isAdmin: Bool \{ role == "admin" \}/);
-  assert.match(root, /if store\.profile\?\.isAdmin == true[\s\S]*AdminCommandCentreView\([\s\S]*requestedWorkspace: requestedAdminWorkspace/);
+  assert.match(root, /if store\.profile\?\.isAdmin == true[\s\S]*AdminCommandCentreView\([\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
   assert.match(view, /Owner access required/);
   assert.match(api, /select", value: "id,full_name,phone,email,role"/);
@@ -218,14 +218,14 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
   assert.match(view, /NavigationStack\(path: \$compactPath\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
-  assert.match(view, /applyRequestedWorkspace\(requestedWorkspace\)/);
+  assert.match(view, /applyRequestedRoute\(requestedRoute\)/);
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
   assert.match(view, /private func workspaceBadge/);
   assert.match(view, /private func workspaceDestination[\s\S]*-> AnyView/);
   assert.match(view, /return AnyView\(dashboard\(session: session\)/);
   assert.match(view, /managementDirectory/);
-  assert.match(view, /let target = workspace \?\? currentWorkspace/);
+  assert.match(view, /openWorkspace\(route\?\.workspace \?\? currentWorkspace\)/);
   assert.match(view, /private func openWorkspace\(_ workspace: XertOwnerWorkspace\)/);
   assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);

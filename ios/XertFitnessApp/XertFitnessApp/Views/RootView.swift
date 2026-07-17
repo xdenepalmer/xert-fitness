@@ -15,7 +15,7 @@ struct RootView: View {
     @State private var isUnlocking = false
     @State private var privacyLockError: String?
     @State private var showingAdminCommandCentre = false
-    @State private var requestedAdminWorkspace: XertOwnerWorkspace?
+    @State private var requestedAdminRoute: XertOwnerRoute?
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
     @State private var pendingProtectedNavigation: XertNavigationIntent?
@@ -48,7 +48,7 @@ struct RootView: View {
                 isPrivacyUnlocked = true
                 privacyLockError = nil
                 pendingOwnerNavigation = nil
-                requestedAdminWorkspace = nil
+                requestedAdminRoute = nil
                 resetMemberNavigationAfterSignOut(clearPendingIntent: true)
                 return
             }
@@ -67,7 +67,7 @@ struct RootView: View {
         }
         .onChange(of: showingAdminCommandCentre) { isPresented in
             guard !isPresented else { return }
-            requestedAdminWorkspace = nil
+            requestedAdminRoute = nil
             refreshOwnerNavigationPulse(force: true)
         }
         .onChange(of: store.hasBootstrapped) { hasBootstrapped in
@@ -195,10 +195,10 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
             if store.profile?.isAdmin == true {
                 AdminCommandCentreView(
-                    requestedWorkspace: requestedAdminWorkspace,
+                    requestedRoute: requestedAdminRoute,
                     onClose: {
                         showingAdminCommandCentre = false
-                        requestedAdminWorkspace = nil
+                        requestedAdminRoute = nil
                     }
                 )
                     .environmentObject(store)
@@ -400,7 +400,7 @@ struct RootView: View {
             handleReselection(navigation.selection)
         case .owner(let workspace):
             guard store.profile?.isAdmin == true else { return }
-            requestedAdminWorkspace = workspace
+            requestedAdminRoute = XertOwnerRoute(workspace: workspace)
             opensAdminAfterCommandDismissal = true
         }
     }
@@ -645,7 +645,7 @@ struct RootView: View {
 
     private func openOwnerCommandCentre(_ workspace: XertOwnerWorkspace? = nil) {
         guard store.profile?.isAdmin == true else { return }
-        requestedAdminWorkspace = workspace
+        requestedAdminRoute = workspace.map { XertOwnerRoute(workspace: $0) }
         showingAdminCommandCentre = true
     }
 
@@ -653,7 +653,7 @@ struct RootView: View {
         switch ownerDisposition(for: route) {
         case .open:
             pendingOwnerNavigation = nil
-            requestedAdminWorkspace = route.workspace
+            requestedAdminRoute = route
             showingAdminCommandCentre = true
         case .deny:
             pendingOwnerNavigation = nil
@@ -671,7 +671,7 @@ struct RootView: View {
         switch ownerDisposition(for: route) {
         case .open:
             pendingOwnerNavigation = nil
-            requestedAdminWorkspace = route.workspace
+            requestedAdminRoute = route
             showingAdminCommandCentre = true
         case .deny:
             pendingOwnerNavigation = nil

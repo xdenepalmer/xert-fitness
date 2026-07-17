@@ -194,7 +194,7 @@ test('owner command access is role-aware, full-screen, and never buried in tab o
   assert.match(root, /isAdmin: store\.profile\?\.isAdmin == true/);
   assert.match(root, /Text\("Owner Command Centre"\)/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
-  assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedWorkspace: requestedAdminWorkspace/);
+  assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(ownerNavigation, /struct XertOwnerRoute: Equatable, Hashable/);
   assert.match(ownerNavigation, /enum XertOwnerNavigationDisposition: Equatable/);
   assert.match(ownerNavigation, /guard isSignedIn else \{ return \.requireAuthentication \}/);
@@ -207,6 +207,45 @@ test('owner command access is role-aware, full-screen, and never buried in tab o
   assert.match(root, /case \.requireAuthentication:[\s\S]*pendingOwnerNavigation = route[\s\S]*openMemberRoute\(\.account, source: \.deepLink\)/);
   assert.match(root, /case \.waitForProfile:[\s\S]*pendingOwnerNavigation = route/);
   assert.match(root, /resumePendingOwnerNavigation/);
+});
+
+test('owner deep links open exact protected native records without weakening workspace scope', async () => {
+  const [root, ownerView, ownerNavigation, modelsTests, api, adminStore] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(viewURL('AdminCommandCentreView'), 'utf8'),
+    readFile(ownerNavigationURL, 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(ownerNavigation, /enum XertOwnerTask: Equatable, Hashable, Identifiable/);
+  assert.match(ownerNavigation, /case member\(UUID\)/);
+  assert.match(ownerNavigation, /case order\(UUID\)/);
+  assert.match(ownerNavigation, /case event\(UUID\)/);
+  assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
+  assert.match(ownerNavigation, /case \(\.finance, "order"\): return \.order\(id\)/);
+  assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
+  assert.match(ownerNavigation, /parts\.count == 2 \|\| parts\.count == 4/);
+  assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);
+  assert.match(root, /requestedAdminRoute = route[\s\S]*showingAdminCommandCentre = true/);
+  assert.match(ownerView, /@State private var presentedOwnerTask: XertOwnerTask\?/);
+  assert.match(ownerView, /\.sheet\(item: \$presentedOwnerTask\)/);
+  assert.match(ownerView, /AdminOwnerTaskSheet/);
+  assert.match(ownerView, /admin\.members\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /admin\.orders\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
+  assert.match(ownerView, /presentedOwnerTask = nil[\s\S]*history\.visit\(workspace\)/);
+  assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
+  assert.match(api, /p_limit: 1,[\s\S]*p_user_id: id/);
+  assert.match(api, /guard rows\.count == 1, rows\[0\]\.id == id/);
+  assert.match(adminStore, /func resolveOwnerTask\(session: AuthSession, task: XertOwnerTask\)/);
+  assert.match(adminStore, /members\.insert\(member, at: 0\)/);
+  assert.match(modelsTests, /testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound/);
+  assert.match(modelsTests, /owner\/finance\/member/);
+  assert.match(modelsTests, /\.requireAuthentication/);
+  assert.match(modelsTests, /\.deny/);
 });
 
 test('owner navigation restores a bounded workspace timeline with back and forward recovery', async () => {

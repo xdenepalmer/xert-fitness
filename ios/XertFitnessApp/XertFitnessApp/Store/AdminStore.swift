@@ -33,6 +33,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSearchingMembers = false
+    @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
@@ -174,6 +175,21 @@ final class AdminStore: ObservableObject {
         defer { isSearchingMembers = false }
         do {
             members = try await api.adminMembers(session: session, search: query)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func resolveOwnerTask(session: AuthSession, task: XertOwnerTask) async {
+        guard resolvingOwnerTask == nil else { return }
+        guard case .member(let memberID) = task,
+              !members.contains(where: { $0.id == memberID }) else { return }
+        resolvingOwnerTask = task
+        defer { resolvingOwnerTask = nil }
+        do {
+            let member = try await api.adminMember(session: session, id: memberID)
+            members.removeAll(where: { $0.id == memberID })
+            members.insert(member, at: 0)
         } catch {
             errorMessage = error.localizedDescription
         }

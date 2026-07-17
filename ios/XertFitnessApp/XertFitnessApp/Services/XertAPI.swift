@@ -574,6 +574,25 @@ final class XertAPI {
         )
     }
 
+    func adminMember(session auth: AuthSession, id: UUID) async throws -> AdminMemberSummary {
+        let rows: [AdminMemberSummary] = try await rpc(
+            path: "admin_list_members_page",
+            body: AdminMemberPageRequest(
+                p_search: nil,
+                p_role: "all",
+                p_credit: "all",
+                p_limit: 1,
+                p_offset: 0,
+                p_user_id: id
+            ),
+            auth: auth
+        )
+        guard rows.count == 1, rows[0].id == id else {
+            throw APIError(message: "This member record is no longer available.")
+        }
+        return rows[0]
+    }
+
     func adminMemberNotes(session auth: AuthSession, memberID: UUID, includeArchived: Bool = true) async throws -> [AdminMemberNote] {
         try await rpc(
             path: "admin_list_member_notes",
