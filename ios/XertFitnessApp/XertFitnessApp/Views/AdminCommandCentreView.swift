@@ -13,6 +13,7 @@ struct AdminCommandCentreView: View {
     @State private var compactPath: [XertOwnerWorkspace] = []
     @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
+    @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     let requestedWorkspace: XertOwnerWorkspace?
     var onClose: (() -> Void)? = nil
 
@@ -40,8 +41,12 @@ struct AdminCommandCentreView: View {
         .background(Color.xertNavy.ignoresSafeArea())
         .task {
             guard let session = store.authSession, store.profile?.isAdmin == true else { return }
+            reloadPinnedWorkspaces()
             applyRequestedWorkspace(requestedWorkspace)
             await admin.refresh(session: session)
+        }
+        .onChange(of: store.authSession?.user?.id) { _ in
+            reloadPinnedWorkspaces()
         }
         .onChange(of: requestedWorkspace) { workspace in
             applyRequestedWorkspace(workspace)
@@ -50,10 +55,13 @@ struct AdminCommandCentreView: View {
             AdminWorkspaceSwitcher(
                 current: currentWorkspace,
                 recent: recentWorkspaces.workspaces,
+                pinned: pinnedWorkspaces,
                 badges: workspaceBadges
             ) { workspace in
                 showingWorkspaceSwitcher = false
                 openWorkspace(workspace)
+            } onTogglePin: { workspace in
+                togglePinnedWorkspace(workspace)
             }
         }
         .alert("Command Centre", isPresented: Binding(
@@ -115,6 +123,18 @@ struct AdminCommandCentreView: View {
         history.visit(workspace)
         restoredWorkspaceHistory = history.restorationValue
         applyWorkspace(workspace)
+    }
+
+    private func reloadPinnedWorkspaces() {
+        pinnedWorkspaces = XertOwnerWorkspacePinsStore.load(
+            for: store.authSession?.user?.id
+        )
+    }
+
+    private func togglePinnedWorkspace(_ workspace: XertOwnerWorkspace) {
+        guard let userID = store.authSession?.user?.id else { return }
+        pinnedWorkspaces = XertOwnerWorkspacePinsStore.toggle(workspace, for: userID)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func applyWorkspace(_ workspace: XertOwnerWorkspace) {
@@ -196,9 +216,18 @@ struct AdminCommandCentreView: View {
                 Label(XertOwnerWorkspace.overview.title, systemImage: XertOwnerWorkspace.overview.icon)
                     .tag(XertOwnerWorkspace.overview)
 
+                if !pinnedWorkspaces.isEmpty {
+                    Section("Pinned") {
+                        ForEach(pinnedWorkspaces) { workspace in
+                            Label(workspace.title, systemImage: workspace.icon)
+                                .tag(workspace)
+                        }
+                    }
+                }
+
                 ForEach(XertOwnerWorkspaceSection.allCases) { section in
                     Section(section.rawValue) {
-                        ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
+                        ForEach(XertOwnerWorkspace.workspaces(in: section).filter { !pinnedWorkspaces.contains($0) }) { workspace in
                             HStack(spacing: 10) {
                                 Label(workspace.title, systemImage: workspace.icon)
                                 Spacer(minLength: 4)
@@ -249,6 +278,7 @@ struct AdminCommandCentreView: View {
                 attentionGrid
                 businessPulse
                 todayDesk(session: session)
+                pinnedDirectory
                 managementDirectory
             }
             .frame(maxWidth: 880)
@@ -458,7 +488,24 @@ struct AdminCommandCentreView: View {
                         title: workspace.title,
                         detail: compactWorkspaceDetail(workspace),
                         icon: workspace.icon,
-                        workspace: workspace
+                        onOpen: { openWorkspace(workspace) }
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pinnedDirectory: some View {
+        if !pinnedWorkspaces.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                adminHeading("Pinned Workspaces")
+                ForEach(pinnedWorkspaces) { workspace in
+                    AdminDestinationRow(
+                        title: workspace.title,
+                        detail: compactWorkspaceDetail(workspace),
+                        icon: workspace.icon,
+                        onOpen: { openWorkspace(workspace) }
                     )
                 }
             }
@@ -549,8 +596,10 @@ private struct AdminWorkspaceSwitcher: View {
     @State private var query = ""
     let current: XertOwnerWorkspace
     let recent: [XertOwnerWorkspace]
+    let pinned: [XertOwnerWorkspace]
     let badges: [XertOwnerWorkspace: Int]
     let onSelect: (XertOwnerWorkspace) -> Void
+    let onTogglePin: (XertOwnerWorkspace) -> Void
 
     private var matchingWorkspaces: [XertOwnerWorkspace] {
         XertOwnerWorkspace.allCases.filter { $0.matches(query) }
@@ -566,6 +615,10 @@ private struct AdminWorkspaceSwitcher: View {
         recent.filter { $0.matches(query) }
     }
 
+    private var matchingPinned: [XertOwnerWorkspace] {
+        pinned.filter { $0.matches(query) }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -573,6 +626,7 @@ private struct AdminWorkspaceSwitcher: View {
                     workspaceSection("Results", workspaces: matchingWorkspaces)
                 } else {
                     workspaceSection("Needs attention", workspaces: attentionWorkspaces)
+                    workspaceSection("Pinned", workspaces: matchingPinned)
                     workspaceSection("Recent", workspaces: matchingRecent)
 
                     Section("All workspaces") {
@@ -630,37 +684,53 @@ private struct AdminWorkspaceSwitcher: View {
     }
 
     private func workspaceRow(_ workspace: XertOwnerWorkspace) -> some View {
-        Button { onSelect(workspace) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: workspace.icon)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.xertSteel)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(workspace.title)
+        HStack(spacing: 4) {
+            Button { onSelect(workspace) } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: workspace.icon)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Color.xertOffWhite)
-                    Text(workspace.detail)
-                        .font(.caption)
-                        .foregroundStyle(Color.xertPale.opacity(0.65))
-                        .lineLimit(2)
+                        .foregroundStyle(Color.xertSteel)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(workspace.title)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text(workspace.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    if let badge = badges[workspace], badge > 0 {
+                        Text(badge > 99 ? "99+" : "\(badge)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertNavy)
+                            .padding(.horizontal, 7)
+                            .frame(minHeight: 20)
+                            .background(Color.xertSteel)
+                            .clipShape(Capsule())
+                    }
+                    Image(systemName: workspace == current ? "checkmark" : "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(workspace == current ? Color.xertSteel : Color.xertPale.opacity(0.35))
                 }
-                Spacer(minLength: 8)
-                if let badge = badges[workspace], badge > 0 {
-                    Text(badge > 99 ? "99+" : "\(badge)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(Color.xertNavy)
-                        .padding(.horizontal, 7)
-                        .frame(minHeight: 20)
-                        .background(Color.xertSteel)
-                        .clipShape(Capsule())
-                }
-                Image(systemName: workspace == current ? "checkmark" : "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(workspace == current ? Color.xertSteel : Color.xertPale.opacity(0.35))
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 3)
+            .buttonStyle(.plain)
+
+            if workspace != .overview {
+                Button { onTogglePin(workspace) } label: {
+                    Image(systemName: pinned.contains(workspace) ? "pin.fill" : "pin")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(pinned.contains(workspace) ? Color.xertSteel : Color.xertPale.opacity(0.45))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(pinned.contains(workspace) ? "Unpin \(workspace.title)" : "Pin \(workspace.title)")
+                .accessibilityHint("Updates your owner workspace shortcuts")
+            }
         }
+        .padding(.vertical, 3)
         .listRowBackground(Color.xertInk)
     }
 }
@@ -4221,10 +4291,10 @@ private struct AdminDestinationRow: View {
     let title: String
     let detail: String
     let icon: String
-    let workspace: XertOwnerWorkspace
+    let onOpen: () -> Void
 
     var body: some View {
-        NavigationLink(value: workspace) {
+        Button(action: onOpen) {
             HStack(spacing: 14) {
                 Image(systemName: icon).frame(width: 26).foregroundStyle(Color.xertSteel)
                 VStack(alignment: .leading, spacing: 3) {

@@ -167,6 +167,48 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped() throws {
+        let suiteName = "XertOwnerWorkspacePinsStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstUser = UUID()
+        let secondUser = UUID()
+
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: nil, defaults: defaults).isEmpty)
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: secondUser, defaults: defaults).isEmpty)
+        XCTAssertTrue(
+            XertOwnerWorkspacePinsStore.toggle(.overview, for: firstUser, defaults: defaults).isEmpty
+        )
+
+        XCTAssertEqual(
+            XertOwnerWorkspacePinsStore.toggle(.finance, for: firstUser, defaults: defaults),
+            [.finance]
+        )
+        XCTAssertEqual(
+            XertOwnerWorkspacePinsStore.toggle(.members, for: firstUser, defaults: defaults),
+            [.members, .finance]
+        )
+        XCTAssertEqual(
+            XertOwnerWorkspacePinsStore.toggle(.finance, for: firstUser, defaults: defaults),
+            [.members]
+        )
+
+        for workspace in [.finance, .products, .health, .events, .team, .audit, .controls] as [XertOwnerWorkspace] {
+            _ = XertOwnerWorkspacePinsStore.toggle(workspace, for: firstUser, defaults: defaults)
+        }
+        let bounded = XertOwnerWorkspacePinsStore.load(for: firstUser, defaults: defaults)
+        XCTAssertEqual(bounded.count, XertOwnerWorkspacePinsSnapshot.maximumWorkspaceCount)
+        XCTAssertEqual(bounded.first, .controls)
+        XCTAssertFalse(bounded.contains(.finance))
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: secondUser, defaults: defaults).isEmpty)
+
+        let storageKey = "xert.owner-navigation.pins.v1.\(firstUser.uuidString.lowercased())"
+        defaults.set(Data(#"{"version":1,"workspaceValues":["unknown","finance"]}"#.utf8), forKey: storageKey)
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: firstUser, defaults: defaults).isEmpty)
+        defaults.set(Data(#"{"version":1,"workspaceValues":["finance","finance"]}"#.utf8), forKey: storageKey)
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: firstUser, defaults: defaults).isEmpty)
+    }
+
     func testOwnerWorkspaceSearchMatchesTasksAcrossBusinessAreas() {
         XCTAssertTrue(XertOwnerWorkspace.finance.matches("stripe refund"))
         XCTAssertTrue(XertOwnerWorkspace.siteContent.matches("homepage hero"))

@@ -233,6 +233,32 @@ test('owner navigation restores a bounded workspace timeline with back and forwa
   assert.match(modelsTests, /testOwnerWorkspaceHistoryPreservesSequenceForwardStateAndRestoration/);
 });
 
+test('owner favorites are account-scoped and every overview shortcut uses the central router', async () => {
+  const [ownerNavigation, ownerView, modelsTests] = await Promise.all([
+    readFile(ownerNavigationURL, 'utf8'),
+    readFile(viewURL('AdminCommandCentreView'), 'utf8'),
+    readFile(modelsTestsURL, 'utf8'),
+  ]);
+  assert.match(ownerNavigation, /struct XertOwnerWorkspacePinsSnapshot: Codable, Equatable/);
+  assert.match(ownerNavigation, /static let maximumWorkspaceCount = 6/);
+  assert.match(ownerNavigation, /keyPrefix = "xert\.owner-navigation\.pins\.v1\."/);
+  assert.match(ownerNavigation, /enum XertOwnerWorkspacePinsStore/);
+  assert.match(ownerNavigation, /guard workspace != \.overview/);
+  assert.match(ownerNavigation, /Set\(workspaces\)\.count == workspaces\.count/);
+  assert.match(ownerView, /@State private var pinnedWorkspaces: \[XertOwnerWorkspace\] = \[\]/);
+  assert.match(ownerView, /XertOwnerWorkspacePinsStore\.load\([\s\S]*store\.authSession\?\.user\?\.id/);
+  assert.match(ownerView, /XertOwnerWorkspacePinsStore\.toggle\(workspace, for: userID\)/);
+  assert.match(ownerView, /Section\("Pinned"\)/);
+  assert.match(ownerView, /adminHeading\("Pinned Workspaces"\)/);
+  assert.match(ownerView, /workspaceSection\("Pinned", workspaces: matchingPinned\)/);
+  assert.match(ownerView, /pinned\.contains\(workspace\) \? "pin\.fill" : "pin"/);
+  assert.match(ownerView, /accessibilityHint\("Updates your owner workspace shortcuts"\)/);
+  assert.match(ownerView, /private struct AdminDestinationRow: View[\s\S]*let onOpen: \(\) -> Void[\s\S]*Button\(action: onOpen\)/);
+  assert.doesNotMatch(ownerView, /NavigationLink\(value: workspace\)/);
+  assert.match(ownerView, /AdminDestinationRow\([\s\S]*onOpen: \{ openWorkspace\(workspace\) \}/);
+  assert.match(modelsTests, /testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped/);
+});
+
 test('scene commands follow the active member or owner navigation scope', async () => {
   const [root, ownerView, sceneCommands] = await Promise.all([
     readFile(rootURL, 'utf8'),

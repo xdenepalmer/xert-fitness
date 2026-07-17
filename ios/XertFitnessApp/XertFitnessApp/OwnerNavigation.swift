@@ -283,6 +283,81 @@ struct XertOwnerWorkspaceHistory: Equatable {
     }
 }
 
+struct XertOwnerWorkspacePinsSnapshot: Codable, Equatable {
+    static let currentVersion = 1
+    static let maximumWorkspaceCount = 6
+    static let maximumEncodedLength = 512
+
+    let version: Int
+    let workspaceValues: [String]
+
+    init(workspaces: [XertOwnerWorkspace]) {
+        version = Self.currentVersion
+        workspaceValues = workspaces.map(\.rawValue)
+    }
+}
+
+enum XertOwnerWorkspacePinsStore {
+    private static let keyPrefix = "xert.owner-navigation.pins.v1."
+
+    static func load(
+        for userID: UUID?,
+        defaults: UserDefaults = .standard
+    ) -> [XertOwnerWorkspace] {
+        guard
+            let userID,
+            let data = defaults.data(forKey: storageKey(for: userID)),
+            data.count <= XertOwnerWorkspacePinsSnapshot.maximumEncodedLength,
+            let snapshot = try? JSONDecoder().decode(XertOwnerWorkspacePinsSnapshot.self, from: data),
+            snapshot.version == XertOwnerWorkspacePinsSnapshot.currentVersion,
+            snapshot.workspaceValues.count <= XertOwnerWorkspacePinsSnapshot.maximumWorkspaceCount
+        else { return [] }
+
+        let workspaces = snapshot.workspaceValues.compactMap(XertOwnerWorkspace.init(rawValue:))
+        guard
+            workspaces.count == snapshot.workspaceValues.count,
+            !workspaces.contains(.overview),
+            Set(workspaces).count == workspaces.count
+        else { return [] }
+        return workspaces
+    }
+
+    @discardableResult
+    static func toggle(
+        _ workspace: XertOwnerWorkspace,
+        for userID: UUID,
+        defaults: UserDefaults = .standard
+    ) -> [XertOwnerWorkspace] {
+        guard workspace != .overview else { return load(for: userID, defaults: defaults) }
+        var workspaces = load(for: userID, defaults: defaults)
+        if let index = workspaces.firstIndex(of: workspace) {
+            workspaces.remove(at: index)
+        } else {
+            workspaces.insert(workspace, at: 0)
+            workspaces = Array(workspaces.prefix(XertOwnerWorkspacePinsSnapshot.maximumWorkspaceCount))
+        }
+        save(workspaces, for: userID, defaults: defaults)
+        return workspaces
+    }
+
+    private static func save(
+        _ workspaces: [XertOwnerWorkspace],
+        for userID: UUID,
+        defaults: UserDefaults
+    ) {
+        let snapshot = XertOwnerWorkspacePinsSnapshot(workspaces: workspaces)
+        guard
+            let data = try? JSONEncoder().encode(snapshot),
+            data.count <= XertOwnerWorkspacePinsSnapshot.maximumEncodedLength
+        else { return }
+        defaults.set(data, forKey: storageKey(for: userID))
+    }
+
+    private static func storageKey(for userID: UUID) -> String {
+        keyPrefix + userID.uuidString.lowercased()
+    }
+}
+
 struct XertOwnerRoute: Equatable, Hashable {
     static let canonicalWebHost = AppConfig.vercelHost
     let workspace: XertOwnerWorkspace
