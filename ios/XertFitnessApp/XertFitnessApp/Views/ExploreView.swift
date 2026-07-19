@@ -78,6 +78,7 @@ struct ExploreView: View {
 
                 opportunitiesSection
                 contactSection
+                XertScrollEndSpacer()
             }
             .xertListBackground()
             .listStyle(.plain)

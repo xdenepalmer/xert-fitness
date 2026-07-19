@@ -1024,6 +1024,48 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testScreenLayoutProtectsFullBleedHeroContentAndScrollReachability() {
+        XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: 59), 69)
+        XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: 0), 28)
+        XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: -12), 28)
+        XCTAssertEqual(XertScreenLayout.scrollEndClearance, 32)
+        XCTAssertEqual(XertScreenLayout.pageHeroHeight(usesAccessibilityText: false), 250)
+        XCTAssertEqual(XertScreenLayout.pageHeroHeight(usesAccessibilityText: true), 420)
+
+        XCTAssertEqual(
+            XertScreenLayout.homeHeroHeight(
+                viewportHeight: 667,
+                deviceTopInset: 20,
+                usesAccessibilityText: false
+            ),
+            580
+        )
+        XCTAssertEqual(
+            XertScreenLayout.homeHeroHeight(
+                viewportHeight: 932,
+                deviceTopInset: 59,
+                usesAccessibilityText: false
+            ),
+            680
+        )
+        XCTAssertEqual(
+            XertScreenLayout.homeHeroHeight(
+                viewportHeight: 667,
+                deviceTopInset: 20,
+                usesAccessibilityText: true
+            ),
+            760
+        )
+        XCTAssertEqual(
+            XertScreenLayout.homeHeroHeight(
+                viewportHeight: 932,
+                deviceTopInset: 59,
+                usesAccessibilityText: true
+            ),
+            920
+        )
+    }
+
     func testWorkspaceOrderIsCompleteAccountScopedAndDrivesNavigation() throws {
         let suiteName = "XertWorkspaceOrderStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

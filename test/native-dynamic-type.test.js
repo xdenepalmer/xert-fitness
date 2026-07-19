@@ -20,7 +20,7 @@ test('native brand typography scales with Dynamic Type', async () => {
   assert.doesNotMatch(home, /displayFont\(size: \d+\)/);
   assert.match(home, /displayFont\(size: 20, relativeTo: \.title3\)/);
   assert.match(home, /@Environment\(\\\.dynamicTypeSize\) private var dynamicTypeSize/);
-  assert.equal((home.match(/dynamicTypeSize\.isAccessibilitySize/g) || []).length, 2);
+  assert.ok((home.match(/dynamicTypeSize\.isAccessibilitySize/g) || []).length >= 3);
   assert.match(home, /if dynamicTypeSize\.isAccessibilitySize \{[\s\S]*VStack\(spacing: 12\)/);
   assert.match(home, /if dynamicTypeSize\.isAccessibilitySize \{[\s\S]*VStack\(spacing: 14\)/);
 

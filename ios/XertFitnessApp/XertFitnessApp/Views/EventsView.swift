@@ -103,6 +103,7 @@ struct EventsView: View {
                         }
                     }
                 }
+                XertScrollEndSpacer()
               }
               .xertListBackground()
               .listStyle(.plain)

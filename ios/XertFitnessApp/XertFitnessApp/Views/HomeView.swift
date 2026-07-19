@@ -12,72 +12,76 @@ struct HomeView: View {
     @State private var lastHandledRouteSequence: UInt = 0
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    NativeHomeHero(
-                        content: store.publicContent(for: .hero),
-                        isSignedIn: store.isSignedIn,
-                        noticeCount: store.announcements.count,
-                        onBook: { onNavigate(.booking) },
-                        onEvents: { onNavigate(.events) },
-                        onNotices: openNoticeCenter,
-                        onRefresh: { Task { await store.refresh() } }
-                    )
-                    .frame(height: heroHeight)
+        GeometryReader { viewport in
+            NavigationStack {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        NativeHomeHero(
+                            content: store.publicContent(for: .hero),
+                            isSignedIn: store.isSignedIn,
+                            noticeCount: store.announcements.count,
+                            topSafeAreaInset: viewport.safeAreaInsets.top,
+                            onBook: { onNavigate(.booking) },
+                            onEvents: { onNavigate(.events) },
+                            onNotices: openNoticeCenter,
+                            onRefresh: { Task { await store.refresh() } }
+                        )
+                        .frame(height: XertScreenLayout.homeHeroHeight(
+                            viewportHeight: viewport.size.height,
+                            deviceTopInset: viewport.safeAreaInsets.top,
+                            usesAccessibilityText: dynamicTypeSize.isAccessibilitySize
+                        ))
 
-                    NativeValueStrip()
+                        NativeValueStrip()
 
-                    VStack(alignment: .leading, spacing: 18) {
-                        CachedPublicDataNotice()
-                        StaleMemberDataNotice()
-                        DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
-                        announcementsSection
-                        NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
-                        todayTrainingSection
-                        creditExpirySection
-                        nextUpSection
-                        quickActions
-                        glanceSection
-                        nextEventSection
-                        sessionPacksSection
+                        VStack(alignment: .leading, spacing: 18) {
+                            CachedPublicDataNotice()
+                            StaleMemberDataNotice()
+                            DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
+                            announcementsSection
+                            NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
+                            todayTrainingSection
+                            creditExpirySection
+                            nextUpSection
+                            quickActions
+                            glanceSection
+                            nextEventSection
+                            sessionPacksSection
+                        }
+                        .padding()
+                        .padding(.bottom, XertScreenLayout.scrollEndClearance)
                     }
-                    .padding()
+                }
+                .refreshable {
+                    await store.refresh()
+                }
+                .xertScreenBackground()
+                .toolbar(.hidden, for: .navigationBar)
+                .sheet(isPresented: $showingNoticeCenter) {
+                    MemberNoticeCenter(
+                        announcements: store.announcements,
+                        highlightedAnnouncementID: highlightedAnnouncementID,
+                        dismissingAnnouncementID: store.dismissingAnnouncementID,
+                        onAction: { announcement in
+                            showingNoticeCenter = false
+                            handleAnnouncementAction(announcement)
+                        },
+                        onDismiss: { announcement in
+                            Task { await store.dismissAnnouncement(announcement) }
+                        }
+                    )
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                }
+                .onChange(of: routeSequence) { sequence in
+                    handleRoute(sequence)
+                }
+                .onAppear {
+                    handleRoute(routeSequence)
                 }
             }
-            .ignoresSafeArea(edges: .top)
-            .refreshable {
-                await store.refresh()
-            }
-            .xertScreenBackground()
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingNoticeCenter) {
-                MemberNoticeCenter(
-                    announcements: store.announcements,
-                    highlightedAnnouncementID: highlightedAnnouncementID,
-                    dismissingAnnouncementID: store.dismissingAnnouncementID,
-                    onAction: { announcement in
-                        showingNoticeCenter = false
-                        handleAnnouncementAction(announcement)
-                    },
-                    onDismiss: { announcement in
-                        Task { await store.dismissAnnouncement(announcement) }
-                    }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-            .onChange(of: routeSequence) { sequence in
-                handleRoute(sequence)
-            }
-            .onAppear {
-                handleRoute(routeSequence)
-            }
         }
-    }
-
-    private var heroHeight: CGFloat {
-        min(640, max(560, UIScreen.main.bounds.height * 0.72))
+        .ignoresSafeArea(edges: .top)
     }
 
     // MARK: - Member notices
@@ -373,6 +377,7 @@ private struct NativeHomeHero: View {
     let content: AdminSiteContentData
     let isSignedIn: Bool
     let noticeCount: Int
+    let topSafeAreaInset: CGFloat
     let onBook: () -> Void
     let onEvents: () -> Void
     let onNotices: () -> Void
@@ -518,7 +523,7 @@ private struct NativeHomeHero: View {
                     .padding(.top, 14)
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, max(proxy.safeAreaInsets.top, 18) + 10)
+                .padding(.top, XertScreenLayout.heroContentTopInset(deviceTopInset: topSafeAreaInset))
                 .padding(.bottom, 24)
             }
         }

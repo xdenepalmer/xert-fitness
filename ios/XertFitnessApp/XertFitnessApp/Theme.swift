@@ -111,6 +111,31 @@ extension View {
 
 // MARK: - Screen scaffolding
 
+enum XertScreenLayout {
+    static let minimumHeroTopInset: CGFloat = 18
+    static let scrollEndClearance: CGFloat = 32
+
+    static func heroContentTopInset(deviceTopInset: CGFloat) -> CGFloat {
+        max(deviceTopInset, minimumHeroTopInset) + 10
+    }
+
+    static func homeHeroHeight(
+        viewportHeight: CGFloat,
+        deviceTopInset: CGFloat,
+        usesAccessibilityText: Bool
+    ) -> CGFloat {
+        let availableHeight = max(0, viewportHeight)
+        if usesAccessibilityText {
+            return max(760, min(920, availableHeight * 1.05 + max(0, deviceTopInset)))
+        }
+        return min(680, max(580, availableHeight * 0.74))
+    }
+
+    static func pageHeroHeight(usesAccessibilityText: Bool) -> CGFloat {
+        usesAccessibilityText ? 420 : 250
+    }
+}
+
 extension View {
     /// Full-bleed architectural backdrop shared by every branded screen.
     func xertScreenBackground() -> some View {
@@ -131,6 +156,19 @@ extension View {
                 RoundedRectangle(cornerRadius: 2)
                     .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
             )
+    }
+}
+
+/// A real final row gives the last control room to clear XERT's persistent
+/// navigation dock, including large Dynamic Type and the owner status strip.
+struct XertScrollEndSpacer: View {
+    var body: some View {
+        Color.clear
+            .frame(height: XertScreenLayout.scrollEndClearance)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityHidden(true)
     }
 }
 
@@ -234,18 +272,23 @@ struct XertLogoHeader: View {
 /// image-led hierarchy as the website while leaving the operational content
 /// immediately below it in the native List or Form.
 struct XertPageHero: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let imageName: String
     let eyebrow: String
     let title: String
     let subtitle: String
     var badge: String? = nil
 
+    private var heroHeight: CGFloat {
+        XertScreenLayout.pageHeroHeight(usesAccessibilityText: dynamicTypeSize.isAccessibilitySize)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Image(imageName)
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: .infinity, minHeight: 250, maxHeight: 250)
+                .frame(maxWidth: .infinity, minHeight: heroHeight, maxHeight: heroHeight)
                 .clipped()
                 .saturation(0.58)
                 .brightness(-0.14)
@@ -287,7 +330,7 @@ struct XertPageHero: View {
             }
             .padding(20)
         }
-        .frame(maxWidth: .infinity, minHeight: 250, maxHeight: 250)
+        .frame(maxWidth: .infinity, minHeight: heroHeight, maxHeight: heroHeight)
         .clipped()
         .overlay(alignment: .top) {
             Rectangle()

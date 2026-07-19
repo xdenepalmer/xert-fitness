@@ -47,6 +47,7 @@ struct BookingView: View {
                     classDiscoverySection
                     classesSection
                     personalTrainingSection
+                    XertScrollEndSpacer()
                 }
                 .tint(.xertSteel)
                 .xertListBackground()

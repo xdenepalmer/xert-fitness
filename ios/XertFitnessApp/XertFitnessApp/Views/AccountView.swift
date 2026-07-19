@@ -64,6 +64,7 @@ struct AccountView: View {
                     } else {
                         signedOutSections
                     }
+                    XertScrollEndSpacer()
                 }
                 .xertListBackground()
                 .listStyle(.plain)
