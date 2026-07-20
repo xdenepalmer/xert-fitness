@@ -68,6 +68,9 @@ export default function Account() {
   const [announcements, setAnnouncements] = useState([]);
   const [dismissingAnnouncementId, setDismissingAnnouncementId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedAccount, setHasLoadedAccount] = useState(false);
+  const [loadedAccountUserId, setLoadedAccountUserId] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -84,6 +87,8 @@ export default function Account() {
 
   const refresh = useCallback(async () => {
     const commerceRequestID = ++commerceRequestIDRef.current;
+    setLoading(true);
+    setLoadError('');
     try {
       const [c, b, o, goals, ptRequests, memberNotices] = await Promise.all([
         getMyCredits(),
@@ -105,16 +110,14 @@ export default function Account() {
       setEventGoals(goals);
       setPrivateSessionRequests(ptRequests);
       setAnnouncements(memberNotices);
+      setLoadedAccountUserId(user?.id || '');
+      setHasLoadedAccount(true);
     } catch (e) {
-      toast({
-        title: 'Could not load your account',
-        description: e.message,
-        variant: 'destructive'
-      });
+      setLoadError(e.message || 'Your account data could not be reached.');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (session) refresh();
@@ -322,12 +325,43 @@ export default function Account() {
 
   const { pending, upcoming, history: past } = partitionAccountBookings(bookings);
   const displayName = profileForm.full_name.trim() || user?.email;
+  const accountReady = hasLoadedAccount && loadedAccountUserId === user?.id;
+  const firstLoadFailed = !accountReady && Boolean(loadError);
+  const initialAccountLoad = !accountReady && !loadError;
+  const unavailableMessage = (
+    <p className="font-body text-sm" role="status" style={{ color: '#e0b36a' }}>
+      Account data unavailable. Retry above to check again.
+    </p>
+  );
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
 
       <main id="main" className="max-w-4xl mx-auto px-6 pt-28 pb-20">
+        {loadError && (
+          <div
+            className="mb-8 flex flex-col gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4 sm:flex-row sm:items-center"
+            role="alert"
+          >
+            <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-body text-sm font-semibold text-xert-offwhite">Could not refresh your account</p>
+              <p className="mt-1 break-words font-body text-xs text-xert-pale/70">{loadError}</p>
+              {hasLoadedAccount && (
+                <p className="mt-1 font-body text-xs text-xert-pale/70">Your previously loaded details are still shown below.</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={loading}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center border border-[#e0b36a]/60 px-4 font-display text-sm uppercase text-xert-offwhite disabled:opacity-50"
+            >
+              {loading ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        )}
         {purchaseStatus && (
           <div
             className="flex flex-wrap items-center gap-3 border p-4 mb-8"
@@ -388,7 +422,7 @@ export default function Account() {
           </button>
         </div>
 
-        {announcements.length > 0 && (
+        {accountReady && announcements.length > 0 && (
           <section id="notices" className="mb-10 scroll-mt-32" aria-labelledby="member-notices-title">
             <div className="mb-4 flex items-center gap-2">
               <BellRing className="h-5 w-5 text-xert-steel" aria-hidden="true" />
@@ -527,7 +561,7 @@ export default function Account() {
 
         {/* Credits */}
         <section className="mb-10">
-          {expiringCredits && (
+          {accountReady && expiringCredits && (
             <div role="status" className="mb-3 flex flex-wrap items-center gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
               <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
               <p className="min-w-0 flex-1 font-body text-sm text-xert-pale">
@@ -544,20 +578,20 @@ export default function Account() {
                 <Ticket className="w-6 h-6" style={{ color: '#101820' }} />
               </div>
               <div>
-                <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{loading ? '—' : (credits?.total ?? 0)}</p>
+                <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{initialAccountLoad || firstLoadFailed ? '—' : (credits?.total ?? 0)}</p>
                 <p className="font-body text-xs uppercase tracking-wider mt-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
                   Class credits available
                 </p>
               </div>
             </div>
             <div className="sm:ml-auto flex flex-wrap items-center gap-3">
-              {!loading && credits?.batches?.some(batch => batch.expires_at) && (
+              {accountReady && !loading && credits?.batches?.some(batch => batch.expires_at) && (
                 <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
                   Next expiry: {formatDate(credits.batches.find(batch => batch.expires_at)?.expires_at)}
                 </p>
               )}
               <Link to="/booking" className="px-5 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-                {credits?.total > 0 ? 'Book A Class' : 'Buy A Pack'}
+                {accountReady && credits?.total > 0 ? 'Book A Class' : 'Buy A Pack'}
               </Link>
             </div>
           </div>
@@ -573,10 +607,12 @@ export default function Account() {
               Explore events
             </Link>
           </div>
-          {loading ? (
+          {initialAccountLoad ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading goals…
             </p>
+          ) : firstLoadFailed ? (
+            unavailableMessage
           ) : eventGoals.length === 0 ? (
             <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
               <Target className="w-5 h-5" style={{ color: '#7BA7BC' }} />
@@ -629,8 +665,10 @@ export default function Account() {
               Request a session
             </Link>
           </div>
-          {loading ? (
+          {initialAccountLoad ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading PT requests…</p>
+          ) : firstLoadFailed ? (
+            unavailableMessage
           ) : privateSessionRequests.length === 0 ? (
             <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
               <Dumbbell className="w-5 h-5" style={{ color: '#7BA7BC' }} />
@@ -665,7 +703,7 @@ export default function Account() {
         </section>
 
         {/* Pending booking requests */}
-        {pending.length > 0 && (
+        {accountReady && pending.length > 0 && (
           <section className="mb-10">
             <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
               Requests &amp; Waitlist
@@ -711,10 +749,12 @@ export default function Account() {
           <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
             Upcoming Classes
           </h2>
-          {loading ? (
+          {initialAccountLoad ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading…
             </p>
+          ) : firstLoadFailed ? (
+            unavailableMessage
           ) : upcoming.length === 0 ? (
             <div className="border p-6" style={cardStyle}>
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
@@ -766,10 +806,12 @@ export default function Account() {
           <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
             Purchases
           </h2>
-          {loading ? (
+          {initialAccountLoad ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading…
             </p>
+          ) : firstLoadFailed ? (
+            unavailableMessage
           ) : orders.length === 0 ? (
             <div className="border p-6" style={cardStyle}>
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
@@ -797,7 +839,7 @@ export default function Account() {
         </section>
 
         {/* Past classes */}
-        {past.length > 0 && (
+        {accountReady && past.length > 0 && (
           <section>
             <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
               Past &amp; Cancelled

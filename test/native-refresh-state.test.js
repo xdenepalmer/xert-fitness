@@ -36,6 +36,25 @@ test('native refreshes coalesce and reject results from an earlier account gener
   assert.match(checkoutReconciliation, /guard canApplyMemberState\(memberVersion, session: memberSession\)/);
 });
 
+test('native account distinguishes unavailable member data from genuine empty history', async () => {
+  const account = await readFile(
+    new URL('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift', import.meta.url),
+    'utf8'
+  );
+  const root = await readFile(
+    new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(account, /Text\(creditsUnavailableOrLoading \? "—"/);
+  assert.match(account, /store\.isLoading && store\.credits\.isEmpty/);
+  assert.match(account, /unavailableDataSources\.contains\(\.orders\).*accountUnavailableRow\("Purchase history"\)/s);
+  assert.match(account, /unavailableDataSources\.contains\(\.bookings\).*accountUnavailableRow\("Bookings"\)/s);
+  assert.match(account, /unavailableDataSources\.contains\(\.privateSessions\).*accountUnavailableRow\("PT requests"\)/s);
+  assert.match(root, /Retry unavailable data/);
+  assert.match(root, /Task \{ await store\.refresh\(\) \}/);
+});
+
 test('temporary native token refresh failures retain stale member data for retry', async () => {
   const store = await readFile(
     new URL('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift', import.meta.url),
