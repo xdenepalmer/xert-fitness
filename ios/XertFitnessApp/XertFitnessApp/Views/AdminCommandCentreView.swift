@@ -498,7 +498,7 @@ struct AdminCommandCentreView: View {
 
     private var priorityQueue: some View {
         let priorities = operationalPriorities
-        VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 adminHeading("Operational priority queue")
                 Spacer()
