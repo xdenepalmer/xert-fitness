@@ -2288,14 +2288,22 @@ struct DataAvailabilityNotice: View {
         let unavailable = sources.intersection(store.unavailableDataSources)
             .sorted { $0.rawValue < $1.rawValue }
         if !unavailable.isEmpty {
-            Label {
-                Text("Could not refresh \(unavailable.map(\.displayName).joined(separator: ", ")). Pull to retry.")
-            } icon: {
-                Image(systemName: "exclamationmark.triangle")
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    Text("Could not refresh \(unavailable.map(\.displayName).joined(separator: ", ")).")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label(store.isLoading ? "Retrying…" : "Retry unavailable data", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.isLoading)
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(.orange)
-            .accessibilityLabel("Some XERT data is unavailable: \(unavailable.map(\.displayName).joined(separator: ", ")). Pull to retry.")
         }
     }
 }

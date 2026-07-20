@@ -7,6 +7,7 @@ const memberForm = readFileSync(new URL('../src/components/public/MemberInterest
 const events = readFileSync(new URL('../src/pages/Events.jsx', import.meta.url), 'utf8');
 const contact = readFileSync(new URL('../src/pages/Contact.jsx', import.meta.url), 'utf8');
 const stickyMobileCta = readFileSync(new URL('../src/components/public/StickyMobileCTA.jsx', import.meta.url), 'utf8');
+const account = readFileSync(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8');
 const packageManifest = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const formSources = [
   '../src/components/public/TrainerInterestForm.jsx',
@@ -50,6 +51,16 @@ test('the shared mobile booking action avoids a page reload and respects reduced
   assert.match(stickyMobileCta, /motion-reduce:transition-none/);
   assert.match(stickyMobileCta, /requestAnimationFrame/);
   assert.doesNotMatch(stickyMobileCta, /framer-motion/);
+});
+
+test('member account failures stay inline and never masquerade as empty account data', () => {
+  assert.match(account, /const \[hasLoadedAccount, setHasLoadedAccount\] = useState\(false\)/);
+  assert.match(account, /const accountReady = hasLoadedAccount && loadedAccountUserId === user\?\.id/);
+  assert.match(account, /const firstLoadFailed = !accountReady && Boolean\(loadError\)/);
+  assert.match(account, /Could not refresh your account/);
+  assert.match(account, /Your previously loaded details are still shown below/);
+  assert.match(account, /onClick=\{refresh\}/);
+  assert.ok((account.match(/firstLoadFailed \? \(/g) || []).length >= 4);
 });
 
 test('public motion uses native reduced-motion-aware effects without a runtime dependency', () => {

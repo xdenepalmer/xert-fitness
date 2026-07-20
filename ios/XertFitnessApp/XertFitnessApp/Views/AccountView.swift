@@ -51,7 +51,7 @@ struct AccountView: View {
                                 ? "Your credits, bookings, training goals and account controls in one place."
                                 : "Create your member account to book coached sessions, purchase packs and train toward shared events.",
                             badge: store.isSignedIn
-                                ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") · \(timeline.upcoming.count) upcoming"
+                                ? accountHeroBadge(timeline: timeline)
                                 : "Train for life · Compete for fun"
                         )
                     }
@@ -215,9 +215,17 @@ struct AccountView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Credits")
                 .xertEyebrow()
-            Text("\(store.creditTotal)")
+            Text(creditsUnavailableOrLoading ? "—" : "\(store.creditTotal)")
                 .xertDisplay(34)
-            if let expiry = store.creditExpirySummary {
+            if store.isLoading && store.credits.isEmpty {
+                Text("Refreshing…")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertMuted)
+            } else if store.unavailableDataSources.contains(.credits) {
+                Text("Unavailable · retry below")
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+            } else if let expiry = store.creditExpirySummary {
                 Text("\(expiry.credits) expire \(expiry.expiresAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.caption)
                     .foregroundStyle(Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255))
@@ -441,7 +449,11 @@ struct AccountView: View {
 
     private var purchaseHistorySection: some View {
         Section {
-            if store.orders.isEmpty {
+            if store.isLoading && store.orders.isEmpty {
+                accountLoadingRow("Loading purchases…")
+            } else if store.unavailableDataSources.contains(.orders) && store.orders.isEmpty {
+                accountUnavailableRow("Purchase history")
+            } else if store.orders.isEmpty {
                 Text("No purchases yet.")
                     .foregroundStyle(Color.xertMuted)
             } else {
@@ -484,7 +496,11 @@ struct AccountView: View {
 
     private var privateSessionHistorySection: some View {
         Section {
-            if store.privateSessionRequests.isEmpty {
+            if store.isLoading && store.privateSessionRequests.isEmpty {
+                accountLoadingRow("Loading PT requests…")
+            } else if store.unavailableDataSources.contains(.privateSessions) && store.privateSessionRequests.isEmpty {
+                accountUnavailableRow("PT requests")
+            } else if store.privateSessionRequests.isEmpty {
                 Text("No PT requests yet.")
                     .foregroundStyle(Color.xertMuted)
             } else {
@@ -550,8 +566,14 @@ struct AccountView: View {
     private func bookingSections(timeline: BookingTimeline) -> some View {
         if store.bookings.isEmpty {
             Section {
-                Text("No bookings yet.")
-                    .foregroundStyle(Color.xertMuted)
+                if store.isLoading {
+                    accountLoadingRow("Loading bookings…")
+                } else if store.unavailableDataSources.contains(.bookings) {
+                    accountUnavailableRow("Bookings")
+                } else {
+                    Text("No bookings yet.")
+                        .foregroundStyle(Color.xertMuted)
+                }
             } header: {
                 Text("Bookings").xertEyebrow()
             }
@@ -590,6 +612,37 @@ struct AccountView: View {
                 .listRowBackground(Color.xertInk)
             }
         }
+    }
+
+    private func accountHeroBadge(timeline: BookingTimeline) -> String {
+        if store.isLoading && store.credits.isEmpty && store.bookings.isEmpty {
+            return "Refreshing account…"
+        }
+        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings]) {
+            return "Account needs refresh"
+        }
+        return "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") · \(timeline.upcoming.count) upcoming"
+    }
+
+    private var creditsUnavailableOrLoading: Bool {
+        (store.isLoading && store.credits.isEmpty) || store.unavailableDataSources.contains(.credits)
+    }
+
+    private func accountLoadingRow(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(Color.xertSteel)
+            Text(title)
+                .foregroundStyle(Color.xertMuted)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func accountUnavailableRow(_ title: String) -> some View {
+        Label("\(title) unavailable. Retry above.", systemImage: "wifi.exclamationmark")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Signed-out member access
