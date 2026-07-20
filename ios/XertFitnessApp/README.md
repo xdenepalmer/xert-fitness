@@ -42,6 +42,11 @@ The included `Info.plist` already contains these xcconfig substitutions:
   Its live operational priority queue consolidates release-health issues,
   booking and PT requests, roll calls, waitlists, retention follow-ups, and
   checkout reconciliation into count-aware one-tap workspaces.
+  The phone-first owner overview also exposes direct tools for member lookup,
+  class creation, notice publishing, and private session-pack drafts. Every
+  dashboard value carries current, last-snapshot, loading, or unavailable state;
+  failed health feeds cannot display green readiness or enable Stripe recovery
+  actions, and platform settings become read-only until a safe refresh succeeds.
   The native audit ledger merges recent access, credit, request, notice, lead,
   schedule, content, and booking changes into one searchable owner timeline.
   Owners can also edit live session-pack names, descriptions, prices, credit
@@ -100,6 +105,14 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Searchable class discovery with Queensland-aware today/7-day windows, open-spot and beginner-friendly filters.
 - Source-level offline and partial-refresh notices, with cached public data kept usable when individual services fail.
 - Coalesced, generation-guarded refreshes that cannot restore private member data after sign-out or an account change.
+- Semantic, rate-limited haptics use prepared generators across navigation,
+  booking, checkout, account, and owner workflows, with an Account preference
+  for members who prefer no touch feedback.
+- CMS photography is memory-bounded and downsampled off the main actor; the Home
+  carousel pauses in the background, under Reduce Motion, and in Low Power Mode.
+- Booking mutations refresh only the timetable, credits, and bookings they can
+  change, while foreground refreshes are freshness-bounded and silent notice
+  pushes reload only the member inbox.
 - Bounded API timeouts with clear offline, timeout, service reachability and secure-connection errors.
 - Upcoming-event filtering in the XERT/Queensland calendar, plus event detail links when an admin supplies one.
 - Booking RPC support through `book_session`.

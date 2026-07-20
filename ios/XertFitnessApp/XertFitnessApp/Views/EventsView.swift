@@ -14,6 +14,9 @@ struct EventsView: View {
     private enum ScrollTarget: Hashable { case goals }
 
     var body: some View {
+        let visibleTrainingGoals = trainingGoals
+        let visibleMonthSections = monthSections
+
         NavigationStack {
             ScrollViewReader { proxy in
               List {
@@ -23,9 +26,9 @@ struct EventsView: View {
                         eyebrow: "XERT Annual Calendar 2026",
                         title: "Compete Together.",
                         subtitle: "Choose the event ahead, train with purpose and build toward it with the XERT community.",
-                        badge: trainingGoals.isEmpty
+                        badge: visibleTrainingGoals.isEmpty
                             ? "South East Queensland"
-                            : "\(trainingGoals.count) active training goal\(trainingGoals.count == 1 ? "" : "s")"
+                            : "\(visibleTrainingGoals.count) active training goal\(visibleTrainingGoals.count == 1 ? "" : "s")"
                     )
                 }
                 .listRowInsets(EdgeInsets())
@@ -57,9 +60,9 @@ struct EventsView: View {
                     .listRowBackground(Color.xertInk)
                 }
 
-                if store.isSignedIn, !trainingGoals.isEmpty {
+                if store.isSignedIn, !visibleTrainingGoals.isEmpty {
                     Section {
-                        ForEach(trainingGoals, id: \.stableID) { event in
+                        ForEach(visibleTrainingGoals, id: \.stableID) { event in
                             Label {
                                 Text(event.name)
                                     .foregroundStyle(Color.xertOffWhite)
@@ -85,14 +88,29 @@ struct EventsView: View {
                     .listRowBackground(Color.xertInk)
                 }
 
-                if monthSections.isEmpty {
+                if visibleMonthSections.isEmpty {
                     Section {
-                        Text(showCompleted ? "No calendar events yet." : "No upcoming events yet.")
-                            .foregroundStyle(Color.xertMuted)
-                            .listRowBackground(Color.xertInk)
+                        if (store.isLoading || !store.hasBootstrapped) && store.events.isEmpty {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                    .tint(.xertSteel)
+                                Text("Loading the XERT event calendar…")
+                                    .foregroundStyle(Color.xertMuted)
+                            }
+                            .accessibilityElement(children: .combine)
+                        } else if store.unavailableDataSources.contains(.events) && store.events.isEmpty {
+                            Label("Event calendar unavailable. Pull to refresh.", systemImage: "wifi.exclamationmark")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(showCompleted ? "No calendar events yet." : "No upcoming events yet.")
+                                .foregroundStyle(Color.xertMuted)
+                        }
                     }
+                    .listRowBackground(Color.xertInk)
                 } else {
-                    ForEach(monthSections) { section in
+                    ForEach(visibleMonthSections) { section in
                         Section {
                             ForEach(section.events, id: \.stableID) { event in
                                 eventRow(event)
@@ -109,6 +127,7 @@ struct EventsView: View {
               .listStyle(.plain)
               .navigationTitle("Events")
               .navigationBarTitleDisplayMode(.inline)
+              .toolbar(.hidden, for: .tabBar)
               .refreshable { await store.refresh() }
               .onAppear { focusRoute(using: proxy) }
               .onChange(of: routeSequence) { _ in focusRoute(using: proxy) }
@@ -148,6 +167,7 @@ struct EventsView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .accessibilityIdentifier("xert-event-\(event.stableID)")
     }
 
     @ViewBuilder
@@ -250,28 +270,51 @@ struct EventsView: View {
                 Label("Event details", systemImage: "arrow.up.right.square")
             }
             .buttonStyle(.xertGhost)
+            .accessibilityHint("Opens the event website")
         }
         if event.startDate != nil {
             Button {
                 Task { await addToCalendar(event) }
             } label: {
-                Label(
-                    addingToCalendarID == event.stableID ? "Adding..." : "Add to Calendar",
-                    systemImage: "calendar.badge.plus"
-                )
+                HStack(spacing: 10) {
+                    Label(
+                        addingToCalendarID == event.stableID ? "Adding to calendar…" : "Add to Calendar",
+                        systemImage: "calendar.badge.plus"
+                    )
+                    Spacer(minLength: 8)
+                    if addingToCalendarID == event.stableID {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             .buttonStyle(.xertGhost)
             .disabled(addingToCalendarID != nil)
+            .accessibilityValue(addingToCalendarID == event.stableID ? "In progress" : "")
         }
         if !event.isComplete, let eventID = event.id {
             if store.isSignedIn {
                 Button {
                     Task { await store.toggleEventGoal(event) }
                 } label: {
-                    Label(trainingGoalLabel(for: event), systemImage: "target")
+                    Label(
+                        trainingGoalLabel(for: event),
+                        systemImage: store.eventGoalIDs.contains(eventID) ? "checkmark.circle.fill" : "target"
+                    )
                 }
                 .buttonStyle(.xertPrimary)
-                .disabled(store.updatingEventGoalID == eventID)
+                .disabled(store.updatingEventGoalID != nil)
+                .accessibilityHint(
+                    store.eventGoalIDs.contains(eventID)
+                        ? "Removes this event from your training goals"
+                        : "Adds this event to your training goals"
+                )
+                .accessibilityValue(
+                    store.updatingEventGoalID == eventID
+                        ? "Saving"
+                        : (store.updatingEventGoalID != nil ? "Another training goal is saving" : "")
+                )
             } else {
                 Button {
                     onNavigate(.account)
@@ -290,9 +333,7 @@ struct EventsView: View {
     }
 
     private func displayDate(_ value: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: value) else { return value }
+        guard let date = Self.inputDateFormatter.date(from: value) else { return value }
         return date.formatted(.dateTime.day().month(.abbreviated).year())
     }
 
@@ -311,9 +352,18 @@ struct EventsView: View {
 
     private func trainingGoalLabel(for event: EventItem) -> String {
         guard let id = event.id else { return "Train for this" }
-        if store.updatingEventGoalID == id { return "Saving goal..." }
-        return store.eventGoalIDs.contains(id) ? "Training goal" : "Train for this"
+        if store.updatingEventGoalID == id { return "Saving goal…" }
+        return store.eventGoalIDs.contains(id) ? "Remove training goal" : "Train for this"
     }
+
+    private static let inputDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = EventItem.calendar
+        formatter.locale = Locale(identifier: "en_AU_POSIX")
+        formatter.timeZone = EventItem.calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     private static let dayNumberFormatter: DateFormatter = {
         let formatter = DateFormatter()

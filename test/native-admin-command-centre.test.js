@@ -238,13 +238,100 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   for (const destination of ['health', 'bookingRequests', 'ptRequests', 'classDesk', 'retention', 'orders']) {
     assert.match(view, new RegExp(`workspace: \\.${destination}`));
   }
-  assert.match(view, /openWorkspace\(priority\.workspace\)/);
+  assert.match(view, /openWorkspaceWithFeedback\(priority\.workspace\)/);
   assert.match(view, /All operational queues are clear/);
   assert.match(view, /case \.idle, \.loading:[\s\S]*Checking operational queues/);
   assert.match(view, /case \.partial\(let unavailableSources\)/);
   assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
-  assert.match(view, /Button \{\s*openWorkspace\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
+  assert.match(view, /Button \{\s*openWorkspaceWithFeedback\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
+});
+
+test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {
+  const [view, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+
+  assert.match(view, /@Environment\(\\\.scenePhase\) private var scenePhase/);
+  assert.match(view, /Date\(\)\.timeIntervalSince\(updatedAt\) >= 120/);
+  assert.match(view, /onChange\(of: scenePhase\)[\s\S]*ownerDataNeedsForegroundRefresh[\s\S]*admin\.refresh/);
+  assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack/);
+  assert.match(view, /private var quickTools: some View/);
+  for (const label of ['Find a member', 'Create a class', 'Publish a notice', 'Create a session pack']) {
+    assert.match(view, new RegExp(label));
+  }
+  assert.match(view, /sheet\(item: \$presentedQuickAction\)/);
+  assert.match(view, /AdminClassEditor\(admin: admin, session: session, classSession: nil\)/);
+  assert.match(view, /AdminAnnouncementComposer\(isPublishing: admin\.isPublishingAnnouncement\)/);
+  assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
+
+  assert.match(store, /@Published private\(set\) var loadedSources: Set<String> = \[\]/);
+  assert.match(store, /@Published private\(set\) var hasCompletedRefresh = false/);
+  assert.match(store, /var successfulSources = Set<String>\(\)/);
+  assert.match(store, /loadedSources\.formUnion\(successfulSources\)/);
+  assert.match(store, /var unavailableHealthSourceCount: Int/);
+  assert.match(store, /guard hasCompletedRefresh else \{ return 0 \}/);
+  assert.match(store, /!loadedSources\.contains\(\$0\) \|\| refreshUnavailableSources\.contains\(\$0\)/);
+  assert.match(store, /var healthIssues: Int \{[\s\S]*unavailableHealthSourceCount/);
+  assert.match(view, /private enum AdminDashboardDataState: Equatable/);
+  assert.match(view, /return admin\.loadedSources\.contains\(source\) \? \.stale : \.unavailable/);
+  assert.match(view, /count: admin\.healthIssues,[\s\S]*workspace: \.health/);
+  assert.match(view, /live health check[\s\S]*unavailable/);
+  assert.match(view, /if !admin\.hasCompletedRefresh \{[\s\S]*Checking release services/);
+  assert.match(view, /case \.unavailable:[\s\S]*Text\("—"\)/);
+  assert.match(view, /Unavailable totals are hidden so they cannot be mistaken for zero/);
+});
+
+test('native platform controls and health recovery remain safe and reachable on compact iPhones', async () => {
+  const [view, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+  const platform = view.slice(view.indexOf('private struct AdminPlatformView'), view.indexOf('private struct AdminCommunicationsView'));
+  const health = view.slice(view.indexOf('private struct AdminOperationsHealthView'), view.indexOf('private struct HealthStatusRow'));
+
+  assert.match(platform, /safeAreaInset\(edge: \.bottom, spacing: 0\)[\s\S]*platformSaveBar/);
+  assert.match(platform, /accessibilityIdentifier\("owner\.platform\.save"\)/);
+  assert.match(platform, /scrollDismissesKeyboard\(\.interactively\)/);
+  assert.match(platform, /lastLoadedSettings/);
+  assert.match(platform, /draft == nil \|\| draft == lastLoadedSettings/);
+  assert.match(platform, /Live platform settings could not be refreshed/);
+  assert.match(platform, /No safe settings snapshot is available/);
+  assert.match(platform, /private var platformMutationAvailable: Bool/);
+  assert.ok((platform.match(/disabled\(!platformMutationAvailable\)/g) || []).length >= 3);
+  assert.match(platform, /private func saveAndOpenPricing\(\) \{\s*guard platformMutationAvailable else \{ return \}/);
+  assert.match(platform, /private func save\(_ settings:[\s\S]*guard platformMutationAvailable else \{ return \}/);
+  assert.match(platform, /platformMutationAvailable[\s\S]*draft != admin\.settings/);
+  assert.match(store, /loadedSources\.insert\("platform controls"\)/);
+  assert.match(store, /refreshUnavailableSources\.removeAll \{ \$0 == "platform controls" \}/);
+  assert.match(store, /guard loadedSources\.contains\("platform controls"\),[\s\S]*Refresh Platform Controls before saving/);
+  assert.match(platform, /XertHaptics\.play\(\.success\)/);
+  assert.match(health, /private var stripeHealthIsCurrent: Bool/);
+  assert.match(health, /private var pushHealthIsCurrent: Bool/);
+  assert.match(health, /Stripe — last snapshot/);
+  assert.match(health, /Actions and readiness checkmarks stay hidden until Stripe health refreshes successfully/);
+  assert.match(health, /if let commerce = admin\.commerceHealth, stripeHealthIsCurrent/);
+  assert.match(health, /if let push = admin\.pushHealth, pushHealthIsCurrent/);
+  assert.match(health, /Retry health checks/);
+});
+
+test('native session-pack tools require a current catalogue before exposing mutations', async () => {
+  const [view, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+  const products = view.slice(view.indexOf('private struct AdminProductsView'), view.indexOf('private struct AdminProductRow'));
+  const editor = view.slice(view.indexOf('private struct AdminProductEditor'), view.indexOf('private struct AdminEventsView'));
+
+  assert.match(products, /private var pricingDataIsCurrent: Bool/);
+  assert.match(products, /private var pricingDataIsPending: Bool/);
+  assert.match(products, /Loading session packs…/);
+  assert.ok((products.match(/disabled\(!pricingMutationAvailable\)/g) || []).length >= 2);
+  assert.match(editor, /private var pricingMutationAvailable: Bool/);
+  assert.match(editor, /Session-pack data is unavailable\. Retry before changing prices or sale state/);
+  assert.match(editor, /isDirty && validationMessage == nil && !isSaving && pricingMutationAvailable/);
+  assert.match(store, /guard loadedSources\.contains\("session packs"\),[\s\S]*Refresh Session Packs & Pricing before saving/);
 });
 
 test('native owner cross-workspace actions preserve compact workflow context', async () => {
@@ -311,9 +398,11 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
   assert.match(view, /NavigationStack\(path: \$compactPath\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
+  assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*workspaceDestination\(workspace, session: session\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
   assert.match(view, /applyRequestedRoute\(requestedRoute, resolvesTask: false\)/);
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
+  assert.match(view, /workspaceDestination\(currentWorkspace, session: session\)[\s\S]*\.id\(currentWorkspace\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
   assert.match(view, /private func workspaceBadge/);
   assert.match(view, /@ViewBuilder\s+private func workspaceDestination[\s\S]*-> some View/);
   assert.doesNotMatch(view, /AnyView\(/);

@@ -7,6 +7,8 @@ struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var admin = AdminStore()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
@@ -15,8 +17,10 @@ struct AdminCommandCentreView: View {
     @State private var compactPath: [XertOwnerWorkspace] = []
     @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
+    @State private var showingAllWorkspaces = false
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
+    @State private var presentedQuickAction: AdminOwnerQuickAction?
     let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
 
@@ -70,9 +74,10 @@ struct AdminCommandCentreView: View {
                     badges: workspaceBadges
                 ) { workspace in
                     showingWorkspaceSwitcher = false
-                    openWorkspace(workspace)
+                    openWorkspaceWithFeedback(workspace)
                 } onOpenRoute: { route in
                     showingWorkspaceSwitcher = false
+                    XertHaptics.play(.lightImpact)
                     openOwnerRoute(route)
                 } onTogglePin: { workspace in
                     togglePinnedWorkspace(workspace)
@@ -84,6 +89,11 @@ struct AdminCommandCentreView: View {
                 AdminOwnerTaskSheet(admin: admin, session: session, task: task)
             }
         }
+        .sheet(item: $presentedQuickAction) { action in
+            if let session = authorizedOwnerSession {
+                quickActionSheet(action, session: session)
+            }
+        }
         .alert("Command Centre", isPresented: Binding(
             get: { admin.errorMessage != nil },
             set: { if !$0 { admin.errorMessage = nil } }
@@ -91,6 +101,12 @@ struct AdminCommandCentreView: View {
             Button("OK") { admin.errorMessage = nil }
         } message: {
             Text(admin.errorMessage ?? "")
+        }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active,
+                  let session = authorizedOwnerSession,
+                  ownerDataNeedsForegroundRefresh else { return }
+            Task { await admin.refresh(session: session) }
         }
     }
 
@@ -103,6 +119,12 @@ struct AdminCommandCentreView: View {
 
     private var currentWorkspace: XertOwnerWorkspace {
         XertOwnerWorkspace(rawValue: restoredWorkspace) ?? .overview
+    }
+
+    private var ownerDataNeedsForegroundRefresh: Bool {
+        guard !admin.isLoading else { return false }
+        guard let updatedAt = admin.lastUpdatedAt else { return true }
+        return Date().timeIntervalSince(updatedAt) >= 120
     }
 
     private var workspaceSelection: Binding<XertOwnerWorkspace?> {
@@ -173,12 +195,14 @@ struct AdminCommandCentreView: View {
         compactPath = []
         pendingCompactPathWorkspace = nil
         presentedOwnerTask = nil
+        presentedQuickAction = nil
+        showingAllWorkspaces = false
     }
 
     private func togglePinnedWorkspace(_ workspace: XertOwnerWorkspace) {
         guard let userID = authorizedOwnerSession?.user?.id else { return }
         pinnedWorkspaces = XertOwnerWorkspacePinsStore.toggle(workspace, for: userID)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        XertHaptics.play(.lightImpact)
     }
 
     private func applyWorkspace(_ workspace: XertOwnerWorkspace) {
@@ -256,6 +280,56 @@ struct AdminCommandCentreView: View {
         openWorkspace(currentWorkspace)
     }
 
+    private func openWorkspaceWithFeedback(_ workspace: XertOwnerWorkspace) {
+        XertHaptics.play(.selection)
+        openWorkspace(workspace)
+    }
+
+    private func presentQuickAction(_ action: AdminOwnerQuickAction) {
+        XertHaptics.play(.lightImpact)
+        presentedQuickAction = action
+    }
+
+    private func refreshOwnerData(session: AuthSession, announcesResult: Bool = true) {
+        guard !admin.isLoading else { return }
+        XertHaptics.play(.softImpact)
+        Task {
+            await admin.refresh(session: session)
+            guard announcesResult else { return }
+            XertHaptics.play(admin.refreshUnavailableSources.isEmpty ? .success : .warning)
+        }
+    }
+
+    @ViewBuilder
+    private func quickActionSheet(_ action: AdminOwnerQuickAction, session: AuthSession) -> some View {
+        switch action {
+        case .newClass:
+            NavigationStack {
+                AdminClassEditor(admin: admin, session: session, classSession: nil)
+            }
+        case .newNotice:
+            AdminAnnouncementComposer(isPublishing: admin.isPublishingAnnouncement) { title, body, tone in
+                Task {
+                    if await admin.publishAnnouncement(session: session, title: title, body: body, tone: tone) {
+                        XertHaptics.play(.success)
+                        presentedQuickAction = nil
+                    } else {
+                        XertHaptics.play(.error)
+                    }
+                }
+            }
+        case .newSessionPack:
+            NavigationStack {
+                AdminProductEditor(
+                    admin: admin,
+                    session: session,
+                    product: nil,
+                    suggestedSortOrder: (admin.products.map(\.sort_order).max() ?? -1) + 1
+                )
+            }
+        }
+    }
+
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
         NavigationStack(path: $compactPath) {
             dashboard(session: session)
@@ -264,6 +338,7 @@ struct AdminCommandCentreView: View {
                 .toolbar { ownerWorkspaceToolbar }
                 .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
                     workspaceDestination(workspace, session: session)
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar { ownerWorkspaceToolbar }
                 }
         }
@@ -319,19 +394,13 @@ struct AdminCommandCentreView: View {
             .toolbar {
                 closeToolbar
                 workspaceSwitcherToolbar
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await admin.refresh(session: session) } } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(admin.isLoading)
-                    .accessibilityLabel("Refresh owner workspace")
-                }
             }
             .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 320)
         } detail: {
             NavigationStack {
                 workspaceDestination(currentWorkspace, session: session)
                     .id(currentWorkspace)
+                    .navigationBarTitleDisplayMode(.inline)
                     .toolbar { workspaceSwitcherToolbar }
             }
         }
@@ -345,11 +414,13 @@ struct AdminCommandCentreView: View {
                 if !admin.refreshUnavailableSources.isEmpty {
                     AdminRefreshDataWarning(
                         unavailableSources: admin.refreshUnavailableSources,
+                        cachedSources: admin.loadedSources,
                         isRetrying: admin.isLoading
                     ) {
-                        Task { await admin.refresh(session: session) }
+                        refreshOwnerData(session: session)
                     }
                 }
+                quickTools
                 priorityQueue
                 attentionGrid
                 businessPulse
@@ -400,6 +471,30 @@ struct AdminCommandCentreView: View {
     private var workspaceSwitcherToolbar: some ToolbarContent {
         ToolbarItem(placement: .secondaryAction) {
             Menu {
+                if currentWorkspace != .overview {
+                    Button { openWorkspaceWithFeedback(.overview) } label: {
+                        Label("Owner overview", systemImage: "waveform.path.ecg.rectangle")
+                    }
+                }
+
+                if let session = authorizedOwnerSession {
+                    Button { refreshOwnerData(session: session) } label: {
+                        Label(admin.isLoading ? "Refreshing owner data" : "Refresh owner data", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(admin.isLoading)
+                }
+
+                if currentWorkspace != .overview {
+                    Button { togglePinnedWorkspace(currentWorkspace) } label: {
+                        Label(
+                            pinnedWorkspaces.contains(currentWorkspace) ? "Unpin this workspace" : "Pin this workspace",
+                            systemImage: pinnedWorkspaces.contains(currentWorkspace) ? "pin.slash" : "pin"
+                        )
+                    }
+                }
+
+                Divider()
+
                 Button { returnToPreviousOwnerRoute() } label: {
                     Label(
                         ownerRouteHistory.previous.map { "Back to \($0.navigationTitle)" } ?? "No previous workspace",
@@ -418,10 +513,14 @@ struct AdminCommandCentreView: View {
                 .keyboardShortcut("]", modifiers: .command)
                 .disabled(ownerRouteHistory.next == nil)
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
+                if admin.isLoading {
+                    ProgressView().tint(Color.xertSteel)
+                } else {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
-            .accessibilityLabel("Owner navigation history")
-            .accessibilityHint("Returns to previous or forward owner workspaces and records")
+            .accessibilityLabel(admin.isLoading ? "Owner actions, refreshing" : "Owner actions")
+            .accessibilityHint("Refreshes data, pins workspaces, or opens owner navigation history")
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -441,33 +540,31 @@ struct AdminCommandCentreView: View {
 
     private var ownerHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("OWNER WORKSPACE")
-                        .font(.caption.weight(.bold))
-                        .tracking(2)
-                        .foregroundStyle(Color.xertSteel)
-                    Text("Run XERT from one place.")
-                        .xertDisplay(32)
-                        .foregroundStyle(Color.xertOffWhite)
-                }
-                Spacer()
-                if admin.isLoading {
-                    ProgressView().tint(Color.xertSteel)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ownerHeaderIdentity
+                        AdminOwnerFreshnessBadge(
+                            isLoading: admin.isLoading,
+                            unavailableCount: admin.refreshUnavailableSources.count,
+                            updatedAt: admin.lastUpdatedAt
+                        )
+                    }
                 } else {
-                    Image(systemName: "waveform.path.ecg.rectangle")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(Color.xertSteel)
+                    HStack(alignment: .top, spacing: 14) {
+                        ownerHeaderIdentity
+                        Spacer(minLength: 8)
+                        AdminOwnerFreshnessBadge(
+                            isLoading: admin.isLoading,
+                            unavailableCount: admin.refreshUnavailableSources.count,
+                            updatedAt: admin.lastUpdatedAt
+                        )
+                    }
                 }
             }
-            Text("Members, classes, retention and live operations use the same protected business data as the desktop command centre.")
+            Text("Members, classes, sales and live operations — protected and ready from your phone.")
                 .font(.subheadline)
                 .foregroundStyle(Color.xertPale.opacity(0.72))
-            if let updated = admin.lastUpdatedAt {
-                Text("Updated \(updated.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(Color.xertPale.opacity(0.45))
-            }
         }
         .padding(18)
         .xertCardStyle()
@@ -476,21 +573,108 @@ struct AdminCommandCentreView: View {
         }
     }
 
+    private var ownerHeaderIdentity: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("OWNER WORKSPACE")
+                .font(.caption.weight(.bold))
+                .tracking(2)
+                .foregroundStyle(Color.xertSteel)
+            Text("Run XERT from one place.")
+                .xertDisplay(32)
+                .foregroundStyle(Color.xertOffWhite)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var quickTools: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            adminHeading("Quick tools")
+            LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
+                AdminQuickToolButton(
+                    title: "Find a member",
+                    detail: "Search name, email or phone",
+                    icon: "magnifyingglass"
+                ) {
+                    XertHaptics.play(.selection)
+                    showingWorkspaceSwitcher = true
+                }
+                AdminQuickToolButton(
+                    title: "Create a class",
+                    detail: quickToolDetail(source: "full timetable", ready: "Add to the timetable"),
+                    icon: "calendar.badge.plus",
+                    isEnabled: quickMutationIsAvailable(source: "full timetable")
+                ) {
+                    presentQuickAction(.newClass)
+                }
+                AdminQuickToolButton(
+                    title: "Publish a notice",
+                    detail: quickToolDetail(source: "member notices", ready: "Reach web and iOS members"),
+                    icon: "bell.badge.fill",
+                    isEnabled: quickMutationIsAvailable(source: "member notices")
+                ) {
+                    presentQuickAction(.newNotice)
+                }
+                AdminQuickToolButton(
+                    title: "Create a session pack",
+                    detail: quickToolDetail(source: "session packs", ready: "Start as a private draft"),
+                    icon: "ticket.fill",
+                    isEnabled: quickMutationIsAvailable(source: "session packs")
+                ) {
+                    presentQuickAction(.newSessionPack)
+                }
+            }
+        }
+    }
+
+    private func quickMutationIsAvailable(source: String) -> Bool {
+        !admin.isLoading
+            && admin.loadedSources.contains(source)
+            && !admin.refreshUnavailableSources.contains(source)
+    }
+
+    private func quickToolDetail(source: String, ready: String) -> String {
+        if admin.isLoading && !admin.loadedSources.contains(source) { return "Checking access…" }
+        if admin.refreshUnavailableSources.contains(source) || !admin.loadedSources.contains(source) {
+            return "Refresh required before editing"
+        }
+        return ready
+    }
+
     private var attentionGrid: some View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Live workload")
             LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
-                AdminMetricTile(title: "Class requests", value: admin.requestedPlaces, icon: "tray.full") {
-                    openWorkspace(.bookingRequests)
+                AdminMetricTile(
+                    title: "Class requests",
+                    value: admin.requestedPlaces,
+                    icon: "tray.full",
+                    dataState: dashboardDataState(for: "today's classes")
+                ) {
+                    openWorkspaceWithFeedback(.bookingRequests)
                 }
-                AdminMetricTile(title: "Waitlisted", value: admin.waitingMembers, icon: "person.2.badge.clock") {
-                    openWorkspace(.classDesk)
+                AdminMetricTile(
+                    title: "Waitlisted",
+                    value: admin.waitingMembers,
+                    icon: "person.2.badge.clock",
+                    dataState: dashboardDataState(for: "waitlists")
+                ) {
+                    openWorkspaceWithFeedback(.classDesk)
                 }
-                AdminMetricTile(title: "Follow-ups", value: admin.followUps.count, icon: "phone.arrow.up.right") {
-                    openWorkspace(.retention)
+                AdminMetricTile(
+                    title: "Follow-ups",
+                    value: admin.followUps.count,
+                    icon: "phone.arrow.up.right",
+                    dataState: dashboardDataState(for: "retention")
+                ) {
+                    openWorkspaceWithFeedback(.retention)
                 }
-                AdminMetricTile(title: "Roll calls", value: admin.attendanceDue, icon: "checklist") {
-                    openWorkspace(.classDesk)
+                AdminMetricTile(
+                    title: "Roll calls",
+                    value: admin.attendanceDue,
+                    icon: "checklist",
+                    dataState: dashboardDataState(for: "today's classes")
+                ) {
+                    openWorkspaceWithFeedback(.classDesk)
                 }
             }
         }
@@ -554,7 +738,7 @@ struct AdminCommandCentreView: View {
     private func priorityRows(_ priorities: [AdminPriorityAction]) -> some View {
         ForEach(priorities) { priority in
             AdminPriorityRow(priority: priority) {
-                openWorkspace(priority.workspace)
+                openWorkspaceWithFeedback(priority.workspace)
             }
         }
     }
@@ -565,7 +749,7 @@ struct AdminCommandCentreView: View {
                 title: "Release health issues",
                 detail: "Review schema, Stripe and push readiness",
                 icon: "cross.case.fill",
-                count: admin.hasHealthSnapshot ? admin.healthIssues : 0,
+                count: admin.healthIssues,
                 workspace: .health,
                 isCritical: true
             ),
@@ -640,20 +824,46 @@ struct AdminCommandCentreView: View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Business pulse")
             LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
-                AdminMoneyTile(title: "This month", cents: admin.monthRevenueCents) {
-                    openWorkspace(.finance)
+                AdminMoneyTile(
+                    title: "This month",
+                    cents: admin.monthRevenueCents,
+                    dataState: dashboardDataState(for: "orders")
+                ) {
+                    openWorkspaceWithFeedback(.finance)
                 }
-                AdminMoneyTile(title: "Total revenue", cents: admin.totalRevenueCents) {
-                    openWorkspace(.finance)
+                AdminMoneyTile(
+                    title: "Total revenue",
+                    cents: admin.totalRevenueCents,
+                    dataState: dashboardDataState(for: "orders")
+                ) {
+                    openWorkspaceWithFeedback(.finance)
                 }
-                AdminMetricTile(title: "Members", value: admin.memberCount, icon: "person.2") {
-                    openWorkspace(.members)
+                AdminMetricTile(
+                    title: "Members",
+                    value: admin.memberCount,
+                    icon: "person.2",
+                    dataState: dashboardDataState(for: "members")
+                ) {
+                    openWorkspaceWithFeedback(.members)
                 }
-                AdminMetricTile(title: "Paid orders", value: admin.paidOrders.count, icon: "creditcard") {
-                    openWorkspace(.orders)
+                AdminMetricTile(
+                    title: "Paid orders",
+                    value: admin.paidOrders.count,
+                    icon: "creditcard",
+                    dataState: dashboardDataState(for: "orders")
+                ) {
+                    openWorkspaceWithFeedback(.orders)
                 }
             }
         }
+    }
+
+    private func dashboardDataState(for source: String) -> AdminDashboardDataState {
+        if admin.refreshUnavailableSources.contains(source) {
+            return admin.loadedSources.contains(source) ? .stale : .unavailable
+        }
+        if admin.loadedSources.contains(source) { return .current }
+        return admin.isLoading || admin.lastUpdatedAt == nil ? .loading : .unavailable
     }
 
     private var todayDesk: some View {
@@ -662,7 +872,7 @@ struct AdminCommandCentreView: View {
                 adminHeading("Today's classes")
                 Spacer()
                 Button {
-                    openWorkspace(.classDesk)
+                    openWorkspaceWithFeedback(.classDesk)
                 } label: {
                     Text("OPEN DESK")
                         .font(.caption2.weight(.bold))
@@ -671,57 +881,127 @@ struct AdminCommandCentreView: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens today's class desk")
             }
+            todayClassContent
+        }
+    }
 
-            if !admin.isLoading && admin.dailyOperations.isEmpty {
+    @ViewBuilder
+    private var todayClassContent: some View {
+        switch dashboardDataState(for: "today's classes") {
+        case .loading:
+            HStack(spacing: 12) {
+                ProgressView().tint(Color.xertSteel)
+                Text("Loading today's class desk…")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale.opacity(0.72))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .xertCardStyle()
+        case .unavailable:
+            AdminEmptyState(
+                icon: "wifi.exclamationmark",
+                text: "Today's classes are unavailable. Retry before relying on the desk."
+            )
+        case .stale:
+            Label("Showing the last class snapshot. Pull to refresh before changing attendance.", systemImage: "clock.badge.exclamationmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 2)
+            if admin.dailyOperations.isEmpty {
+                AdminEmptyState(icon: "calendar", text: "No classes were in the last available snapshot.")
+            } else {
+                todayClassRows
+            }
+        case .current:
+            if admin.dailyOperations.isEmpty {
                 AdminEmptyState(icon: "calendar", text: "No classes are scheduled today.")
             } else {
-                ForEach(admin.dailyOperations.prefix(4)) { item in
-                    HStack(spacing: 14) {
-                        VStack(spacing: 2) {
-                            Text(item.start_time.formatted(date: .omitted, time: .shortened))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(Color.xertOffWhite)
-                            Text(item.status.uppercased())
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(Color.xertSteel)
-                        }
-                        .frame(width: 72)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.title)
-                                .font(.headline)
-                                .foregroundStyle(Color.xertOffWhite)
-                            Text("\(item.confirmed_count) confirmed · \(item.requested_count) requested · \(item.waitlist_count) waiting")
-                                .font(.caption)
-                                .foregroundStyle(Color.xertPale.opacity(0.6))
-                        }
-                        Spacer()
-                        if item.attendance_due {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(.orange)
-                                .accessibilityLabel("Attendance due")
-                        }
-                    }
-                    .padding(14)
-                    .xertCardStyle()
-                }
+                todayClassRows
             }
+        }
+    }
+
+    private var todayClassRows: some View {
+        ForEach(admin.dailyOperations.prefix(4)) { item in
+            Button { openWorkspaceWithFeedback(.classDesk) } label: {
+                HStack(spacing: 14) {
+                    VStack(spacing: 2) {
+                        Text(item.start_time.formatted(date: .omitted, time: .shortened))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text(item.status.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .frame(width: 72)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("\(item.confirmed_count) confirmed · \(item.requested_count) requested · \(item.waitlist_count) waiting")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: item.attendance_due ? "exclamationmark.circle.fill" : "chevron.right")
+                        .foregroundStyle(item.attendance_due ? Color.orange : Color.xertSteel)
+                }
+                .padding(14)
+                .xertCardStyle()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                "\(item.title), \(item.start_time.formatted(date: .omitted, time: .shortened)), "
+                    + "\(item.confirmed_count) confirmed, \(item.requested_count) requested, "
+                    + "\(item.waitlist_count) waiting\(item.attendance_due ? ", attendance due" : "")"
+            )
+            .accessibilityHint("Opens today's class desk")
         }
     }
 
     private var managementDirectory: some View {
         VStack(alignment: .leading, spacing: 12) {
-            adminHeading("Manage XERT")
-            ForEach(XertOwnerWorkspaceSection.allCases) { section in
-                adminHeading(section.rawValue)
-                    .padding(.top, section == .operate ? 0 : 8)
-                ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
-                    AdminDestinationRow(
-                        title: workspace.title,
-                        detail: compactWorkspaceDetail(workspace),
-                        icon: workspace.icon,
-                        onOpen: { openWorkspace(workspace) }
-                    )
+            Button {
+                XertHaptics.play(.selection)
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                    showingAllWorkspaces.toggle()
                 }
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        adminHeading("Manage XERT")
+                        Text(showingAllWorkspaces ? "Hide the full owner directory" : "Open all \(XertOwnerWorkspace.allCases.count - 1) management workspaces")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: showingAllWorkspaces ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showingAllWorkspaces ? "Hide all management workspaces" : "Show all management workspaces")
+
+            if showingAllWorkspaces {
+                ForEach(XertOwnerWorkspaceSection.allCases) { section in
+                    adminHeading(section.rawValue)
+                        .padding(.top, section == .operate ? 0 : 8)
+                    ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
+                        AdminDestinationRow(
+                            title: workspace.title,
+                            detail: compactWorkspaceDetail(workspace),
+                            icon: workspace.icon,
+                            onOpen: { openWorkspaceWithFeedback(workspace) }
+                        )
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -736,7 +1016,7 @@ struct AdminCommandCentreView: View {
                         title: workspace.title,
                         detail: compactWorkspaceDetail(workspace),
                         icon: workspace.icon,
-                        onOpen: { openWorkspace(workspace) }
+                        onOpen: { openWorkspaceWithFeedback(workspace) }
                     )
                 }
             }
@@ -750,7 +1030,13 @@ struct AdminCommandCentreView: View {
         case .notices:
             return "\(admin.liveAnnouncements) live · publish to web and iOS"
         case .health:
-            if !admin.hasHealthSnapshot { return "Checking release services" }
+            if !admin.hasCompletedRefresh {
+                return "Checking release services"
+            }
+            if admin.unavailableHealthSourceCount > 0 {
+                return "\(admin.unavailableHealthSourceCount) live health check\(admin.unavailableHealthSourceCount == 1 ? "" : "s") unavailable"
+            }
+            if !admin.hasHealthSnapshot { return "Release health response incomplete" }
             return admin.healthIssues == 0
                 ? "Schema, Stripe and APNs ready"
                 : "\(admin.healthIssues) release issue\(admin.healthIssues == 1 ? "" : "s")"
@@ -776,7 +1062,7 @@ struct AdminCommandCentreView: View {
         case .products:
             return pricingAttentionCount
         case .health:
-            return admin.hasHealthSnapshot ? admin.healthIssues : nil
+            return admin.healthIssues
         default:
             return nil
         }
@@ -1850,7 +2136,12 @@ private struct AdminClassEditor: View {
                 Section {
                     Button {
                         Task {
-                            if await admin.saveClass(session: session, classSession: classSession, draft: draft) { dismiss() }
+                            if await admin.saveClass(session: session, classSession: classSession, draft: draft) {
+                                XertHaptics.play(.success)
+                                dismiss()
+                            } else {
+                                XertHaptics.play(.error)
+                            }
                         }
                     } label: {
                         HStack {
@@ -2994,12 +3285,17 @@ private struct AdminSiteContentEditor: View {
     private func heroPhotoRow(index: Int) -> some View {
         let value = (draft.photos ?? [])[index]
         HStack(spacing: 12) {
-            AsyncImage(url: publicImageURL(value)) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Image(systemName: "photo").foregroundStyle(Color.xertPale.opacity(0.4))
+            if let url = publicImageURL(value) {
+                XertRemoteImage(url: url, maximumPointDimension: 72) {
+                    Image(systemName: "photo").foregroundStyle(Color.xertPale.opacity(0.4))
+                }
+                .frame(width: 58, height: 70)
+                .clipped()
+            } else {
+                Image(systemName: "photo")
+                    .foregroundStyle(Color.xertPale.opacity(0.4))
+                    .frame(width: 58, height: 70)
             }
-            .frame(width: 58, height: 70).clipped()
             Text(value).font(.caption).lineLimit(2)
             Spacer()
             reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
@@ -3714,19 +4010,65 @@ private struct AdminPlatformView: View {
     let session: AuthSession
     let onOpenPricing: () -> Void
     @State private var draft: AdminPlatformSettings?
+    @State private var lastLoadedSettings: AdminPlatformSettings?
     @State private var saved = false
     @State private var confirmingPaymentActivation = false
     @State private var confirmingPricingNavigation = false
     @State private var openPricingAfterPaymentActivation = false
+    @State private var staleDraftRequiresReset = false
 
     private var pricingDataUnavailable: Bool {
         admin.refreshUnavailableSources.contains("session packs")
+    }
+
+    private var platformDataIsCurrent: Bool {
+        admin.loadedSources.contains("platform controls")
+            && !admin.refreshUnavailableSources.contains("platform controls")
+    }
+
+    private var platformDataUnavailable: Bool {
+        !platformDataIsCurrent && admin.hasCompletedRefresh
+    }
+
+    private var platformMutationAvailable: Bool {
+        platformDataIsCurrent && !admin.isLoading
+    }
+
+    private var stripeHealthIsCurrent: Bool {
+        admin.loadedSources.contains("Stripe health")
+            && !admin.refreshUnavailableSources.contains("Stripe health")
+            && admin.commerceHealth != nil
     }
 
     var body: some View {
         Group {
             if draft != nil {
                 Form {
+                    if platformDataUnavailable {
+                        Section {
+                            Label(
+                                "Live platform settings could not be refreshed. This last snapshot is read-only until a retry succeeds.",
+                                systemImage: "clock.badge.exclamationmark"
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            Button {
+                                Task { await admin.refresh(session: session) }
+                            } label: {
+                                Label(admin.isLoading ? "Retrying…" : "Retry platform settings", systemImage: "arrow.clockwise")
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.orange)
+                            .disabled(admin.isLoading)
+                        }
+                    } else if admin.isLoading {
+                        Section {
+                            Label("Refreshing live platform settings. Editing is paused until the latest snapshot settles.", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                    }
                     Section("Pack sales") {
                         LabeledContent(
                             "Active session packs",
@@ -3741,6 +4083,7 @@ private struct AdminPlatformView: View {
                         Button(action: requestPricingNavigation) {
                             Label("Open session packs & pricing", systemImage: "ticket")
                         }
+                        .disabled(admin.isLoading)
                         if pricingDataUnavailable {
                             Label("Session-pack data could not be refreshed. Pricing counts may be stale.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                                 .font(.caption).foregroundStyle(.orange)
@@ -3759,49 +4102,77 @@ private struct AdminPlatformView: View {
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         Toggle("Launch countdown", isOn: settingBinding(\.countdown_enabled))
                     }
+                    .disabled(!platformMutationAvailable)
                     Section("Public announcement") {
                         Toggle("Show announcement banner", isOn: settingBinding(\.announcement_banner_enabled))
                         TextField("Announcement text", text: announcementBinding, axis: .vertical)
                             .lineLimit(2...5)
                     }
+                    .disabled(!platformMutationAvailable)
                     Section("Launch") {
                         TextField("Target date (YYYY-MM-DD)", text: settingBinding(\.target_launch_date))
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
-                    Section {
-                        Button {
-                            guard let draft else { return }
-                            if draft.payments_enabled && admin.settings?.payments_enabled != true {
-                                confirmingPaymentActivation = true
-                            } else {
-                                save(draft)
-                            }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                if admin.isSavingSettings { ProgressView().tint(Color.xertNavy) }
-                                Text(saved ? "Settings saved" : "Save live settings").fontWeight(.bold)
-                                Spacer()
-                            }
-                        }
-                        .disabled(admin.isSavingSettings || draft == admin.settings)
-                        .listRowBackground(Color.xertSteel)
-                        .foregroundStyle(Color.xertNavy)
-                    }
+                    .disabled(!platformMutationAvailable)
                 }
                 .scrollContentBackground(.hidden)
-            } else {
+                .scrollDismissesKeyboard(.interactively)
+            } else if admin.isLoading || !platformDataUnavailable {
                 ProgressView("Loading platform settings...").tint(Color.xertSteel)
+            } else {
+                VStack(spacing: 14) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(Color.orange)
+                    Text("Platform settings unavailable")
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("No safe settings snapshot is available. Retry before changing bookings, payments or public announcements.")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                    Button {
+                        Task { await admin.refresh(session: session) }
+                    } label: {
+                        Label("Retry platform settings", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                }
+                .padding(24)
+                .frame(maxWidth: 520, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
             }
         }
         .background(Color.xertNavy)
         .navigationTitle("Platform Controls")
-        .onAppear { draft = admin.settings }
-        .onChange(of: admin.settings) { settings in
-            if draft == nil || draft == settings { draft = settings }
+        .onAppear {
+            draft = admin.settings
+            lastLoadedSettings = admin.settings
+            staleDraftRequiresReset = platformDataUnavailable
         }
-        .onChange(of: draft) { _ in saved = false }
+        .onChange(of: admin.settings) { settings in
+            if draft == nil || draft == lastLoadedSettings { draft = settings }
+            lastLoadedSettings = settings
+        }
+        .onChange(of: draft) { value in
+            if value != admin.settings { saved = false }
+        }
+        .onChange(of: platformDataUnavailable) { isUnavailable in
+            if isUnavailable {
+                staleDraftRequiresReset = true
+                saved = false
+            } else if staleDraftRequiresReset {
+                draft = admin.settings
+                lastLoadedSettings = admin.settings
+                staleDraftRequiresReset = false
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if draft != nil { platformSaveBar }
+        }
         .confirmationDialog(
             "Open session packs & pricing?",
             isPresented: $confirmingPricingNavigation,
@@ -3825,13 +4196,52 @@ private struct AdminPlatformView: View {
             }
             Button("Keep payments paused", role: .cancel) { openPricingAfterPaymentActivation = false }
         } message: {
-            Text(admin.commerceHealth?.ready == true
+            Text(stripeHealthIsCurrent && admin.commerceHealth?.ready == true
                 ? "Stripe launch checks passed recently. XERT will run them again on the server before enabling purchases."
                 : "XERT will run every Stripe launch check on the server. Payments remain paused if any check fails.")
         }
     }
 
+    private var platformSaveBar: some View {
+        Button {
+            guard let draft else { return }
+            XertHaptics.play(.lightImpact)
+            if draft.payments_enabled && admin.settings?.payments_enabled != true {
+                confirmingPaymentActivation = true
+            } else {
+                save(draft)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if admin.isSavingSettings { ProgressView().tint(Color.xertNavy) }
+                Image(systemName: saved ? "checkmark.circle.fill" : "checkmark.shield")
+                Text(saved ? "Live settings saved" : "Save live settings")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSavePlatformSettings ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSavePlatformSettings)
+        .accessibilityIdentifier("owner.platform.save")
+        .accessibilityHint("Saves booking, payment, countdown and public announcement settings")
+    }
+
+    private var canSavePlatformSettings: Bool {
+        !admin.isSavingSettings
+            && platformMutationAvailable
+            && draft != nil
+            && draft != admin.settings
+    }
+
     private func requestPricingNavigation() {
+        guard platformDataIsCurrent else {
+            onOpenPricing()
+            return
+        }
+        guard platformMutationAvailable else { return }
         guard draft != admin.settings else {
             onOpenPricing()
             return
@@ -3840,6 +4250,7 @@ private struct AdminPlatformView: View {
     }
 
     private func saveAndOpenPricing() {
+        guard platformMutationAvailable else { return }
         guard let draft else { return }
         if draft.payments_enabled && admin.settings?.payments_enabled != true {
             openPricingAfterPaymentActivation = true
@@ -3850,11 +4261,15 @@ private struct AdminPlatformView: View {
     }
 
     private func save(_ settings: AdminPlatformSettings, thenOpenPricing: Bool = false) {
+        guard platformMutationAvailable else { return }
         Task {
             saved = await admin.saveSettings(session: session, draft: settings)
             if saved {
+                XertHaptics.play(.success)
                 draft = admin.settings
                 if thenOpenPricing { onOpenPricing() }
+            } else {
+                XertHaptics.play(.error)
             }
         }
     }
@@ -3942,30 +4357,89 @@ private struct AdminOperationsHealthView: View {
     let onOpenWorkspace: (XertOwnerWorkspace) -> Void
     @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
     @State private var pendingRetry: AdminCommerceHealth.WebhookDelivery.Incident?
+    @State private var copiedStripeEventID: String?
+
+    private var unavailableHealthSources: [String] {
+        admin.refreshUnavailableSources.filter { ["schema health", "Stripe health", "push health"].contains($0) }
+    }
+
+    private var databaseReady: Bool? {
+        guard admin.loadedSources.contains("schema health"),
+              !admin.refreshUnavailableSources.contains("schema health") else { return nil }
+        return admin.missingSchemaCapabilities.isEmpty
+    }
+
+    private var stripeHealthIsCurrent: Bool {
+        admin.loadedSources.contains("Stripe health")
+            && !admin.refreshUnavailableSources.contains("Stripe health")
+            && admin.commerceHealth != nil
+    }
+
+    private var pushHealthIsCurrent: Bool {
+        admin.loadedSources.contains("push health")
+            && !admin.refreshUnavailableSources.contains("push health")
+            && admin.pushHealth != nil
+    }
+
+    private var databaseDetail: String {
+        guard let databaseReady else {
+            return admin.loadedSources.contains("schema health")
+                ? "The last database snapshot is hidden until a live health check succeeds."
+                : "Database capabilities could not be loaded. No readiness result is available."
+        }
+        return databaseReady
+            ? "All \(AdminSchemaReadiness.required.count) required capabilities are installed."
+            : "\(admin.missingSchemaCapabilities.count) required database capabilities are missing."
+    }
 
     var body: some View {
         List {
+            if !unavailableHealthSources.isEmpty {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(
+                            "Live health is unavailable for \(unavailableHealthSources.joined(separator: ", ")). Last-known details are labelled below.",
+                            systemImage: "wifi.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        Button {
+                            XertHaptics.play(.softImpact)
+                            Task {
+                                await admin.refresh(session: session)
+                                XertHaptics.play(admin.refreshUnavailableSources.isEmpty ? .success : .warning)
+                            }
+                        } label: {
+                            Label(admin.isLoading ? "Refreshing health…" : "Retry health checks", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.orange)
+                        .disabled(admin.isLoading)
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
             Section("Release readiness") {
                 HealthStatusRow(
                     title: "Database contract",
-                    ready: admin.missingSchemaCapabilities.isEmpty,
-                    detail: admin.missingSchemaCapabilities.isEmpty
-                        ? "All \(AdminSchemaReadiness.required.count) required capabilities are installed."
-                        : "\(admin.missingSchemaCapabilities.count) required database capabilities are missing."
+                    ready: databaseReady,
+                    detail: databaseDetail
                 )
                 HealthStatusRow(
                     title: "Stripe checkout",
-                    ready: admin.commerceHealth?.ready == true,
+                    ready: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
                     detail: commerceDetail
                 )
                 HealthStatusRow(
                     title: "Member push notifications",
-                    ready: admin.pushHealth?.ready == true,
+                    ready: pushHealthIsCurrent ? admin.pushHealth?.ready : nil,
                     detail: pushDetail
                 )
             }
 
-            if !admin.missingSchemaCapabilities.isEmpty {
+            if databaseReady != nil && !admin.missingSchemaCapabilities.isEmpty {
                 Section("Missing database capabilities") {
                     ForEach(admin.missingSchemaCapabilities, id: \.self) { capability in
                         Label(capability.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "exclamationmark.triangle")
@@ -3974,7 +4448,7 @@ private struct AdminOperationsHealthView: View {
                     }
                 }
             }
-            if let commerce = admin.commerceHealth {
+            if let commerce = admin.commerceHealth, stripeHealthIsCurrent {
                 Section("Stripe launch checklist") {
                     HealthValueRow(label: "Mode", value: commerce.mode?.uppercased() ?? "Unknown")
                     HealthValueRow(
@@ -4030,13 +4504,20 @@ private struct AdminOperationsHealthView: View {
                                     Spacer()
                                     Button {
                                         UIPasteboard.general.string = incident.event_id
+                                        copiedStripeEventID = incident.event_id
+                                        XertHaptics.play(.success)
+                                        Task {
+                                            try? await Task.sleep(nanoseconds: 1_600_000_000)
+                                            guard !Task.isCancelled, copiedStripeEventID == incident.event_id else { return }
+                                            copiedStripeEventID = nil
+                                        }
                                     } label: {
-                                        Image(systemName: "doc.on.doc")
+                                        Image(systemName: copiedStripeEventID == incident.event_id ? "checkmark.circle.fill" : "doc.on.doc")
                                             .frame(width: 44, height: 44)
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(Color.xertSteel)
-                                    .accessibilityLabel("Copy Stripe Event ID")
+                                    .accessibilityLabel(copiedStripeEventID == incident.event_id ? "Stripe Event ID copied" : "Copy Stripe Event ID")
                                 }
                                 Text(incident.event_id)
                                     .font(.caption2.monospaced())
@@ -4122,12 +4603,33 @@ private struct AdminOperationsHealthView: View {
                         }
                     }
                 }
+            } else if let commerce = admin.commerceHealth {
+                Section("Stripe — last snapshot") {
+                    Label(
+                        "Live verification failed. Actions and readiness checkmarks stay hidden until Stripe health refreshes successfully.",
+                        systemImage: "lock.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .listRowBackground(Color.xertInk)
+                    HealthValueRow(label: "Last mode", value: commerce.mode?.uppercased() ?? "Unknown")
+                    HealthCountRow(label: "Last active pack count", value: commerce.active_product_count)
+                    HealthCountRow(label: "Last Stripe-linked count", value: commerce.stripe_price_count)
+                }
             }
-            if let push = admin.pushHealth {
+            if let push = admin.pushHealth, pushHealthIsCurrent {
                 Section("APNs activity (24 hours)") {
                     HealthCountRow(label: "Production devices", value: push.subscriptions.production)
                     HealthCountRow(label: "Delivered", value: push.deliveries_24h.delivered)
                     HealthCountRow(label: "Failed", value: push.deliveries_24h.failed + push.deliveries_24h.invalid_token)
+                }
+            } else if let push = admin.pushHealth {
+                Section("APNs — last snapshot") {
+                    Label("Live push verification failed. These counts may be stale.", systemImage: "clock.badge.exclamationmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .listRowBackground(Color.xertInk)
+                    HealthCountRow(label: "Last production devices", value: push.subscriptions.production)
                 }
             }
         }
@@ -4167,7 +4669,11 @@ private struct AdminOperationsHealthView: View {
     }
 
     private var commerceDetail: String {
-        guard let health = admin.commerceHealth else { return "Commerce health is unavailable." }
+        guard stripeHealthIsCurrent, let health = admin.commerceHealth else {
+            return admin.commerceHealth == nil
+                ? "Stripe health could not be loaded. No readiness result is available."
+                : "Live Stripe health failed. A last snapshot is available below, with all actions disabled."
+        }
         if !health.environment.missing.isEmpty {
             return "Missing: \(health.environment.missing.joined(separator: ", "))."
         }
@@ -4202,7 +4708,11 @@ private struct AdminOperationsHealthView: View {
     }
 
     private var pushDetail: String {
-        guard let health = admin.pushHealth else { return "Push health is unavailable." }
+        guard pushHealthIsCurrent, let health = admin.pushHealth else {
+            return admin.pushHealth == nil
+                ? "Push health could not be loaded. No delivery result is available."
+                : "Live push health failed. The last device count is shown below as stale."
+        }
         if !health.environment.missing.isEmpty {
             return "Missing: \(health.environment.missing.joined(separator: ", "))."
         }
@@ -4212,19 +4722,36 @@ private struct AdminOperationsHealthView: View {
 
 private struct HealthStatusRow: View {
     let title: String
-    let ready: Bool
+    let ready: Bool?
     let detail: String
+
+    private var icon: String {
+        guard let ready else { return "questionmark.circle.fill" }
+        return ready ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var colour: Color {
+        guard let ready else { return Color.xertPale.opacity(0.55) }
+        return ready ? .green : .orange
+    }
+
+    private var stateLabel: String {
+        guard let ready else { return "Status unavailable" }
+        return ready ? "Ready" : "Needs attention"
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(ready ? Color.green : Color.orange)
+            Image(systemName: icon)
+                .foregroundStyle(colour)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline).foregroundStyle(Color.xertOffWhite)
                 Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
             }
         }
         .listRowBackground(Color.xertInk)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(stateLabel). \(detail)")
     }
 }
 
@@ -4359,15 +4886,30 @@ private struct AdminProductsView: View {
 
     private var activeProducts: [AdminProduct] { admin.products.filter(\.active) }
     private var liveBlockedProducts: [AdminProduct] { activeProducts.filter { !$0.hasStableStripePriceID } }
+    private var pricingDataIsCurrent: Bool {
+        admin.loadedSources.contains("session packs")
+            && !admin.refreshUnavailableSources.contains("session packs")
+    }
+    private var pricingDataIsPending: Bool {
+        !admin.hasCompletedRefresh && !admin.loadedSources.contains("session packs")
+    }
     private var pricingDataUnavailable: Bool {
-        admin.refreshUnavailableSources.contains("session packs")
+        !pricingDataIsCurrent && !pricingDataIsPending
+    }
+    private var pricingMutationAvailable: Bool {
+        pricingDataIsCurrent && !admin.isLoading
+    }
+    private var stripeHealthIsCurrent: Bool {
+        admin.loadedSources.contains("Stripe health")
+            && !admin.refreshUnavailableSources.contains("Stripe health")
+            && admin.commerceHealth != nil
     }
     private var stripeHealthUnavailable: Bool {
-        admin.refreshUnavailableSources.contains("Stripe health")
+        !stripeHealthIsCurrent && admin.hasCompletedRefresh
     }
     private var isLiveReady: Bool {
-        !pricingDataUnavailable
-            && !stripeHealthUnavailable
+        pricingDataIsCurrent
+            && stripeHealthIsCurrent
             && admin.commerceHealth?.ready == true
             && !activeProducts.isEmpty
             && liveBlockedProducts.isEmpty
@@ -4390,7 +4932,9 @@ private struct AdminProductsView: View {
                         .foregroundStyle(isLiveReady ? Color.green : Color.orange)
                     VStack(alignment: .leading, spacing: 5) {
                         Text("LIVE STRIPE READINESS").font(.caption.weight(.bold))
-                        if pricingDataUnavailable || stripeHealthUnavailable {
+                        if pricingDataIsPending || (admin.isLoading && !pricingDataIsCurrent) {
+                            Text("Checking session-pack and Stripe readiness…")
+                        } else if pricingDataUnavailable || stripeHealthUnavailable {
                             Text("Pricing or Stripe health could not be refreshed. The last visible setup may be stale.")
                             Text("Return to Overview and retry unavailable data before changing checkout.")
                                 .foregroundStyle(Color.xertPale.opacity(0.5))
@@ -4425,7 +4969,15 @@ private struct AdminProductsView: View {
                 .listRowBackground(Color.xertInk)
             }
 
-            if pricingDataUnavailable {
+            if pricingDataIsPending {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading session packs…")
+                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                }
+                .accessibilityElement(children: .combine)
+                .listRowBackground(Color.xertInk)
+            } else if pricingDataUnavailable {
                 Label("Session-pack data is unavailable. Cached rows below may be stale.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                     .foregroundStyle(.orange)
                     .listRowBackground(Color.xertInk)
@@ -4439,8 +4991,13 @@ private struct AdminProductsView: View {
                     AdminProductRow(product: product, dataIsStale: pricingDataUnavailable)
                 }
                 .buttonStyle(.plain)
+                .disabled(!pricingMutationAvailable)
                 .accessibilityIdentifier("owner.product.\(product.id.uuidString.lowercased())")
-                .accessibilityHint("Opens this session pack to review pricing and sale state")
+                .accessibilityHint(
+                    pricingMutationAvailable
+                        ? "Opens this session pack to review pricing and sale state"
+                        : "Refresh Session Packs & Pricing before editing this pack"
+                )
                 .listRowBackground(Color.xertInk)
             }
         }
@@ -4459,9 +5016,14 @@ private struct AdminProductsView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.xertNavy)
             .background(Color.xertSteel)
-            .disabled(pricingDataUnavailable)
-            .opacity(pricingDataUnavailable ? 0.45 : 1)
+            .disabled(!pricingMutationAvailable)
+            .opacity(pricingMutationAvailable ? 1 : 0.45)
             .accessibilityLabel("Create a new session pack")
+            .accessibilityHint(
+                pricingMutationAvailable
+                    ? "Opens a private session-pack draft"
+                    : "Wait for a current session-pack refresh before creating a pack"
+            )
             .accessibilityIdentifier("owner.products.create")
         }
         .sheet(isPresented: $showingCreate) {
@@ -4601,11 +5163,41 @@ private struct AdminProductEditor: View {
     private var isCreating: Bool { product == nil }
     private var isDirty: Bool { draft != baseline }
     private var isSaving: Bool { admin.savingProductID != nil }
+    private var pricingDataIsCurrent: Bool {
+        admin.loadedSources.contains("session packs")
+            && !admin.refreshUnavailableSources.contains("session packs")
+    }
+    private var pricingMutationAvailable: Bool {
+        pricingDataIsCurrent && !admin.isLoading
+    }
     private var validationMessage: String? { draft.validationMessage(existingProduct: product) }
-    private var canSave: Bool { isDirty && validationMessage == nil && !isSaving }
+    private var canSave: Bool {
+        isDirty && validationMessage == nil && !isSaving && pricingMutationAvailable
+    }
 
     var body: some View {
         Form {
+            if !pricingMutationAvailable {
+                Section {
+                    Label(
+                        pricingDataIsCurrent
+                            ? "Session packs are refreshing. Editing will resume when the current catalogue settles."
+                            : "Session-pack data is unavailable. Retry before changing prices or sale state.",
+                        systemImage: pricingDataIsCurrent ? "arrow.clockwise" : "clock.badge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(pricingDataIsCurrent ? Color.xertSteel : Color.orange)
+                    Button {
+                        Task { await admin.refresh(session: session) }
+                    } label: {
+                        Label(admin.isLoading ? "Refreshing…" : "Retry session packs", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(pricingDataIsCurrent ? Color.xertSteel : Color.orange)
+                    .disabled(admin.isLoading)
+                }
+            }
             Section("Pack details") {
                 if isCreating {
                     TextField("Permanent ID (for example starter-6)", text: $draft.slug)
@@ -4630,6 +5222,7 @@ private struct AdminProductEditor: View {
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     .focused($focusedField, equals: .currency)
             }
+            .disabled(!pricingMutationAvailable || isSaving)
             Section("Credits") {
                 Stepper("Sessions: \(draft.sessions)", value: $draft.sessions, in: 1...1_000)
                 Stepper("Validity: \(draft.validityDays) days", value: $draft.validityDays, in: 1...3_650)
@@ -4639,6 +5232,7 @@ private struct AdminProductEditor: View {
                     LabeledContent("Price per session", value: amount.formatted(.currency(code: draft.currency.uppercased())))
                 }
             }
+            .disabled(!pricingMutationAvailable || isSaving)
             Section("Sale state") {
                 Toggle("Featured pack", isOn: $draft.featured)
                 if isCreating {
@@ -4673,6 +5267,7 @@ private struct AdminProductEditor: View {
                     }
                 }
             }
+            .disabled(!pricingMutationAvailable || isSaving)
 
             if let validationMessage, isDirty || !isCreating {
                 Section {
@@ -4684,7 +5279,6 @@ private struct AdminProductEditor: View {
                 }
             }
         }
-        .disabled(isSaving)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .background(Color.xertNavy)
@@ -4745,7 +5339,10 @@ private struct AdminProductEditor: View {
         focusedField = nil
         Task {
             if await admin.saveProduct(session: session, product: product, draft: draft) {
+                XertHaptics.play(.success)
                 dismiss()
+            } else {
+                XertHaptics.play(.error)
             }
         }
     }
@@ -4987,14 +5584,19 @@ private struct AdminCoachesView: View {
             if admin.coaches.isEmpty { Text("No team profiles configured.").listRowBackground(Color.xertInk) }
             ForEach(admin.coaches) { coach in
                 HStack(alignment: .top, spacing: 12) {
-                    AsyncImage(url: URL(string: coach.photo_url ?? "")) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Image(systemName: "person.crop.square").foregroundStyle(Color.xertSteel)
+                    if let photoURL = URL(string: coach.photo_url ?? ""), !(coach.photo_url ?? "").isEmpty {
+                        XertRemoteImage(url: photoURL, maximumPointDimension: 64) {
+                            Image(systemName: "person.crop.square").foregroundStyle(Color.xertSteel)
+                        }
+                        .frame(width: 52, height: 60)
+                        .background(Color.xertNavy)
+                        .clipped()
+                    } else {
+                        Image(systemName: "person.crop.square")
+                            .foregroundStyle(Color.xertSteel)
+                            .frame(width: 52, height: 60)
+                            .background(Color.xertNavy)
                     }
-                    .frame(width: 52, height: 60)
-                    .background(Color.xertNavy)
-                    .clipped()
 
                     VStack(alignment: .leading, spacing: 5) {
                         NavigationLink {
@@ -5092,10 +5694,12 @@ private struct AdminCoachEditor: View {
                 TextField("Photo URL", text: $draft.photoURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                 if let url = URL(string: draft.photoURL), !draft.photoURL.isEmpty {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: { ProgressView() }
-                    .frame(height: 180).frame(maxWidth: .infinity).clipped()
+                    XertRemoteImage(url: url, maximumPointDimension: 640) {
+                        ProgressView().tint(Color.xertSteel)
+                    }
+                    .frame(height: 180)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                 }
                 TextField("Social link", text: $draft.socialURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -5177,6 +5781,119 @@ private struct AdminAnnouncementComposer: View {
                 Text("The notice becomes live on the website and iOS app, and push delivery starts immediately.")
             }
         }
+    }
+}
+
+private enum AdminOwnerQuickAction: String, Identifiable {
+    case newClass
+    case newNotice
+    case newSessionPack
+
+    var id: String { rawValue }
+}
+
+private enum AdminDashboardDataState: Equatable {
+    case loading
+    case current
+    case stale
+    case unavailable
+
+    var accessibilityDescription: String {
+        switch self {
+        case .loading: return "loading"
+        case .current: return "current"
+        case .stale: return "from the last loaded snapshot"
+        case .unavailable: return "unavailable"
+        }
+    }
+}
+
+private struct AdminOwnerFreshnessBadge: View {
+    let isLoading: Bool
+    let unavailableCount: Int
+    let updatedAt: Date?
+
+    private var label: String {
+        if isLoading { return "Refreshing" }
+        if unavailableCount > 0 { return "Partial data" }
+        if let updatedAt { return "Updated \(updatedAt.formatted(date: .omitted, time: .shortened))" }
+        return "Connecting"
+    }
+
+    private var icon: String {
+        if isLoading { return "arrow.clockwise" }
+        if unavailableCount > 0 { return "exclamationmark.triangle.fill" }
+        if updatedAt != nil { return "checkmark.circle.fill" }
+        return "antenna.radiowaves.left.and.right"
+    }
+
+    private var colour: Color {
+        unavailableCount > 0 ? .orange : Color.xertSteel
+    }
+
+    var body: some View {
+        Label(label, systemImage: icon)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(colour)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
+            .background(colour.opacity(0.12))
+            .clipShape(Capsule())
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel(
+                isLoading
+                    ? "Refreshing Command Centre data"
+                    : unavailableCount > 0
+                        ? "Partial Command Centre data, \(unavailableCount) services unavailable"
+                        : updatedAt.map { "Command Centre data updated at \($0.formatted(date: .omitted, time: .shortened))" }
+                            ?? "Connecting Command Centre data"
+            )
+    }
+}
+
+private struct AdminQuickToolButton: View {
+    let title: String
+    let detail: String
+    let icon: String
+    var isEnabled = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.xertSteel.opacity(isEnabled ? 0.14 : 0.07))
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(isEnabled ? Color.xertSteel : Color.xertPale.opacity(0.35))
+                }
+                .frame(width: 44, height: 44)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isEnabled ? Color.xertOffWhite : Color.xertPale.opacity(0.45))
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(isEnabled ? Color.xertPale.opacity(0.62) : Color.orange.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(isEnabled ? Color.xertSteel : Color.xertPale.opacity(0.25))
+            }
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .xertCardStyle()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel("\(title). \(detail)")
+        .accessibilityHint(isEnabled ? "Opens this owner tool" : "Retry Command Centre data to enable this tool")
     }
 }
 
@@ -5301,17 +6018,48 @@ private struct AdminOperationalDataWarning: View {
 
 private struct AdminRefreshDataWarning: View {
     let unavailableSources: [String]
+    let cachedSources: Set<String>
     let isRetrying: Bool
     let onRetry: () -> Void
+    @State private var showingDetails = false
+
+    private var retainedSourceCount: Int {
+        unavailableSources.filter(cachedSources.contains).count
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
-                Text("Some data is temporarily unavailable: \(unavailableSources.joined(separator: ", ")). Available sections still work and keep their last loaded data.")
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(unavailableSources.count) data service\(unavailableSources.count == 1 ? "" : "s") need\(unavailableSources.count == 1 ? "s" : "") attention")
+                        .font(.subheadline.weight(.bold))
+                    Text(retainedSourceCount > 0
+                        ? "\(retainedSourceCount) area\(retainedSourceCount == 1 ? " is" : "s are") showing the last loaded snapshot. Other available tools still work."
+                        : "Unavailable totals are hidden so they cannot be mistaken for zero. Other available tools still work.")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
             }
+
+            DisclosureGroup(isExpanded: $showingDetails) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(unavailableSources, id: \.self) { source in
+                        Label(
+                            source.capitalized + (cachedSources.contains(source) ? " — last snapshot" : " — unavailable"),
+                            systemImage: cachedSources.contains(source) ? "clock.badge.exclamationmark" : "xmark.circle"
+                        )
+                    }
+                }
+                .font(.caption)
+                .padding(.top, 8)
+            } label: {
+                Text(showingDetails ? "Hide affected areas" : "Show affected areas")
+                    .font(.caption.weight(.bold))
+            }
+            .tint(Color.orange)
 
             Button(action: onRetry) {
                 HStack(spacing: 8) {
@@ -5340,6 +6088,10 @@ private struct AdminRefreshDataWarning: View {
                 .stroke(Color.orange.opacity(0.42), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(
+            "Command Centre data is partial. Unavailable: \(unavailableSources.joined(separator: ", ")). "
+                + "\(retainedSourceCount) areas retain their last snapshot."
+        )
     }
 }
 
@@ -5347,17 +6099,20 @@ private struct AdminMetricTile: View {
     let title: String
     let value: Int
     let icon: String
+    let dataState: AdminDashboardDataState
     let action: (() -> Void)?
 
     init(
         title: String,
         value: Int,
         icon: String,
+        dataState: AdminDashboardDataState = .current,
         action: (() -> Void)? = nil
     ) {
         self.title = title
         self.value = value
         self.icon = icon
+        self.dataState = dataState
         self.action = action
     }
 
@@ -5378,29 +6133,77 @@ private struct AdminMetricTile: View {
             HStack {
                 Image(systemName: icon).foregroundStyle(Color.xertSteel)
                 Spacer()
+                dataStateBadge
                 if action != nil {
                     Image(systemName: "arrow.up.right")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color.xertSteel.opacity(0.6))
                 }
             }
-            Text(value.formatted()).xertDisplay(30).foregroundStyle(Color.xertOffWhite)
+            metricValue
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .xertCardStyle()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(accessibleValue), \(dataState.accessibilityDescription)")
+    }
+
+    @ViewBuilder
+    private var metricValue: some View {
+        switch dataState {
+        case .loading:
+            ProgressView()
+                .tint(Color.xertSteel)
+                .frame(height: 36, alignment: .leading)
+        case .unavailable:
+            Text("—").xertDisplay(30).foregroundStyle(Color.xertPale.opacity(0.5))
+        case .current, .stale:
+            Text(value.formatted()).xertDisplay(30).foregroundStyle(Color.xertOffWhite)
+        }
+    }
+
+    @ViewBuilder
+    private var dataStateBadge: some View {
+        switch dataState {
+        case .stale:
+            Text("LAST")
+                .font(.system(size: 8, weight: .black))
+                .foregroundStyle(.orange)
+        case .unavailable:
+            Image(systemName: "wifi.exclamationmark")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+        case .loading, .current:
+            EmptyView()
+        }
+    }
+
+    private var accessibleValue: String {
+        switch dataState {
+        case .loading: return "loading"
+        case .unavailable: return "value unavailable"
+        case .current, .stale: return value.formatted()
+        }
     }
 }
 
 private struct AdminMoneyTile: View {
     let title: String
     let cents: Int
+    let dataState: AdminDashboardDataState
     let action: (() -> Void)?
 
-    init(title: String, cents: Int, action: (() -> Void)? = nil) {
+    init(
+        title: String,
+        cents: Int,
+        dataState: AdminDashboardDataState = .current,
+        action: (() -> Void)? = nil
+    ) {
         self.title = title
         self.cents = cents
+        self.dataState = dataState
         self.action = action
     }
 
@@ -5421,19 +6224,58 @@ private struct AdminMoneyTile: View {
             HStack {
                 Image(systemName: "dollarsign.circle").foregroundStyle(Color.xertSteel)
                 Spacer()
+                if dataState == .stale {
+                    Text("LAST")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.orange)
+                } else if dataState == .unavailable {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
                 if action != nil {
                     Image(systemName: "arrow.up.right")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color.xertSteel.opacity(0.6))
                 }
             }
-            Text((Double(cents) / 100).formatted(.currency(code: "AUD")))
-                .font(.title3.weight(.bold)).foregroundStyle(Color.xertOffWhite).lineLimit(1).minimumScaleFactor(0.7)
+            moneyValue
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .xertCardStyle()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(accessibleValue), \(dataState.accessibilityDescription)")
+    }
+
+    @ViewBuilder
+    private var moneyValue: some View {
+        switch dataState {
+        case .loading:
+            ProgressView()
+                .tint(Color.xertSteel)
+                .frame(height: 28, alignment: .leading)
+        case .unavailable:
+            Text("—")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.xertPale.opacity(0.5))
+        case .current, .stale:
+            Text((Double(cents) / 100).formatted(.currency(code: "AUD")))
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.xertOffWhite)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
+
+    private var accessibleValue: String {
+        switch dataState {
+        case .loading: return "loading"
+        case .unavailable: return "value unavailable"
+        case .current, .stale:
+            return (Double(cents) / 100).formatted(.currency(code: "AUD"))
+        }
     }
 }
 

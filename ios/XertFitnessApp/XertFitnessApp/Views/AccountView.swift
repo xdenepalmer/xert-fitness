@@ -9,6 +9,7 @@ struct AccountView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
+    @AppStorage(XertHapticPreference.preferenceKey) private var hapticFeedbackEnabled = true
     @State private var email = ""
     @State private var password = ""
     @State private var passwordConfirmation = ""
@@ -27,10 +28,21 @@ struct AccountView: View {
     @State private var showingDeleteConfirmation = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
     @State private var handledRouteSequence: UInt = 0
+    @State private var isSubmittingAuthentication = false
     @FocusState private var focusedProfileField: ProfileField?
+    @FocusState private var focusedAuthField: AuthField?
+    @FocusState private var focusedSecurityField: SecurityField?
 
     private enum ProfileField {
         case fullName, phone
+    }
+
+    private enum AuthField {
+        case fullName, phone, email, password, passwordConfirmation
+    }
+
+    private enum SecurityField {
+        case newPassword, passwordConfirmation
     }
 
     private enum ScrollTarget: Hashable {
@@ -70,6 +82,14 @@ struct AccountView: View {
                 .listStyle(.plain)
                 .navigationTitle("Account")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .tabBar)
+                .scrollDismissesKeyboard(.interactively)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button(keyboardToolbarTitle, action: performKeyboardToolbarAction)
+                    }
+                }
                 .refreshable {
                     await store.refresh()
                 }
@@ -81,7 +101,12 @@ struct AccountView: View {
                 .onChange(of: routeSequence) { _ in
                     focusRoute(using: proxy)
                 }
-                .onChange(of: store.isSignedIn) { _ in
+                .onChange(of: store.isSignedIn) { isSignedIn in
+                    if isSignedIn {
+                        focusedAuthField = nil
+                        password = ""
+                        passwordConfirmation = ""
+                    }
                     focusRoute(using: proxy)
                 }
                 .onChange(of: store.isLoading) { _ in
@@ -177,15 +202,16 @@ struct AccountView: View {
         }
 
         membershipSection
+        activeBookingSections(timeline: timeline)
+        privateSessionHistorySection
+        purchaseHistorySection
+        reminderSettingsSection
         accountDetailsSection
         accountSecuritySection
-        reminderSettingsSection
+        bookingHistorySection(timeline: timeline)
+        legalSection
         signOutSection
         accountControlSection
-        legalSection
-        purchaseHistorySection
-        privateSessionHistorySection
-        bookingSections(timeline: timeline)
     }
 
     private var membershipSection: some View {
@@ -293,11 +319,30 @@ struct AccountView: View {
                 .disabled(store.isUpdatingReminderPreference)
             }
 
-            Text("Member notices arrive when staff publish an update. Class reminders stay on this device and follow your selected lead time.")
+            Toggle("Haptic feedback", isOn: $hapticFeedbackEnabled)
+                .tint(.xertSteel)
+                .accessibilityHint("Adds subtle touch feedback to important XERT actions")
+                .onChange(of: hapticFeedbackEnabled) { enabled in
+                    XertHapticPreference.setEnabled(enabled)
+                    if enabled { XertHaptics.play(.lightImpact) }
+                }
+
+            if store.isUpdatingMemberPush || store.isUpdatingReminderPreference {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.xertSteel)
+                    Text("Saving preferences…")
+                        .foregroundStyle(Color.xertMuted)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
+            Text("Member notices arrive when staff publish an update. Class reminders stay on this device. Haptic feedback adds subtle confirmation without sound.")
                 .font(.footnote)
                 .foregroundStyle(Color.xertMuted)
         } header: {
-            Text("Notifications").xertEyebrow()
+            Text("App Preferences").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
     }
@@ -315,6 +360,7 @@ struct AccountView: View {
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
                 .focused($focusedProfileField, equals: .phone)
+                .submitLabel(.done)
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
             Button {
@@ -354,28 +400,20 @@ struct AccountView: View {
         Section {
             SecureField("New password", text: $newPassword)
                 .textContentType(.newPassword)
+                .focused($focusedSecurityField, equals: .newPassword)
                 .submitLabel(.next)
+                .onSubmit { focusedSecurityField = .passwordConfirmation }
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
             SecureField("Confirm new password", text: $newPasswordConfirmation)
                 .textContentType(.newPassword)
+                .focused($focusedSecurityField, equals: .passwordConfirmation)
                 .submitLabel(.done)
+                .onSubmit { submitPasswordUpdate() }
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
 
-            Button {
-                Task {
-                    let updated = await store.updatePassword(
-                        password: newPassword,
-                        confirmation: newPasswordConfirmation
-                    )
-                    didUpdatePassword = updated
-                    if updated {
-                        newPassword = ""
-                        newPasswordConfirmation = ""
-                    }
-                }
-            } label: {
+            Button(action: submitPasswordUpdate) {
                 HStack {
                     Text(store.isUpdatingPassword ? "Updating..." : "Update Password")
                         .font(.subheadline.weight(.semibold))
@@ -418,6 +456,24 @@ struct AccountView: View {
             Text("Account Security").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    private func submitPasswordUpdate() {
+        guard !store.isUpdatingPassword,
+              !newPassword.isEmpty,
+              !newPasswordConfirmation.isEmpty else { return }
+        focusedSecurityField = nil
+        Task {
+            let updated = await store.updatePassword(
+                password: newPassword,
+                confirmation: newPasswordConfirmation
+            )
+            didUpdatePassword = updated
+            if updated {
+                newPassword = ""
+                newPasswordConfirmation = ""
+            }
+        }
     }
 
     private var signOutSection: some View {
@@ -563,7 +619,7 @@ struct AccountView: View {
     }
 
     @ViewBuilder
-    private func bookingSections(timeline: BookingTimeline) -> some View {
+    private func activeBookingSections(timeline: BookingTimeline) -> some View {
         if store.bookings.isEmpty {
             Section {
                 if store.isLoading {
@@ -598,19 +654,23 @@ struct AccountView: View {
                 .id(timeline.pending.isEmpty ? ScrollTarget.bookings : ScrollTarget.upcoming)
                 .listRowBackground(Color.xertInk)
             }
-            if !timeline.history.isEmpty {
-                Section {
-                    bookingRows(timeline.history)
-                } header: {
-                    Text("Booking History").xertEyebrow()
-                }
-                .id(
-                    timeline.pending.isEmpty && timeline.upcoming.isEmpty
-                        ? ScrollTarget.bookings
-                        : ScrollTarget.history
-                )
-                .listRowBackground(Color.xertInk)
+        }
+    }
+
+    @ViewBuilder
+    private func bookingHistorySection(timeline: BookingTimeline) -> some View {
+        if !timeline.history.isEmpty {
+            Section {
+                bookingRows(timeline.history)
+            } header: {
+                Text("Booking History").xertEyebrow()
             }
+            .id(
+                timeline.pending.isEmpty && timeline.upcoming.isEmpty
+                    ? ScrollTarget.bookings
+                    : ScrollTarget.history
+            )
+            .listRowBackground(Color.xertInk)
         }
     }
 
@@ -688,10 +748,16 @@ struct AccountView: View {
         Section {
             Button(isCreatingAccount ? "Already have an account?" : "Create a member account") {
                 isCreatingAccount.toggle()
+                password = ""
                 passwordConfirmation = ""
                 acceptedAccountTerms = false
+                Task { @MainActor in
+                    await Task.yield()
+                    focusedAuthField = isCreatingAccount ? .fullName : .email
+                }
             }
             .buttonStyle(.xertGhost)
+            .disabled(isSubmittingAuthentication)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             .listRowSeparator(.hidden)
@@ -764,11 +830,14 @@ struct AccountView: View {
             if isCreatingAccount {
                 TextField("Full name", text: $fullName)
                     .textContentType(.name)
+                    .focused($focusedAuthField, equals: .fullName)
                     .submitLabel(.next)
+                    .onSubmit { focusedAuthField = .phone }
                     .xertAccountField()
                 TextField("Mobile number (optional)", text: $phone)
                     .textContentType(.telephoneNumber)
                     .keyboardType(.phonePad)
+                    .focused($focusedAuthField, equals: .phone)
                     .submitLabel(.next)
                     .xertAccountField()
             }
@@ -776,14 +845,29 @@ struct AccountView: View {
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
+                .focused($focusedAuthField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedAuthField = .password }
                 .onChange(of: email) { _ in passwordResetSent = false }
                 .xertAccountField()
             SecureField("Password", text: $password)
                 .textContentType(isCreatingAccount ? .newPassword : .password)
+                .focused($focusedAuthField, equals: .password)
+                .submitLabel(isCreatingAccount ? .next : .go)
+                .onSubmit {
+                    if isCreatingAccount {
+                        focusedAuthField = .passwordConfirmation
+                    } else {
+                        submitAuthentication()
+                    }
+                }
                 .xertAccountField()
             if isCreatingAccount {
                 SecureField("Confirm password", text: $passwordConfirmation)
                     .textContentType(.newPassword)
+                    .focused($focusedAuthField, equals: .passwordConfirmation)
+                    .submitLabel(.go)
+                    .onSubmit { submitAuthentication() }
                     .xertAccountField()
             }
         }
@@ -810,27 +894,22 @@ struct AccountView: View {
     }
 
     private var primaryAuthButton: some View {
-        Button {
-            Task {
-                if isCreatingAccount {
-                    await store.signUp(
-                        fullName: fullName,
-                        email: email,
-                        phone: phone,
-                        password: password,
-                        confirmation: passwordConfirmation,
-                        acceptedTerms: acceptedAccountTerms
-                    )
-                } else {
-                    await store.signIn(email: email, password: password)
+        Button(action: submitAuthentication) {
+            HStack(spacing: 10) {
+                Text(authenticationActionTitle)
+                Spacer(minLength: 8)
+                if isSubmittingAuthentication {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.xertNavy)
+                        .accessibilityHidden(true)
                 }
             }
-        } label: {
-            Text(isCreatingAccount ? "Create Account" : "Sign In")
         }
         .buttonStyle(.xertPrimary)
         .disabled(authActionDisabled)
         .opacity(authActionDisabled ? 0.55 : 1)
+        .accessibilityValue(isSubmittingAuthentication ? "In progress" : "")
     }
 
     private var forgotPasswordControls: some View {
@@ -864,13 +943,57 @@ struct AccountView: View {
 
     // MARK: - Shared helpers
 
+    private var keyboardToolbarTitle: String {
+        focusedAuthField == .phone ? "Next" : "Done"
+    }
+
+    private func performKeyboardToolbarAction() {
+        if focusedAuthField == .phone {
+            focusedAuthField = .email
+            return
+        }
+        focusedProfileField = nil
+        focusedAuthField = nil
+        focusedSecurityField = nil
+    }
+
+    private var authenticationActionTitle: String {
+        if isSubmittingAuthentication {
+            return isCreatingAccount ? "Creating Account…" : "Signing In…"
+        }
+        return isCreatingAccount ? "Create Account" : "Sign In"
+    }
+
+    private func submitAuthentication() {
+        guard !authActionDisabled else { return }
+        let creatingAccount = isCreatingAccount
+        focusedAuthField = nil
+        isSubmittingAuthentication = true
+        Task {
+            defer { isSubmittingAuthentication = false }
+            if creatingAccount {
+                await store.signUp(
+                    fullName: fullName,
+                    email: email,
+                    phone: phone,
+                    password: password,
+                    confirmation: passwordConfirmation,
+                    acceptedTerms: acceptedAccountTerms
+                )
+            } else {
+                await store.signIn(email: email, password: password)
+            }
+        }
+    }
+
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
     }
 
     private var authActionDisabled: Bool {
-        if store.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if store.isLoading || isSubmittingAuthentication
+            || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return true
         }
         if !isCreatingAccount { return password.count < 6 }
@@ -898,22 +1021,57 @@ struct AccountView: View {
                     Button {
                         Task { await addBookingToCalendar(booking) }
                     } label: {
-                        Label(
-                            addingBookingToCalendarID == booking.id ? "Adding to calendar..." : "Add to Calendar",
-                            systemImage: "calendar.badge.plus"
-                        )
+                        HStack(spacing: 10) {
+                            Label(
+                                addingBookingToCalendarID == booking.id ? "Adding to calendar…" : "Add to Calendar",
+                                systemImage: "calendar.badge.plus"
+                            )
+                            Spacer(minLength: 8)
+                            if addingBookingToCalendarID == booking.id {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
                     .disabled(addingBookingToCalendarID != nil)
+                    .accessibilityValue(addingBookingToCalendarID == booking.id ? "In progress" : "")
                 }
                 if booking.isCancellable() {
-                    Button(booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking", role: .destructive) {
+                    let isCancelling = store.cancellingBookingID == booking.id
+                    let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
+                    Button(role: .destructive) {
                         bookingToCancel = booking
+                    } label: {
+                        HStack(spacing: 10) {
+                            Label(
+                                isCancelling
+                                    ? (booking.status == "waitlisted" ? "Leaving waitlist…" : "Cancelling booking…")
+                                    : (booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking"),
+                                systemImage: "xmark.circle"
+                            )
+                            Spacer(minLength: 8)
+                            if isCancelling {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .disabled(store.cancellingBookingID == booking.id)
+                    .buttonStyle(.borderless)
+                    .disabled(hasBookingMutation)
+                    .accessibilityValue(
+                        isCancelling ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
+                    )
                 }
             }
             .padding(.vertical, 4)
+            .accessibilityElement(children: .contain)
             .id(booking.id)
         }
     }

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
@@ -98,6 +97,8 @@ struct RootView: View {
             openMemberRoute(route, source: .handoff)
         }
         .onAppear {
+            XertHaptics.prepare(.selection)
+            XertHaptics.prepare(.lightImpact)
             reloadPinnedMemberRoutes()
             reloadMemberWorkspaceOrder()
             restoreMemberWorkspaceWhenReady()
@@ -131,7 +132,7 @@ struct RootView: View {
             consumePendingQuickActionRoute()
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertRefreshAnnouncements)) { _ in
-            Task { await store.refresh() }
+            Task { await store.refreshAnnouncements() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertCheckoutCallback)) { notification in
             guard let url = notification.object as? URL else { return }
@@ -146,24 +147,28 @@ struct RootView: View {
                 routeSequence: navigation.routeSequence,
                 onNavigate: navigate
             )
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
                 .tag(XertPrimaryDestination.home)
 
             BookingView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
                 .tag(XertPrimaryDestination.booking)
 
             EventsView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
                 .tag(XertPrimaryDestination.events)
 
             ExploreView(onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Explore", systemImage: "safari")
                 }
@@ -175,6 +180,7 @@ struct RootView: View {
                 pendingNavigationTitle: pendingProtectedNavigation?.route.navigationTitle,
                 onCancelPendingNavigation: cancelPendingProtectedNavigation
             )
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
                 }
@@ -437,7 +443,7 @@ struct RootView: View {
     private func handleReselection(_ destination: XertPrimaryDestination) {
         claimMemberNavigation()
         navigation.reselect(destination)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        XertHaptics.play(.lightImpact)
         Task { await store.refresh() }
     }
 
@@ -449,21 +455,21 @@ struct RootView: View {
         ) else { return }
         claimMemberNavigation()
         cancelPendingProtectedNavigation()
-        UISelectionFeedbackGenerator().selectionChanged()
+        XertHaptics.play(.selection)
     }
 
     private func returnToPreviousNavigationDestination() {
         guard navigation.returnToPrevious() else { return }
         claimMemberNavigation()
         cancelPendingProtectedNavigation()
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        XertHaptics.play(.softImpact)
     }
 
     private func returnToNextNavigationDestination() {
         guard navigation.returnToNext() else { return }
         claimMemberNavigation()
         cancelPendingProtectedNavigation()
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        XertHaptics.play(.softImpact)
     }
 
     private func executeNavigationCommand(_ command: XertNavigationCommand) {
@@ -481,7 +487,7 @@ struct RootView: View {
             ) else { return }
             claimMemberNavigation()
             cancelPendingProtectedNavigation()
-            UISelectionFeedbackGenerator().selectionChanged()
+            XertHaptics.play(.selection)
         case .activity(let activity):
             executeNavigationActivity(activity)
         case .previous:
@@ -535,13 +541,13 @@ struct RootView: View {
     private func saveMemberWorkspaceOrder(_ destinations: [XertPrimaryDestination]) {
         guard let userID = store.authSession?.user?.id else { return }
         memberWorkspaceOrder = XertWorkspaceOrderStore.save(destinations, for: userID)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        XertHaptics.play(.success)
     }
 
     private func togglePinnedMemberRoute(_ route: XertMemberRoute) {
         guard let userID = store.authSession?.user?.id else { return }
         pinnedMemberRoutes = XertPinnedWorkspaceStore.toggle(route, for: userID)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        XertHaptics.play(.lightImpact)
     }
 
     private func completeCommandDismissal() {
@@ -602,9 +608,9 @@ struct RootView: View {
             Task { await unlockApp() }
         } else if store.hasBootstrapped, !store.isLoading {
             Task {
-                await store.refresh()
+                await store.refreshIfStale()
                 await store.reconcilePendingCheckout()
-                await refreshOwnerNavigationPulseNow(force: true)
+                await refreshOwnerNavigationPulseNow()
             }
         }
     }
@@ -641,12 +647,14 @@ struct RootView: View {
             )
             guard scenePhase == .active, store.isSignedIn, privacyLockEnabled else { return }
             isPrivacyUnlocked = true
+            XertHaptics.play(.success)
             if store.hasBootstrapped, !store.isLoading {
-                await store.refresh()
+                await store.refreshIfStale()
                 await store.reconcilePendingCheckout()
             }
         } catch {
             privacyLockError = error.localizedDescription
+            XertHaptics.play(.error)
         }
     }
 
@@ -792,7 +800,7 @@ struct RootView: View {
     private func consumePendingAnnouncementRoute() {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
         if openMemberRoute(.notices(pendingAnnouncementID), source: .pushNotification) {
-            Task { await store.refresh() }
+            Task { await store.refreshAnnouncements() }
         }
     }
 
@@ -979,7 +987,7 @@ private struct XertNavigationRail: View {
                 onReselect(item)
                 return
             }
-            UISelectionFeedbackGenerator().selectionChanged()
+            XertHaptics.play(.selection)
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { selection = item }
         } label: {
             VStack(spacing: 6) {
@@ -1399,7 +1407,7 @@ private struct XertNavigationDock: View {
                 onReselect(item)
                 return
             }
-            UISelectionFeedbackGenerator().selectionChanged()
+            XertHaptics.play(.selection)
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { selection = item }
         } label: {
             VStack(spacing: 4) {
@@ -1734,6 +1742,7 @@ private struct XertPinnedWorkspaceBadge: View {
 private struct XertNavigationCommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var query = ""
     @State private var showingWorkspaceOrderEditor = false
     @FocusState private var searchFocused: Bool
@@ -1849,7 +1858,7 @@ private struct XertNavigationCommandPalette: View {
                 proxy.scrollTo(current.id, anchor: .center)
             }
             .onChange(of: workspace.currentRoute.destination) { destination in
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                     proxy.scrollTo(destination, anchor: .center)
                 }
             }
@@ -2052,6 +2061,7 @@ private struct XertNavigationCommandPalette: View {
 
 private struct XertWorkspaceOrderEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var destinations: [XertPrimaryDestination]
     let onSave: ([XertPrimaryDestination]) -> Void
 
@@ -2119,7 +2129,9 @@ private struct XertWorkspaceOrderEditor: View {
     }
 
     private func resetDestinations() {
-        withAnimation { destinations = XertPrimaryDestination.dockOrder }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            destinations = XertPrimaryDestination.dockOrder
+        }
     }
 }
 

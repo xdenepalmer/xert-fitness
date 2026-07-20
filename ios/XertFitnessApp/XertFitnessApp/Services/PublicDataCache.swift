@@ -57,6 +57,20 @@ enum PublicDataCache {
         defaults.set(data, forKey: key)
     }
 
+    /// JSON coding and UserDefaults persistence scale with the published class
+    /// and event catalogues, so live app callers keep that work off MainActor.
+    static func loadAsync(now: Date = Date()) async -> PublicDataSnapshot? {
+        await Task.detached(priority: .utility) {
+            load(now: now)
+        }.value
+    }
+
+    static func saveAsync(_ snapshot: PublicDataSnapshot) async {
+        await Task.detached(priority: .utility) {
+            save(snapshot)
+        }.value
+    }
+
     static func clear(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: key)
     }

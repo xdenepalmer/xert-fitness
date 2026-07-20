@@ -47,10 +47,14 @@ final class XertStore: ObservableObject {
     @Published private(set) var unavailableDataSources: Set<XertDataSource> = []
 
     private let api = XertAPI()
+    private var bootstrapTask: Task<Void, Never>?
     private var sessionRefreshTask: Task<AuthSession, Error>?
     private var dataRefreshTask: Task<Void, Never>?
+    private var lastRefreshCompletedAt: Date?
+    private var requiresBootstrapRefresh = false
     private var dataRefreshVersion = MemberStateVersion()
     private var memberStateVersion = MemberStateVersion()
+    private var announcementStateVersion = MemberStateVersion()
     private static let memberDataSources: Set<XertDataSource> = [
         .credits, .bookings, .orders, .profile, .eventGoals, .privateSessions, .announcements,
     ]
@@ -82,15 +86,30 @@ final class XertStore: ObservableObject {
             case .trainer: try await api.submitTrainerInterest(TrainerInterestSubmission(draft))
             case .partner: try await api.submitPartnerInterest(PartnerInterestSubmission(draft))
             }
+            XertHaptics.play(.success)
             return true
         } catch {
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
 
     func bootstrap() async {
-        if let cached = PublicDataCache.load() {
+        if let bootstrapTask {
+            await bootstrapTask.value
+            return
+        }
+        guard !hasBootstrapped else { return }
+
+        let task = Task { await performBootstrap() }
+        bootstrapTask = task
+        await task.value
+        bootstrapTask = nil
+    }
+
+    private func performBootstrap() async {
+        if let cached = await PublicDataCache.loadAsync() {
             products = cached.products
             sessions = cached.sessions
             events = cached.events
@@ -100,7 +119,10 @@ final class XertStore: ObservableObject {
             isUsingCachedPublicData = true
         }
         authSession = KeychainStore.loadSession()
-        await refresh()
+        repeat {
+            requiresBootstrapRefresh = false
+            await refresh()
+        } while requiresBootstrapRefresh || lastRefreshCompletedAt == nil
         hasBootstrapped = true
         await reconcilePendingCheckout()
         await restoreMemberPushRegistration()
@@ -115,17 +137,42 @@ final class XertStore: ObservableObject {
         dataRefreshVersion.invalidate()
         let refreshVersion = dataRefreshVersion.snapshot
         let memberVersion = memberStateVersion.snapshot
+        let announcementVersion = announcementStateVersion.snapshot
         let task = Task {
-            await performRefresh(refreshVersion: refreshVersion, memberVersion: memberVersion)
+            await performRefresh(
+                refreshVersion: refreshVersion,
+                memberVersion: memberVersion,
+                announcementVersion: announcementVersion
+            )
         }
         dataRefreshTask = task
         await task.value
         if dataRefreshVersion.isCurrent(refreshVersion) {
             dataRefreshTask = nil
+            lastRefreshCompletedAt = Date()
         }
     }
 
-    private func performRefresh(refreshVersion: Int, memberVersion: Int) async {
+    /// Lifecycle activation can fire several times around system sheets,
+    /// authentication and checkout. Keep explicit pull-to-refresh immediate,
+    /// while coalescing automatic foreground refreshes that would otherwise
+    /// repeat the complete public and member request fan-out.
+    func refreshIfStale(
+        maximumAge: TimeInterval = 45,
+        now: Date = Date()
+    ) async {
+        if let lastRefreshCompletedAt {
+            let age = now.timeIntervalSince(lastRefreshCompletedAt)
+            if age >= 0, age < max(10, maximumAge) { return }
+        }
+        await refresh()
+    }
+
+    private func performRefresh(
+        refreshVersion: Int,
+        memberVersion: Int,
+        announcementVersion: Int
+    ) async {
         isLoading = true
         errorMessage = nil
         unavailableDataSources = []
@@ -217,7 +264,8 @@ final class XertStore: ObservableObject {
                 coaches: coaches,
                 siteContent: siteContent
             )
-            PublicDataCache.save(snapshot)
+            await PublicDataCache.saveAsync(snapshot)
+            guard canApplyRefresh(refreshVersion) else { return }
             publicDataUpdatedAt = snapshot.savedAt
             isUsingCachedPublicData = false
         } else {
@@ -327,10 +375,14 @@ final class XertStore: ObservableObject {
             do {
                 let loadedAnnouncements = try await announcementRequest
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
-                announcements = loadedAnnouncements
+                if announcementStateVersion.isCurrent(announcementVersion) {
+                    announcements = loadedAnnouncements
+                }
             } catch {
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
-                unavailableDataSources.insert(.announcements)
+                if announcementStateVersion.isCurrent(announcementVersion) {
+                    unavailableDataSources.insert(.announcements)
+                }
                 // Announcements are additive and cannot make bookings or credits unavailable.
             }
 
@@ -376,6 +428,7 @@ final class XertStore: ObservableObject {
             )
             guard let session = try await api.signUp(request) else {
                 errorMessage = "Check your email to confirm your XERT account, then sign in."
+                XertHaptics.play(.success)
                 return
             }
             replaceAuthSession(with: session)
@@ -383,8 +436,10 @@ final class XertStore: ObservableObject {
             await refresh()
             await reconcilePendingCheckout()
             await restoreMemberPushRegistration()
+            XertHaptics.play(.success)
         } catch {
             errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
         }
     }
 
@@ -393,6 +448,7 @@ final class XertStore: ObservableObject {
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedEmail.isEmpty else {
             errorMessage = "Enter your email address to request a password reset."
+            XertHaptics.play(.warning)
             return false
         }
 
@@ -400,9 +456,11 @@ final class XertStore: ObservableObject {
         defer { isRequestingPasswordReset = false }
         do {
             try await api.requestPasswordReset(email: normalizedEmail)
+            XertHaptics.play(.success)
             return true
         } catch {
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
@@ -412,6 +470,7 @@ final class XertStore: ObservableObject {
         let pushToken = PushDeviceTokenStore.load()
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
+        XertHaptics.play(.softImpact)
         Task {
             await ClassReminderScheduler.shared.clearAll()
             if let currentSession {
@@ -432,14 +491,17 @@ final class XertStore: ObservableObject {
             replaceAuthSession(with: nil)
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
+            XertHaptics.play(.success)
             return true
         } catch {
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
 
     func book(_ session: ClassSession) async {
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
         defer {
@@ -449,14 +511,18 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             try await api.book(session: authSession, classSessionID: session.id)
             guard canApplyMemberState(memberVersion, session: authSession) else { return }
-            await refresh()
+            cancelInFlightFullRefresh()
+            XertHaptics.play(.success)
+            await refreshBookingState(memberVersion: memberVersion, session: authSession)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
+            XertHaptics.play(.error)
         }
     }
 
     func joinWaitlist(_ session: ClassSession) async {
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
         defer {
@@ -466,14 +532,18 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             try await api.joinWaitlist(session: authSession, classSessionID: session.id)
             guard canApplyMemberState(memberVersion, session: authSession) else { return }
-            await refresh()
+            cancelInFlightFullRefresh()
+            XertHaptics.play(.success)
+            await refreshBookingState(memberVersion: memberVersion, session: authSession)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
+            XertHaptics.play(.error)
         }
     }
 
     func cancel(_ booking: BookingItem) async {
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         cancellingBookingID = booking.id
         defer {
@@ -483,12 +553,87 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             try await api.cancelBooking(session: authSession, bookingID: booking.id)
             guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            cancelInFlightFullRefresh()
             await ClassReminderScheduler.shared.remove(bookingID: booking.booking_id)
-            await refresh()
+            guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            XertHaptics.play(.success)
+            await refreshBookingState(memberVersion: memberVersion, session: authSession)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
+            XertHaptics.play(.error)
         }
+    }
+
+    /// Booking mutations only invalidate the timetable, credits and bookings.
+    /// Refreshing these three sources keeps the UI authoritative while avoiding
+    /// the ten unrelated requests in a complete app refresh.
+    private func refreshBookingState(memberVersion: Int, session: AuthSession) async {
+        async let sessionRequest = api.sessions()
+        async let creditRequest = api.credits(session: session)
+        async let bookingRequest = api.bookings(session: session)
+
+        var creditsLoaded = false
+        var bookingsLoaded = false
+
+        do {
+            let loadedSessions = try await sessionRequest
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            sessions = loadedSessions
+            unavailableDataSources.remove(.sessions)
+        } catch {
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            unavailableDataSources.insert(.sessions)
+        }
+
+        do {
+            let loadedCredits = try await creditRequest
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            credits = loadedCredits
+            unavailableDataSources.remove(.credits)
+            creditsLoaded = true
+        } catch {
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            unavailableDataSources.insert(.credits)
+        }
+
+        do {
+            let loadedBookings = try await bookingRequest
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            bookings = loadedBookings
+            unavailableDataSources.remove(.bookings)
+            if classRemindersEnabled {
+                await ClassReminderScheduler.shared.sync(
+                    bookings: loadedBookings,
+                    leadTime: classReminderLeadTime
+                )
+            } else {
+                await ClassReminderScheduler.shared.clearAll()
+            }
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            bookingsLoaded = true
+        } catch {
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            unavailableDataSources.insert(.bookings)
+        }
+
+        if creditsLoaded && bookingsLoaded {
+            memberDataUpdatedAt = Date()
+            if unavailableDataSources.isDisjoint(with: Self.memberDataSources) {
+                isUsingStaleMemberData = false
+            }
+        } else {
+            isUsingStaleMemberData = memberDataUpdatedAt != nil
+        }
+    }
+
+    private func cancelInFlightFullRefresh() {
+        guard dataRefreshTask != nil else { return }
+        if !hasBootstrapped { requiresBootstrapRefresh = true }
+        dataRefreshVersion.invalidate()
+        dataRefreshTask?.cancel()
+        dataRefreshTask = nil
+        isLoading = false
     }
 
     func setClassRemindersEnabled(_ enabled: Bool) async {
@@ -505,6 +650,7 @@ final class XertStore: ObservableObject {
                 ClassReminderPreference.setEnabled(false)
                 classRemindersEnabled = false
                 errorMessage = "Notifications are disabled for XERT. Allow them in Settings to enable class reminders."
+                XertHaptics.play(.warning)
                 return
             }
             ClassReminderPreference.setEnabled(true)
@@ -514,6 +660,7 @@ final class XertStore: ObservableObject {
             classRemindersEnabled = false
             await ClassReminderScheduler.shared.clearAll()
         }
+        XertHaptics.play(.lightImpact)
     }
 
     func setClassReminderLeadTime(_ leadTime: ClassReminderLeadTime) async {
@@ -526,12 +673,14 @@ final class XertStore: ObservableObject {
         if classRemindersEnabled {
             await ClassReminderScheduler.shared.sync(bookings: bookings, leadTime: leadTime)
         }
+        XertHaptics.play(.selection)
     }
 
     func setMemberPushEnabled(_ enabled: Bool) async {
         guard enabled != memberPushEnabled, !isUpdatingMemberPush else { return }
         guard isSignedIn else {
             errorMessage = "Sign in to enable member notice notifications."
+            XertHaptics.play(.warning)
             return
         }
         isUpdatingMemberPush = true
@@ -542,6 +691,7 @@ final class XertStore: ObservableObject {
                 MemberPushPreference.setEnabled(false)
                 memberPushEnabled = false
                 errorMessage = "Notifications are disabled for XERT. Allow them in Settings to receive member notices."
+                XertHaptics.play(.warning)
                 return
             }
             MemberPushPreference.setEnabled(true)
@@ -553,6 +703,7 @@ final class XertStore: ObservableObject {
                     try await api.updatePushSubscription(session: session, token: token, enabled: false)
                 } catch {
                     present(error)
+                    XertHaptics.play(.error)
                     return
                 }
             }
@@ -560,6 +711,7 @@ final class XertStore: ObservableObject {
             memberPushEnabled = false
             UIApplication.shared.unregisterForRemoteNotifications()
         }
+        XertHaptics.play(.lightImpact)
     }
 
     func syncMemberPushToken(_ token: DevicePushToken? = nil) async {
@@ -576,6 +728,7 @@ final class XertStore: ObservableObject {
         MemberPushPreference.setEnabled(false)
         memberPushEnabled = false
         errorMessage = "This device could not register for XERT notifications. Check notification settings and try again."
+        XertHaptics.play(.error)
     }
 
     private func restoreMemberPushRegistration() async {
@@ -589,8 +742,10 @@ final class XertStore: ObservableObject {
     }
 
     func toggleEventGoal(_ event: EventItem) async {
+        guard updatingEventGoalID == nil else { return }
         guard let eventID = event.id else {
             errorMessage = "This calendar event will be available to track once it is loaded in XERT."
+            XertHaptics.play(.warning)
             return
         }
 
@@ -610,9 +765,33 @@ final class XertStore: ObservableObject {
                 guard canApplyMemberState(memberVersion, session: authSession) else { return }
                 eventGoalIDs.insert(eventID)
             }
+            XertHaptics.play(.lightImpact)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             present(error)
+            XertHaptics.play(.error)
+        }
+    }
+
+    /// Silent pushes only invalidate the private notice inbox. Refresh that
+    /// bounded source instead of waking the entire catalogue and account graph.
+    func refreshAnnouncements() async {
+        guard authSession != nil else { return }
+        let memberVersion = memberStateVersion.snapshot
+        announcementStateVersion.invalidate()
+        let announcementVersion = announcementStateVersion.snapshot
+        do {
+            let memberSession = try await validAuthSession()
+            let loadedAnnouncements = try await api.announcements(session: memberSession)
+            guard canApplyMemberState(memberVersion, session: memberSession),
+                  announcementStateVersion.isCurrent(announcementVersion) else { return }
+            announcements = loadedAnnouncements
+            unavailableDataSources.remove(.announcements)
+        } catch {
+            guard memberStateVersion.isCurrent(memberVersion),
+                  announcementStateVersion.isCurrent(announcementVersion) else { return }
+            unavailableDataSources.insert(.announcements)
+            isUsingStaleMemberData = memberDataUpdatedAt != nil
         }
     }
 
@@ -630,9 +809,11 @@ final class XertStore: ObservableObject {
             try await api.dismissAnnouncement(session: memberSession, announcementID: announcement.id)
             guard canApplyMemberState(memberVersion, session: memberSession) else { return }
             announcements.removeAll { $0.id == announcement.id }
+            XertHaptics.play(.softImpact)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             present(error)
+            XertHaptics.play(.error)
         }
     }
 
@@ -640,6 +821,7 @@ final class XertStore: ObservableObject {
         let memberVersion = memberStateVersion.snapshot
         guard sessionPackPaymentsEnabled else {
             errorMessage = "Session pack purchases are paused while XERT completes its payment launch checks."
+            XertHaptics.play(.warning)
             return nil
         }
         do {
@@ -660,10 +842,12 @@ final class XertStore: ObservableObject {
                 checkoutSessionID: checkout.checkout_session_id
             ))
             isCheckoutConfirmationPending = true
+            XertHaptics.play(.mediumImpact)
             return checkout.url
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return nil }
             errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
             return nil
         }
     }
@@ -719,8 +903,12 @@ final class XertStore: ObservableObject {
                     isCheckoutConfirmationPending = false
                     if settlement == .failed {
                         errorMessage = "Checkout did not complete. No session pack was activated."
+                        XertHaptics.play(.warning)
                     } else if settlement == .refunded {
                         errorMessage = "This payment was refunded. No purchased credits remain on the order."
+                        XertHaptics.play(.warning)
+                    } else {
+                        XertHaptics.play(.success)
                     }
                     return
                 }
@@ -764,10 +952,12 @@ final class XertStore: ObservableObject {
                 privateSessionRequests = loadedRequests
                 unavailableDataSources.remove(.privateSessions)
             }
+            XertHaptics.play(.success)
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
@@ -779,9 +969,11 @@ final class XertStore: ObservableObject {
         defer { isRequestingClassInterest = false }
         do {
             try await api.requestClassInterest(request)
+            XertHaptics.play(.success)
             return true
         } catch {
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
@@ -806,10 +998,12 @@ final class XertStore: ObservableObject {
             )
             guard canApplyMemberState(memberVersion, session: authSession) else { return false }
             profile = loadedProfile
+            XertHaptics.play(.success)
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
@@ -828,10 +1022,12 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             try await api.updatePassword(session: authSession, request: update)
             guard canApplyMemberState(memberVersion, session: authSession) else { return false }
+            XertHaptics.play(.success)
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
             present(error)
+            XertHaptics.play(.error)
             return false
         }
     }
@@ -848,8 +1044,10 @@ final class XertStore: ObservableObject {
             await refresh()
             await reconcilePendingCheckout()
             await restoreMemberPushRegistration()
+            XertHaptics.play(.success)
         } catch {
             errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
         }
     }
 
@@ -901,6 +1099,7 @@ final class XertStore: ObservableObject {
 
     private func replaceAuthSession(with session: AuthSession?) {
         memberStateVersion.invalidate()
+        announcementStateVersion.invalidate()
         dataRefreshVersion.invalidate()
         dataRefreshTask?.cancel()
         dataRefreshTask = nil

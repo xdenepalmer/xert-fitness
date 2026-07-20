@@ -57,6 +57,7 @@ struct HomeView: View {
                 }
                 .xertScreenBackground()
                 .toolbar(.hidden, for: .navigationBar)
+                .toolbar(.hidden, for: .tabBar)
                 .sheet(isPresented: $showingNoticeCenter) {
                     MemberNoticeCenter(
                         announcements: store.announcements,
@@ -373,7 +374,9 @@ struct HomeView: View {
 
 private struct NativeHomeHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var photoIndex = 0
+    @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
     let content: AdminSiteContentData
     let isSignedIn: Bool
     let noticeCount: Int
@@ -528,11 +531,14 @@ private struct NativeHomeHero: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSProcessInfoPowerStateDidChange)) { _ in
+            isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
         .task(id: carouselTaskID) {
             if photoIndex >= heroPhotoURLs.count { photoIndex = 0 }
-            guard heroPhotoURLs.count > 1, !reduceMotion else { return }
+            guard heroPhotoURLs.count > 1, allowsAutomaticCarousel else { return }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, allowsAutomaticCarousel else { return }
             withAnimation(.easeInOut(duration: 1.2)) {
                 photoIndex = (photoIndex + 1) % heroPhotoURLs.count
             }
@@ -542,9 +548,12 @@ private struct NativeHomeHero: View {
     @ViewBuilder
     private var heroImage: some View {
         if let url = currentHeroPhotoURL {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { fallbackImage }
+            XertRemoteImage(
+                url: url,
+                maximumPointDimension: 760,
+                contentMode: .fill
+            ) {
+                fallbackImage
             }
             .id(url)
             .transition(.opacity)
@@ -568,7 +577,11 @@ private struct NativeHomeHero: View {
     }
 
     private var carouselTaskID: String {
-        "\(reduceMotion)-\(photoIndex)-" + heroPhotoURLs.map(\.absoluteString).joined(separator: "|")
+        "\(allowsAutomaticCarousel)-\(photoIndex)-" + heroPhotoURLs.map(\.absoluteString).joined(separator: "|")
+    }
+
+    private var allowsAutomaticCarousel: Bool {
+        scenePhase == .active && !reduceMotion && !isLowPowerModeEnabled
     }
 
     private var fallbackImage: some View {

@@ -104,7 +104,7 @@ test('native order fixtures preserve the purchased credit terms', () => {
 test('cold launches and later foregrounds resume a pending native purchase', () => {
   assert.match(store, /hasBootstrapped = true\s+await reconcilePendingCheckout\(\)/);
   assert.match(store, /try KeychainStore\.saveSession\(session\)\s+await refresh\(\)\s+await reconcilePendingCheckout\(\)/);
-  assert.match(root, /await store\.refresh\(\)\s+await store\.reconcilePendingCheckout\(\)/);
+  assert.match(root, /await store\.refreshIfStale\(\)\s+await store\.reconcilePendingCheckout\(\)/);
   assert.match(root, /store\.cancelPendingCheckout\(\)/);
   assert.match(booking, /await store\.reconcilePendingCheckout\(\)/);
 });

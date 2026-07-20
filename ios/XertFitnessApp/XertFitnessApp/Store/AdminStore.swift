@@ -76,8 +76,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var hasCompletedRefresh = false
     @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
     @Published private(set) var refreshUnavailableSources: [String] = []
+    @Published private(set) var loadedSources: Set<String> = []
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
@@ -96,13 +98,28 @@ final class AdminStore: ObservableObject {
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
     var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
     var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
+    var unavailableHealthSourceCount: Int {
+        guard hasCompletedRefresh else { return 0 }
+        Self.healthSources.filter {
+            !loadedSources.contains($0) || refreshUnavailableSources.contains($0)
+        }.count
+    }
     var healthIssues: Int {
-        missingSchemaCapabilities.count
-            + (commerceHealth?.ready == false ? 1 : 0)
-            + (pushHealth?.ready == false ? 1 : 0)
+        unavailableHealthSourceCount
+            + (healthSourceIsCurrent("schema health") ? missingSchemaCapabilities.count : 0)
+            + (healthSourceIsCurrent("Stripe health") && commerceHealth?.ready == false ? 1 : 0)
+            + (healthSourceIsCurrent("push health") && pushHealth?.ready == false ? 1 : 0)
     }
     var hasHealthSnapshot: Bool {
-        !schemaCapabilities.isEmpty && commerceHealth != nil && pushHealth != nil
+        unavailableHealthSourceCount == 0
+            && commerceHealth != nil
+            && pushHealth != nil
+    }
+
+    private static let healthSources: Set<String> = ["schema health", "Stripe health", "push health"]
+
+    private func healthSourceIsCurrent(_ source: String) -> Bool {
+        loadedSources.contains(source) && !refreshUnavailableSources.contains(source)
     }
 
     func refresh(session: AuthSession) async {
@@ -133,52 +150,56 @@ final class AdminStore: ObservableObject {
 
         var failures: [String] = []
         var queueFailures: [String] = []
+        var successfulSources = Set<String>()
         var loadedSource = false
-        do { dailyOperations = try await operationsRequest; loadedSource = true }
+        do { dailyOperations = try await operationsRequest; successfulSources.insert("today's classes"); loadedSource = true }
         catch { failures.append("today's classes"); queueFailures.append("today's classes") }
-        do { waitlist = try await waitlistRequest; loadedSource = true }
+        do { waitlist = try await waitlistRequest; successfulSources.insert("waitlists"); loadedSource = true }
         catch { failures.append("waitlists"); queueFailures.append("waitlists") }
-        do { followUps = try await followUpRequest; loadedSource = true }
+        do { followUps = try await followUpRequest; successfulSources.insert("retention"); loadedSource = true }
         catch { failures.append("retention"); queueFailures.append("retention") }
-        do { members = try await memberRequest; loadedSource = true }
+        do { members = try await memberRequest; successfulSources.insert("members"); loadedSource = true }
         catch { failures.append("members") }
-        do { orders = try await orderRequest; loadedSource = true }
+        do { orders = try await orderRequest; successfulSources.insert("orders"); loadedSource = true }
         catch { failures.append("orders"); queueFailures.append("orders") }
-        do { settings = try await settingsRequest; loadedSource = true }
+        do { settings = try await settingsRequest; successfulSources.insert("platform controls"); loadedSource = true }
         catch { failures.append("platform controls") }
-        do { ptRequests = try await ptRequest; loadedSource = true }
+        do { ptRequests = try await ptRequest; successfulSources.insert("PT requests"); loadedSource = true }
         catch { failures.append("PT requests"); queueFailures.append("PT requests") }
-        do { announcements = try await announcementRequest; loadedSource = true }
+        do { announcements = try await announcementRequest; successfulSources.insert("member notices"); loadedSource = true }
         catch { failures.append("member notices") }
-        do { schemaCapabilities = try await capabilitiesRequest; loadedSource = true }
+        do { schemaCapabilities = try await capabilitiesRequest; successfulSources.insert("schema health"); loadedSource = true }
         catch { failures.append("schema health") }
-        do { commerceHealth = try await commerceRequest; loadedSource = true }
+        do { commerceHealth = try await commerceRequest; successfulSources.insert("Stripe health"); loadedSource = true }
         catch { failures.append("Stripe health") }
-        do { pushHealth = try await pushRequest; loadedSource = true }
+        do { pushHealth = try await pushRequest; successfulSources.insert("push health"); loadedSource = true }
         catch { failures.append("push health") }
-        do { auditEntries = try await auditRequest; loadedSource = true }
+        do { auditEntries = try await auditRequest; successfulSources.insert("admin audit"); loadedSource = true }
         catch { failures.append("admin audit") }
-        do { products = try await productRequest; loadedSource = true }
+        do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
         catch { failures.append("session packs") }
-        do { events = try await eventRequest; loadedSource = true }
+        do { events = try await eventRequest; successfulSources.insert("event calendar"); loadedSource = true }
         catch { failures.append("event calendar") }
         do {
             eventGoalCounts = Dictionary(grouping: try await eventGoalsRequest, by: \.event_id).mapValues(\.count)
+            successfulSources.insert("event training groups")
             loadedSource = true
         } catch { failures.append("event training groups") }
-        do { coaches = try await coachRequest; loadedSource = true }
+        do { coaches = try await coachRequest; successfulSources.insert("team directory"); loadedSource = true }
         catch { failures.append("team directory") }
-        do { classSessions = try await classSessionRequest; loadedSource = true }
+        do { classSessions = try await classSessionRequest; successfulSources.insert("full timetable"); loadedSource = true }
         catch { failures.append("full timetable") }
-        do { availabilityBlocks = try await availabilityRequest; loadedSource = true }
+        do { availabilityBlocks = try await availabilityRequest; successfulSources.insert("availability"); loadedSource = true }
         catch { failures.append("availability") }
-        do { blackoutPeriods = try await blackoutRequest; loadedSource = true }
+        do { blackoutPeriods = try await blackoutRequest; successfulSources.insert("blackouts"); loadedSource = true }
         catch { failures.append("blackouts") }
 
         if loadedSource {
             lastUpdatedAt = Date()
         }
+        loadedSources.formUnion(successfulSources)
         refreshUnavailableSources = failures
+        hasCompletedRefresh = true
         operationalQueueState = queueFailures.isEmpty
             ? .ready
             : .partial(unavailableSources: queueFailures)
@@ -257,6 +278,8 @@ final class AdminStore: ObservableObject {
                 let refreshedProducts = try await api.adminProducts(session: session)
                 guard refreshedProducts.contains(where: { $0.id == productID }) else { return }
                 products = refreshedProducts
+                loadedSources.insert("session packs")
+                refreshUnavailableSources.removeAll { $0 == "session packs" }
             case .order, .event:
                 break
             }
@@ -694,16 +717,32 @@ final class AdminStore: ObservableObject {
 
     func saveSettings(session: AuthSession, draft: AdminPlatformSettings) async -> Bool {
         guard !isSavingSettings else { return false }
+        guard loadedSources.contains("platform controls"),
+              !refreshUnavailableSources.contains("platform controls"),
+              !isLoading else {
+            errorMessage = "Refresh Platform Controls before saving live settings."
+            return false
+        }
         isSavingSettings = true
         defer { isSavingSettings = false }
         do {
             let activatingPayments = draft.payments_enabled && settings?.payments_enabled != true
             if activatingPayments {
                 settings = try await api.adminActivatePlatformPayments(session: session, settings: draft)
-                commerceHealth = try? await api.adminCommerceHealth(session: session)
+                do {
+                    commerceHealth = try await api.adminCommerceHealth(session: session)
+                    loadedSources.insert("Stripe health")
+                    refreshUnavailableSources.removeAll { $0 == "Stripe health" }
+                } catch {
+                    if !refreshUnavailableSources.contains("Stripe health") {
+                        refreshUnavailableSources.append("Stripe health")
+                    }
+                }
             } else {
                 settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
             }
+            loadedSources.insert("platform controls")
+            refreshUnavailableSources.removeAll { $0 == "platform controls" }
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -796,6 +835,12 @@ final class AdminStore: ObservableObject {
 
     func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {
         guard savingProductID == nil else { return false }
+        guard loadedSources.contains("session packs"),
+              !refreshUnavailableSources.contains("session packs"),
+              !isLoading else {
+            errorMessage = "Refresh Session Packs & Pricing before saving catalogue changes."
+            return false
+        }
         savingProductID = product?.id ?? UUID()
         defer { savingProductID = nil }
         do {
@@ -809,6 +854,7 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
             do {
                 products = try await api.adminProducts(session: session)
+                loadedSources.insert("session packs")
                 refreshUnavailableSources.removeAll(where: { $0 == "session packs" })
             } catch {
                 if !refreshUnavailableSources.contains("session packs") {
