@@ -109,6 +109,7 @@ struct EventsView: View {
               .listStyle(.plain)
               .navigationTitle("Events")
               .navigationBarTitleDisplayMode(.inline)
+              .toolbar(.hidden, for: .tabBar)
               .refreshable { await store.refresh() }
               .onAppear { focusRoute(using: proxy) }
               .onChange(of: routeSequence) { _ in focusRoute(using: proxy) }

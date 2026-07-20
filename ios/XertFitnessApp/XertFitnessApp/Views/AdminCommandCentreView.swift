@@ -264,6 +264,7 @@ struct AdminCommandCentreView: View {
                 .toolbar { ownerWorkspaceToolbar }
                 .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
                     workspaceDestination(workspace, session: session)
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar { ownerWorkspaceToolbar }
                 }
         }
@@ -332,6 +333,7 @@ struct AdminCommandCentreView: View {
             NavigationStack {
                 workspaceDestination(currentWorkspace, session: session)
                     .id(currentWorkspace)
+                    .navigationBarTitleDisplayMode(.inline)
                     .toolbar { workspaceSwitcherToolbar }
             }
         }

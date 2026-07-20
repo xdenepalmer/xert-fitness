@@ -146,24 +146,28 @@ struct RootView: View {
                 routeSequence: navigation.routeSequence,
                 onNavigate: navigate
             )
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
                 .tag(XertPrimaryDestination.home)
 
             BookingView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
                 }
                 .tag(XertPrimaryDestination.booking)
 
             EventsView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Events", systemImage: "trophy")
                 }
                 .tag(XertPrimaryDestination.events)
 
             ExploreView(onNavigate: navigate)
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Explore", systemImage: "safari")
                 }
@@ -175,6 +179,7 @@ struct RootView: View {
                 pendingNavigationTitle: pendingProtectedNavigation?.route.navigationTitle,
                 onCancelPendingNavigation: cancelPendingProtectedNavigation
             )
+                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Account", systemImage: "person.crop.circle")
                 }

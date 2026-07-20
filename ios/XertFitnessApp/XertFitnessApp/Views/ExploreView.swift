@@ -84,6 +84,7 @@ struct ExploreView: View {
             .listStyle(.plain)
             .navigationTitle("Explore")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)
             .refreshable { await store.refresh() }
         }
     }

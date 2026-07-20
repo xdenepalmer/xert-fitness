@@ -70,6 +70,7 @@ struct AccountView: View {
                 .listStyle(.plain)
                 .navigationTitle("Account")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .tabBar)
                 .refreshable {
                     await store.refresh()
                 }

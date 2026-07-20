@@ -54,6 +54,7 @@ struct BookingView: View {
                 .listStyle(.plain)
                 .navigationTitle("Book")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .tabBar)
                 .searchable(
                     text: $classSearch,
                     placement: .navigationBarDrawer(displayMode: .always),

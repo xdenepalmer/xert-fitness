@@ -57,6 +57,7 @@ struct HomeView: View {
                 }
                 .xertScreenBackground()
                 .toolbar(.hidden, for: .navigationBar)
+                .toolbar(.hidden, for: .tabBar)
                 .sheet(isPresented: $showingNoticeCenter) {
                     MemberNoticeCenter(
                         announcements: store.announcements,
