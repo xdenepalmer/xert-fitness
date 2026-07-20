@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test test",
+    "test": "node scripts/run-tests.mjs",
     "check:stripe": "node --env-file-if-exists=.env.local scripts/check-stripe-readiness.mjs",
     "stripe:test:check": "node --env-file-if-exists=.env.local scripts/stripe-launch-preflight.mjs --mode=test --expect-payments=paused",
     "stripe:test:verify": "node --env-file-if-exists=.env.local scripts/stripe-launch-preflight.mjs --mode=test --expect-payments=enabled",
