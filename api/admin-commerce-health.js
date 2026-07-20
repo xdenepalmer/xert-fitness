@@ -25,6 +25,7 @@ const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
 export const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
@@ -104,6 +105,94 @@ export function normalizePaymentActivationRequest(body) {
       announcement_banner_enabled: settings.announcement_banner_enabled,
     },
   };
+}
+
+export function normalizeProductActivationRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.action !== 'activate_product') {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+  const productId = String(body.product_id || '').trim();
+  const expectedUpdatedAt = String(body.expected_updated_at || '').trim();
+  const product = body.product;
+  if (
+    !UUID_PATTERN.test(productId)
+    || expectedUpdatedAt.length > 64
+    || !Number.isFinite(Date.parse(expectedUpdatedAt))
+    || !product
+    || typeof product !== 'object'
+    || Array.isArray(product)
+  ) {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+
+  const name = String(product.name || '').trim();
+  const description = product.description == null ? null : String(product.description).trim() || null;
+  const priceCents = Number(product.price_cents);
+  const sessionsCount = Number(product.sessions_count);
+  const validityDays = Number(product.validity_days);
+  const sortOrder = Number(product.sort_order);
+  const currency = String(product.currency || '').trim().toLowerCase();
+  const stripePriceId = String(product.stripe_price_id || '').trim();
+  if (
+    !name || name.length > 120
+    || (description?.length || 0) > 2_000
+    || !Number.isSafeInteger(priceCents) || priceCents < 1 || priceCents > POSTGRES_INTEGER_MAX
+    || !Number.isSafeInteger(sessionsCount) || sessionsCount < 1 || sessionsCount > 1_000
+    || !Number.isSafeInteger(validityDays) || validityDays < 1 || validityDays > 3_650
+    || !Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 10_000
+    || !/^[a-z]{3}$/.test(currency)
+    || !/^price_[A-Za-z0-9]+$/.test(stripePriceId)
+    || typeof product.featured !== 'boolean'
+    || product.active !== true
+  ) {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+
+  return {
+    productId,
+    expectedUpdatedAt,
+    updates: {
+      name,
+      description,
+      price_cents: priceCents,
+      currency,
+      sessions_count: sessionsCount,
+      validity_days: validityDays,
+      stripe_price_id: stripePriceId,
+      featured: product.featured,
+      active: true,
+      sort_order: sortOrder,
+    },
+  };
+}
+
+export async function activateVerifiedProduct({ admin, stripe, activation, expectedLivemode, actorId }) {
+  const { data: current, error: currentError } = await admin
+    .from('products')
+    .select('*')
+    .eq('id', activation.productId)
+    .maybeSingle();
+  if (currentError) throw new Error('PRODUCT_ACTIVATION_LOOKUP_FAILED');
+  if (!current) throw new Error('PRODUCT_NOT_FOUND');
+  if (current.updated_at !== activation.expectedUpdatedAt) throw new Error('PRODUCT_STALE');
+
+  const candidate = { ...current, ...activation.updates };
+  const stripePrice = await stripe.prices.retrieve(candidate.stripe_price_id);
+  assertCheckoutProduct(candidate);
+  assertStripePriceMatchesProduct(candidate, stripePrice, expectedLivemode);
+
+  const { data, error: saveError } = await admin.rpc('admin_apply_verified_product', {
+    p_product_id: activation.productId,
+    p_product: activation.updates,
+    p_expected_updated_at: activation.expectedUpdatedAt,
+    p_actor_id: actorId,
+  });
+  if (saveError && /PRODUCT_STALE/i.test(saveError.message || '')) throw new Error('PRODUCT_STALE');
+  if (saveError && /PRODUCT_NOT_FOUND/i.test(saveError.message || '')) throw new Error('PRODUCT_NOT_FOUND');
+  if (saveError) throw new Error('PRODUCT_ACTIVATION_SAVE_FAILED');
+  const saved = Array.isArray(data) ? data[0] : data;
+  if (!saved) throw new Error('PRODUCT_STALE');
+  return saved;
 }
 
 export function normalizeStripeReviewResolutionRequest(body) {
@@ -548,6 +637,7 @@ export default async function handler(request, response) {
   if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
 
   let activation;
+  let productActivation;
   let reviewResolution;
   let webhookRetry;
   if (request.method === 'POST') {
@@ -557,6 +647,8 @@ export default async function handler(request, response) {
         reviewResolution = normalizeStripeReviewResolutionRequest(body);
       } else if (body?.action === 'retry_stripe_event') {
         webhookRetry = normalizeStripeRetryRequest(body);
+      } else if (body?.action === 'activate_product') {
+        productActivation = normalizeProductActivationRequest(body);
       } else {
         activation = normalizePaymentActivationRequest(body);
       }
@@ -566,6 +658,9 @@ export default async function handler(request, response) {
       }
       if (error.message === 'INVALID_STRIPE_RETRY') {
         return json({ error: 'Stripe event retry request is invalid.' }, 400);
+      }
+      if (error.message === 'INVALID_PRODUCT_ACTIVATION') {
+        return json({ error: 'Session pack activation details are invalid.' }, 400);
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
@@ -621,6 +716,51 @@ export default async function handler(request, response) {
         return json({ error: 'This Stripe incident changed. Refresh Operations Health before retrying.' }, 409);
       }
       return json({ error: 'Stripe could not safely retry this event. The incident remains unresolved.' }, 500);
+    }
+  }
+
+  if (productActivation) {
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') {
+      return json({ error: 'Stripe verification is unavailable. The pack remains private.' }, 503);
+    }
+    try {
+      const saved = await activateVerifiedProduct({
+        admin,
+        stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+        activation: productActivation,
+        expectedLivemode: stripeMode === 'live',
+        actorId: user.id,
+      });
+      console.info('Session pack activated after Stripe verification.', {
+        requestId: trace.requestId,
+        productId: saved.id,
+        actorId: user.id,
+      });
+      return json(saved);
+    } catch (error) {
+      if (error.message === 'PRODUCT_NOT_FOUND') {
+        return json({ error: 'This session pack no longer exists. Refresh the catalogue.' }, 404);
+      }
+      if (error.message === 'PRODUCT_STALE') {
+        return json({ error: 'This session pack changed since you opened it. Refresh and review it before activating.' }, 409);
+      }
+      if (
+        error.message === 'Stripe price does not match the product configuration.'
+        || error.message === 'Product configuration is invalid.'
+        || error?.type === 'StripeInvalidRequestError'
+        || error?.code === 'resource_missing'
+      ) {
+        return json({
+          error: 'Stripe could not verify this Price against the pack amount, currency, sessions, validity, identity and mode. The pack remains private.',
+        }, 409);
+      }
+      console.error('Session pack activation failed.', {
+        requestId: trace.requestId,
+        productId: productActivation.productId,
+        code: String(error?.code || error?.message || 'PRODUCT_ACTIVATION_FAILED'),
+      });
+      return json({ error: 'The pack could not be activated safely. It remains private.' }, 500);
     }
   }
 

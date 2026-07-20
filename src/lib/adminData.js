@@ -1144,12 +1144,46 @@ export async function getAllProducts() {
 }
 
 export async function createProduct(product) {
-  const { error } = await supabase.from('products').insert([product]);
-  if (error) throw new Error(error.message);
+  const { slug, ...draft } = product;
+  const created = await supabase.rpc('admin_create_product', {
+    p_slug: slug,
+    p_product: draft,
+  });
+  if (!created.error) return Array.isArray(created.data) ? created.data[0] : created.data;
+  if (/products_slug_key|duplicate key/i.test(created.error.message || '')) {
+    throw new Error('That permanent pack ID is already in use. Choose another one.');
+  }
+  const unavailable = ['42883', 'PGRST202'].includes(created.error.code)
+    || /admin_create_product.*(?:not found|schema cache|does not exist)/i.test(created.error.message || '');
+  if (unavailable) throw new Error('Install the commercial terms guard migration before creating session packs.');
+  if (/INVALID_PRODUCT_PAYLOAD/i.test(created.error.message || '')) {
+    throw new Error('Check the pack name, description, price, currency, sessions, validity and display order.');
+  }
+  throw new Error(created.error.message);
 }
 
 export async function updateProduct(id, updates, expectedUpdatedAt) {
   if (!expectedUpdatedAt) throw new Error('Session pack version is missing. Refresh the admin view and try again.');
+  if (updates.active) {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+    const response = await fetch('/api/admin-commerce-health', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        action: 'activate_product',
+        product_id: id,
+        product: updates,
+        expected_updated_at: expectedUpdatedAt,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(apiErrorMessage(body, 'The pack could not be activated safely. It remains private.'));
+    return body;
+  }
   const guarded = await supabase.rpc('admin_update_product', {
     p_product_id: id,
     p_product: updates,
@@ -1164,7 +1198,16 @@ export async function updateProduct(id, updates, expectedUpdatedAt) {
       throw new Error('Session pack update was not applied because this pack changed since you opened it. Refresh the admin view and review the latest version.');
     }
     if (/STRIPE_PRICE_REFRESH_REQUIRED/i.test(guarded.error.message || '')) {
-      throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price or currency.');
+      throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price, currency, sessions or validity.');
+    }
+    if (/ACTIVE_PRODUCT_REQUIRES_STRIPE_PRICE/i.test(guarded.error.message || '')) {
+      throw new Error('Add a Stripe Price ID before making this pack active and purchasable.');
+    }
+    if (/PRODUCT_ACTIVATION_VERIFICATION_REQUIRED/i.test(guarded.error.message || '')) {
+      throw new Error('Stripe must verify this Price before the pack can become active. Save again from the current Command Centre.');
+    }
+    if (/INVALID_PRODUCT_PAYLOAD/i.test(guarded.error.message || '')) {
+      throw new Error('Check the pack name, description, price, currency, sessions, validity and display order.');
     }
     throw new Error(guarded.error.message);
   }

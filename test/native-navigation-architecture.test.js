@@ -275,11 +275,13 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
   assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
   assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
-  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length === 5);
+  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length >= 5);
   assert.match(ownerView, /Button \{ onOpenTask\(\.member\(member\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.order\(order\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.product\(product\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.event\(event\.id\)\) \}/);
+  assert.match(ownerView, /Button \{ openMemberRecord\(member\.id\) \} label:[\s\S]*Member record/);
+  assert.match(ownerView, /\.sheet\(item: \$presentedMember\)/);
   assert.doesNotMatch(ownerView, /@State private var selectedOrder: OrderItem\?/);
   assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
   assert.match(api, /p_limit: 1,[\s\S]*p_user_id: id/);

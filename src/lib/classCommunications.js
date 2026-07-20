@@ -17,6 +17,20 @@ function normalizePhone(value) {
   return dialable.length >= 8 ? { display: phone, dialable } : { display: '', dialable: '' };
 }
 
+function formatBrisbaneClassStart(date) {
+  const parts = new Intl.DateTimeFormat('en-AU', {
+    timeZone: 'Australia/Brisbane',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(date);
+  const value = type => parts.find(part => part.type === type)?.value || '';
+  return `${value('weekday')} ${value('day')} ${value('month')} at ${value('hour')}:${value('minute')} ${value('dayPeriod').toLowerCase()}`;
+}
+
 export function collectClassCancellationContacts(...bookingGroups) {
   const contacts = [];
   for (const booking of bookingGroups.flat()) {
@@ -55,14 +69,7 @@ export function buildClassCancellationMessage(session) {
   const title = clean(session?.title) || 'XERT class';
   const startDate = session?.start_time ? new Date(session.start_time) : null;
   const startsAt = startDate && !Number.isNaN(startDate.getTime())
-    ? new Intl.DateTimeFormat('en-AU', {
-        timeZone: 'Australia/Brisbane',
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        hour: 'numeric',
-        minute: '2-digit',
-      }).format(startDate)
+    ? formatBrisbaneClassStart(startDate)
     : 'the scheduled time';
 
   return {

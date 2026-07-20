@@ -975,7 +975,7 @@ enum AdminSchemaReadiness {
         "lead_pipeline_audit", "schedule_change_audit", "content_change_audit",
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
-        "catalog_optimistic_locking", "targeted_member_notices"
+        "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {
@@ -1008,6 +1008,11 @@ struct AdminProduct: Identifiable, Codable, Hashable {
     let updated_at: String
 
     var displayPrice: String { (Double(price_cents) / 100).formatted(.currency(code: currency.uppercased())) }
+    var displayPricePerSession: String {
+        guard sessions_count > 0 else { return displayPrice }
+        return (Double(price_cents) / 100 / Double(sessions_count))
+            .formatted(.currency(code: currency.uppercased()))
+    }
     var hasStableStripePriceID: Bool {
         guard let stripePriceID = stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
         return stripePriceID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) != nil
@@ -1015,6 +1020,9 @@ struct AdminProduct: Identifiable, Codable, Hashable {
 }
 
 struct AdminProductDraft: Equatable {
+    static let maximumPriceCents = Int(Int32.max)
+
+    var slug: String
     var name: String
     var description: String
     var price: String
@@ -1027,6 +1035,7 @@ struct AdminProductDraft: Equatable {
     var sortOrder: Int
 
     init(product: AdminProduct) {
+        slug = product.slug
         name = product.name
         description = product.description ?? ""
         price = String(format: "%.2f", Double(product.price_cents) / 100)
@@ -1037,6 +1046,77 @@ struct AdminProductDraft: Equatable {
         featured = product.featured
         active = product.active
         sortOrder = product.sort_order
+    }
+
+    init(suggestedSortOrder: Int = 0) {
+        slug = ""
+        name = ""
+        description = ""
+        price = ""
+        currency = "AUD"
+        sessions = 1
+        validityDays = 28
+        stripePriceID = ""
+        featured = false
+        active = false
+        sortOrder = suggestedSortOrder
+    }
+
+    var normalizedPriceCents: Int? {
+        let value = price.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: #"^\d+(?:[\.,]\d{1,2})?$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        let components = value.split(whereSeparator: { $0 == "." || $0 == "," })
+        guard let dollars = Int(components[0]), dollars <= Self.maximumPriceCents / 100 else { return nil }
+        let fraction = components.count == 2 ? String(components[1]) : ""
+        let cents = Int(fraction.padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0
+        let total = dollars * 100 + cents
+        return total > 0 && total <= Self.maximumPriceCents ? total : nil
+    }
+
+    func validationMessage(existingProduct: AdminProduct?) -> String? {
+        let normalizedSlug = slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if existingProduct == nil,
+           (normalizedSlug.count > 80 || normalizedSlug.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) == nil) {
+            return "Use a permanent ID made from lowercase letters, numbers and single hyphens."
+        }
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedName.isEmpty { return "Add a name for this session pack." }
+        if normalizedName.count > 120 { return "Keep the pack name to 120 characters or fewer." }
+        if description.trimmingCharacters(in: .whitespacesAndNewlines).count > 2_000 {
+            return "Keep the description to 2,000 characters or fewer."
+        }
+        guard normalizedPriceCents != nil else {
+            return "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        }
+        guard (1...1_000).contains(sessions) else { return "Sessions must be between 1 and 1,000." }
+        guard (1...3_650).contains(validityDays) else { return "Validity must be between 1 and 3,650 days." }
+        guard (0...10_000).contains(sortOrder) else { return "Display order must be between 0 and 10,000." }
+
+        let normalizedCurrency = currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalizedCurrency.range(of: #"^[a-z]{3}$"#, options: .regularExpression) != nil else {
+            return "Use a three-letter currency code such as AUD."
+        }
+        let normalizedStripeID = stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedStripeID.isEmpty,
+           normalizedStripeID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) == nil {
+            return "Stripe Price ID must begin with price_ and contain only letters and numbers."
+        }
+        if active && normalizedStripeID.isEmpty {
+            return "Add a Stripe Price ID before making this pack active and purchasable."
+        }
+        if let existingProduct,
+           let currentStripeID = existingProduct.stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !currentStripeID.isEmpty,
+           currentStripeID == normalizedStripeID,
+           (existingProduct.price_cents != normalizedPriceCents
+            || existingProduct.currency.lowercased() != normalizedCurrency
+            || existingProduct.sessions_count != sessions
+            || existingProduct.validity_days != validityDays) {
+            return "Clear or replace the Stripe Price ID before changing price, currency, sessions or validity."
+        }
+        return nil
     }
 }
 

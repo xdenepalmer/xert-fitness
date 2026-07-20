@@ -160,6 +160,8 @@ The Supabase schema is defined in:
   launch-setting and announcement actions from overwriting another administrator's work
 - `src/supabase/catalog_optimistic_locking_upgrade.sql` — adds version-aware coach,
   event and session-pack editing so concurrent administrators cannot overwrite newer catalogue work
+- `supabase/migrations/20260720000000_product_commercial_terms_guard.sql` — prevents an active pack
+  from losing its Stripe Price ID and requires a replacement Price when amount, currency, credits or validity change
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
@@ -183,6 +185,7 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
+`supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`. This sequence produces the
@@ -213,6 +216,7 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
+`supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`. The scripts are idempotent;

@@ -87,11 +87,39 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /issue\.slug == "activation-receipt"[\s\S]*onOpenWorkspace\(\.controls\)/);
   assert.match(view, /LIVE STRIPE READINESS/);
   assert.match(view, /liveBlockedProducts/);
-  assert.match(view, /This active pack blocks live Stripe checkout/);
-  assert.match(view, /stripePriceIDIsValid/);
+  assert.match(view, /Session Packs & Pricing/);
+  assert.match(ownerNavigation, /Session Packs & Pricing/);
+  assert.doesNotMatch(view, /Memberships & Pricing|Membership sales/);
+  assert.match(view, /Create session pack/);
+  assert.match(view, /AdminProductRow/);
+  assert.match(view, /dynamicTypeSize\.isAccessibilitySize/);
+  assert.match(view, /interactiveDismissDisabled\(isDirty \|\| isSaving\)/);
+  assert.match(view, /Discard unsaved pack changes/);
+  assert.match(view, /ToolbarItemGroup\(placement: \.keyboard\)/);
+  assert.match(view, /safeAreaInset\(edge: \.bottom/);
+  assert.match(view, /owner\.productEditor\.save/);
+  assert.match(view, /if !admin\.products\.contains\(where: \\.active\) \{ return 1 \}/);
+  assert.match(view, /pricingDataUnavailable[\s\S]*Session-pack data is unavailable/);
+  assert.match(view, /stripeHealthUnavailable[\s\S]*admin\.commerceHealth\?\.ready == true/);
+  assert.match(view, /AdminProductRow\(product: product, dataIsStale: pricingDataUnavailable\)/);
+  assert.match(view, /Malformed Price ID/);
+  assert.match(view, /Pricing data stale/);
+  const pricingView = view.slice(view.indexOf('private struct AdminProductsView'), view.indexOf('private struct AdminProductRow'));
+  assert.doesNotMatch(pricingView, /ToolbarItem\(placement: \.primaryAction\)/);
+  assert.match(adminModels, /func validationMessage\(existingProduct: AdminProduct\?\)/);
+  assert.match(adminModels, /normalizedPriceCents/);
   assert.match(api, /path: "admin_update_product"/);
+  assert.match(api, /func adminCreateProduct/);
+  assert.match(api, /path: "admin_create_product"/);
+  assert.match(api, /AdminProductCreateRequest\([\s\S]*p_slug:[\s\S]*p_product:/);
+  assert.match(api, /if draft\.active[\s\S]*path: "\/api\/admin-commerce-health"[\s\S]*action: "activate_product"/);
+  assert.match(api, /AdminProductActivationRequest[\s\S]*expected_updated_at/);
+  assert.doesNotMatch(api, /path: "\/rest\/v1\/products"\)[\s\S]{0,500}request\.httpMethod = "POST"/);
+  assert.match(api, /active: false/);
   assert.match(api, /p_expected_updated_at: product\.updated_at/);
   assert.match(adminStore, /func saveProduct/);
+  assert.match(adminStore, /mergeProduct\(savedProduct\)/);
+  assert.match(adminStore, /refreshUnavailableSources\.append\("session packs"\)/);
   assert.match(view, /AdminEventsView/);
   assert.match(view, /AdminEventEditor/);
   assert.match(view, /AdminEventRosterView/);
@@ -217,6 +245,23 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
   assert.match(view, /Button \{\s*openWorkspace\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
+});
+
+test('native owner cross-workspace actions preserve compact workflow context', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+
+  const retention = view.slice(view.indexOf('private struct AdminRetentionView'), view.indexOf('private struct AdminFinanceView'));
+  assert.match(retention, /@State private var presentedMember: AdminMemberSummary\?/);
+  assert.match(retention, /await admin\.resolveOwnerTask\(session: session, task: \.member\(memberID\)\)/);
+  assert.match(retention, /\.sheet\(item: \$presentedMember\)/);
+  assert.doesNotMatch(retention, /onOpenTask/);
+
+  const platform = view.slice(view.indexOf('private struct AdminPlatformView'), view.indexOf('private struct AdminCommunicationsView'));
+  assert.match(platform, /confirmingPricingNavigation/);
+  assert.match(platform, /Save changes and open/);
+  assert.match(platform, /Discard changes and open/);
+  assert.match(platform, /Keep editing/);
+  assert.match(platform, /openPricingAfterPaymentActivation/);
 });
 
 test('owner queue freshness and booking mutations keep dashboard counts trustworthy', async () => {

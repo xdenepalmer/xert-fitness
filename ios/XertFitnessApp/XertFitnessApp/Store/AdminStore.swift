@@ -794,18 +794,40 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func saveProduct(session: AuthSession, product: AdminProduct, draft: AdminProductDraft) async -> Bool {
+    func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {
         guard savingProductID == nil else { return false }
-        savingProductID = product.id
+        savingProductID = product?.id ?? UUID()
         defer { savingProductID = nil }
         do {
-            try await api.adminUpdateProduct(session: session, product: product, draft: draft)
-            products = try await api.adminProducts(session: session)
+            let savedProduct: AdminProduct
+            if let product {
+                savedProduct = try await api.adminUpdateProduct(session: session, product: product, draft: draft)
+            } else {
+                savedProduct = try await api.adminCreateProduct(session: session, draft: draft)
+            }
+            mergeProduct(savedProduct)
             lastUpdatedAt = Date()
+            do {
+                products = try await api.adminProducts(session: session)
+                refreshUnavailableSources.removeAll(where: { $0 == "session packs" })
+            } catch {
+                if !refreshUnavailableSources.contains("session packs") {
+                    refreshUnavailableSources.append("session packs")
+                }
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    private func mergeProduct(_ product: AdminProduct) {
+        products.removeAll(where: { $0.id == product.id })
+        products.append(product)
+        products.sort {
+            if $0.sort_order != $1.sort_order { return $0.sort_order < $1.sort_order }
+            return $0.slug.localizedCaseInsensitiveCompare($1.slug) == .orderedAscending
         }
     }
 

@@ -52,7 +52,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .team: return "Team Directory"
         case .finance: return "Finance"
         case .orders: return "Orders"
-        case .products: return "Session Packs"
+        case .products: return "Session Packs & Pricing"
         case .controls: return "Platform Controls"
         case .health: return "Operations Health"
         case .audit: return "Admin Audit"
@@ -139,7 +139,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .team: return ["coach", "practitioner", "trainer", "team"]
         case .finance: return ["revenue", "sales", "performance", "income", "Stripe"]
         case .orders: return ["payment", "order", "checkout", "recovery", "refund", "fulfilment", "Stripe"]
-        case .products: return ["pack", "price", "credit", "Stripe", "product"]
+        case .products: return ["session pack", "pack", "price", "credit", "Stripe", "product"]
         case .controls: return ["launch", "payment", "booking", "platform", "settings"]
         case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
         case .audit: return ["audit", "history", "change", "operator"]

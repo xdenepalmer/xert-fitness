@@ -39,6 +39,9 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   useEffect(() => () => onDirtyChange(product.id, false), [onDirtyChange, product.id]);
   let transitionError = '';
   const hasStripePrice = /^price_[A-Za-z0-9]+$/.test(form.stripe_price_id.trim());
+  const activationError = form.active && !hasStripePrice
+    ? 'Enter a valid Stripe Price ID before making this pack active and purchasable.'
+    : '';
   try {
     transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
   } catch {
@@ -53,11 +56,20 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
       toast({ title: 'Check this pack', description: error.message, variant: 'destructive' });
       return;
     }
+    if (activationError) {
+      toast({ title: 'Pack is not ready for sale', description: activationError, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      await updateProduct(product.id, updates, product.updated_at);
-      await onSaved();
-      toast({ title: 'Session pack saved', description: `${updates.name} is up to date.` });
+      const saved = await updateProduct(product.id, updates, product.updated_at);
+      onSaved(saved);
+      toast({
+        title: updates.active ? 'Session pack verified and saved' : 'Session pack saved',
+        description: updates.active
+          ? `${updates.name} matches Stripe and is ready for checkout.`
+          : `${updates.name} is up to date.`,
+      });
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -114,14 +126,16 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <label htmlFor={`product-${product.id}-stripe`} className={`${labelCls} mb-0`}>Stripe Price ID (required for live checkout)</label>
           {form.active && (
-            <span className={`inline-flex items-center gap-1 font-body text-xs ${hasStripePrice ? 'text-green-400' : 'text-xert-orange'}`}>
-              {hasStripePrice ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-              {hasStripePrice ? 'Live ready' : 'Blocks live checkout'}
+            <span className={`inline-flex items-center gap-1 font-body text-xs ${hasStripePrice && !dirty ? 'text-green-400' : 'text-xert-orange'}`}>
+              {hasStripePrice && !dirty ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {hasStripePrice && !dirty ? 'Verified on last save' : 'Verification required'}
             </span>
           )}
         </div>
         <input id={`product-${product.id}-stripe`} value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} />
         {transitionError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{transitionError}</p>}
+        {activationError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{activationError}</p>}
+        {hasStripePrice && <p className="mt-2 font-body text-xs text-xert-concrete/45">Saving an active pack verifies amount, currency, credits, validity, identity and Stripe mode. Checkout verifies them again before every charge.</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-6">
@@ -139,7 +153,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
           </span>
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
         </label>
-        <button onClick={handleSave} disabled={saving || !dirty || Boolean(transitionError)}
+        <button onClick={handleSave} disabled={saving || !dirty || Boolean(transitionError) || Boolean(activationError)}
           className="ml-auto px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -195,8 +209,8 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
     }
     setSaving(true);
     try {
-      await createProduct(product);
-      await onCreated();
+      const created = await createProduct(product);
+      onCreated(created);
       toast({ title: 'Session pack created', description: `${product.name} is ready in the catalogue.` });
       onClose();
     } catch (error) {
@@ -229,12 +243,10 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
             <div><label htmlFor="new-product-validity" className={labelCls}>Validity</label><input id="new-product-validity" type="number" min="1" value={form.validity_days} onChange={e => set('validity_days', e.target.value)} className={inputCls} /></div>
             <div><label htmlFor="new-product-order" className={labelCls}>Order</label><input id="new-product-order" type="number" min="0" value={form.sort_order} onChange={e => set('sort_order', e.target.value)} className={inputCls} /></div>
           </div>
-          <div><label htmlFor="new-product-stripe" className={labelCls}>Stripe Price ID (required for live checkout)</label><input id="new-product-stripe" value={form.stripe_price_id} onChange={e => set('stripe_price_id', e.target.value)} placeholder="price_..." className={inputCls} /></div>
           <div className="flex flex-wrap gap-5">
             <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.featured} onChange={e => set('featured', e.target.checked)} /> Featured</label>
-            <label className="flex min-h-11 items-center gap-2 font-body text-sm text-xert-concrete/80"><input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} /> Active and purchasable</label>
           </div>
-          <p className="font-body text-xs text-xert-concrete/45">New packs start inactive unless explicitly enabled. The slug becomes the permanent checkout identifier.</p>
+          <p className="font-body text-xs text-xert-concrete/45">New packs are always created as private drafts with no Stripe link. The slug becomes the permanent checkout identifier. Add and verify the Stripe Price ID before making the saved pack active.</p>
         </div>
         <footer className="flex gap-3 p-5 border-t border-xert-steel/20">
           <button type="button" onClick={requestClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
@@ -263,6 +275,26 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
   const [showCreate, setShowCreate] = useState(false);
   const [dirtyEditors, setDirtyEditors] = useState(() => new Set());
   const stripeReadiness = useMemo(() => productStripeReadiness(products), [products]);
+
+  const acceptSavedProduct = useCallback(saved => {
+    if (saved?.id) {
+      setProducts(current => {
+        const index = current.findIndex(product => product.id === saved.id);
+        if (index === -1) return [...current, saved].sort((left, right) => left.sort_order - right.sort_order);
+        const next = [...current];
+        next[index] = saved;
+        return next.sort((left, right) => left.sort_order - right.sort_order);
+      });
+      setLoadError('');
+    }
+    getAllProducts()
+      .then(setProducts)
+      .catch(error => toast({
+        title: 'Pack saved; refresh needed',
+        description: `The change is safe, but the catalogue could not refresh: ${error.message}`,
+        variant: 'destructive',
+      }));
+  }, []);
 
   const handleDirtyChange = useCallback((key, dirty) => {
     setDirtyEditors(current => {
@@ -301,11 +333,11 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 mb-2">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Session Packs</h2>
+        <h2 className="font-display text-lg text-xert-offwhite uppercase">Session Packs &amp; Pricing</h2>
         <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase">+ Add Pack</button>
       </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
-        Price changes apply to new purchases immediately. Existing credits are unaffected.
+        XERT currently sells one-off session packs rather than recurring subscriptions. Price and credit changes apply to new purchases only; existing credits keep their original terms.
       </p>
       {!loading && !loadError && (
         <div role="status" className={`mb-6 border-l-4 px-4 py-3 ${stripeReadiness.readyForLive ? 'border-green-500 bg-green-500/10' : 'border-xert-orange bg-xert-orange/10'}`}>
@@ -319,7 +351,7 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
                 {stripeReadiness.activeCount === 0
                   ? 'No active packs. Activate at least one pack and attach its live Stripe Price ID before launch.'
                   : stripeReadiness.readyForLive
-                    ? `All ${stripeReadiness.activeCount} active pack${stripeReadiness.activeCount === 1 ? '' : 's'} have stable Stripe Price IDs.`
+                    ? `All ${stripeReadiness.activeCount} active pack${stripeReadiness.activeCount === 1 ? '' : 's'} have linked Stripe Price IDs. Operations Health and checkout re-verify their full terms.`
                     : `${stripeReadiness.missingCount} of ${stripeReadiness.activeCount} active pack${stripeReadiness.activeCount === 1 ? '' : 's'} block live checkout: ${stripeReadiness.missingSlugs.join(', ')}.`}
               </p>
               {!stripeReadiness.readyForLive && stripeReadiness.activeCount > 0 && (
@@ -337,10 +369,10 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
         <div className="space-y-4">
           {products.length === 0
             ? <p className="font-body text-sm text-xert-concrete/60">No session packs have been configured.</p>
-            : products.map(p => <ProductCard key={`${p.id}:${p.updated_at || ''}`} product={p} onSaved={load} onDirtyChange={handleDirtyChange} />)}
+            : products.map(p => <ProductCard key={`${p.id}:${p.updated_at || ''}`} product={p} onSaved={acceptSavedProduct} onDirtyChange={handleDirtyChange} />)}
         </div>
       )}
-      {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={load} onDirtyChange={handleDirtyChange} />}
+      {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={acceptSavedProduct} onDirtyChange={handleDirtyChange} />}
     </div>
   );
 }

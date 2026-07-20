@@ -2736,6 +2736,7 @@ final class ModelsTests: XCTestCase {
 
         let draft = AdminProductDraft(product: product)
 
+        XCTAssertEqual(draft.slug, "ten-session-pack")
         XCTAssertEqual(draft.name, "Ten Session Pack")
         XCTAssertEqual(draft.price, "299.00")
         XCTAssertEqual(draft.currency, "AUD")
@@ -2744,6 +2745,78 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(draft.stripePriceID, "price_xert")
         XCTAssertTrue(draft.featured)
         XCTAssertTrue(draft.active)
+    }
+
+    func testAdminProductDraftValidatesExactMoneyAndStripeCommercialTerms() {
+        let product = AdminProduct(
+            id: UUID(),
+            slug: "starter-4",
+            name: "Starter Pack",
+            description: nil,
+            price_cents: 4800,
+            currency: "aud",
+            sessions_count: 4,
+            validity_days: 28,
+            stripe_price_id: "price_starter4",
+            featured: true,
+            active: true,
+            sort_order: 2,
+            updated_at: "2026-07-20T00:00:00Z"
+        )
+
+        var draft = AdminProductDraft(product: product)
+        XCTAssertNil(draft.validationMessage(existingProduct: product))
+        XCTAssertEqual(draft.normalizedPriceCents, 4800)
+
+        draft.price = "48.009"
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: product),
+            "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        )
+
+        draft.price = "48.00"
+        draft.sessions = 5
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: product),
+            "Clear or replace the Stripe Price ID before changing price, currency, sessions or validity."
+        )
+    }
+
+    func testAdminProductDraftParsesCommaMoneyAndCapsPostgresIntegerCents() {
+        var draft = AdminProductDraft(suggestedSortOrder: 0)
+        draft.slug = "locale-pack"
+        draft.name = "Locale Pack"
+        draft.price = "48,05"
+
+        XCTAssertEqual(draft.normalizedPriceCents, 4_805)
+        XCTAssertNil(draft.validationMessage(existingProduct: nil))
+
+        draft.price = "21474836.47"
+        XCTAssertEqual(draft.normalizedPriceCents, Int(Int32.max))
+
+        draft.price = "21474836,48"
+        XCTAssertNil(draft.normalizedPriceCents)
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: nil),
+            "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        )
+    }
+
+    func testNewAdminProductDraftStartsPrivateAndRequiresSafeIdentifiers() {
+        var draft = AdminProductDraft(suggestedSortOrder: 6)
+        XCTAssertFalse(draft.active)
+        XCTAssertTrue(draft.stripePriceID.isEmpty)
+        XCTAssertEqual(draft.validityDays, 28)
+        XCTAssertEqual(draft.sortOrder, 6)
+        XCTAssertNotNil(draft.validationMessage(existingProduct: nil))
+
+        draft.slug = "founders-6"
+        draft.name = "Founders Pack"
+        draft.price = "120"
+        draft.sessions = 6
+        draft.validityDays = 42
+        XCTAssertNil(draft.validationMessage(existingProduct: nil))
+        XCTAssertEqual(draft.normalizedPriceCents, 12_000)
     }
 
     func testAdminEventDraftUsesQueenslandCalendarDates() {

@@ -570,6 +570,16 @@ struct AdminCommandCentreView: View {
                 isCritical: true
             ),
             AdminPriorityAction(
+                title: "Pack sales setup",
+                detail: admin.products.isEmpty
+                    ? "Create the first private session-pack draft"
+                    : "Fix active packs before members reach checkout",
+                icon: "ticket",
+                count: pricingAttentionCount,
+                workspace: .products,
+                isCritical: admin.settings?.payments_enabled == true
+            ),
+            AdminPriorityAction(
                 title: "Class booking requests",
                 detail: "Confirm or decline member places",
                 icon: "person.crop.circle.badge.questionmark",
@@ -618,6 +628,12 @@ struct AdminCommandCentreView: View {
             if $0.isCritical != $1.isCritical { return $0.isCritical }
             return $0.count > $1.count
         }
+    }
+
+    private var pricingAttentionCount: Int {
+        guard !admin.refreshUnavailableSources.contains("session packs") else { return 0 }
+        if !admin.products.contains(where: \.active) { return 1 }
+        return admin.products.filter { $0.active && !$0.hasStableStripePriceID }.count
     }
 
     private var businessPulse: some View {
@@ -757,6 +773,8 @@ struct AdminCommandCentreView: View {
             return admin.liveAnnouncements
         case .orders:
             return admin.orders.filter(\.isRecoverable).count
+        case .products:
+            return pricingAttentionCount
         case .health:
             return admin.hasHealthSnapshot ? admin.healthIssues : nil
         default:
@@ -786,7 +804,10 @@ struct AdminCommandCentreView: View {
         case .ptRequests:
             AdminPTRequestsView(admin: admin, session: session)
         case .retention:
-            AdminRetentionView(admin: admin, session: session)
+            AdminRetentionView(
+                admin: admin,
+                session: session
+            )
         case .leads:
             AdminLeadsView(admin: admin, session: session)
         case .campaigns:
@@ -820,7 +841,11 @@ struct AdminCommandCentreView: View {
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
             )
         case .controls:
-            AdminPlatformView(admin: admin, session: session)
+            AdminPlatformView(
+                admin: admin,
+                session: session,
+                onOpenPricing: { openWorkspace(.products) }
+            )
         case .health:
             AdminOperationsHealthView(
                 admin: admin,
@@ -1107,7 +1132,6 @@ private struct AdminOwnerTaskSheet: View {
         case .product(let id):
             if let product = admin.products.first(where: { $0.id == id }) {
                 AdminProductEditor(admin: admin, session: session, product: product)
-                    .toolbar { closeToolbar }
             } else {
                 resolutionView(recordName: "session pack")
             }
@@ -2053,6 +2077,8 @@ private struct AdminRetentionView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var selected: AdminFollowUp?
+    @State private var presentedMember: AdminMemberSummary?
+    @State private var openingMemberID: UUID?
 
     var body: some View {
         List {
@@ -2090,6 +2116,16 @@ private struct AdminRetentionView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Retention")
+        .sheet(item: $presentedMember) { member in
+            NavigationStack {
+                AdminMemberDetailView(admin: admin, session: session, member: member)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { presentedMember = nil }
+                        }
+                    }
+            }
+        }
         .confirmationDialog(
             "Log follow-up",
             isPresented: Binding(
@@ -2109,6 +2145,12 @@ private struct AdminRetentionView: View {
 
     @ViewBuilder
     private func retentionActions(for member: AdminFollowUp, expands: Bool) -> some View {
+        Button { openMemberRecord(member.id) } label: {
+            Label(openingMemberID == member.id ? "Opening..." : "Member record", systemImage: "person.text.rectangle")
+                .frame(maxWidth: expands ? .infinity : nil)
+        }
+        .buttonStyle(.bordered)
+        .disabled(openingMemberID != nil)
         if let phone = member.phone,
            let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
             Link(destination: url) {
@@ -2131,6 +2173,22 @@ private struct AdminRetentionView: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.xertSteel)
         .disabled(admin.loggingFollowUpMemberID != nil)
+    }
+
+    private func openMemberRecord(_ memberID: UUID) {
+        guard openingMemberID == nil else { return }
+        if let member = admin.members.first(where: { $0.id == memberID }) {
+            presentedMember = member
+            return
+        }
+        openingMemberID = memberID
+        Task {
+            await admin.resolveOwnerTask(session: session, task: .member(memberID))
+            if let member = admin.members.first(where: { $0.id == memberID }) {
+                presentedMember = member
+            }
+            openingMemberID = nil
+        }
     }
 }
 
@@ -3654,14 +3712,44 @@ private struct AdminPTNotesEditor: View {
 private struct AdminPlatformView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let onOpenPricing: () -> Void
     @State private var draft: AdminPlatformSettings?
     @State private var saved = false
     @State private var confirmingPaymentActivation = false
+    @State private var confirmingPricingNavigation = false
+    @State private var openPricingAfterPaymentActivation = false
+
+    private var pricingDataUnavailable: Bool {
+        admin.refreshUnavailableSources.contains("session packs")
+    }
 
     var body: some View {
         Group {
             if draft != nil {
                 Form {
+                    Section("Pack sales") {
+                        LabeledContent(
+                            "Active session packs",
+                            value: pricingDataUnavailable ? "Unavailable" : "\(admin.products.filter(\.active).count)"
+                        )
+                        LabeledContent(
+                            "Stripe-linked active packs",
+                            value: pricingDataUnavailable
+                                ? "Unavailable"
+                                : "\(admin.products.filter { $0.active && $0.hasStableStripePriceID }.count)"
+                        )
+                        Button(action: requestPricingNavigation) {
+                            Label("Open session packs & pricing", systemImage: "ticket")
+                        }
+                        if pricingDataUnavailable {
+                            Label("Session-pack data could not be refreshed. Pricing counts may be stale.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                                .font(.caption).foregroundStyle(.orange)
+                        } else if draft?.payments_enabled == true,
+                           admin.products.contains(where: { $0.active && !$0.hasStableStripePriceID }) {
+                            Label("Checkout is enabled but an active pack is missing its Stripe Price ID.", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
                     Section("Live platform") {
                         Toggle("Bookings enabled", isOn: settingBinding(\.bookings_enabled))
                         Text("Disabling bookings changes public class actions to registration interest.")
@@ -3714,12 +3802,28 @@ private struct AdminPlatformView: View {
             if draft == nil || draft == settings { draft = settings }
         }
         .onChange(of: draft) { _ in saved = false }
+        .confirmationDialog(
+            "Open session packs & pricing?",
+            isPresented: $confirmingPricingNavigation,
+            titleVisibility: .visible
+        ) {
+            Button("Save changes and open") { saveAndOpenPricing() }
+            Button("Discard changes and open", role: .destructive) {
+                draft = admin.settings
+                onOpenPricing()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Platform settings have unsaved changes. Save or discard them before leaving this workspace.")
+        }
         .confirmationDialog("Open session pack checkout?", isPresented: $confirmingPaymentActivation, titleVisibility: .visible) {
             Button("Enable pack checkout") {
                 guard let draft else { return }
-                save(draft)
+                let shouldOpenPricing = openPricingAfterPaymentActivation
+                openPricingAfterPaymentActivation = false
+                save(draft, thenOpenPricing: shouldOpenPricing)
             }
-            Button("Keep payments paused", role: .cancel) {}
+            Button("Keep payments paused", role: .cancel) { openPricingAfterPaymentActivation = false }
         } message: {
             Text(admin.commerceHealth?.ready == true
                 ? "Stripe launch checks passed recently. XERT will run them again on the server before enabling purchases."
@@ -3727,10 +3831,31 @@ private struct AdminPlatformView: View {
         }
     }
 
-    private func save(_ settings: AdminPlatformSettings) {
+    private func requestPricingNavigation() {
+        guard draft != admin.settings else {
+            onOpenPricing()
+            return
+        }
+        confirmingPricingNavigation = true
+    }
+
+    private func saveAndOpenPricing() {
+        guard let draft else { return }
+        if draft.payments_enabled && admin.settings?.payments_enabled != true {
+            openPricingAfterPaymentActivation = true
+            confirmingPaymentActivation = true
+        } else {
+            save(draft, thenOpenPricing: true)
+        }
+    }
+
+    private func save(_ settings: AdminPlatformSettings, thenOpenPricing: Bool = false) {
         Task {
             saved = await admin.saveSettings(session: session, draft: settings)
-            if saved { draft = admin.settings }
+            if saved {
+                draft = admin.settings
+                if thenOpenPricing { onOpenPricing() }
+            }
         }
     }
 
@@ -4221,10 +4346,41 @@ private struct AdminProductsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let onOpenTask: (XertOwnerTask) -> Void
+    @State private var query = ""
+    @State private var filter: ProductFilter = .all
+    @State private var showingCreate = false
+
+    private enum ProductFilter: String, CaseIterable, Identifiable {
+        case all = "All"
+        case active = "Live"
+        case inactive = "Drafts"
+        var id: String { rawValue }
+    }
 
     private var activeProducts: [AdminProduct] { admin.products.filter(\.active) }
     private var liveBlockedProducts: [AdminProduct] { activeProducts.filter { !$0.hasStableStripePriceID } }
-    private var isLiveReady: Bool { !activeProducts.isEmpty && liveBlockedProducts.isEmpty }
+    private var pricingDataUnavailable: Bool {
+        admin.refreshUnavailableSources.contains("session packs")
+    }
+    private var stripeHealthUnavailable: Bool {
+        admin.refreshUnavailableSources.contains("Stripe health")
+    }
+    private var isLiveReady: Bool {
+        !pricingDataUnavailable
+            && !stripeHealthUnavailable
+            && admin.commerceHealth?.ready == true
+            && !activeProducts.isEmpty
+            && liveBlockedProducts.isEmpty
+    }
+    private var visibleProducts: [AdminProduct] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return admin.products.filter { product in
+            let matchesFilter = filter == .all || (filter == .active ? product.active : !product.active)
+            let matchesQuery = term.isEmpty || "\(product.name) \(product.slug) \(product.description ?? "")"
+                .lowercased().contains(term)
+            return matchesFilter && matchesQuery
+        }
+    }
 
     var body: some View {
         List {
@@ -4234,15 +4390,25 @@ private struct AdminProductsView: View {
                         .foregroundStyle(isLiveReady ? Color.green : Color.orange)
                     VStack(alignment: .leading, spacing: 5) {
                         Text("LIVE STRIPE READINESS").font(.caption.weight(.bold))
-                        if activeProducts.isEmpty {
-                            Text("Activate at least one pack and attach its live Stripe Price ID before launch.")
+                        if pricingDataUnavailable || stripeHealthUnavailable {
+                            Text("Pricing or Stripe health could not be refreshed. The last visible setup may be stale.")
+                            Text("Return to Overview and retry unavailable data before changing checkout.")
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
+                        } else if activeProducts.isEmpty {
+                            Text("Create a pack, attach its live Stripe Price ID, then make it active when it is ready for sale.")
                         } else if isLiveReady {
-                            Text("All \(activeProducts.count) active packs have stable Stripe Price IDs.")
+                            Text("Stripe has verified all \(activeProducts.count) active packs and the checkout service is ready.")
+                        } else if liveBlockedProducts.isEmpty {
+                            Text("All active packs have Price IDs, but Stripe launch checks still need attention.")
+                            Text("Review Operations Health before enabling checkout.")
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
                         } else {
                             Text("\(liveBlockedProducts.count) of \(activeProducts.count) active packs block live checkout: \(liveBlockedProducts.map(\.slug).joined(separator: ", ")).")
                             Text("Test checkout may use dynamic prices. Live checkout requires a live price_ ID.")
                                 .foregroundStyle(Color.xertPale.opacity(0.5))
                         }
+                        Text("These are one-off session packs, not recurring subscriptions. Changes affect new purchases only; existing credits keep their original terms.")
+                            .foregroundStyle(Color.xertPale.opacity(0.5))
                     }
                     .font(.caption)
                     .foregroundStyle(Color.xertPale.opacity(0.75))
@@ -4250,44 +4416,147 @@ private struct AdminProductsView: View {
                 .padding(.vertical, 5)
                 .listRowBackground(Color.xertInk)
             }
-            if admin.products.isEmpty { Text("No session packs configured.").listRowBackground(Color.xertInk) }
-            ForEach(admin.products) { product in
+
+            Section {
+                Picker("Sale status", selection: $filter) {
+                    ForEach(ProductFilter.allCases) { option in Text(option.rawValue).tag(option) }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.xertInk)
+            }
+
+            if pricingDataUnavailable {
+                Label("Session-pack data is unavailable. Cached rows below may be stale.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .foregroundStyle(.orange)
+                    .listRowBackground(Color.xertInk)
+            } else if visibleProducts.isEmpty {
+                Text(admin.products.isEmpty ? "No session packs configured." : "No packs match this search and filter.")
+                    .foregroundStyle(Color.xertPale.opacity(0.7))
+                    .listRowBackground(Color.xertInk)
+            }
+            ForEach(visibleProducts) { product in
                 Button { onOpenTask(.product(product.id)) } label: {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(product.name).font(.headline)
-                                if product.featured {
-                                    Text("FEATURED").font(.caption2.weight(.bold)).foregroundStyle(.orange)
-                                }
-                            }
-                            Text("\(product.sessions_count) sessions · \(product.validity_days) days · \(product.displayPrice)")
-                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(product.active ? "LIVE" : "OFF")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(product.active ? Color.green : Color.xertPale.opacity(0.4))
-                            if product.active {
-                                Label(product.hasStableStripePriceID ? "Stripe linked" : "Live blocked",
-                                      systemImage: product.hasStableStripePriceID ? "checkmark.circle" : "exclamationmark.triangle")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(product.hasStableStripePriceID ? Color.green : Color.orange)
-                            }
-                        }
-                    }
-                    .foregroundStyle(Color.xertOffWhite)
-                    .padding(.vertical, 6)
+                    AdminProductRow(product: product, dataIsStale: pricingDataUnavailable)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Opens this exact session pack in owner navigation")
+                .accessibilityIdentifier("owner.product.\(product.id.uuidString.lowercased())")
+                .accessibilityHint("Opens this session pack to review pricing and sale state")
                 .listRowBackground(Color.xertInk)
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
-        .navigationTitle("Session Packs")
+        .navigationTitle("Session Packs & Pricing")
+        .searchable(text: $query, prompt: "Search packs")
+        .accessibilityIdentifier("owner.products.list")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button { showingCreate = true } label: {
+                Label("Create session pack", systemImage: "plus.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.xertNavy)
+            .background(Color.xertSteel)
+            .disabled(pricingDataUnavailable)
+            .opacity(pricingDataUnavailable ? 0.45 : 1)
+            .accessibilityLabel("Create a new session pack")
+            .accessibilityIdentifier("owner.products.create")
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack {
+                AdminProductEditor(
+                    admin: admin,
+                    session: session,
+                    product: nil,
+                    suggestedSortOrder: (admin.products.map(\.sort_order).max() ?? -1) + 1
+                )
+            }
+        }
+    }
+}
+
+private struct AdminProductRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let product: AdminProduct
+    let dataIsStale: Bool
+
+    private var hasMalformedStripePriceID: Bool {
+        let value = product.stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !value.isEmpty && !product.hasStableStripePriceID
+    }
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    identity
+                    status
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    identity
+                    Spacer(minLength: 8)
+                    status
+                }
+            }
+        }
+        .foregroundStyle(Color.xertOffWhite)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(product.name).font(.headline).fixedSize(horizontal: false, vertical: true)
+                if product.featured {
+                    Text("FEATURED")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
+                        .fixedSize()
+                }
+            }
+            Text("\(product.sessions_count) sessions · \(product.validity_days) days · \(product.displayPrice)")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(product.displayPricePerSession) per session")
+                .font(.caption2)
+                .foregroundStyle(Color.xertPale.opacity(0.5))
+        }
+    }
+
+    private var status: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(product.active ? "LIVE" : "DRAFT")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(
+                    dataIsStale
+                        ? Color.orange
+                        : hasMalformedStripePriceID
+                            ? Color.red
+                            : product.active ? Color.green : Color.xertPale.opacity(0.55)
+                )
+            if dataIsStale {
+                Label("Pricing data stale", systemImage: "clock.badge.exclamationmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if hasMalformedStripePriceID {
+                Label("Malformed Price ID", systemImage: "xmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if product.active {
+                Label(product.hasStableStripePriceID ? "Price ID entered" : "Checkout blocked",
+                      systemImage: product.hasStableStripePriceID ? "checkmark.circle" : "exclamationmark.triangle")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(product.hasStableStripePriceID ? Color.green : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -4295,82 +4564,190 @@ private struct AdminProductEditor: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
     let session: AuthSession
-    let product: AdminProduct
+    let product: AdminProduct?
+    private let baseline: AdminProductDraft
     @State private var draft: AdminProductDraft
+    @State private var confirmingDiscard = false
+    @FocusState private var focusedField: Field?
 
-    init(admin: AdminStore, session: AuthSession, product: AdminProduct) {
+    private enum Field: Hashable { case slug, name, description, price, currency, stripePrice }
+
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        product: AdminProduct?,
+        suggestedSortOrder: Int = 0
+    ) {
         self.admin = admin
         self.session = session
         self.product = product
-        _draft = State(initialValue: AdminProductDraft(product: product))
+        let initial = product.map { AdminProductDraft(product: $0) }
+            ?? AdminProductDraft(suggestedSortOrder: suggestedSortOrder)
+        baseline = initial
+        _draft = State(initialValue: initial)
     }
 
     private var normalizedStripePriceID: String {
         draft.stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var stripePriceIDIsValid: Bool {
-        normalizedStripePriceID.isEmpty || normalizedStripePriceID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) != nil
+    private var stripePriceIDHasValidSyntax: Bool {
+        normalizedStripePriceID.range(
+            of: #"^price_[A-Za-z0-9]+$"#,
+            options: .regularExpression
+        ) != nil
     }
+
+    private var isCreating: Bool { product == nil }
+    private var isDirty: Bool { draft != baseline }
+    private var isSaving: Bool { admin.savingProductID != nil }
+    private var validationMessage: String? { draft.validationMessage(existingProduct: product) }
+    private var canSave: Bool { isDirty && validationMessage == nil && !isSaving }
 
     var body: some View {
         Form {
             Section("Pack details") {
+                if isCreating {
+                    TextField("Permanent ID (for example starter-6)", text: $draft.slug)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .slug)
+                    Text("The permanent ID becomes part of checkout records and cannot be edited later.")
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                } else if let product {
+                    LabeledContent("Permanent ID", value: product.slug)
+                }
                 TextField("Name", text: $draft.name)
-                TextField("Description", text: $draft.description, axis: .vertical).lineLimit(2...5)
-                TextField("Price", text: $draft.price).keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .name)
+                TextField("Description", text: $draft.description, axis: .vertical)
+                    .lineLimit(2...5)
+                    .focused($focusedField, equals: .description)
+                TextField("Price in \(draft.currency.uppercased())", text: $draft.price)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .price)
+                    .accessibilityIdentifier("owner.productEditor.price")
                 TextField("Currency", text: $draft.currency)
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                    .focused($focusedField, equals: .currency)
             }
             Section("Credits") {
                 Stepper("Sessions: \(draft.sessions)", value: $draft.sessions, in: 1...1_000)
                 Stepper("Validity: \(draft.validityDays) days", value: $draft.validityDays, in: 1...3_650)
                 Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
+                if let cents = draft.normalizedPriceCents, draft.sessions > 0 {
+                    let amount = Double(cents) / 100 / Double(draft.sessions)
+                    LabeledContent("Price per session", value: amount.formatted(.currency(code: draft.currency.uppercased())))
+                }
             }
             Section("Sale state") {
-                Toggle("Active and purchasable", isOn: $draft.active)
                 Toggle("Featured pack", isOn: $draft.featured)
-                TextField("Stripe Price ID (required for live checkout)", text: $draft.stripePriceID)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                if draft.active && normalizedStripePriceID.isEmpty {
-                    Label("This active pack blocks live Stripe checkout.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange)
-                } else if !stripePriceIDIsValid {
-                    Label("Use a Stripe Price ID beginning with price_.", systemImage: "xmark.circle.fill")
-                        .font(.caption).foregroundStyle(.red)
-                } else if !normalizedStripePriceID.isEmpty {
-                    Label("Stable Stripe price linked.", systemImage: "checkmark.circle.fill")
-                        .font(.caption).foregroundStyle(.green)
-                }
-                if product.stripe_price_id != nil {
-                    Text("Replace or clear the Stripe Price ID before changing price or currency.")
-                        .font(.caption).foregroundStyle(.orange)
+                if isCreating {
+                    Label("New packs are saved as private drafts with no Stripe link.", systemImage: "lock.fill")
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.7))
+                    Text("After creating it, add the matching Stripe Price ID and make it active when checkout is ready.")
+                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                } else {
+                    Toggle("Active and purchasable", isOn: $draft.active)
+                    TextField("Stripe Price ID (required for live checkout)", text: $draft.stripePriceID)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .focused($focusedField, equals: .stripePrice)
+                    if draft.active && normalizedStripePriceID.isEmpty {
+                        Label("Add a Stripe Price ID before making this pack live.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(.orange)
+                    } else if !normalizedStripePriceID.isEmpty && !stripePriceIDHasValidSyntax {
+                        Label("Malformed Price ID. Use price_ followed by letters and numbers.", systemImage: "xmark.circle.fill")
+                            .font(.caption).foregroundStyle(.red)
+                    } else if stripePriceIDHasValidSyntax && draft.active && !isDirty && product?.active == true {
+                        Label("Price ID linked. Checkout re-verifies every commercial term before charging.", systemImage: "checkmark.shield")
+                            .font(.caption).foregroundStyle(.green)
+                    } else if stripePriceIDHasValidSyntax && draft.active {
+                        Label("Stripe will verify this Price and every pack term when you save.", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption).foregroundStyle(.orange)
+                    } else if stripePriceIDHasValidSyntax {
+                        Label("Price ID entered. Stripe verification runs when this pack is activated.", systemImage: "clock.badge.checkmark")
+                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.65))
+                    }
+                    if product?.stripe_price_id != nil {
+                        Text("Clear or replace the Stripe Price ID before changing price, currency, sessions or validity.")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 }
             }
-            Section {
-                Button {
-                    Task {
-                        if await admin.saveProduct(session: session, product: product, draft: draft) {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if admin.savingProductID == product.id { ProgressView().tint(Color.xertNavy) }
-                        Text("Save session pack").fontWeight(.bold)
-                        Spacer()
-                    }
+
+            if let validationMessage, isDirty || !isCreating {
+                Section {
+                    Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Cannot save. \(validationMessage)")
                 }
-                .disabled(admin.savingProductID != nil || draft == AdminProductDraft(product: product) || !stripePriceIDIsValid)
-                .listRowBackground(Color.xertSteel)
-                .foregroundStyle(Color.xertNavy)
             }
         }
+        .disabled(isSaving)
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.xertNavy)
-        .navigationTitle(product.slug)
+        .navigationTitle(isCreating ? "New Session Pack" : product?.name ?? "Session Pack")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("owner.productEditor.form")
+        .interactiveDismissDisabled(isDirty || isSaving)
+        .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { requestDismiss() }
+                    .disabled(isSaving)
+                    .accessibilityIdentifier("owner.productEditor.close")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
+        .confirmationDialog(
+            "Discard unsaved pack changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The session-pack pricing details in this draft have not been saved.")
+        }
+    }
+
+    private var saveBar: some View {
+        Button { save() } label: {
+            HStack(spacing: 10) {
+                if isSaving { ProgressView().tint(Color.xertNavy) }
+                Text(isCreating ? "Create private draft" : "Save pricing changes")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.productEditor.save")
+        .accessibilityHint(validationMessage ?? "Saves this session pack")
+    }
+
+    private func requestDismiss() {
+        focusedField = nil
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
+    }
+
+    private func save() {
+        guard canSave else { return }
+        focusedField = nil
+        Task {
+            if await admin.saveProduct(session: session, product: product, draft: draft) {
+                dismiss()
+            }
+        }
     }
 }
 

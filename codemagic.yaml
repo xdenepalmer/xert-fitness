@@ -330,6 +330,7 @@ workflows:
               "schedule_optimistic_locking",
               "shared_admin_optimistic_locking",
               "catalog_optimistic_locking",
+              "product_commercial_terms_guard",
               "targeted_member_notices",
             ];
             const missing = required.filter(item => !installed.has(item));

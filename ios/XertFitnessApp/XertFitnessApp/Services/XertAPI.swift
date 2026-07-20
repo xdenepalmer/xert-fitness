@@ -1141,48 +1141,122 @@ final class XertAPI {
         )
     }
 
-    func adminUpdateProduct(session auth: AuthSession, product: AdminProduct, draft: AdminProductDraft) async throws {
-        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw APIError(message: "A pack name is required.") }
-        guard let amount = Decimal(string: draft.price), amount > 0 else {
-            throw APIError(message: "Enter a valid positive pack price.")
-        }
-        let cents = NSDecimalNumber(decimal: amount * 100).intValue
-        guard cents > 0, draft.sessions > 0, draft.validityDays > 0, draft.sortOrder >= 0 else {
-            throw APIError(message: "Sessions, validity and display order must be valid whole numbers.")
-        }
-        let currency = draft.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard currency.range(of: #"^[a-z]{3}$"#, options: .regularExpression) != nil else {
-            throw APIError(message: "Currency must be a three-letter code such as AUD.")
-        }
-        let stripeID = draft.stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !stripeID.isEmpty, stripeID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) == nil {
-            throw APIError(message: "Stripe Price ID must begin with price_.")
-        }
-        if let currentStripe = product.stripe_price_id, currentStripe == stripeID,
-           (product.price_cents != cents || product.currency.lowercased() != currency) {
-            throw APIError(message: "Replace or clear the Stripe Price ID before changing this pack's price or currency.")
-        }
-
-        let _: UUID = try await rpc(
-            path: "admin_update_product",
-            body: AdminProductUpdateRequest(
-                p_product_id: product.id,
-                p_product: AdminProductPayload(
-                    name: name,
-                    description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                    price_cents: cents,
-                    currency: currency,
-                    sessions_count: draft.sessions,
-                    validity_days: draft.validityDays,
-                    stripe_price_id: stripeID.nilIfEmpty,
-                    featured: draft.featured,
-                    active: draft.active,
-                    sort_order: draft.sortOrder
+    func adminCreateProduct(session auth: AuthSession, draft: AdminProductDraft) async throws -> AdminProduct {
+        let payload = try adminProductCreatePayload(draft)
+        do {
+            let result: AdminProductRPCResult = try await rpc(
+                path: "admin_create_product",
+                body: AdminProductCreateRequest(
+                    p_slug: draft.slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    p_product: payload
                 ),
-                p_expected_updated_at: product.updated_at
-            ),
-            auth: auth
+                auth: auth
+            )
+            return result.product
+        } catch let error as APIError where error.message.localizedCaseInsensitiveContains("products_slug_key")
+            || error.message.localizedCaseInsensitiveContains("duplicate key")
+            || error.message.localizedCaseInsensitiveContains("PRODUCT_SLUG_TAKEN") {
+            throw APIError(message: "That permanent pack ID is already in use. Choose another one.")
+        } catch let error as APIError {
+            throw friendlyProductError(error)
+        }
+    }
+
+    func adminUpdateProduct(session auth: AuthSession, product: AdminProduct, draft: AdminProductDraft) async throws -> AdminProduct {
+        let payload = try adminProductPayload(draft, existingProduct: product)
+
+        do {
+            if draft.active {
+                return try await vercelRequest(
+                    path: "/api/admin-commerce-health",
+                    body: AdminProductActivationRequest(
+                        action: "activate_product",
+                        product_id: product.id,
+                        product: payload,
+                        expected_updated_at: product.updated_at
+                    ),
+                    auth: auth
+                )
+            }
+            let result: AdminProductRPCResult = try await rpc(
+                path: "admin_update_product",
+                body: AdminProductUpdateRequest(
+                    p_product_id: product.id,
+                    p_product: payload,
+                    p_expected_updated_at: product.updated_at
+                ),
+                auth: auth
+            )
+            return result.product
+        } catch let error as APIError {
+            throw friendlyProductError(error)
+        }
+    }
+
+    private func friendlyProductError(_ error: APIError) -> APIError {
+        if error.message.localizedCaseInsensitiveContains("PRODUCT_STALE") {
+            return APIError(message: "This pack changed since you opened it. Close it, refresh pricing and review the latest version.")
+        }
+        if error.message.localizedCaseInsensitiveContains("STRIPE_PRICE_REFRESH_REQUIRED") {
+            return APIError(message: "Clear or replace the Stripe Price ID before changing price, currency, sessions or validity.")
+        }
+        if error.message.localizedCaseInsensitiveContains("INVALID_PRODUCT_PAYLOAD") {
+            return APIError(message: "One or more pack details are invalid. Review the price, credits, validity and sale state.")
+        }
+        if error.message.localizedCaseInsensitiveContains("ACTIVE_PRODUCT_REQUIRES_STRIPE_PRICE") {
+            return APIError(message: "Add a Stripe Price ID before making this pack active and purchasable.")
+        }
+        if error.message.localizedCaseInsensitiveContains("PRODUCT_ACTIVATION_VERIFICATION_REQUIRED") {
+            return APIError(message: "Active packs must be verified against Stripe before they can be saved.")
+        }
+        if error.message.localizedCaseInsensitiveContains("Stripe price does not match")
+            || error.message.localizedCaseInsensitiveContains("PRODUCT_ACTIVATION_SAVE_FAILED")
+            || error.message.localizedCaseInsensitiveContains("INVALID_PRODUCT_ACTIVATION") {
+            return APIError(message: "Stripe could not verify this pack's price, currency, credits and validity. Check the Price ID and its metadata, then try again.")
+        }
+        if error.message.localizedCaseInsensitiveContains("PRODUCT_NOT_FOUND") {
+            return APIError(message: "This session pack is no longer available. Refresh pricing and try again.")
+        }
+        return APIError(message: error.message, statusCode: error.statusCode)
+    }
+
+    private func adminProductPayload(
+        _ draft: AdminProductDraft,
+        existingProduct: AdminProduct?
+    ) throws -> AdminProductPayload {
+        if let issue = draft.validationMessage(existingProduct: existingProduct) {
+            throw APIError(message: issue)
+        }
+        guard let priceCents = draft.normalizedPriceCents else {
+            throw APIError(message: "Enter a positive price up to 21,474,836.47 with no more than two decimal places.")
+        }
+        return AdminProductPayload(
+            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            price_cents: priceCents,
+            currency: draft.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            sessions_count: draft.sessions,
+            validity_days: draft.validityDays,
+            stripe_price_id: draft.stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            featured: draft.featured,
+            active: draft.active,
+            sort_order: draft.sortOrder
+        )
+    }
+
+    private func adminProductCreatePayload(_ draft: AdminProductDraft) throws -> AdminProductCreatePayload {
+        let payload = try adminProductPayload(draft, existingProduct: nil)
+        return AdminProductCreatePayload(
+            name: payload.name,
+            description: payload.description,
+            price_cents: payload.price_cents,
+            currency: payload.currency,
+            sessions_count: payload.sessions_count,
+            validity_days: payload.validity_days,
+            stripe_price_id: nil,
+            featured: payload.featured,
+            active: false,
+            sort_order: payload.sort_order
         )
     }
 
@@ -2055,6 +2129,48 @@ private struct AdminProductPayload: Encodable {
     let featured: Bool
     let active: Bool
     let sort_order: Int
+}
+private struct AdminProductCreatePayload: Encodable {
+    let name: String
+    let description: String?
+    let price_cents: Int
+    let currency: String
+    let sessions_count: Int
+    let validity_days: Int
+    let stripe_price_id: String?
+    let featured: Bool
+    let active: Bool
+    let sort_order: Int
+}
+private struct AdminProductCreateRequest: Encodable {
+    let p_slug: String
+    let p_product: AdminProductCreatePayload
+}
+private struct AdminProductActivationRequest: Encodable {
+    let action: String
+    let product_id: UUID
+    let product: AdminProductPayload
+    let expected_updated_at: String
+}
+
+private struct AdminProductRPCResult: Decodable {
+    let product: AdminProduct
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let product = try? container.decode(AdminProduct.self) {
+            self.product = product
+            return
+        }
+        let products = try container.decode([AdminProduct].self)
+        guard let product = products.first else {
+            throw DecodingError.valueNotFound(
+                AdminProduct.self,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Product mutation returned no row.")
+            )
+        }
+        self.product = product
+    }
 }
 private struct AdminProductUpdateRequest: Encodable {
     let p_product_id: UUID

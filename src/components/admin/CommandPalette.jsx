@@ -16,7 +16,7 @@ const NAV_COMMANDS = [
   { key: 'audit', label: 'Admin Audit', icon: ScrollText },
   { key: 'gym-members', label: 'Members', icon: Users },
   { key: 'orders', label: 'Orders & Revenue', icon: DollarSign },
-  { key: 'products', label: 'Session Packs', icon: Ticket },
+  { key: 'products', label: 'Session Packs & Pricing', icon: Ticket },
   { key: 'calendar', label: 'Class Calendar', icon: CalendarDays },
   { key: 'bookings', label: 'Booking Requests', icon: Inbox },
   { key: 'pt-requests', label: 'PT Requests', icon: Dumbbell },
