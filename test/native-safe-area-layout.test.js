@@ -36,5 +36,21 @@ test('shared page heroes expand instead of clipping accessibility-sized copy', a
   assert.match(theme, /usesAccessibilityText \? 420 : 250/);
   assert.match(theme, /@Environment\(\\\.dynamicTypeSize\) private var dynamicTypeSize/);
   assert.match(theme, /XertScreenLayout\.pageHeroHeight\(usesAccessibilityText: dynamicTypeSize\.isAccessibilitySize\)/);
-  assert.equal((theme.match(/minHeight: heroHeight, maxHeight: heroHeight/g) || []).length, 2);
+  assert.match(theme, /minHeight: heroHeight, maxHeight: \.infinity/);
+  assert.match(theme, /\.frame\(maxWidth: \.infinity, minHeight: heroHeight\)/);
+  assert.doesNotMatch(theme, /minHeight: heroHeight, maxHeight: heroHeight/);
+});
+
+test('bottom booking and retention actions adapt and scroll fully above native chrome', async () => {
+  const [theme, booking, admin] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Theme.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(theme, /scrollEndClearance: CGFloat = 112/);
+  assert.match(booking, /ViewThatFits\(in: \.horizontal\)[\s\S]*Request PT Session/);
+  assert.match(booking, /submitSection\s+XertScrollEndSpacer\(\)/);
+  assert.match(admin, /ViewThatFits\(in: \.horizontal\)[\s\S]*retentionActions\(for: member, expands: true\)/);
+  assert.match(admin, /Label\("Log follow-up", systemImage: "checkmark\.circle"\)/);
 });

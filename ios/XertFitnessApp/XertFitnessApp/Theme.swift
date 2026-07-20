@@ -47,8 +47,9 @@ enum XertTheme {
         let offWhite = UIColor(red: 241 / 255, green: 243 / 255, blue: 244 / 255, alpha: 1)
 
         let nav = UINavigationBarAppearance()
-        nav.configureWithOpaqueBackground()
-        nav.backgroundColor = navy
+        nav.configureWithDefaultBackground()
+        nav.backgroundEffect = UIBlurEffect(style: .systemChromeMaterialDark)
+        nav.backgroundColor = navy.withAlphaComponent(0.86)
         nav.shadowColor = steel.withAlphaComponent(0.25)
         nav.titleTextAttributes = [
             .font: displayUIFont(size: 22, textStyle: .headline),
@@ -60,13 +61,20 @@ enum XertTheme {
             .foregroundColor: offWhite,
             .kern: 1.5,
         ]
+        let navButton = UIBarButtonItemAppearance(style: .plain)
+        navButton.normal.titleTextAttributes = [.foregroundColor: steel]
+        navButton.highlighted.titleTextAttributes = [.foregroundColor: offWhite]
+        nav.buttonAppearance = navButton
+        nav.doneButtonAppearance = navButton
+        nav.backButtonAppearance = navButton
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
 
         let tab = UITabBarAppearance()
-        tab.configureWithOpaqueBackground()
-        tab.backgroundColor = ink
+        tab.configureWithDefaultBackground()
+        tab.backgroundEffect = UIBlurEffect(style: .systemChromeMaterialDark)
+        tab.backgroundColor = ink.withAlphaComponent(0.9)
         tab.shadowColor = steel.withAlphaComponent(0.25)
         for item in [tab.stackedLayoutAppearance, tab.inlineLayoutAppearance, tab.compactInlineLayoutAppearance] {
             item.selected.iconColor = steel
@@ -113,7 +121,10 @@ extension View {
 
 enum XertScreenLayout {
     static let minimumHeroTopInset: CGFloat = 18
-    static let scrollEndClearance: CGFloat = 32
+    /// Extra scroll runway above the persistent custom dock. The safe-area
+    /// inset reserves the dock itself; this lets the final action scroll fully
+    /// into view above it on short iPhones and with large Dynamic Type.
+    static let scrollEndClearance: CGFloat = 112
 
     static func heroContentTopInset(deviceTopInset: CGFloat) -> CGFloat {
         max(deviceTopInset, minimumHeroTopInset) + 10
@@ -151,11 +162,32 @@ extension View {
     /// Brand card: ink surface with the site's hairline steel border and the
     /// sharp 2pt radius from the web (`--radius: 0.125rem`).
     func xertCardStyle() -> some View {
-        background(Color.xertCard.opacity(0.94))
+        background(
+            LinearGradient(
+                colors: [
+                    Color.xertDeep.opacity(0.38),
+                    Color.xertCard.opacity(0.97),
+                    Color.xertInk.opacity(0.98),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
             .overlay(
                 RoundedRectangle(cornerRadius: 2)
                     .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
             )
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, Color.xertSteel.opacity(0.34), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: 1)
+            }
     }
 }
 
@@ -177,10 +209,14 @@ struct XertScrollEndSpacer: View {
 struct XertScreenBackdrop: View {
     var body: some View {
         ZStack {
-            Color.xertNavy
+            LinearGradient(
+                colors: [Color.xertDeep.opacity(0.46), Color.xertNavy, Color.xertInk],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
-            Canvas { context, size in
-                let spacing: CGFloat = 56
+            Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, size in
+                let spacing: CGFloat = 64
                 var grid = Path()
                 stride(from: CGFloat.zero, through: size.width, by: spacing).forEach { x in
                     grid.move(to: CGPoint(x: x, y: 0))
@@ -215,6 +251,9 @@ struct XertScreenBackdrop: View {
 
 /// Solid steel call-to-action, navy label, sharp corners — the site's primary button.
 struct XertPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.bold))
@@ -223,13 +262,35 @@ struct XertPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(Color.xertNavy)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(configuration.isPressed ? Color.xertPale : Color.xertSteel)
+            .background(
+                LinearGradient(
+                    colors: configuration.isPressed
+                        ? [Color.xertPale, Color.xertSteel]
+                        : [Color.xertPale, Color.xertSteel, Color.xertSteel],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(alignment: .top) {
+                Rectangle().fill(Color.white.opacity(0.28)).frame(height: 1)
+            }
+            .opacity(isEnabled ? 1 : 0.46)
+            .shadow(
+                color: Color.black.opacity(isEnabled ? (configuration.isPressed ? 0.1 : 0.24) : 0),
+                radius: 8,
+                y: 4
+            )
+            .scaleEffect(!reduceMotion && isEnabled && configuration.isPressed ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
 /// Outlined secondary action matching the site's ghost buttons.
 struct XertGhostButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.bold))
@@ -238,10 +299,14 @@ struct XertGhostButtonStyle: ButtonStyle {
             .foregroundStyle(configuration.isPressed ? Color.xertPale : Color.xertSteel)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
+            .background(Color.xertSteel.opacity(configuration.isPressed ? 0.12 : 0.035))
             .overlay(
                 RoundedRectangle(cornerRadius: 2)
                     .stroke(Color.xertSteel.opacity(configuration.isPressed ? 1 : 0.6), lineWidth: 1)
             )
+            .opacity(isEnabled ? 1 : 0.42)
+            .scaleEffect(!reduceMotion && isEnabled && configuration.isPressed ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -288,7 +353,7 @@ struct XertPageHero: View {
             Image(imageName)
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: .infinity, minHeight: heroHeight, maxHeight: heroHeight)
+                .frame(maxWidth: .infinity, minHeight: heroHeight, maxHeight: .infinity)
                 .clipped()
                 .saturation(0.58)
                 .brightness(-0.14)
@@ -330,7 +395,7 @@ struct XertPageHero: View {
             }
             .padding(20)
         }
-        .frame(maxWidth: .infinity, minHeight: heroHeight, maxHeight: heroHeight)
+        .frame(maxWidth: .infinity, minHeight: heroHeight)
         .clipped()
         .overlay(alignment: .top) {
             Rectangle()

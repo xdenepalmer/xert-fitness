@@ -52,6 +52,9 @@ test('compact dock visibly exposes exact task context, back, and quick switching
   assert.match(root, /XertNavigationDock\([\s\S]*currentRoute: navigation\.route/);
   assert.match(root, /let currentRoute: XertMemberRoute/);
   assert.match(root, /private var taskStrip: some View/);
+  assert.match(root, /ViewThatFits\(in: \.horizontal\)[\s\S]*taskStripLayout\(compact: false\)[\s\S]*taskStripLayout\(compact: true\)/);
+  assert.match(root, /private var compactUtilitiesMenu: some View/);
+  assert.match(root, /accessibilityIdentifier\("xert-navigation-utilities"\)/);
   assert.match(root, /Text\(currentRoute\.navigationTitle\)/);
   assert.match(root, /lineLimit\(2\)[\s\S]*minimumScaleFactor\(0\.72\)/);
   assert.match(root, /frame\(height: dynamicTypeSize\.isAccessibilitySize \? 58 : 46\)/);
@@ -164,7 +167,9 @@ test('native navigation exposes a searchable contextual command switcher', async
   assert.match(root, /xert-navigation-workspace-map/);
   assert.match(root, /private func openWorkspaceFromMap/);
   assert.match(root, /navigation\.selection == destination[\s\S]*handleReselection\(destination\)[\s\S]*selectMemberDestination\(destination, source: \.commandPalette\)/);
-  assert.match(root, /context: navigationContext/);
+  assert.match(root, /context: navigationPaletteContext/);
+  assert.match(root, /private var navigationStatusContext:[\s\S]*memberRecords: \[\]/);
+  assert.match(root, /private var navigationPaletteContext:[\s\S]*memberRecords: memberNavigationRecords\(from: activeBookings\)/);
   assert.match(root, /memberRecords: memberNavigationRecords\(from: activeBookings\)/);
   assert.match(root, /let title = \$0\.title\.trimmingCharacters[\s\S]*return XertNextBookingNavigationContext\(/);
   assert.match(root, /case \.notice\(let noticeID\):[\s\S]*openMemberRoute\(\.notices\(noticeID\), source: \.commandPalette\)/);
@@ -460,7 +465,7 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /nextBookingNavigationContext[\s\S]*\.min \{ \$0\.start_time < \$1\.start_time \}/);
   assert.match(root, /openMemberRoute\(\.upcomingBookings\(bookingID\), source: \.commandPalette\)/);
   assert.match(modelsTests, /priorityStatus\?\.activity, \.upcomingBookings\(bookingID\)/);
-  assert.match(root, /statusSnapshot: XertNavigationStatusSnapshot\(context: navigationContext\)/);
+  assert.match(root, /statusSnapshot: XertNavigationStatusSnapshot\(context: navigationStatusContext\)/);
   assert.ok((root.match(/let statusSnapshot: XertNavigationStatusSnapshot/g) || []).length === 2);
   assert.match(root, /XertNavigationStatusBadge\(status: status\)/);
   assert.match(root, /private struct XertNavigationStatusControl: View/);

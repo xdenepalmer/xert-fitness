@@ -199,6 +199,39 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /URLQueryItem\(name: "updated_at", value: "eq\.\\\(settings\.updated_at\)"\)/);
 });
 
+test('native owner dashboard consolidates live priorities into actionable workspaces', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+
+  assert.match(view, /private var priorityQueue: some View/);
+  assert.match(view, /private var operationalPriorities: \[AdminPriorityAction\]/);
+  assert.match(view, /private struct AdminPriorityRow: View/);
+  assert.match(view, /ForEach\(priorities\) \{ priority in/);
+  assert.doesNotMatch(view, /operationalPriorities\.prefix/);
+  for (const destination of ['health', 'bookingRequests', 'ptRequests', 'classDesk', 'retention', 'orders']) {
+    assert.match(view, new RegExp(`workspace: \\.${destination}`));
+  }
+  assert.match(view, /openWorkspace\(priority\.workspace\)/);
+  assert.match(view, /All operational queues are clear/);
+  assert.match(view, /case \.idle, \.loading:[\s\S]*Checking operational queues/);
+  assert.match(view, /case \.partial\(let unavailableSources\)/);
+  assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
+  assert.match(view, /Button \{\s*openWorkspace\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
+  assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
+});
+
+test('owner queue freshness and booking mutations keep dashboard counts trustworthy', async () => {
+  const store = await read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
+
+  assert.match(store, /enum AdminOperationalQueueState: Equatable/);
+  assert.match(store, /operationalQueueState = \.loading/);
+  assert.match(store, /queueFailures\.isEmpty[\s\S]*\.ready[\s\S]*\.partial\(unavailableSources: queueFailures\)/);
+  assert.match(store, /private func refreshBookingOperationsSnapshot/);
+  assert.match(store, /async let bookingRequest = api\.adminBookingRequests/);
+  assert.match(store, /async let operationsRequest = api\.adminDailyOperations/);
+  assert.match(store, /async let waitlistRequest = api\.adminWaitlist/);
+  assert.ok((store.match(/try await refreshBookingOperationsSnapshot\(session: session\)/g) || []).length >= 2);
+});
+
 test('native owner navigation adapts into a categorized scene-restored iPad workspace', async () => {
   const [view, ownerNavigation] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
@@ -228,8 +261,9 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
   assert.match(view, /private func workspaceBadge/);
-  assert.match(view, /private func workspaceDestination[\s\S]*-> AnyView/);
-  assert.match(view, /return AnyView\(dashboard\(session: session\)/);
+  assert.match(view, /@ViewBuilder\s+private func workspaceDestination[\s\S]*-> some View/);
+  assert.doesNotMatch(view, /AnyView\(/);
+  assert.match(view, /case \.overview:\s+dashboard\(session: session\)/);
   assert.match(view, /managementDirectory/);
   assert.match(view, /private func openOwnerRoute\(_ route: XertOwnerRoute/);
   assert.match(view, /applyOwnerRoute\(ownerRouteHistory\.current\)/);

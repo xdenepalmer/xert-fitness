@@ -51,7 +51,7 @@ test('native home carries the website visual system below the hero', async () =>
   assert.match(home, /Purposeful\.\\nProgressive\.\\nSustainable\./);
   assert.match(home, /Coach-led[\s\S]*Progressive[\s\S]*Event-led/);
   assert.match(theme, /struct XertScreenBackdrop/);
-  assert.match(theme, /Canvas \{ context, size in/);
+  assert.match(theme, /Canvas\([\s\S]*rendersAsynchronously: true\) \{ context, size in/);
   assert.match(theme, /background\(XertScreenBackdrop\(\)\.ignoresSafeArea\(\)\)/);
   await access(trainingStyleURL);
 });

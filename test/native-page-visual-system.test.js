@@ -51,3 +51,27 @@ test('all native photographic headers are bundled in the asset catalogue', async
     await access(new URL(`${base}${filename}`, import.meta.url));
   }
 });
+
+test('native chrome uses advanced surfaces without rebuilding decorative navigation canvas', async () => {
+  const [theme, root] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Theme.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift'),
+  ]);
+
+  assert.match(theme, /backgroundEffect = UIBlurEffect\(style: \.systemChromeMaterialDark\)/);
+  assert.match(theme, /Canvas\(opaque: false, colorMode: \.linear, rendersAsynchronously: true\)/);
+  assert.match(theme, /func xertCardStyle\(\)[\s\S]*LinearGradient/);
+  assert.match(root, /private struct XertNavigationDock: View[\s\S]*RoundedRectangle\(cornerRadius: 18, style: \.continuous\)/);
+  assert.match(root, /matchedGeometryEffect\(id: "primary-navigation-selection"/);
+  assert.doesNotMatch(root, /let width = size\.width \/ CGFloat\(items\.count\)/);
+});
+
+test('shared native controls expose disabled state and honor Reduce Motion', async () => {
+  const theme = await read('../ios/XertFitnessApp/XertFitnessApp/Theme.swift');
+
+  assert.ok((theme.match(/@Environment\(\\\.isEnabled\) private var isEnabled/g) || []).length >= 2);
+  assert.ok((theme.match(/@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/g) || []).length >= 2);
+  assert.match(theme, /\.opacity\(isEnabled \? 1 : 0\.46\)/);
+  assert.match(theme, /scaleEffect\(!reduceMotion && isEnabled && configuration\.isPressed/);
+  assert.match(theme, /animation\(reduceMotion \? nil : \.easeOut/);
+});
