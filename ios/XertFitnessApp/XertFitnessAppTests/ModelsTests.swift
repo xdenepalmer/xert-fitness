@@ -1028,7 +1028,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: 59), 69)
         XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: 0), 28)
         XCTAssertEqual(XertScreenLayout.heroContentTopInset(deviceTopInset: -12), 28)
-        XCTAssertEqual(XertScreenLayout.scrollEndClearance, 32)
+        XCTAssertEqual(XertScreenLayout.scrollEndClearance, 112)
         XCTAssertEqual(XertScreenLayout.pageHeroHeight(usesAccessibilityText: false), 250)
         XCTAssertEqual(XertScreenLayout.pageHeroHeight(usesAccessibilityText: true), 420)
 
