@@ -1,6 +1,13 @@
 import Foundation
 import Combine
 
+enum AdminOperationalQueueState: Equatable {
+    case idle
+    case loading
+    case ready
+    case partial(unavailableSources: [String])
+}
+
 @MainActor
 final class AdminStore: ObservableObject {
     @Published private(set) var dailyOperations: [AdminDailyOperation] = []
@@ -69,6 +76,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
@@ -99,6 +107,7 @@ final class AdminStore: ObservableObject {
     func refresh(session: AuthSession) async {
         guard !isLoading else { return }
         isLoading = true
+        operationalQueueState = .loading
         errorMessage = nil
         defer { isLoading = false }
 
@@ -123,29 +132,30 @@ final class AdminStore: ObservableObject {
         async let blackoutRequest = api.adminBlackoutPeriods(session: session)
 
         var failures: [String] = []
+        var queueFailures: [String] = []
         var loadedSource = false
         do { dailyOperations = try await operationsRequest; loadedSource = true }
-        catch { failures.append("today's classes") }
+        catch { failures.append("today's classes"); queueFailures.append("today's classes") }
         do { waitlist = try await waitlistRequest; loadedSource = true }
-        catch { failures.append("waitlists") }
+        catch { failures.append("waitlists"); queueFailures.append("waitlists") }
         do { followUps = try await followUpRequest; loadedSource = true }
-        catch { failures.append("retention") }
+        catch { failures.append("retention"); queueFailures.append("retention") }
         do { members = try await memberRequest; loadedSource = true }
         catch { failures.append("members") }
         do { orders = try await orderRequest; loadedSource = true }
-        catch { failures.append("orders") }
+        catch { failures.append("orders"); queueFailures.append("orders") }
         do { settings = try await settingsRequest; loadedSource = true }
         catch { failures.append("platform controls") }
         do { ptRequests = try await ptRequest; loadedSource = true }
-        catch { failures.append("PT requests") }
+        catch { failures.append("PT requests"); queueFailures.append("PT requests") }
         do { announcements = try await announcementRequest; loadedSource = true }
         catch { failures.append("member notices") }
         do { schemaCapabilities = try await capabilitiesRequest; loadedSource = true }
-        catch { failures.append("schema health") }
+        catch { failures.append("schema health"); queueFailures.append("schema health") }
         do { commerceHealth = try await commerceRequest; loadedSource = true }
-        catch { failures.append("Stripe health") }
+        catch { failures.append("Stripe health"); queueFailures.append("Stripe health") }
         do { pushHealth = try await pushRequest; loadedSource = true }
-        catch { failures.append("push health") }
+        catch { failures.append("push health"); queueFailures.append("push health") }
         do { auditEntries = try await auditRequest; loadedSource = true }
         catch { failures.append("admin audit") }
         do { products = try await productRequest; loadedSource = true }
@@ -168,6 +178,9 @@ final class AdminStore: ObservableObject {
         if loadedSource {
             lastUpdatedAt = Date()
         }
+        operationalQueueState = queueFailures.isEmpty
+            ? .ready
+            : .partial(unavailableSources: queueFailures)
         if !failures.isEmpty {
             errorMessage = "Could not refresh \(failures.joined(separator: ", ")). Pull down to retry."
         }
@@ -523,7 +536,7 @@ final class AdminStore: ObservableObject {
         defer { updatingBookingRequestIDs = [] }
         do {
             try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
-            bookingRequests = try await api.adminBookingRequests(session: session)
+            try await refreshBookingOperationsSnapshot(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -546,7 +559,7 @@ final class AdminStore: ObservableObject {
             catch { failed.insert(booking.id) }
         }
         do {
-            bookingRequests = try await api.adminBookingRequests(session: session)
+            try await refreshBookingOperationsSnapshot(session: session)
             lastUpdatedAt = Date()
         } catch {
             errorMessage = error.localizedDescription
@@ -555,6 +568,16 @@ final class AdminStore: ObservableObject {
             errorMessage = "\(failed.count) booking update\(failed.count == 1 ? "" : "s") failed and remain selected. Review class capacity, credits, or current status."
         }
         return failed
+    }
+
+    private func refreshBookingOperationsSnapshot(session: AuthSession) async throws {
+        async let bookingRequest = api.adminBookingRequests(session: session)
+        async let operationsRequest = api.adminDailyOperations(session: session)
+        async let waitlistRequest = api.adminWaitlist(session: session)
+        let snapshot = try await (bookingRequest, operationsRequest, waitlistRequest)
+        bookingRequests = snapshot.0
+        dailyOperations = snapshot.1
+        waitlist = snapshot.2
     }
 
     func saveLegacyBookingNotes(

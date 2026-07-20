@@ -39,6 +39,9 @@ The included `Info.plist` already contains these xcconfig substitutions:
   to web, in-app inboxes, and APNs. Supabase role checks and every admin RPC
   remain enforced server-side. Native operations health reports the complete
   migration contract alongside authenticated Stripe and APNs readiness.
+  Its live operational priority queue consolidates release-health issues,
+  booking and PT requests, roll calls, waitlists, retention follow-ups, and
+  checkout reconciliation into count-aware one-tap workspaces.
   The native audit ledger merges recent access, credit, request, notice, lead,
   schedule, content, and booking changes into one searchable owner timeline.
   Owners can also edit live session-pack names, descriptions, prices, credit

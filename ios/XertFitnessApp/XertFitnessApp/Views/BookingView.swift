@@ -322,9 +322,18 @@ struct BookingView: View {
             Button {
                 activeSheet = .privateSession
             } label: {
-                Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
+                ViewThatFits(in: .horizontal) {
+                    Label("Request PT Session", systemImage: "figure.strengthtraining.traditional")
+                    VStack(spacing: 6) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                        Text("Request PT Session")
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 24)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .buttonStyle(.xertGhost)
+            .accessibilityHint("Opens the personal training request form")
         } header: {
             Text("Personal Training").xertEyebrow()
         }
@@ -682,6 +691,7 @@ private struct PrivateSessionRequestView: View {
             sessionSection
             trainingSection
             submitSection
+            XertScrollEndSpacer()
         }
         .tint(.xertSteel)
         .xertListBackground()

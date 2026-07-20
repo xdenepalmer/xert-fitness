@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var admin = AdminStore()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
@@ -341,9 +342,10 @@ struct AdminCommandCentreView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 ownerHeader
+                priorityQueue
                 attentionGrid
                 businessPulse
-                todayDesk(session: session)
+                todayDesk
                 pinnedDirectory
                 managementDirectory
             }
@@ -352,7 +354,7 @@ struct AdminCommandCentreView: View {
             .padding(.bottom, 32)
             .frame(maxWidth: .infinity)
         }
-        .background(Color.xertNavy)
+        .xertScreenBackground()
         .refreshable { await admin.refresh(session: session) }
     }
 
@@ -460,50 +462,190 @@ struct AdminCommandCentreView: View {
             }
         }
         .padding(18)
-        .background(Color.xertInk)
+        .xertCardStyle()
         .overlay(alignment: .leading) {
             Rectangle().fill(Color.xertSteel).frame(width: 3)
         }
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.2), lineWidth: 1))
     }
 
     private var attentionGrid: some View {
         VStack(alignment: .leading, spacing: 12) {
-            adminHeading("Needs attention")
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                AdminMetricTile(title: "Requests", value: admin.requestedPlaces + admin.pendingPTRequests, icon: "tray.full")
-                AdminMetricTile(title: "Waitlisted", value: admin.waitingMembers, icon: "person.2.badge.clock")
-                AdminMetricTile(title: "Follow-ups", value: admin.followUps.count, icon: "phone.arrow.up.right")
-                AdminMetricTile(title: "Roll calls", value: admin.attendanceDue, icon: "checklist")
+            adminHeading("Live workload")
+            LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
+                AdminMetricTile(title: "Class requests", value: admin.requestedPlaces, icon: "tray.full") {
+                    openWorkspace(.bookingRequests)
+                }
+                AdminMetricTile(title: "Waitlisted", value: admin.waitingMembers, icon: "person.2.badge.clock") {
+                    openWorkspace(.classDesk)
+                }
+                AdminMetricTile(title: "Follow-ups", value: admin.followUps.count, icon: "phone.arrow.up.right") {
+                    openWorkspace(.retention)
+                }
+                AdminMetricTile(title: "Roll calls", value: admin.attendanceDue, icon: "checklist") {
+                    openWorkspace(.classDesk)
+                }
             }
+        }
+    }
+
+    private var priorityQueue: some View {
+        let priorities = operationalPriorities
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                adminHeading("Operational priority queue")
+                Spacer()
+                Text("LIVE")
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.xertNavy)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.xertSteel)
+                    .clipShape(Capsule())
+            }
+
+            operationalQueueContent(priorities)
+        }
+    }
+
+    @ViewBuilder
+    private func operationalQueueContent(_ priorities: [AdminPriorityAction]) -> some View {
+        switch admin.operationalQueueState {
+        case .idle, .loading:
+            HStack(spacing: 12) {
+                ProgressView().tint(Color.xertSteel)
+                Text("Checking operational queues…")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.xertPale.opacity(0.82))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .xertCardStyle()
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Checking operational queues")
+        case .partial(let unavailableSources):
+            AdminOperationalDataWarning(unavailableSources: unavailableSources)
+            if priorities.isEmpty {
+                AdminEmptyState(
+                    icon: "exclamationmark.triangle.fill",
+                    text: "Available queues have no open items. Some operational data could not be checked."
+                )
+            } else {
+                priorityRows(priorities)
+            }
+        case .ready:
+            if priorities.isEmpty {
+                AdminEmptyState(icon: "checkmark.seal.fill", text: "All operational queues are clear.")
+            } else {
+                priorityRows(priorities)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func priorityRows(_ priorities: [AdminPriorityAction]) -> some View {
+        ForEach(priorities) { priority in
+            AdminPriorityRow(priority: priority) {
+                openWorkspace(priority.workspace)
+            }
+        }
+    }
+
+    private var operationalPriorities: [AdminPriorityAction] {
+        [
+            AdminPriorityAction(
+                title: "Release health issues",
+                detail: "Review schema, Stripe and push readiness",
+                icon: "cross.case.fill",
+                count: admin.hasHealthSnapshot ? admin.healthIssues : 0,
+                workspace: .health,
+                isCritical: true
+            ),
+            AdminPriorityAction(
+                title: "Class booking requests",
+                detail: "Confirm or decline member places",
+                icon: "person.crop.circle.badge.questionmark",
+                count: admin.requestedPlaces,
+                workspace: .bookingRequests
+            ),
+            AdminPriorityAction(
+                title: "PT enquiries",
+                detail: "Respond to coaching requests",
+                icon: "figure.strengthtraining.traditional",
+                count: admin.pendingPTRequests,
+                workspace: .ptRequests
+            ),
+            AdminPriorityAction(
+                title: "Attendance due",
+                detail: "Complete outstanding class roll calls",
+                icon: "checklist",
+                count: admin.attendanceDue,
+                workspace: .classDesk
+            ),
+            AdminPriorityAction(
+                title: "Waitlisted members",
+                detail: "Review queues and available places",
+                icon: "person.2.badge.clock",
+                count: admin.waitingMembers,
+                workspace: .classDesk
+            ),
+            AdminPriorityAction(
+                title: "Retention follow-ups",
+                detail: "Contact members who need support",
+                icon: "phone.arrow.up.right",
+                count: admin.followUps.count,
+                workspace: .retention
+            ),
+            AdminPriorityAction(
+                title: "Orders to reconcile",
+                detail: "Recover unresolved paid checkouts",
+                icon: "arrow.triangle.2.circlepath.circle",
+                count: admin.orders.lazy.filter(\.isRecoverable).count,
+                workspace: .orders,
+                isCritical: true
+            ),
+        ]
+        .filter { $0.count > 0 }
+        .sorted {
+            if $0.isCritical != $1.isCritical { return $0.isCritical }
+            return $0.count > $1.count
         }
     }
 
     private var businessPulse: some View {
         VStack(alignment: .leading, spacing: 12) {
             adminHeading("Business pulse")
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                AdminMoneyTile(title: "This month", cents: admin.monthRevenueCents)
-                AdminMoneyTile(title: "Total revenue", cents: admin.totalRevenueCents)
-                AdminMetricTile(title: "Members", value: admin.memberCount, icon: "person.2")
-                AdminMetricTile(title: "Paid orders", value: admin.paidOrders.count, icon: "creditcard")
+            LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
+                AdminMoneyTile(title: "This month", cents: admin.monthRevenueCents) {
+                    openWorkspace(.finance)
+                }
+                AdminMoneyTile(title: "Total revenue", cents: admin.totalRevenueCents) {
+                    openWorkspace(.finance)
+                }
+                AdminMetricTile(title: "Members", value: admin.memberCount, icon: "person.2") {
+                    openWorkspace(.members)
+                }
+                AdminMetricTile(title: "Paid orders", value: admin.paidOrders.count, icon: "creditcard") {
+                    openWorkspace(.orders)
+                }
             }
         }
     }
 
-    @ViewBuilder
-    private func todayDesk(session: AuthSession) -> some View {
+    private var todayDesk: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 adminHeading("Today's classes")
                 Spacer()
-                NavigationLink {
-                    AdminClassesView(admin: admin, session: session)
+                Button {
+                    openWorkspace(.classDesk)
                 } label: {
                     Text("OPEN DESK")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color.xertOffWhite)
                 }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens today's class desk")
             }
 
             if !admin.isLoading && admin.dailyOperations.isEmpty {
@@ -536,8 +678,7 @@ struct AdminCommandCentreView: View {
                         }
                     }
                     .padding(14)
-                    .background(Color.xertInk)
-                    .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+                    .xertCardStyle()
                 }
             }
         }
@@ -615,72 +756,78 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func workspaceDestination(_ workspace: XertOwnerWorkspace, session: AuthSession) -> AnyView {
+    @ViewBuilder
+    private func workspaceDestination(_ workspace: XertOwnerWorkspace, session: AuthSession) -> some View {
         switch workspace {
         case .overview:
-            return AnyView(dashboard(session: session).navigationTitle("Overview"))
+            dashboard(session: session).navigationTitle("Overview")
         case .members:
-            return AnyView(AdminMembersView(
+            AdminMembersView(
                 admin: admin,
                 session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
-            ))
+            )
         case .classDesk:
-            return AnyView(AdminClassesView(admin: admin, session: session))
+            AdminClassesView(admin: admin, session: session)
         case .bookingRequests:
-            return AnyView(AdminBookingRequestsView(admin: admin, session: session))
+            AdminBookingRequestsView(admin: admin, session: session)
         case .timetable:
-            return AnyView(AdminScheduleView(admin: admin, session: session))
+            AdminScheduleView(admin: admin, session: session)
         case .availability:
-            return AnyView(AdminAvailabilityView(admin: admin, session: session))
+            AdminAvailabilityView(admin: admin, session: session)
         case .ptRequests:
-            return AnyView(AdminPTRequestsView(admin: admin, session: session))
+            AdminPTRequestsView(admin: admin, session: session)
         case .retention:
-            return AnyView(AdminRetentionView(admin: admin, session: session))
+            AdminRetentionView(admin: admin, session: session)
         case .leads:
-            return AnyView(AdminLeadsView(admin: admin, session: session))
+            AdminLeadsView(admin: admin, session: session)
         case .campaigns:
-            return AnyView(AdminCampaignAttributionView(admin: admin, session: session))
+            AdminCampaignAttributionView(admin: admin, session: session)
         case .siteContent:
-            return AnyView(AdminSiteContentView(admin: admin, session: session))
+            AdminSiteContentView(admin: admin, session: session)
         case .notices:
-            return AnyView(AdminCommunicationsView(admin: admin, session: session))
+            AdminCommunicationsView(admin: admin, session: session)
         case .events:
-            return AnyView(AdminEventsView(
+            AdminEventsView(
                 admin: admin,
                 session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
-            ))
+            )
         case .team:
-            return AnyView(AdminCoachesView(admin: admin, session: session))
+            AdminCoachesView(admin: admin, session: session)
         case .finance:
-            return AnyView(AdminFinanceView(
+            AdminFinanceView(
                 admin: admin,
                 onOpenOrders: { openWorkspace(.orders) }
-            ))
+            )
         case .orders:
-            return AnyView(AdminOrdersView(
+            AdminOrdersView(
                 admin: admin,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
-            ))
+            )
         case .products:
-            return AnyView(AdminProductsView(
+            AdminProductsView(
                 admin: admin,
                 session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
-            ))
+            )
         case .controls:
-            return AnyView(AdminPlatformView(admin: admin, session: session))
+            AdminPlatformView(admin: admin, session: session)
         case .health:
-            return AnyView(AdminOperationsHealthView(
+            AdminOperationsHealthView(
                 admin: admin,
                 session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) },
                 onOpenWorkspace: openWorkspace
-            ))
+            )
         case .audit:
-            return AnyView(AdminAuditView(admin: admin))
+            AdminAuditView(admin: admin)
         }
+    }
+
+    private var dashboardMetricColumns: [GridItem] {
+        let count = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
     }
 }
 
@@ -1917,18 +2064,13 @@ private struct AdminRetentionView: View {
                     }
                     Text("\(member.credits_remaining) credits · \(member.bookings_count) bookings")
                         .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                    HStack {
-                        if let phone = member.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                            Link(destination: url) { Label("Call", systemImage: "phone") }
-                                .buttonStyle(.bordered)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            retentionActions(for: member, expands: false)
                         }
-                        if let email = member.email, let url = URL(string: "mailto:\(email)") {
-                            Link(destination: url) { Label("Email", systemImage: "envelope") }
-                                .buttonStyle(.bordered)
+                        VStack(spacing: 8) {
+                            retentionActions(for: member, expands: true)
                         }
-                        Button { selected = member } label: { Label("Log", systemImage: "checkmark.circle") }
-                            .buttonStyle(.borderedProminent).tint(Color.xertSteel)
-                            .disabled(admin.loggingFollowUpMemberID != nil)
                     }
                     .font(.caption.weight(.bold))
                 }
@@ -1955,6 +2097,32 @@ private struct AdminRetentionView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    @ViewBuilder
+    private func retentionActions(for member: AdminFollowUp, expands: Bool) -> some View {
+        if let phone = member.phone,
+           let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+            Link(destination: url) {
+                Label("Call", systemImage: "phone")
+                    .frame(maxWidth: expands ? .infinity : nil)
+            }
+            .buttonStyle(.bordered)
+        }
+        if let email = member.email, let url = URL(string: "mailto:\(email)") {
+            Link(destination: url) {
+                Label("Email", systemImage: "envelope")
+                    .frame(maxWidth: expands ? .infinity : nil)
+            }
+            .buttonStyle(.bordered)
+        }
+        Button { selected = member } label: {
+            Label("Log follow-up", systemImage: "checkmark.circle")
+                .frame(maxWidth: expands ? .infinity : nil)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.xertSteel)
+        .disabled(admin.loggingFollowUpMemberID != nil)
     }
 }
 
@@ -4627,39 +4795,216 @@ private struct AdminAnnouncementComposer: View {
     }
 }
 
+private struct AdminPriorityAction: Identifiable {
+    let title: String
+    let detail: String
+    let icon: String
+    let count: Int
+    let workspace: XertOwnerWorkspace
+    var isCritical = false
+
+    var id: String { "\(workspace.rawValue):\(title)" }
+}
+
+private struct AdminPriorityRow: View {
+    let priority: AdminPriorityAction
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    priorityIcon
+                    priorityCopy
+                    Spacer(minLength: 8)
+                    countBadge
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.xertSteel)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        priorityIcon
+                        Text(priority.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.xertOffWhite)
+                        Spacer(minLength: 8)
+                        countBadge
+                    }
+                    Text(priority.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        if priority.isCritical {
+                            Label("Critical", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.red)
+                        }
+                        Spacer()
+                        Label("Open workspace", systemImage: "arrow.right")
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .font(.caption.weight(.bold))
+                }
+            }
+            .padding(14)
+            .xertCardStyle()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(priority.isCritical ? "Critical, " : "")\(priority.title), \(priority.count)")
+        .accessibilityHint(priority.detail)
+    }
+
+    private var priorityIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill((priority.isCritical ? Color.red : Color.xertSteel).opacity(0.14))
+            Image(systemName: priority.icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(priority.isCritical ? Color.red : Color.xertSteel)
+        }
+        .frame(width: 42, height: 42)
+    }
+
+    private var priorityCopy: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(priority.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertOffWhite)
+            Text(priority.detail)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.72))
+                .lineLimit(2)
+        }
+    }
+
+    private var countBadge: some View {
+        Text(priority.count > 99 ? "99+" : priority.count.formatted())
+            .font(.caption.weight(.black))
+            .foregroundStyle(priority.isCritical ? Color.white : Color.xertNavy)
+            .padding(.horizontal, 8)
+            .frame(minWidth: 30, minHeight: 26)
+            .background(priority.isCritical ? Color.red : Color.xertSteel)
+            .clipShape(Capsule())
+    }
+}
+
+private struct AdminOperationalDataWarning: View {
+    let unavailableSources: [String]
+
+    var body: some View {
+        Label {
+            Text("Partial data: \(unavailableSources.joined(separator: ", ")). Existing items remain available; pull to retry.")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(Color.orange)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.orange.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.orange.opacity(0.42), lineWidth: 1)
+        }
+        .accessibilityLabel("Operational data is partial. Unavailable: \(unavailableSources.joined(separator: ", "))")
+    }
+}
+
 private struct AdminMetricTile: View {
     let title: String
     let value: Int
     let icon: String
+    let action: (() -> Void)?
+
+    init(
+        title: String,
+        value: Int,
+        icon: String,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.action = action
+    }
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { tileContent }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens \(title.lowercased())")
+            } else {
+                tileContent
+            }
+        }
+    }
+
+    private var tileContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.xertSteel)
+            HStack {
+                Image(systemName: icon).foregroundStyle(Color.xertSteel)
+                Spacer()
+                if action != nil {
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.xertSteel.opacity(0.6))
+                }
+            }
             Text(value.formatted()).xertDisplay(30).foregroundStyle(Color.xertOffWhite)
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+        .xertCardStyle()
     }
 }
 
 private struct AdminMoneyTile: View {
     let title: String
     let cents: Int
+    let action: (() -> Void)?
+
+    init(title: String, cents: Int, action: (() -> Void)? = nil) {
+        self.title = title
+        self.cents = cents
+        self.action = action
+    }
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { tileContent }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens finance")
+            } else {
+                tileContent
+            }
+        }
+    }
+
+    private var tileContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "dollarsign.circle").foregroundStyle(Color.xertSteel)
+            HStack {
+                Image(systemName: "dollarsign.circle").foregroundStyle(Color.xertSteel)
+                Spacer()
+                if action != nil {
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.xertSteel.opacity(0.6))
+                }
+            }
             Text((Double(cents) / 100).formatted(.currency(code: "AUD")))
                 .font(.title3.weight(.bold)).foregroundStyle(Color.xertOffWhite).lineLimit(1).minimumScaleFactor(0.7)
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+        .xertCardStyle()
     }
 }
 
@@ -4696,8 +5041,7 @@ private struct AdminDestinationRow: View {
                 Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Color.xertSteel)
             }
             .padding(15)
-            .background(Color.xertInk)
-            .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+            .xertCardStyle()
         }
         .buttonStyle(.plain)
     }
@@ -4713,8 +5057,7 @@ private struct AdminEmptyState: View {
             .foregroundStyle(Color.xertPale.opacity(0.65))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(Color.xertInk)
-            .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+            .xertCardStyle()
     }
 }
 

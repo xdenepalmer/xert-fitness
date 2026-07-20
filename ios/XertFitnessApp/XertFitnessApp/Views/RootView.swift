@@ -208,7 +208,7 @@ struct RootView: View {
             XertNavigationCommandPalette(
                 commands: navigation.commandPaletteCommands(
                     isAdmin: store.profile?.isAdmin == true,
-                    context: navigationContext,
+                    context: navigationPaletteContext,
                     pinnedRoutes: pinnedMemberRoutes,
                     orderedDestinations: memberWorkspaceOrder
                 ),
@@ -271,7 +271,21 @@ struct RootView: View {
         .resolve(isRegularWidth: horizontalSizeClass == .regular)
     }
 
-    private var navigationContext: XertNavigationContext {
+    private var navigationStatusContext: XertNavigationContext {
+        let activeBookings = activeUpcomingBookings
+        return XertNavigationContext(
+            isSignedIn: store.isSignedIn,
+            noticeCount: store.announcements.count,
+            bookingCount: activeBookings.count,
+            creditCount: store.creditTotal,
+            eventGoalCount: store.eventGoalIDs.count,
+            hasPendingCheckout: store.isCheckoutConfirmationPending || store.isReconcilingCheckout,
+            nextBooking: nextBookingNavigationContext(from: activeBookings),
+            memberRecords: []
+        )
+    }
+
+    private var navigationPaletteContext: XertNavigationContext {
         let activeBookings = activeUpcomingBookings
         return XertNavigationContext(
             isSignedIn: store.isSignedIn,
@@ -289,8 +303,10 @@ struct RootView: View {
         from bookings: [BookingItem]
     ) -> [XertMemberRecordNavigationContext] {
         let now = Date()
+        let limit = XertMemberRecordNavigationContext.maximumRecordsPerKind
         let classRecords = ClassSessionDiscovery.sessions(from: store.sessions, now: now)
             .filter { $0.start_time >= now }
+            .prefix(limit)
             .map {
                 XertMemberRecordNavigationContext.classSession(
                     id: $0.id,
@@ -301,23 +317,32 @@ struct RootView: View {
                     startTime: $0.start_time
                 )
             }
-        let bookingRecords = bookings.map {
-            XertMemberRecordNavigationContext.booking(
-                id: $0.booking_id,
-                title: $0.title,
-                status: $0.stateLabel,
-                startTime: $0.start_time
-            )
-        }
-        let noticeRecords = store.announcements.map {
-            XertMemberRecordNavigationContext.notice(
-                id: $0.id,
-                title: $0.title,
-                tone: $0.tone,
-                publishedAt: $0.published_at
-            )
-        }
-        return classRecords + bookingRecords + noticeRecords
+        let bookingRecords = bookings
+            .sorted { $0.start_time < $1.start_time }
+            .prefix(limit)
+            .map {
+                XertMemberRecordNavigationContext.booking(
+                    id: $0.booking_id,
+                    title: $0.title,
+                    status: $0.stateLabel,
+                    startTime: $0.start_time
+                )
+            }
+        let noticeRecords = store.announcements
+            .map {
+                XertMemberRecordNavigationContext.notice(
+                    id: $0.id,
+                    title: $0.title,
+                    tone: $0.tone,
+                    publishedAt: $0.published_at
+                )
+            }
+            .sorted {
+                if $0.priority != $1.priority { return $0.priority < $1.priority }
+                return $0.timestamp > $1.timestamp
+            }
+            .prefix(limit)
+        return Array(classRecords) + Array(bookingRecords) + Array(noticeRecords)
     }
 
     private var navigationCommandContext: XertNavigationCommandContext {
@@ -339,7 +364,7 @@ struct RootView: View {
             selection: selectedDestinationBinding,
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
-            statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
+            statusSnapshot: XertNavigationStatusSnapshot(context: navigationStatusContext),
             ownerPulse: ownerNavigationPulse.snapshot,
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
@@ -361,7 +386,7 @@ struct RootView: View {
             selection: selectedDestinationBinding,
             currentRoute: navigation.route,
             isAdmin: store.profile?.isAdmin == true,
-            statusSnapshot: XertNavigationStatusSnapshot(context: navigationContext),
+            statusSnapshot: XertNavigationStatusSnapshot(context: navigationStatusContext),
             ownerPulse: ownerNavigationPulse.snapshot,
             previousRoute: navigation.previousRoute,
             nextRoute: navigation.nextRoute,
@@ -1138,10 +1163,21 @@ private struct XertNavigationDock: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(Color.xertDeep.opacity(0.96))
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Color.xertSteel.opacity(0.48)).frame(height: 1)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.xertDeep, Color.xertInk.opacity(0.94)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                 }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.xertSteel.opacity(0.32), lineWidth: 1)
+                }
+                .padding(.bottom, 7)
                 .accessibilityHint(ownerAccessibilityHint)
                 .accessibilityValue(ownerPulse.accessibilityLabel)
                 .contextMenu { ownerWorkspaceMenu }
@@ -1156,23 +1192,18 @@ private struct XertNavigationDock: View {
             }
             .frame(height: dynamicTypeSize.isAccessibilitySize ? 80 : 66)
             .background {
-                ZStack {
-                    Color.xertInk.opacity(0.98)
-                    Canvas { context, size in
-                        let width = size.width / CGFloat(items.count)
-                        for index in 1..<items.count {
-                            var line = Path()
-                            line.move(to: CGPoint(x: CGFloat(index) * width, y: 14))
-                            line.addLine(to: CGPoint(x: CGFloat(index) * width, y: size.height - 12))
-                            context.stroke(line, with: .color(Color.xertSteel.opacity(0.08)), lineWidth: 1)
-                        }
-                    }
-                    .allowsHitTesting(false)
-                }
+                LinearGradient(
+                    colors: [Color.xertDeep.opacity(0.92), Color.xertInk.opacity(0.98)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-            .overlay(alignment: .top) {
-                Rectangle().fill(Color.xertSteel.opacity(0.24)).frame(height: 1)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.xertSteel.opacity(0.28), lineWidth: 1)
             }
+            .shadow(color: Color.black.opacity(0.26), radius: 14, y: 5)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 36)
                     .onEnded { value in
@@ -1183,93 +1214,164 @@ private struct XertNavigationDock: View {
                     }
             )
         }
-        .background(Color.xertInk.ignoresSafeArea(edges: .bottom))
+        .padding(.horizontal, 10)
+        .padding(.top, 7)
+        .padding(.bottom, 5)
+        .background {
+            LinearGradient(
+                colors: [Color.xertNavy.opacity(0.08), Color.xertInk.opacity(0.98)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        }
         .accessibilityAction(named: "Open XERT quick switcher") {
             onOpenCommands()
         }
     }
 
     private var taskStrip: some View {
+        ViewThatFits(in: .horizontal) {
+            taskStripLayout(compact: false)
+            taskStripLayout(compact: true)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: dynamicTypeSize.isAccessibilitySize ? 58 : 46)
+        .background {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.xertDeep.opacity(0.9))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.xertSteel.opacity(0.18), lineWidth: 1)
+        }
+        .padding(.bottom, 7)
+    }
+
+    private func taskStripLayout(compact: Bool) -> some View {
         HStack(spacing: 8) {
-            if let previousRoute {
-                Button(action: onReturnPrevious) {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.xertSteel)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("[", modifiers: .command)
-                .accessibilityLabel("Back to \(previousRoute.navigationTitle)")
-                .accessibilityHint("Returns to the exact previous XERT task")
-                .accessibilityIdentifier("xert-navigation-history")
+            taskStripLeadingControl
+            taskStripTitle(minimumWidth: compact ? 64 : 100)
+
+            if compact {
+                compactUtilitiesMenu
             } else {
-                Image(systemName: currentRoute.destination.selectedIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.xertSteel)
-                    .frame(width: 44, height: 44)
-                    .accessibilityHidden(true)
+                taskStripForwardControl
+                XertNavigationShareControl(route: currentRoute, layout: .compact)
+                XertNavigationStatusControl(
+                    status: statusSnapshot.priorityStatus,
+                    layout: .compact,
+                    onOpen: onOpenStatus
+                )
             }
 
-            Text(currentRoute.navigationTitle)
-                .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
-                .textCase(.uppercase)
-                .tracking(0.8)
-                .foregroundStyle(Color.xertOffWhite)
-                .lineLimit(2)
-                .minimumScaleFactor(0.72)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
+            quickSwitcherControl
+        }
+    }
 
-            Button(action: onReturnNext) {
-                Image(systemName: "arrow.uturn.forward")
+    @ViewBuilder
+    private var taskStripLeadingControl: some View {
+        if let previousRoute {
+            Button(action: onReturnPrevious) {
+                Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.xertSteel)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("]", modifiers: .command)
-            .disabled(nextRoute == nil)
-            .opacity(nextRoute == nil ? 0.24 : 1)
-            .accessibilityLabel(nextRoute.map { "Forward to \($0.navigationTitle)" } ?? "No forward task")
-            .accessibilityHint("Returns to the next XERT workspace task")
-            .accessibilityHidden(nextRoute == nil)
-            .accessibilityIdentifier("xert-navigation-forward-history")
+            .keyboardShortcut("[", modifiers: .command)
+            .accessibilityLabel("Back to \(previousRoute.navigationTitle)")
+            .accessibilityHint("Returns to the exact previous XERT task")
+            .accessibilityIdentifier("xert-navigation-history")
+        } else {
+            Image(systemName: currentRoute.destination.selectedIcon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
+        }
+    }
 
-            XertNavigationShareControl(route: currentRoute, layout: .compact)
+    private func taskStripTitle(minimumWidth: CGFloat) -> some View {
+        Text(currentRoute.navigationTitle)
+            .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
+            .textCase(.uppercase)
+            .tracking(0.8)
+            .foregroundStyle(Color.xertOffWhite)
+            .lineLimit(2)
+            .minimumScaleFactor(0.72)
+            .frame(minWidth: minimumWidth, maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Current task: \(currentRoute.navigationTitle)")
+    }
 
-            XertNavigationStatusControl(
-                status: statusSnapshot.priorityStatus,
-                layout: .compact,
-                onOpen: onOpenStatus
-            )
+    private var taskStripForwardControl: some View {
+        Button(action: onReturnNext) {
+            Image(systemName: "arrow.uturn.forward")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("]", modifiers: .command)
+        .disabled(nextRoute == nil)
+        .opacity(nextRoute == nil ? 0.24 : 1)
+        .accessibilityLabel(nextRoute.map { "Forward to \($0.navigationTitle)" } ?? "No forward task")
+        .accessibilityHint("Returns to the next XERT workspace task")
+        .accessibilityHidden(nextRoute == nil)
+        .accessibilityIdentifier("xert-navigation-forward-history")
+    }
 
-            Button(action: onOpenCommands) {
-                ZStack {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
-                    XertPinnedWorkspaceBadge(count: pinnedRoutes.count)
-                        .offset(x: 15, y: -12)
+    private var compactUtilitiesMenu: some View {
+        Menu {
+            if let nextRoute {
+                Button(action: onReturnNext) {
+                    Label("Forward to \(nextRoute.navigationTitle)", systemImage: "arrow.uturn.forward")
                 }
+            }
+            if let destination = currentRoute.shareDestination {
+                ShareLink(item: destination.route.webURL, subject: Text(destination.title)) {
+                    Label("Share \(destination.title)", systemImage: "square.and.arrow.up")
+                }
+            }
+            if let status = statusSnapshot.priorityStatus {
+                Button(action: { onOpenStatus(status) }) {
+                    Label(status.actionTitle, systemImage: status.icon)
+                }
+            }
+            Button(action: { onReselect(currentRoute.destination) }) {
+                Label("Refresh \(currentRoute.destination.title)", systemImage: "arrow.clockwise")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Color.xertPale)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
+        }
+        .accessibilityLabel("More navigation actions")
+        .accessibilityIdentifier("xert-navigation-utilities")
+    }
+
+    private var quickSwitcherControl: some View {
+        Button(action: onOpenCommands) {
+            ZStack {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                XertPinnedWorkspaceBadge(count: pinnedRoutes.count)
+                    .offset(x: 15, y: -12)
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut("k", modifiers: .command)
-            .accessibilityLabel(quickSwitcherAccessibilityLabel)
-            .accessibilityHint("Searches workspaces, recent tasks and available actions")
-            .accessibilityIdentifier("xert-navigation-commands")
-            .contextMenu { pinnedWorkspaceMenu }
+            .foregroundStyle(Color.xertPale)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .frame(height: dynamicTypeSize.isAccessibilitySize ? 58 : 46)
-        .background(Color.xertDeep.opacity(0.96))
-        .overlay(alignment: .top) {
-            Rectangle().fill(Color.xertSteel.opacity(0.2)).frame(height: 1)
-        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("k", modifiers: .command)
+        .accessibilityLabel(quickSwitcherAccessibilityLabel)
+        .accessibilityHint("Searches workspaces, recent tasks and available actions")
+        .accessibilityIdentifier("xert-navigation-commands")
+        .contextMenu { pinnedWorkspaceMenu }
     }
 
     @ViewBuilder
@@ -1327,14 +1429,28 @@ private struct XertNavigationDock: View {
                     .minimumScaleFactor(0.72)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .top) {
+            .background {
                 if selected {
-                    Rectangle()
-                        .fill(Color.xertSteel)
-                        .frame(width: item == .booking ? 42 : 28, height: 2)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.xertSteel.opacity(0.19), Color.xertSteel.opacity(0.06)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                         .matchedGeometryEffect(id: "primary-navigation-selection", in: selectionNamespace)
                 }
             }
+            .overlay(alignment: .top) {
+                if selected {
+                    Capsule()
+                        .fill(Color.xertSteel)
+                        .frame(width: item == .booking ? 42 : 28, height: 3)
+                }
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
