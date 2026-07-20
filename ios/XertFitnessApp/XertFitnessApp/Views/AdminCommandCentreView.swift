@@ -342,6 +342,14 @@ struct AdminCommandCentreView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 ownerHeader
+                if !admin.refreshUnavailableSources.isEmpty {
+                    AdminRefreshDataWarning(
+                        unavailableSources: admin.refreshUnavailableSources,
+                        isRetrying: admin.isLoading
+                    ) {
+                        Task { await admin.refresh(session: session) }
+                    }
+                }
                 priorityQueue
                 attentionGrid
                 businessPulse
@@ -4911,6 +4919,50 @@ private struct AdminOperationalDataWarning: View {
                 .stroke(Color.orange.opacity(0.42), lineWidth: 1)
         }
         .accessibilityLabel("Operational data is partial. Unavailable: \(unavailableSources.joined(separator: ", "))")
+    }
+}
+
+private struct AdminRefreshDataWarning: View {
+    let unavailableSources: [String]
+    let isRetrying: Bool
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("Some data is temporarily unavailable: \(unavailableSources.joined(separator: ", ")). Available sections still work and keep their last loaded data.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
+
+            Button(action: onRetry) {
+                HStack(spacing: 8) {
+                    if isRetrying {
+                        ProgressView().tint(Color.xertNavy)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(isRetrying ? "Retrying…" : "Retry unavailable data")
+                }
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .disabled(isRetrying)
+            .accessibilityLabel(isRetrying ? "Retrying unavailable Command Centre data" : "Retry unavailable Command Centre data")
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(Color.orange)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.orange.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.orange.opacity(0.42), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

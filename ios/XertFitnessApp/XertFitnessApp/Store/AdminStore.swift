@@ -77,6 +77,7 @@ final class AdminStore: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
+    @Published private(set) var refreshUnavailableSources: [String] = []
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
@@ -108,7 +109,6 @@ final class AdminStore: ObservableObject {
         guard !isLoading else { return }
         isLoading = true
         operationalQueueState = .loading
-        errorMessage = nil
         defer { isLoading = false }
 
         async let operationsRequest = api.adminDailyOperations(session: session)
@@ -151,11 +151,11 @@ final class AdminStore: ObservableObject {
         do { announcements = try await announcementRequest; loadedSource = true }
         catch { failures.append("member notices") }
         do { schemaCapabilities = try await capabilitiesRequest; loadedSource = true }
-        catch { failures.append("schema health"); queueFailures.append("schema health") }
+        catch { failures.append("schema health") }
         do { commerceHealth = try await commerceRequest; loadedSource = true }
-        catch { failures.append("Stripe health"); queueFailures.append("Stripe health") }
+        catch { failures.append("Stripe health") }
         do { pushHealth = try await pushRequest; loadedSource = true }
-        catch { failures.append("push health"); queueFailures.append("push health") }
+        catch { failures.append("push health") }
         do { auditEntries = try await auditRequest; loadedSource = true }
         catch { failures.append("admin audit") }
         do { products = try await productRequest; loadedSource = true }
@@ -178,12 +178,10 @@ final class AdminStore: ObservableObject {
         if loadedSource {
             lastUpdatedAt = Date()
         }
+        refreshUnavailableSources = failures
         operationalQueueState = queueFailures.isEmpty
             ? .ready
             : .partial(unavailableSources: queueFailures)
-        if !failures.isEmpty {
-            errorMessage = "Could not refresh \(failures.joined(separator: ", ")). Pull down to retry."
-        }
     }
 
     func searchMembers(session: AuthSession, query: String) async {

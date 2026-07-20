@@ -221,15 +221,24 @@ test('native owner dashboard consolidates live priorities into actionable worksp
 
 test('owner queue freshness and booking mutations keep dashboard counts trustworthy', async () => {
   const store = await read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
 
   assert.match(store, /enum AdminOperationalQueueState: Equatable/);
   assert.match(store, /operationalQueueState = \.loading/);
+  assert.match(store, /@Published private\(set\) var refreshUnavailableSources: \[String\] = \[\]/);
+  assert.match(store, /refreshUnavailableSources = failures/);
+  assert.doesNotMatch(store, /errorMessage = "Could not refresh/);
+  assert.doesNotMatch(store, /catch \{ failures\.append\("Stripe health"\); queueFailures\.append/);
+  assert.doesNotMatch(store, /catch \{ failures\.append\("push health"\); queueFailures\.append/);
   assert.match(store, /queueFailures\.isEmpty[\s\S]*\.ready[\s\S]*\.partial\(unavailableSources: queueFailures\)/);
   assert.match(store, /private func refreshBookingOperationsSnapshot/);
   assert.match(store, /async let bookingRequest = api\.adminBookingRequests/);
   assert.match(store, /async let operationsRequest = api\.adminDailyOperations/);
   assert.match(store, /async let waitlistRequest = api\.adminWaitlist/);
   assert.ok((store.match(/try await refreshBookingOperationsSnapshot\(session: session\)/g) || []).length >= 2);
+  assert.match(view, /AdminRefreshDataWarning\(/);
+  assert.match(view, /Retry unavailable data/);
+  assert.match(view, /Task \{ await admin\.refresh\(session: session\) \}/);
 });
 
 test('native owner navigation adapts into a categorized scene-restored iPad workspace', async () => {
