@@ -100,7 +100,7 @@ final class AdminStore: ObservableObject {
     var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
     var unavailableHealthSourceCount: Int {
         guard hasCompletedRefresh else { return 0 }
-        Self.healthSources.filter {
+        return Self.healthSources.filter {
             !loadedSources.contains($0) || refreshUnavailableSources.contains($0)
         }.count
     }
