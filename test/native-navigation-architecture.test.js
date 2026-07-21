@@ -55,6 +55,10 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
 
 test('compact dock visibly exposes exact task context, back, and quick switching', async () => {
   const root = await readFile(rootURL, 'utf8');
+  const dock = root.slice(
+    root.indexOf('private struct XertNavigationDock'),
+    root.indexOf('private struct XertOwnerNavigationPulseBadge'),
+  );
   assert.match(root, /XertNavigationDock\([\s\S]*currentRoute: navigation\.route/);
   assert.match(root, /let currentRoute: XertMemberRoute/);
   assert.match(root, /private var taskStrip: some View/);
@@ -68,6 +72,8 @@ test('compact dock visibly exposes exact task context, back, and quick switching
   assert.match(root, /Returns to the exact previous XERT task/);
   assert.match(root, /Button\(action: onOpenCommands\)[\s\S]*magnifyingglass/);
   assert.match(root, /Searches workspaces, recent tasks and available actions/);
+  assert.doesNotMatch(dock, /Text\("Owner Command Centre"\)/);
+  assert.match(dock, /if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
 });
 
 test('member routing is typed, task-restorable, and owns native deep-link mapping', async () => {
@@ -226,13 +232,14 @@ test('quick switcher exposes a bounded authorization-aware exact-task timeline',
   assert.match(modelsTests, /testNavigationTimelineRejectsProtectedJumpsAndCommandsWhenSignedOut/);
 });
 
-test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
-  const [root, ownerNavigation] = await Promise.all([
+test('owner command access is role-aware, full-screen, and available through native switching', async () => {
+  const [root, navigation, ownerNavigation] = await Promise.all([
     readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
     readFile(ownerNavigationURL, 'utf8'),
   ]);
   assert.match(root, /isAdmin: store\.profile\?\.isAdmin == true/);
-  assert.match(root, /Text\("Owner Command Centre"\)/);
+  assert.match(navigation, /title: workspace == \.overview \? "Owner Command Centre" : workspace\.title/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
   assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(ownerNavigation, /struct XertOwnerRoute: Equatable, Hashable/);
