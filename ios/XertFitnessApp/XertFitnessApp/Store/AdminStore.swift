@@ -13,6 +13,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var dailyOperations: [AdminDailyOperation] = []
     @Published private(set) var waitlist: [AdminWaitlistItem] = []
     @Published private(set) var followUps: [AdminFollowUp] = []
+    @Published private(set) var activationOverview: AdminMemberActivationOverview?
+    @Published private(set) var activationQueue: [AdminMemberActivationItem] = []
     @Published private(set) var members: [AdminMemberSummary] = []
     @Published private(set) var memberNotes: [AdminMemberNote] = []
     @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
@@ -138,6 +140,8 @@ final class AdminStore: ObservableObject {
         async let operationsRequest = api.adminDailyOperations(session: session)
         async let waitlistRequest = api.adminWaitlist(session: session)
         async let followUpRequest = api.adminFollowUps(session: session)
+        async let activationOverviewRequest = api.adminMemberActivationOverview(session: session)
+        async let activationQueueRequest = api.adminMemberActivationQueue(session: session)
         async let memberRequest = api.adminMembers(session: session)
         async let orderRequest = api.adminOrders(session: session)
         async let settingsRequest = api.adminPlatformSettings(session: session)
@@ -165,6 +169,16 @@ final class AdminStore: ObservableObject {
         catch { failures.append("waitlists"); queueFailures.append("waitlists") }
         do { followUps = try await followUpRequest; successfulSources.insert("retention"); loadedSource = true }
         catch { failures.append("retention"); queueFailures.append("retention") }
+        do {
+            activationOverview = try await activationOverviewRequest
+            successfulSources.insert("member activation")
+            loadedSource = true
+        } catch { failures.append("member activation") }
+        do {
+            activationQueue = try await activationQueueRequest
+            successfulSources.insert("activation actions")
+            loadedSource = true
+        } catch { failures.append("activation actions"); queueFailures.append("activation actions") }
         do { members = try await memberRequest; successfulSources.insert("members"); loadedSource = true }
         catch { failures.append("members") }
         do { orders = try await orderRequest; successfulSources.insert("orders"); loadedSource = true }
@@ -802,6 +816,39 @@ final class AdminStore: ObservableObject {
             )
             followUps = try await api.adminFollowUps(session: session)
             lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func logActivationFollowUp(
+        session: AuthSession,
+        member: AdminMemberActivationItem,
+        channel: String
+    ) async -> Bool {
+        guard loggingFollowUpMemberID == nil else { return false }
+        loggingFollowUpMemberID = member.id
+        defer { loggingFollowUpMemberID = nil }
+        do {
+            try await api.adminAddMemberNote(
+                session: session,
+                memberID: member.id,
+                category: "follow_up",
+                body: "Activation follow-up completed via \(channel). Next step: \(member.reasonLabel)."
+            )
+            activationQueue.removeAll { $0.id == member.id }
+            lastUpdatedAt = Date()
+            do {
+                activationQueue = try await api.adminMemberActivationQueue(session: session)
+                loadedSources.insert("activation actions")
+                refreshUnavailableSources.removeAll { $0 == "activation actions" }
+            } catch {
+                if !refreshUnavailableSources.contains("activation actions") {
+                    refreshUnavailableSources.append("activation actions")
+                }
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription

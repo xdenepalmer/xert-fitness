@@ -48,6 +48,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var isReconcilingCheckout = false
     @Published private(set) var isCheckoutConfirmationPending = false
+    @Published private(set) var checkoutActivatedSessionID: UUID?
     @Published private(set) var hasBootstrapped = false
     @Published private(set) var isUsingCachedPublicData = false
     @Published private(set) var publicDataUpdatedAt: Date?
@@ -539,13 +540,14 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func book(_ session: ClassSession) async {
+    @discardableResult
+    func book(_ session: ClassSession) async -> MemberBookingOutcome {
         if let message = memberBookingControlError() {
             errorMessage = message
             XertHaptics.play(.warning)
-            return
+            return .failed
         }
-        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return .failed }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
         defer {
@@ -554,24 +556,31 @@ final class XertStore: ObservableObject {
         do {
             let authSession = try await validAuthSession()
             try await api.book(session: authSession, classSessionID: session.id)
-            guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            guard canApplyMemberState(memberVersion, session: authSession) else { return .failed }
             cancelInFlightFullRefresh()
             XertHaptics.play(.success)
             await refreshBookingState(memberVersion: memberVersion, session: authSession)
+            return .completed
         } catch {
-            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            guard memberStateVersion.isCurrent(memberVersion) else { return .failed }
+            if error.localizedDescription.contains("NO_CREDITS") {
+                XertHaptics.play(.warning)
+                return .needsCredits
+            }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
+            return .failed
         }
     }
 
-    func joinWaitlist(_ session: ClassSession) async {
+    @discardableResult
+    func joinWaitlist(_ session: ClassSession) async -> MemberBookingOutcome {
         if let message = memberBookingControlError() {
             errorMessage = message
             XertHaptics.play(.warning)
-            return
+            return .failed
         }
-        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return .failed }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
         defer {
@@ -580,14 +589,16 @@ final class XertStore: ObservableObject {
         do {
             let authSession = try await validAuthSession()
             try await api.joinWaitlist(session: authSession, classSessionID: session.id)
-            guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            guard canApplyMemberState(memberVersion, session: authSession) else { return .failed }
             cancelInFlightFullRefresh()
             XertHaptics.play(.success)
             await refreshBookingState(memberVersion: memberVersion, session: authSession)
+            return .completed
         } catch {
-            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            guard memberStateVersion.isCurrent(memberVersion) else { return .failed }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
+            return .failed
         }
     }
 
@@ -907,7 +918,11 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func checkoutURL(for product: Product, attemptID: UUID) async -> URL? {
+    func checkoutURL(
+        for product: Product,
+        attemptID: UUID,
+        activationSessionID: UUID? = nil
+    ) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
         guard sessionPackPaymentsEnabled else {
             errorMessage = "Session pack purchases are paused while XERT completes its payment launch checks."
@@ -929,7 +944,8 @@ final class XertStore: ObservableObject {
                 userID: userID,
                 baselineOrderIDs: Set(orders.map(\.id)),
                 startedAt: Date(),
-                checkoutSessionID: checkout.checkout_session_id
+                checkoutSessionID: checkout.checkout_session_id,
+                activationSessionID: activationSessionID
             ))
             isCheckoutConfirmationPending = true
             XertHaptics.play(.mediumImpact)
@@ -999,6 +1015,7 @@ final class XertStore: ObservableObject {
                         errorMessage = "This payment was refunded. No purchased credits remain on the order."
                         XertHaptics.play(.warning)
                     } else {
+                        checkoutActivatedSessionID = pendingCheckout.activationSessionID
                         XertHaptics.play(.success)
                     }
                     return
@@ -1026,6 +1043,12 @@ final class XertStore: ObservableObject {
     func cancelPendingCheckout() {
         PendingCheckoutStore.clear()
         isCheckoutConfirmationPending = false
+        checkoutActivatedSessionID = nil
+    }
+
+    func consumeCheckoutActivatedSessionID() -> UUID? {
+        defer { checkoutActivatedSessionID = nil }
+        return checkoutActivatedSessionID
     }
 
     @discardableResult
@@ -1322,6 +1345,7 @@ final class XertStore: ObservableObject {
         creditBalanceLoaded = false
         bookings = []
         classReminderSyncState = .off
+        checkoutActivatedSessionID = nil
         orders = []
         profile = nil
         memberOnboarding = nil

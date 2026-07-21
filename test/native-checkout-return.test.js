@@ -29,7 +29,7 @@ test('native checkout requests the bounded iOS return target', () => {
 test('native checkout reuses an attempt after API failure and clears it after handoff', () => {
   assert.match(booking, /@State private var checkoutAttemptIDs: \[String: UUID\] = \[:\]/);
   assert.match(booking, /checkoutAttemptIDs\[product\.id\] \?\? UUID\(\)/);
-  assert.match(booking, /checkoutURL\(for: product, attemptID: checkoutAttemptID\)/);
+  assert.match(booking, /checkoutURL\([\s\S]*for: product,[\s\S]*attemptID: checkoutAttemptID,[\s\S]*activationSessionID:/);
   assert.match(booking, /if let url[\s\S]*checkoutAttemptIDs\[product\.id\] = nil[\s\S]*checkoutBrowser\.start/);
 });
 

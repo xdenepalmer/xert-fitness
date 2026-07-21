@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
-import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberFollowUps, adminListMembersPage, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { Activity, Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
+import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
 import { createFollowUpCopy, createFollowUpLog } from '@/lib/memberFollowUp';
+import { activationQueuePresentation, activationSnapshotPresentation } from '@/lib/memberActivation';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
@@ -481,6 +482,180 @@ function followUpDetail(member) {
   return `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`;
 }
 
+function ActivationCockpit({
+  overview,
+  overviewAvailable,
+  overviewError,
+  overviewLoading,
+  queue,
+  queueAvailable,
+  queueError,
+  queueLoading,
+  onRetry,
+  onView,
+  onLog,
+}) {
+  const presentation = overview ? activationSnapshotPresentation(overview) : null;
+  const actionRows = activationQueuePresentation(queue, 12);
+  const outreachAllowed = !queueError && !queueLoading;
+  const hasSnapshotWarning = Boolean(overviewError || presentation?.partial || presentation?.inconsistent || presentation?.stale);
+
+  return (
+    <section aria-labelledby="member-activation-title" className="mb-6 border border-xert-steel/20 bg-xert-ink/45 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 id="member-activation-title" className="flex items-center gap-2 font-display text-base uppercase text-xert-offwhite">
+            <Activity className="h-4 w-4 shrink-0 text-xert-steel" aria-hidden="true" /> Member activation
+          </h3>
+          <p className="mt-1 max-w-2xl font-body text-xs leading-relaxed text-xert-concrete/50">
+            Authoritative 30-day account cohort. Each step comes from current setup, training access, booking and recorded attendance — not page views.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={overviewLoading || queueLoading}
+          className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel disabled:opacity-40"
+        >
+          <RefreshCw className={`h-4 w-4 ${(overviewLoading || queueLoading) ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+
+      {!overview && overviewLoading ? (
+        <div className="mt-4 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Loading member activation funnel">
+          {[1, 2, 3, 4, 5, 6].map(item => <div key={item} className="h-24 animate-pulse bg-xert-charcoal" />)}
+        </div>
+      ) : !overviewAvailable ? (
+        <p className="mt-4 border border-[#e0b36a]/35 bg-[#e0b36a]/10 p-3 font-body text-xs text-[#e0b36a]" role="status">
+          Activation reporting is paused until the member activation upgrade is applied.
+        </p>
+      ) : !overview ? (
+        <div className="mt-4">
+          <AdminLoadError message={overviewError || 'Member activation reporting is unavailable.'} onRetry={onRetry} />
+        </div>
+      ) : (
+        <>
+          {hasSnapshotWarning && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-[#e0b36a]/35 bg-[#e0b36a]/10 p-3">
+              <p role="status" className="font-body text-xs leading-relaxed text-[#e0b36a]">
+                {overviewError
+                  ? 'Showing the last successful activation snapshot. Refresh before making outreach decisions.'
+                  : presentation.inconsistent
+                    ? 'Activation stages do not form a valid funnel. Treat this snapshot as unavailable and retry.'
+                    : presentation.partial
+                      ? 'Some activation stages are unavailable. Known counts remain visible.'
+                      : 'This activation snapshot is stale. Refresh before making outreach decisions.'}
+              </p>
+              {presentation.asOf && (
+                <span className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
+                  As of {fmtDateTime(presentation.asOf)}
+                </span>
+              )}
+            </div>
+          )}
+
+          {overviewLoading && (
+            <p className="mt-3 font-body text-xs text-xert-concrete/45" role="status">Refreshing the last activation snapshot…</p>
+          )}
+
+          <div className="mt-4 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {presentation.stages.map(stage => (
+              <article
+                key={stage.key}
+                className="min-w-0 border border-xert-steel/15 bg-xert-charcoal/65 p-3"
+                aria-label={`${stage.label}: ${stage.countLabel}. ${stage.rateLabel}. ${stage.detail}.`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-display text-3xl leading-none tabular-nums text-xert-offwhite">{stage.countLabel}</p>
+                    <h4 className="mt-2 font-display text-xs uppercase tracking-wider text-xert-steel">{stage.label}</h4>
+                  </div>
+                  <span className="shrink-0 font-body text-[10px] tabular-nums text-xert-concrete/50">{stage.rate === null ? '—' : `${stage.rate}%`}</span>
+                </div>
+                <div className="mt-3 h-1 overflow-hidden bg-xert-navy" aria-hidden="true">
+                  <div className="h-full bg-xert-steel" style={{ width: `${stage.rate ?? 0}%` }} />
+                </div>
+                <p className="mt-2 font-body text-[10px] leading-relaxed text-xert-concrete/40">{stage.detail}</p>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="mt-5 border-t border-xert-steel/15 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="font-display text-sm uppercase text-xert-offwhite">Activation actions</h4>
+            <p className="mt-1 font-body text-[11px] text-xert-concrete/45">Bounded to the 12 highest-priority members. Outreach remains manual.</p>
+          </div>
+          {!queueLoading && queueAvailable && !queueError && (
+            <span className="font-body text-xs tabular-nums text-xert-concrete/40">{actionRows.length} due</span>
+          )}
+        </div>
+
+        {queueLoading && actionRows.length === 0 ? (
+          <div className="mt-3 h-14 animate-pulse bg-xert-charcoal" aria-label="Loading activation actions" />
+        ) : !queueAvailable ? (
+          <p className="mt-3 font-body text-xs text-[#e0b36a]" role="status">Activation actions are paused until the member activation upgrade is applied.</p>
+        ) : queueError && actionRows.length === 0 ? (
+          <div className="mt-3"><AdminLoadError message={queueError} onRetry={onRetry} /></div>
+        ) : actionRows.length === 0 ? (
+          <p className="mt-3 font-body text-sm text-xert-concrete/45">No activation follow-ups are due.</p>
+        ) : (
+          <>
+            {queueError && (
+              <p className="mt-3 font-body text-xs text-[#e0b36a]" role="status">Showing the last successful action queue. Refresh before contacting members.</p>
+            )}
+            <div className="mt-3 divide-y divide-xert-steel/10 border-t border-xert-steel/10">
+              {actionRows.map(member => {
+                const contact = createFollowUpCopy(member, window.location.origin);
+                const name = member.full_name || member.email || 'Member';
+                return (
+                  <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
+                    <div className="min-w-[12rem] flex-1">
+                      <p className="font-display text-sm uppercase text-xert-offwhite">{name}</p>
+                      <p className="mt-0.5 font-body text-[11px] text-xert-concrete/45">
+                        {member.activationReasonLabel}{member.joined_at ? ` · Joined ${fmtDate(member.joined_at)}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {member.email && (outreachAllowed ? (
+                        <a href={contact.mailto} title={`Draft email to ${name}`} aria-label={`Draft activation email to ${name}`} className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                          <Mail className="h-4 w-4" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <span aria-disabled="true" title="Refresh activation actions before emailing" className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-concrete/30">
+                          <Mail className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">Email unavailable until activation actions refresh</span>
+                        </span>
+                      ))}
+                      {member.phone && (outreachAllowed ? (
+                        <a href={`tel:${member.phone}`} title={`Call ${name}`} aria-label={`Call ${name} about activation`} className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
+                          <Phone className="h-4 w-4" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <span aria-disabled="true" title="Refresh activation actions before calling" className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-concrete/30">
+                          <Phone className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">Call unavailable until activation actions refresh</span>
+                        </span>
+                      ))}
+                      <button type="button" onClick={() => onLog(member)} disabled={!outreachAllowed} title={outreachAllowed ? `Log activation follow-up with ${name}` : 'Refresh activation actions before logging outreach'} className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs text-xert-steel hover:border-xert-steel disabled:cursor-not-allowed disabled:opacity-35">
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Log
+                      </button>
+                      <button type="button" onClick={() => onView(member)} className="min-h-11 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function FollowUpQueue({ rows, available, error, loading, onRetry, onView, onLog }) {
   return (
     <section aria-labelledby="member-follow-up-title" className="mb-6 border-y border-xert-steel/20 py-4">
@@ -681,6 +856,14 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [followUpsAvailable, setFollowUpsAvailable] = useState(true);
   const [followUpsLoading, setFollowUpsLoading] = useState(true);
   const [followUpsError, setFollowUpsError] = useState('');
+  const [activationOverview, setActivationOverview] = useState(null);
+  const [activationOverviewAvailable, setActivationOverviewAvailable] = useState(true);
+  const [activationOverviewLoading, setActivationOverviewLoading] = useState(true);
+  const [activationOverviewError, setActivationOverviewError] = useState('');
+  const [activationQueue, setActivationQueue] = useState([]);
+  const [activationQueueAvailable, setActivationQueueAvailable] = useState(true);
+  const [activationQueueLoading, setActivationQueueLoading] = useState(true);
+  const [activationQueueError, setActivationQueueError] = useState('');
   const [pendingRoleChange, setPendingRoleChange] = useState(null);
 
   useEffect(() => {
@@ -729,6 +912,46 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         setFollowUpsError(error.message || 'Check the follow-up queue permissions.');
       })
       .finally(() => { if (active) setFollowUpsLoading(false); });
+    return () => { active = false; };
+  }, [refreshVersion]);
+
+  useEffect(() => {
+    let active = true;
+    setActivationOverviewLoading(true);
+    setActivationOverviewError('');
+    adminMemberActivationOverview(30)
+      .then(result => {
+        if (!active) return;
+        setActivationOverviewAvailable(result?.available !== false);
+        if (result?.available !== false) {
+          setActivationOverview(result?.overview ?? result?.data ?? result);
+        }
+      })
+      .catch(error => {
+        if (!active) return;
+        setActivationOverviewError(error.message || 'Check the member activation reporting permissions.');
+      })
+      .finally(() => { if (active) setActivationOverviewLoading(false); });
+
+    return () => { active = false; };
+  }, [refreshVersion]);
+
+  useEffect(() => {
+    let active = true;
+    setActivationQueueLoading(true);
+    setActivationQueueError('');
+    adminListMemberActivationQueue(12)
+      .then(result => {
+        if (!active) return;
+        setActivationQueueAvailable(result?.available !== false);
+        if (result?.available !== false) setActivationQueue(result?.rows ?? []);
+      })
+      .catch(error => {
+        if (!active) return;
+        setActivationQueueError(error.message || 'Check the member activation queue permissions.');
+      })
+      .finally(() => { if (active) setActivationQueueLoading(false); });
+
     return () => { active = false; };
   }, [refreshVersion]);
 
@@ -820,6 +1043,20 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
           </button>
         </div>
       </div>
+
+      <ActivationCockpit
+        overview={activationOverview}
+        overviewAvailable={activationOverviewAvailable}
+        overviewError={activationOverviewError}
+        overviewLoading={activationOverviewLoading}
+        queue={activationQueue}
+        queueAvailable={activationQueueAvailable}
+        queueError={activationQueueError}
+        queueLoading={activationQueueLoading}
+        onRetry={refresh}
+        onView={setViewing}
+        onLog={setLoggingFollowUp}
+      />
 
       <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} onLog={setLoggingFollowUp} />
 

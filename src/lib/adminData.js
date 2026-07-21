@@ -932,6 +932,84 @@ export async function adminListMemberFollowUps(limit = 20) {
   throw new Error(error.message);
 }
 
+function memberActivationUnavailable(error, functionName) {
+  return ['42883', 'PGRST202'].includes(error?.code)
+    || new RegExp(`${functionName}.*(?:not found|schema cache|does not exist)`, 'i').test(error?.message || '');
+}
+
+export async function adminMemberActivationOverview(cohortDays = 30) {
+  const safeDays = Math.max(1, Math.min(3650, Number.parseInt(String(cohortDays), 10) || 30));
+  const { data, error } = await supabase.rpc('admin_member_activation_overview', {
+    p_cohort_days: safeDays,
+  });
+  if (!error) {
+    const row = data?.[0];
+    const countFields = [
+      'accounts_created', 'readiness_complete', 'training_access',
+      'first_booking', 'first_attended', 'returned',
+    ];
+    const counts = countFields.map(field => Number(row?.[field]));
+    const countsAreValid = counts.every((count, index) => row?.[countFields[index]] !== null
+      && row?.[countFields[index]] !== undefined
+      && Number.isSafeInteger(count)
+      && count >= 0
+      && (index === 0 || count <= counts[index - 1]));
+    if (!row || !row.as_of || Number(row.cohort_days) !== safeDays || !countsAreValid) {
+      throw new Error('Member activation returned an incomplete cohort summary.');
+    }
+    return {
+      available: true,
+      as_of: row.as_of,
+      cohort_days: Number(row.cohort_days),
+      accounts_created: Number(row.accounts_created),
+      readiness_complete: Number(row.readiness_complete),
+      training_access: Number(row.training_access),
+      first_booking: Number(row.first_booking),
+      first_attended: Number(row.first_attended),
+      returned: Number(row.returned),
+    };
+  }
+  if (memberActivationUnavailable(error, 'admin_member_activation_overview')) {
+    return {
+      available: false,
+      as_of: null,
+      cohort_days: safeDays,
+      accounts_created: null,
+      readiness_complete: null,
+      training_access: null,
+      first_booking: null,
+      first_attended: null,
+      returned: null,
+    };
+  }
+  throw new Error(error.message);
+}
+
+export async function adminListMemberActivationQueue(limit = 12) {
+  const safeLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 12));
+  const { data, error } = await supabase.rpc('admin_member_activation_queue', { p_limit: safeLimit });
+  if (!error) {
+    const rows = data || [];
+    const allowedReasons = new Set([
+      'setup_incomplete', 'readiness_incomplete', 'no_training_access', 'no_first_booking', 'no_first_attendance',
+    ]);
+    if (rows.some(row => !row.id
+      || row.role !== 'member'
+      || !row.joined_at
+      || !allowedReasons.has(row.reason)
+      || typeof row.has_training_access !== 'boolean'
+      || !['credits_remaining', 'bookings_count', 'total_spent_cents']
+        .every(field => Number.isSafeInteger(Number(row[field])) && Number(row[field]) >= 0))) {
+      throw new Error('Member activation returned an incomplete action queue.');
+    }
+    return { rows, available: true };
+  }
+  if (memberActivationUnavailable(error, 'admin_member_activation_queue')) {
+    return { rows: [], available: false };
+  }
+  throw new Error(error.message);
+}
+
 async function getAuditProfiles(ids) {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   const profiles = [];

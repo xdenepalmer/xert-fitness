@@ -17,6 +17,12 @@ struct BookingView: View {
     let route: XertMemberRoute
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+    let firstClassActivation: XertFirstClassActivation?
+    let onRequireSignInForClass: (UUID) -> Void
+    let onBookingNeedsCredits: (UUID) -> Void
+    let onChooseCreditsForClass: (UUID) -> Void
+    let onCheckoutStarted: () -> Void
+    let onBookingCompleted: (UUID) -> Void
 
     private enum ScrollTarget: Hashable {
         case credits, packs, session(UUID)
@@ -327,7 +333,12 @@ struct BookingView: View {
                         let checkoutAttemptID = checkoutAttemptIDs[product.id] ?? UUID()
                         checkoutAttemptIDs[product.id] = checkoutAttemptID
                         Task {
-                            if let url = await store.checkoutURL(for: product, attemptID: checkoutAttemptID) {
+                            if let url = await store.checkoutURL(
+                                for: product,
+                                attemptID: checkoutAttemptID,
+                                activationSessionID: firstClassActivation?.sessionID
+                            ) {
+                                onCheckoutStarted()
                                 checkoutAttemptIDs[product.id] = nil
                                 checkoutBrowser.start(url: url) { result in
                                     checkoutProductID = nil
@@ -533,6 +544,15 @@ struct BookingView: View {
                     .accessibilityLabel("Time conflict with \(timeConflict.title)")
             }
 
+            if firstClassActivation?.matches(session.id) == true,
+               firstClassActivation?.stage == .readyToBook,
+               booking == nil {
+                Label("Credits ready — book your place below", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.green)
+                    .accessibilityAddTraits(.isHeader)
+            }
+
             DisclosureGroup(isExpanded: expansionBinding(for: session.id)) {
                 sessionDetails(for: session)
                     .padding(.top, 10)
@@ -708,6 +728,22 @@ struct BookingView: View {
                 .buttonStyle(.xertGhost)
                 .accessibilityHint("Opens this booking to add it to your calendar or cancel it")
             }
+        } else if firstClassActivation?.matches(session.id) == true,
+                  firstClassActivation?.stage == .needsCredits {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("You need a session credit to book this class.", systemImage: "ticket")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    onChooseCreditsForClass(session.id)
+                } label: {
+                    Label("Choose a session pack", systemImage: "creditcard")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.xertPrimary)
+                .accessibilityHint("Keeps this class selected while you choose credits")
+            }
         } else if !store.bookingAvailabilityLoaded {
             Label("Checking booking availability…", systemImage: "arrow.clockwise")
                 .font(.subheadline.weight(.semibold))
@@ -726,9 +762,14 @@ struct BookingView: View {
         } else if session.isFull {
             Button {
                 if store.isSignedIn {
-                    Task { await store.joinWaitlist(session) }
+                    Task {
+                        let outcome = await store.joinWaitlist(session)
+                        if outcome == .completed {
+                            onBookingCompleted(session.id)
+                        }
+                    }
                 } else {
-                    onNavigate(.account)
+                    onRequireSignInForClass(session.id)
                 }
             } label: {
                 bookingActionLabel(
@@ -751,9 +792,16 @@ struct BookingView: View {
         } else {
             Button {
                 if store.isSignedIn {
-                    Task { await store.book(session) }
+                    Task {
+                        let outcome = await store.book(session)
+                        if outcome == .needsCredits {
+                            onBookingNeedsCredits(session.id)
+                        } else if outcome == .completed {
+                            onBookingCompleted(session.id)
+                        }
+                    }
                 } else {
-                    onNavigate(.account)
+                    onRequireSignInForClass(session.id)
                 }
             } label: {
                 bookingActionLabel(

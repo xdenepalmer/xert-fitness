@@ -8,6 +8,12 @@ enum BookingCancellationPolicy {
     }
 }
 
+enum MemberBookingOutcome: Equatable {
+    case completed
+    case needsCredits
+    case failed
+}
+
 enum BookingErrorMessage {
     private static let messages: [(code: String, message: String)] = [
         ("AUTH_REQUIRED", "Sign in to book a class."),

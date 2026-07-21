@@ -5,6 +5,10 @@ const REASON_LABELS = {
   credits_expiring: 'expiring class credits',
   idle_credits: 'unused class credits',
   renewal_due: 'training renewal',
+  setup_incomplete: 'member setup',
+  readiness_incomplete: 'current member readiness',
+  no_training_access: 'session-pack access',
+  no_first_attendance: 'first-class support',
 };
 
 function firstName(member) {
@@ -39,6 +43,18 @@ export function createFollowUpCopy(member, baseUrl) {
   if (member?.reason === 'no_first_booking') {
     subject = 'Ready for your first XERT class?';
     message = `We would love to help you book your first XERT class. You can view the timetable and choose a session here: ${bookLink}`;
+  } else if (member?.reason === 'setup_incomplete' || member?.reason === 'readiness_incomplete') {
+    subject = 'Complete your XERT member setup';
+    const readinessLink = (() => {
+      try { return new URL('/account#member-readiness', baseUrl).toString(); } catch { return '/account#member-readiness'; }
+    })();
+    message = `Your XERT member setup still has an action available. Review your current details and acknowledgements here: ${readinessLink}`;
+  } else if (member?.reason === 'no_training_access') {
+    subject = 'Choose your XERT training access';
+    message = `Choose a session pack or contact us if Byron is arranging your credits directly. View the current options here: ${bookLink}`;
+  } else if (member?.reason === 'no_first_attendance') {
+    subject = 'How can we help with your first XERT class?';
+    message = `We would love to help you get your first XERT class completed. Reply to this message if you need support, or choose another session here: ${bookLink}`;
   } else if (member?.reason === 'credits_expiring') {
     const count = Math.max(0, Number(member.credits_expiring) || 0);
     const expiry = formatExpiry(member.next_credit_expiry);

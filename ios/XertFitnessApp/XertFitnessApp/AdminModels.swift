@@ -36,6 +36,58 @@ struct AdminMemberOnboardingSummary: Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminMemberActivationOverview: Codable, Hashable {
+    let as_of: Date
+    let cohort_days: Int
+    let accounts_created: Int
+    let readiness_complete: Int
+    let training_access: Int
+    let first_booking: Int
+    let first_attended: Int
+    let returned: Int
+
+    var stages: [(label: String, count: Int)] {
+        [
+            ("Accounts", accounts_created),
+            ("Ready now", readiness_complete),
+            ("Access", training_access),
+            ("Booked", first_booking),
+            ("Attended", first_attended),
+            ("Returned", returned),
+        ]
+    }
+}
+
+struct AdminMemberActivationItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let role: String
+    let joined_at: Date
+    let credits_remaining: Int
+    let bookings_count: Int
+    let total_spent_cents: Int
+    let reason: String
+    let has_training_access: Bool
+    let profile_complete: Bool
+    let emergency_contact_complete: Bool
+    let documents_complete: Bool
+    let readiness_complete: Bool
+
+    var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "XERT member" }
+    var reasonLabel: String {
+        switch reason {
+        case "setup_incomplete": return "Finish member setup"
+        case "readiness_incomplete": return "Review current readiness"
+        case "no_training_access": return "Choose a pack or add credits"
+        case "no_first_booking": return "Book a first class"
+        case "no_first_attendance": return "Complete a first class"
+        default: return "Activation follow-up"
+        }
+    }
+}
+
 struct AdminMemberEmergencyContact: Codable, Hashable {
     let name: String
     let phone: String
@@ -1082,7 +1134,7 @@ enum AdminSchemaReadiness {
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
         "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
-        "member_onboarding_foundation"
+        "member_onboarding_foundation", "member_activation_cockpit"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

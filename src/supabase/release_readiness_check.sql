@@ -8,6 +8,7 @@ with required (capability, migration) as (
     ('booking_waitlist_withdrawal', 'src/supabase/booking_modes_upgrade.sql'),
     ('member_booking_switch_guard', 'supabase/migrations/20260721000000_member_booking_switch_guard.sql'),
     ('member_onboarding_foundation', 'supabase/migrations/20260721010000_member_onboarding_foundation.sql'),
+    ('member_activation_cockpit', 'supabase/migrations/20260721020000_member_activation_cockpit.sql'),
     ('member_waitlist_join', 'src/supabase/member_waitlist_upgrade.sql'),
     ('waitlist_fifo_promotion', 'supabase/migrations/20260714004100_waitlist_fifo_promotion.sql'),
     ('attendance_roll_call', 'src/supabase/attendance_roll_call_upgrade.sql'),

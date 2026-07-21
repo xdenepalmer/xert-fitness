@@ -573,6 +573,25 @@ enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum XertFirstClassActivationStage: Equatable {
+    case signIn
+    case needsCredits
+    case choosingCredits
+    case checkout
+    case readyToBook
+}
+
+/// Keeps only the public class identifier needed to resume a member's chosen
+/// task. It never stores profile, payment or readiness information.
+struct XertFirstClassActivation: Equatable {
+    let sessionID: UUID
+    var stage: XertFirstClassActivationStage
+
+    func matches(_ sessionID: UUID) -> Bool {
+        self.sessionID == sessionID
+    }
+}
+
 private enum XertNavigationFormatters {
     /// Command and status models are rebuilt as navigation state changes. A
     /// shared formatter avoids repeatedly allocating ICU-backed formatters in

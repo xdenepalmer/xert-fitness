@@ -37,7 +37,7 @@ test('native refresh work is coalesced and scoped to invalidated data', async ()
   assert.match(store, /repeat \{[\s\S]*await refresh\(\)[\s\S]*\} while requiresBootstrapRefresh \|\| lastRefreshCompletedAt == nil/);
   assert.match(store, /if !hasBootstrapped \{ requiresBootstrapRefresh = true \}/);
   assert.match(store, /func refreshIfStale\([\s\S]*maximumAge: TimeInterval = 45/);
-  assert.equal((store.match(/guard bookingSessionID == nil, cancellingBookingID == nil else \{ return \}/g) ?? []).length, 3);
+  assert.equal((store.match(/guard bookingSessionID == nil, cancellingBookingID == nil else \{ return(?: \.failed)? \}/g) ?? []).length, 3);
   assert.equal((store.match(/await refreshBookingState\(memberVersion:/g) ?? []).length, 3);
   assert.match(store, /private func refreshBookingState[\s\S]*async let sessionRequest[\s\S]*async let creditRequest[\s\S]*async let bookingRequest/);
   assert.match(store, /func refreshAnnouncements\(\) async[\s\S]*api\.announcements/);

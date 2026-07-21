@@ -630,6 +630,7 @@ struct AdminCommandCentreView: View {
                 priorityQueue
                 attentionGrid
                 businessPulse
+                activationPulse
                 todayDesk
                 pinnedDirectory
                 managementDirectory
@@ -1170,6 +1171,70 @@ struct AdminCommandCentreView: View {
                 ) {
                     openWorkspaceWithFeedback(.orders)
                 }
+            }
+        }
+    }
+
+    private var activationPulse: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                adminHeading("Member activation · 30 days")
+                Spacer()
+                Button("OPEN ACTIONS") { openWorkspaceWithFeedback(.retention) }
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.xertSteel)
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens member activation and retention actions")
+            }
+
+            if admin.activationOverview == nil && (admin.isLoading || admin.lastUpdatedAt == nil) {
+                HStack(spacing: 12) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Building the member activation snapshot…")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale.opacity(0.75))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .xertCardStyle()
+            } else if let overview = admin.activationOverview {
+                if admin.refreshUnavailableSources.contains("member activation") {
+                    Label("Showing the last activation snapshot. Pull to refresh before outreach.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
+                    ForEach(Array(overview.stages.enumerated()), id: \.offset) { _, stage in
+                        let percentage = overview.accounts_created > 0
+                            ? Int((Double(stage.count) / Double(overview.accounts_created) * 100).rounded())
+                            : nil
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("\(stage.count)").xertDisplay(28)
+                            Text(stage.label.uppercased())
+                                .font(.caption2.weight(.bold))
+                                .tracking(0.7)
+                                .foregroundStyle(Color.xertSteel)
+                            Text(percentage.map { "\($0)% of accounts" } ?? "No cohort yet")
+                                .font(.caption2)
+                                .foregroundStyle(Color.xertPale.opacity(0.58))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+                        .padding(13)
+                        .xertCardStyle()
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(stage.label), \(stage.count), \(percentage.map { "\($0) percent of accounts" } ?? "no cohort yet")")
+                    }
+                }
+                Text("Current readiness, training access, confirmed bookings and recorded attendance · as of \(overview.as_of.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                AdminEmptyState(
+                    icon: "chart.bar.xaxis",
+                    text: "Activation reporting is unavailable until Operations Health verifies the member activation upgrade."
+                )
             }
         }
     }
@@ -3060,11 +3125,58 @@ private struct AdminRetentionView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var selected: AdminFollowUp?
+    @State private var selectedActivation: AdminMemberActivationItem?
     @State private var presentedMember: AdminMemberSummary?
     @State private var openingMemberID: UUID?
 
     var body: some View {
         List {
+            Section("Activation actions") {
+                if admin.refreshUnavailableSources.contains("activation actions") {
+                    Label("Showing the last activation snapshot. Outreach is disabled until you pull down to refresh.", systemImage: "wifi.exclamationmark")
+                        .foregroundStyle(Color.orange)
+                        .listRowBackground(Color.xertInk)
+                } else if admin.activationQueue.isEmpty {
+                    Text("No activation follow-ups are due.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(admin.activationQueue) { member in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(member.displayName).font(.headline)
+                                Text(member.reasonLabel).font(.caption).foregroundStyle(Color.xertSteel)
+                            }
+                            Spacer()
+                            Text("\(member.credits_remaining) credits")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.xertPale.opacity(0.6))
+                        }
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                activationActions(
+                                    for: member,
+                                    expands: false,
+                                    allowsOutreach: !admin.refreshUnavailableSources.contains("activation actions")
+                                )
+                            }
+                            VStack(spacing: 8) {
+                                activationActions(
+                                    for: member,
+                                    expands: true,
+                                    allowsOutreach: !admin.refreshUnavailableSources.contains("activation actions")
+                                )
+                            }
+                        }
+                        .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .padding(.vertical, 6)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            Section("Retention actions") {
             if admin.followUps.isEmpty {
                 Text("The retention queue is caught up.")
                     .listRowBackground(Color.xertInk)
@@ -3095,6 +3207,7 @@ private struct AdminRetentionView: View {
                 .padding(.vertical, 6)
                 .listRowBackground(Color.xertInk)
             }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
@@ -3120,6 +3233,21 @@ private struct AdminRetentionView: View {
             ForEach(["phone", "email", "SMS", "in person"], id: \.self) { channel in
                 Button(channel.capitalized) {
                     Task { _ = await admin.logFollowUp(session: session, member: member, channel: channel) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Log activation follow-up",
+            isPresented: Binding(
+                get: { selectedActivation != nil },
+                set: { if !$0 { selectedActivation = nil } }
+            ),
+            presenting: selectedActivation
+        ) { member in
+            ForEach(["phone", "email", "SMS", "in person"], id: \.self) { channel in
+                Button(channel.capitalized) {
+                    Task { _ = await admin.logActivationFollowUp(session: session, member: member, channel: channel) }
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -3156,6 +3284,49 @@ private struct AdminRetentionView: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.xertSteel)
         .disabled(admin.loggingFollowUpMemberID != nil)
+    }
+
+    @ViewBuilder
+    private func activationActions(
+        for member: AdminMemberActivationItem,
+        expands: Bool,
+        allowsOutreach: Bool
+    ) -> some View {
+        Button { openMemberRecord(member.id) } label: {
+            Label(openingMemberID == member.id ? "Opening..." : "Member record", systemImage: "person.text.rectangle")
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .disabled(openingMemberID != nil)
+        if let phone = member.phone,
+           let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+            Link(destination: url) {
+                Label("Call", systemImage: "phone")
+                    .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!allowsOutreach)
+            .accessibilityHint(allowsOutreach ? "Calls this member" : "Refresh activation actions before contacting this member")
+        }
+        if let email = member.email,
+           let encoded = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "mailto:\(encoded)") {
+            Link(destination: url) {
+                Label("Email", systemImage: "envelope")
+                    .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!allowsOutreach)
+            .accessibilityHint(allowsOutreach ? "Emails this member" : "Refresh activation actions before contacting this member")
+        }
+        Button { selectedActivation = member } label: {
+            Label("Log follow-up", systemImage: "checkmark.circle")
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.xertSteel)
+        .disabled(admin.loggingFollowUpMemberID != nil || !allowsOutreach)
+        .accessibilityHint(allowsOutreach ? "Records completed outreach" : "Refresh activation actions before logging outreach")
     }
 
     private func openMemberRecord(_ memberID: UUID) {

@@ -295,6 +295,7 @@ workflows:
               "booking_waitlist_withdrawal",
               "member_booking_switch_guard",
               "member_onboarding_foundation",
+              "member_activation_cockpit",
               "member_waitlist_join",
               "waitlist_fifo_promotion",
               "attendance_roll_call",

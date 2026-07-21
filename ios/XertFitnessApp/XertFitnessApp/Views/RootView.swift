@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
@@ -18,6 +19,7 @@ struct RootView: View {
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
     @State private var pendingProtectedNavigation: XertNavigationIntent?
+    @State private var firstClassActivation: XertFirstClassActivation?
     @State private var pendingOwnerNavigation: XertOwnerRoute?
     @State private var hasRestoredMemberWorkspace = false
     @State private var hasExplicitMemberNavigation = false
@@ -59,6 +61,10 @@ struct RootView: View {
                 return
             }
             lockAndAuthenticate()
+        }
+        .onChange(of: store.checkoutActivatedSessionID) { sessionID in
+            guard sessionID != nil else { return }
+            resumeFirstClassAfterCheckout()
         }
         .onChange(of: store.profile?.role) { _ in
             resumePendingOwnerNavigation()
@@ -153,7 +159,17 @@ struct RootView: View {
                 }
                 .tag(XertPrimaryDestination.home)
 
-            BookingView(route: navigation.route, routeSequence: navigation.routeSequence, onNavigate: navigate)
+            BookingView(
+                route: navigation.route,
+                routeSequence: navigation.routeSequence,
+                onNavigate: navigate,
+                firstClassActivation: firstClassActivation,
+                onRequireSignInForClass: requireSignInForClass,
+                onBookingNeedsCredits: showCreditsNeeded,
+                onChooseCreditsForClass: chooseCredits,
+                onCheckoutStarted: markActivationCheckoutStarted,
+                onBookingCompleted: completeFirstClassActivation
+            )
                 .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Book", systemImage: "calendar.badge.plus")
@@ -674,7 +690,49 @@ struct RootView: View {
         opensAdminAfterCommandDismissal = false
         if clearPendingIntent {
             pendingProtectedNavigation = nil
+            firstClassActivation = nil
         }
+    }
+
+    private func requireSignInForClass(_ sessionID: UUID) {
+        claimMemberNavigation()
+        firstClassActivation = XertFirstClassActivation(sessionID: sessionID, stage: .signIn)
+        pendingProtectedNavigation = XertNavigationIntent(
+            route: .classSession(sessionID),
+            source: .content
+        )
+        navigation.open(.account, source: .content)
+    }
+
+    private func showCreditsNeeded(_ sessionID: UUID) {
+        firstClassActivation = XertFirstClassActivation(sessionID: sessionID, stage: .needsCredits)
+        XertHaptics.play(.warning)
+    }
+
+    private func chooseCredits(_ sessionID: UUID) {
+        firstClassActivation = XertFirstClassActivation(sessionID: sessionID, stage: .choosingCredits)
+        navigation.open(.sessionPacks, source: .content)
+    }
+
+    private func markActivationCheckoutStarted() {
+        guard var activation = firstClassActivation else { return }
+        activation.stage = .checkout
+        firstClassActivation = activation
+    }
+
+    private func resumeFirstClassAfterCheckout() {
+        guard let sessionID = store.consumeCheckoutActivatedSessionID() else { return }
+        firstClassActivation = XertFirstClassActivation(sessionID: sessionID, stage: .readyToBook)
+        navigation.open(.classSession(sessionID), source: .checkout)
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: "Credits ready. Your selected class is open and has not been booked yet."
+        )
+    }
+
+    private func completeFirstClassActivation(_ sessionID: UUID) {
+        guard firstClassActivation?.matches(sessionID) == true else { return }
+        firstClassActivation = nil
     }
 
     @discardableResult
@@ -723,6 +781,9 @@ struct RootView: View {
 
     private func cancelPendingProtectedNavigation() {
         pendingProtectedNavigation = nil
+        if firstClassActivation?.stage == .signIn {
+            firstClassActivation = nil
+        }
     }
 
     private func handleOpenURL(_ url: URL) {

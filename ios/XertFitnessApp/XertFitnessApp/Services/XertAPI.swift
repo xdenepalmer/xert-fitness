@@ -609,6 +609,32 @@ final class XertAPI {
         )
     }
 
+    func adminMemberActivationOverview(
+        session auth: AuthSession,
+        cohortDays: Int = 30
+    ) async throws -> AdminMemberActivationOverview {
+        let rows: [AdminMemberActivationOverview] = try await rpc(
+            path: "admin_member_activation_overview",
+            body: AdminCohortDaysRequest(p_cohort_days: min(max(cohortDays, 1), 3_650)),
+            auth: auth
+        )
+        guard rows.count == 1 else {
+            throw APIError(message: "Member activation returned an incomplete cohort summary.")
+        }
+        return rows[0]
+    }
+
+    func adminMemberActivationQueue(
+        session auth: AuthSession,
+        limit: Int = 12
+    ) async throws -> [AdminMemberActivationItem] {
+        try await rpc(
+            path: "admin_member_activation_queue",
+            body: AdminLimitRequest(p_limit: min(max(limit, 1), 100)),
+            auth: auth
+        )
+    }
+
     func adminMemberOnboardingSummary(session auth: AuthSession, memberID: UUID) async throws -> AdminMemberOnboardingSummary {
         let rows: [AdminMemberOnboardingSummary] = try await rpc(
             path: "admin_member_onboarding_summary",
@@ -1977,6 +2003,7 @@ final class XertAPI {
 private struct EmptyBody: Encodable {}
 private struct EmptyObject: Decodable {}
 private struct AdminLimitRequest: Encodable { let p_limit: Int }
+private struct AdminCohortDaysRequest: Encodable { let p_cohort_days: Int }
 private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
 private struct AdminBookingStatusRequest: Encodable {
     let p_booking_id: UUID

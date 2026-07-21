@@ -1682,11 +1682,13 @@ final class ModelsTests: XCTestCase {
         let userID = UUID()
         let orderIDs: Set<UUID> = [UUID(), UUID()]
         let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let activationSessionID = UUID()
         let pending = PendingCheckout(
             userID: userID,
             baselineOrderIDs: orderIDs,
             startedAt: startedAt,
-            checkoutSessionID: "cs_test_exact"
+            checkoutSessionID: "cs_test_exact",
+            activationSessionID: activationSessionID
         )
 
         PendingCheckoutStore.save(pending, defaults: defaults)
@@ -1712,6 +1714,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(migrated?.baselineOrderIDs, pending.baselineOrderIDs)
         XCTAssertEqual(migrated?.startedAt, pending.startedAt)
         XCTAssertNil(migrated?.checkoutSessionID)
+        XCTAssertNil(migrated?.activationSessionID)
     }
 
     func testPendingCheckoutRejectsAnotherUserAndExpires() throws {
@@ -3526,6 +3529,19 @@ final class ModelsTests: XCTestCase {
         )) { error in
             XCTAssertTrue(error.localizedDescription.contains("acknowledge every current"))
         }
+    }
+
+    func testFirstClassActivationRetainsOnlyTheSelectedSessionAndStage() {
+        let sessionID = UUID()
+        var activation = XertFirstClassActivation(sessionID: sessionID, stage: .signIn)
+
+        XCTAssertTrue(activation.matches(sessionID))
+        XCTAssertFalse(activation.matches(UUID()))
+        activation.stage = .needsCredits
+        XCTAssertEqual(activation, XertFirstClassActivation(sessionID: sessionID, stage: .needsCredits))
+        activation.stage = .readyToBook
+        XCTAssertEqual(activation.sessionID, sessionID)
+        XCTAssertEqual(activation.stage, .readyToBook)
     }
 
     func testMemberOnboardingSaveRequestRejectsUnder18OrUnconfirmedAdultEligibility() {
