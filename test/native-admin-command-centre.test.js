@@ -37,7 +37,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
     'admin_waitlist_overview',
     'admin_member_follow_up_queue',
     'admin_list_members_page',
-    'admin_promote_next_waitlisted',
+    'admin_promote_next_waitlisted_with_notice',
     'admin_add_member_note',
     'admin_update_request',
   ]) assert.match(api, new RegExp(`path: "${rpc}"`));

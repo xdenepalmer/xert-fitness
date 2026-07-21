@@ -7,8 +7,11 @@ import { normalizeSessionPromotion } from '../src/lib/adminRequests.js';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('promotion requests require an explicit session record', () => {
-  assert.deepEqual(normalizeSessionPromotion(' session-id '), { sessionId: 'session-id' });
+  assert.deepEqual(normalizeSessionPromotion(' session-id ', ' booking-id ', ' request-id '), {
+    sessionId: 'session-id', expectedBookingId: 'booking-id', requestId: 'request-id'
+  });
   assert.throws(() => normalizeSessionPromotion(''), /request record is required/i);
+  assert.throws(() => normalizeSessionPromotion('session-id', ''), /request record is required/i);
 });
 
 for (const path of [
@@ -87,7 +90,7 @@ test('admin, member web, and SwiftUI expose the FIFO workflow', () => {
   const swiftModel = read('../ios/XertFitnessApp/XertFitnessApp/Models.swift');
   const swiftAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
 
-  assert.match(adminData, /rpc\('admin_promote_next_waitlisted'/);
+  assert.match(adminData, /rpc\('admin_promote_next_waitlisted_with_notice'/);
   assert.match(adminView, /Promote next/);
   assert.match(adminView, /Waitlist position/);
   assert.match(adminView, /status === 'waitlisted'\) return \['waitlisted', 'cancelled'\]/);

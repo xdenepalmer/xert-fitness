@@ -366,6 +366,21 @@ struct AdminWaitlistItem: Identifiable, Codable, Hashable {
     var nextMemberName: String { next_full_name?.nilIfBlank ?? next_email?.nilIfBlank ?? "Next member" }
 }
 
+struct AdminWaitlistPromotion: Codable, Hashable {
+    let request_id: UUID
+    let session_id: UUID
+    let booking_id: UUID
+    let user_id: UUID
+    let announcement_id: UUID
+    let promoted_at: Date
+}
+
+struct AdminWaitlistPromotionOutcome: Hashable {
+    let promotion: AdminWaitlistPromotion
+    let pushDelivered: Bool
+    let warning: String?
+}
+
 struct AdminFollowUp: Identifiable, Codable, Hashable {
     let id: UUID
     let full_name: String?
@@ -1134,6 +1149,7 @@ enum AdminSchemaReadiness {
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
         "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
+        "waitlist_promotion_notifications",
         "member_onboarding_foundation", "member_activation_cockpit"
     ]
 

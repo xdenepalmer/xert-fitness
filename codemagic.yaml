@@ -335,6 +335,7 @@ workflows:
               "catalog_optimistic_locking",
               "product_commercial_terms_guard",
               "targeted_member_notices",
+              "waitlist_promotion_notifications",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

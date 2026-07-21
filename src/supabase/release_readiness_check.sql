@@ -47,7 +47,8 @@ with required (capability, migration) as (
     ('shared_admin_optimistic_locking', 'supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql'),
     ('catalog_optimistic_locking', 'supabase/migrations/20260714020000_catalog_optimistic_locking.sql'),
     ('product_commercial_terms_guard', 'supabase/migrations/20260720000000_product_commercial_terms_guard.sql'),
-    ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql')
+    ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql'),
+    ('waitlist_promotion_notifications', 'supabase/migrations/20260721030000_waitlist_promotion_notifications.sql')
 ), readiness as (
   select
     required.capability,

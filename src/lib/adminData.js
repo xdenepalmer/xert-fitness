@@ -903,23 +903,31 @@ export async function adminSendMemberNotice(userId, notice) {
   });
   if (error) throw new Error(error.message);
 
+  return notifyTargetedAnnouncementPush(announcementId);
+}
+
+async function notifyTargetedAnnouncementPush(announcementId) {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !session) {
     return { announcement_id: announcementId, push: null, warning: 'The notice was saved, but push delivery needs a fresh admin sign-in.' };
   }
-  const response = await fetch('/api/admin-publish-announcement', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ action: 'notify_targeted_announcement', announcement_id: announcementId }),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return { announcement_id: announcementId, push: null, warning: body.error || 'The notice was saved, but push delivery could not be completed.' };
+  try {
+    const response = await fetch('/api/admin-publish-announcement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ action: 'notify_targeted_announcement', announcement_id: announcementId }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { announcement_id: announcementId, push: null, warning: body.error || 'The notice was saved, but push delivery could not be completed.' };
+    }
+    return body;
+  } catch {
+    return { announcement_id: announcementId, push: null, warning: 'The notice was saved, but push delivery could not be completed.' };
   }
-  return body;
 }
 
 export async function adminListMemberFollowUps(limit = 20) {
@@ -1132,14 +1140,29 @@ export async function adminSetBookingStatus(bookingId, status) {
   }
 }
 
-export async function adminPromoteNextWaitlisted(sessionId) {
-  const mutation = normalizeSessionPromotion(sessionId);
-  const { data, error } = await supabase.rpc('admin_promote_next_waitlisted', {
-    p_session_id: mutation.sessionId
+export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, requestId = globalThis.crypto?.randomUUID?.()) {
+  const mutation = normalizeSessionPromotion(sessionId, expectedBookingId, requestId);
+  const { data, error } = await supabase.rpc('admin_promote_next_waitlisted_with_notice', {
+    p_session_id: mutation.sessionId,
+    p_expected_booking_id: mutation.expectedBookingId,
+    p_request_id: mutation.requestId,
   });
-  if (!error) return data;
+  if (!error) {
+    const promotion = Array.isArray(data) ? data[0] : data;
+    if (!promotion?.announcement_id || promotion.booking_id !== mutation.expectedBookingId) {
+      throw new Error('The promotion completed without a verifiable member notice receipt. Refresh the waitlist before continuing.');
+    }
+    const delivery = await notifyTargetedAnnouncementPush(promotion.announcement_id);
+    return { ...promotion, push: delivery.push, warning: delivery.warning || null };
+  }
   const message = error.message || '';
+  if (error.code === 'PGRST202' || /admin_promote_next_waitlisted_with_notice.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    throw new Error('Apply the waitlist promotion notifications migration before promoting members.');
+  }
   if (/WAITLIST_EMPTY/i.test(message)) throw new Error('No members are waiting for this class.');
+  if (/WAITLIST_CHANGED|WAITLIST_PROMOTION_REQUEST_CONFLICT/i.test(message)) {
+    throw new Error('The queue changed before confirmation. Refresh and review the next member.');
+  }
   if (/WAITLIST_MEMBER_NO_CREDITS|NO_CREDITS/i.test(message)) {
     throw new Error('The next member has no available class credit. Contact them before changing the queue.');
   }

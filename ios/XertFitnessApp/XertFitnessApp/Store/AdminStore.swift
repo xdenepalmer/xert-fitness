@@ -52,6 +52,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var ownerMemberSearchError: String?
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
+    @Published private(set) var promotionNoticeWarning: String?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
@@ -845,18 +846,38 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func promoteNext(session: AuthSession, classSessionID: UUID) async -> Bool {
+    func promoteNext(
+        session: AuthSession,
+        classSessionID: UUID,
+        expectedBookingID: UUID,
+        requestID: UUID
+    ) async -> Bool {
         guard promotingSessionID == nil else { return false }
         promotingSessionID = classSessionID
+        promotionNoticeWarning = nil
         defer { promotingSessionID = nil }
         do {
-            try await api.adminPromoteNextWaitlisted(session: session, classSessionID: classSessionID)
+            let outcome = try await api.adminPromoteNextWaitlisted(
+                session: session,
+                classSessionID: classSessionID,
+                expectedBookingID: expectedBookingID,
+                requestID: requestID
+            )
+            promotionNoticeWarning = outcome.warning
             waitlist = try await api.adminWaitlist(session: session)
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            let message = error.localizedDescription
+            if message.localizedCaseInsensitiveContains("WAITLIST_CHANGED")
+                || message.localizedCaseInsensitiveContains("WAITLIST_PROMOTION_REQUEST_CONFLICT") {
+                errorMessage = "The queue changed before confirmation. Refresh and review the next member."
+            } else if message.localizedCaseInsensitiveContains("admin_promote_next_waitlisted_with_notice") {
+                errorMessage = "Apply the waitlist promotion notifications migration before promoting members."
+            } else {
+                errorMessage = message
+            }
             return false
         }
     }

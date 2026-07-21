@@ -2317,6 +2317,9 @@ private struct AdminClassesView: View {
                 }
             }
             Section("Waitlist desk") {
+                if let warning = admin.promotionNoticeWarning {
+                    operationalWarningRow(warning)
+                }
                 if waitlistIsLoading {
                     operationalLoadingRow("Loading class waitlists…")
                 } else {
@@ -2366,11 +2369,18 @@ private struct AdminClassesView: View {
             presenting: promotion
         ) { item in
             Button("Confirm promotion") {
-                Task { _ = await admin.promoteNext(session: session, classSessionID: item.session_id) }
+                Task {
+                    _ = await admin.promoteNext(
+                        session: session,
+                        classSessionID: item.session_id,
+                        expectedBookingID: item.next_booking_id,
+                        requestID: UUID()
+                    )
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: { item in
-            Text("This confirms the next FIFO waitlisted member into \(item.title) and consumes one available credit.")
+            Text("This confirms the next FIFO waitlisted member into \(item.title), reserves one available credit, and creates a private member notice. Apple push is requested for enabled devices.")
         }
     }
 

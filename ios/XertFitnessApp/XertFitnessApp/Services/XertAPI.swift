@@ -1683,13 +1683,49 @@ final class XertAPI {
         )
     }
 
-    @discardableResult
-    func adminPromoteNextWaitlisted(session auth: AuthSession, classSessionID: UUID) async throws -> UUID {
-        try await rpc(
-            path: "admin_promote_next_waitlisted",
-            body: AdminSessionRequest(p_session_id: classSessionID),
+    func adminPromoteNextWaitlisted(
+        session auth: AuthSession,
+        classSessionID: UUID,
+        expectedBookingID: UUID,
+        requestID: UUID
+    ) async throws -> AdminWaitlistPromotionOutcome {
+        let rows: [AdminWaitlistPromotion] = try await rpc(
+            path: "admin_promote_next_waitlisted_with_notice",
+            body: AdminWaitlistPromotionRequest(
+                p_session_id: classSessionID,
+                p_expected_booking_id: expectedBookingID,
+                p_request_id: requestID
+            ),
             auth: auth
         )
+        guard rows.count == 1, let promotion = rows.first,
+              promotion.session_id == classSessionID,
+              promotion.booking_id == expectedBookingID else {
+            throw APIError(message: "The promotion completed without a verifiable member notice receipt. Refresh the waitlist before continuing.")
+        }
+        do {
+            let response: AdminTargetedNoticeResponse = try await vercelRequest(
+                path: "/api/admin-publish-announcement",
+                body: AdminTargetedNoticeRequest(
+                    action: "notify_targeted_announcement",
+                    announcement_id: promotion.announcement_id
+                ),
+                auth: auth
+            )
+            return AdminWaitlistPromotionOutcome(
+                promotion: promotion,
+                pushDelivered: (response.push?.delivered ?? 0) > 0,
+                warning: response.push?.configured == false
+                    ? "The member is confirmed and their private notice is live, but Apple push is not configured."
+                    : nil
+            )
+        } catch {
+            return AdminWaitlistPromotionOutcome(
+                promotion: promotion,
+                pushDelivered: false,
+                warning: "The member is confirmed and their private notice is live, but Apple push delivery needs attention."
+            )
+        }
     }
 
     @discardableResult
@@ -2005,6 +2041,11 @@ private struct EmptyObject: Decodable {}
 private struct AdminLimitRequest: Encodable { let p_limit: Int }
 private struct AdminCohortDaysRequest: Encodable { let p_cohort_days: Int }
 private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
+private struct AdminWaitlistPromotionRequest: Encodable {
+    let p_session_id: UUID
+    let p_expected_booking_id: UUID
+    let p_request_id: UUID
+}
 private struct AdminBookingStatusRequest: Encodable {
     let p_booking_id: UUID
     let p_status: String
@@ -2046,6 +2087,19 @@ private struct AdminCancellationNoticeRequest: Encodable {
     let session_id: UUID
 }
 private struct AdminCancellationNoticeResponse: Decodable {}
+private struct AdminTargetedNoticeRequest: Encodable {
+    let action: String
+    let announcement_id: UUID
+}
+private struct AdminTargetedNoticeResponse: Decodable {
+    let push: AdminTargetedPushSummary?
+}
+private struct AdminTargetedPushSummary: Decodable {
+    let configured: Bool
+    let attempted: Int
+    let delivered: Int
+    let failed: Int
+}
 private struct AdminAvailabilityPayload: Encodable {
     let start_time: String
     let end_time: String

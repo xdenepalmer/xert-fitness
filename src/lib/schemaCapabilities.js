@@ -44,6 +44,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   catalog_optimistic_locking: 'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
   product_commercial_terms_guard: 'Apply supabase/migrations/20260720000000_product_commercial_terms_guard.sql in Supabase.',
   targeted_member_notices: 'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
+  waitlist_promotion_notifications: 'Apply supabase/migrations/20260721030000_waitlist_promotion_notifications.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

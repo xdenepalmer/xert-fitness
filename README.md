@@ -179,6 +179,9 @@ The Supabase schema is defined in:
   it exposes no emergency-contact values or document contents
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
+- `src/supabase/waitlist_promotion_notifications_upgrade.sql` — makes FIFO promotion
+  retry-safe and atomically confirms the booking, reserves one credit, records an
+  immutable receipt and creates the member's private notice before push delivery
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -202,6 +205,7 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `catalog_optimistic_locking_upgrade.sql`, then
 `supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`waitlist_promotion_notifications_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`, then
 `member_booking_switch_guard_upgrade.sql`, then
@@ -236,6 +240,7 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `catalog_optimistic_locking_upgrade.sql`, then
 `supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`waitlist_promotion_notifications_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`, then
 `member_booking_switch_guard_upgrade.sql`, then
