@@ -139,7 +139,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminClassRosterView/);
   assert.match(view, /Save complete roll call/);
   assert.match(api, /path: "admin_session_roster"/);
-  assert.match(api, /path: "admin_set_booking_status"/);
+  assert.match(api, /path: "admin_set_booking_status_with_notice"/);
   assert.match(api, /path: "admin_record_session_attendance"/);
   assert.match(adminStore, /func setBookingStatus/);
   assert.match(adminStore, /func recordAttendance/);

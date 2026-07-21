@@ -1123,21 +1123,38 @@ export async function getAdminDailyOperations() {
   throw new Error(error.message);
 }
 
-export async function adminSetBookingStatus(bookingId, status) {
+export async function adminSetBookingStatus(bookingId, status, requestId = globalThis.crypto?.randomUUID?.()) {
   const mutation = normalizeBookingStatusMutation(bookingId, status);
-  const { error } = await supabase.rpc('admin_set_booking_status', {
+  if (!requestId) throw new Error('A secure booking decision request ID could not be created. Refresh and try again.');
+  const { data, error } = await supabase.rpc('admin_set_booking_status_with_notice', {
     p_booking_id: mutation.id,
-    p_status: mutation.status
+    p_status: mutation.status,
+    p_request_id: requestId,
   });
-  if (error) {
-    if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(error.message || '')) {
-      throw new Error('Promote the next waitlisted member before reopening another booking.');
+  if (!error) {
+    const decision = Array.isArray(data) ? data[0] : data;
+    if (!decision || decision.booking_id !== mutation.id || decision.new_status !== mutation.status) {
+      throw new Error('The booking decision completed without a verifiable receipt. Refresh before continuing.');
     }
-    if (/BOOKING_TIME_CONFLICT/i.test(error.message || '')) {
-      throw new Error('This member already has another active class at the same time. Resolve that booking before confirming this place.');
-    }
-    throw new Error(error.message);
+    if (!decision.announcement_id) return { ...decision, push: null, warning: null };
+    const delivery = await notifyTargetedAnnouncementPush(decision.announcement_id);
+    return { ...decision, push: delivery.push, warning: delivery.warning || null };
   }
+
+  const message = error.message || '';
+  if (error.code === 'PGRST202' || /admin_set_booking_status_with_notice.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    throw new Error('Apply the booking decision notifications migration before changing member bookings.');
+  }
+  if (/BOOKING_DECISION_REQUEST_CONFLICT/i.test(message)) {
+    throw new Error('This booking decision request was already used for another change. Refresh and try again.');
+  }
+  if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(message)) {
+      throw new Error('Promote the next waitlisted member before reopening another booking.');
+  }
+  if (/BOOKING_TIME_CONFLICT/i.test(message)) {
+    throw new Error('This member already has another active class at the same time. Resolve that booking before confirming this place.');
+  }
+  throw new Error(message);
 }
 
 export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, requestId = globalThis.crypto?.randomUUID?.()) {

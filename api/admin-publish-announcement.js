@@ -100,7 +100,7 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
     .select('id,title,body,cta_url,expires_at')
     .eq('id', announcementId)
     .eq('audience', 'targeted')
-    .in('source_kind', ['member_direct', 'waitlist_promotion'])
+    .in('source_kind', ['member_direct', 'waitlist_promotion', 'booking_decision'])
     .maybeSingle();
   if (announcementError) throw announcementError;
   if (!announcement) throw new Error('TARGETED_NOTICE_NOT_FOUND');

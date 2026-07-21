@@ -34,7 +34,7 @@ test('web promotion confirms the exact FIFO member and reports durable notificat
   assert.match(data, /p_expected_booking_id: mutation\.expectedBookingId/);
   assert.match(data, /p_request_id: mutation\.requestId/);
   assert.match(data, /notifyTargetedAnnouncementPush\(promotion\.announcement_id\)/);
-  assert.match(publisher, /\.in\('source_kind', \['member_direct', 'waitlist_promotion'\]\)/);
+  assert.match(publisher, /\.in\('source_kind', \['member_direct', 'waitlist_promotion', 'booking_decision'\]\)/);
   assert.match(view, /Confirm and notify this member/);
   assert.match(view, /Their earliest-expiring credit will be reserved and a private member notice will be created/);
   assert.match(view, /Member promoted and notified/);

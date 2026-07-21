@@ -614,8 +614,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
     setUpdatingBookingId(bookingId);
     try {
-      await adminSetBookingStatus(bookingId, status);
+      const result = await adminSetBookingStatus(bookingId, status);
       await refreshBookings(sessionId);
+      if (result?.notice_created) {
+        toast({
+          title: 'Booking updated and member notified',
+          description: result.warning
+            || (Number(result.push?.delivered || 0) > 0
+              ? 'Their private notice is live and Apple push was delivered.'
+              : 'Their private notice is live in their member account.'),
+        });
+      }
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {

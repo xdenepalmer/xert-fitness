@@ -182,6 +182,9 @@ The Supabase schema is defined in:
 - `src/supabase/waitlist_promotion_notifications_upgrade.sql` — makes FIFO promotion
   retry-safe and atomically confirms the booking, reserves one credit, records an
   immutable receipt and creates the member's private notice before push delivery
+- `src/supabase/booking_decision_notifications_upgrade.sql` — makes staff booking
+  approvals, waitlisting, declines and cancellations retry-safe; each affected
+  member receives an atomic private notice plus best-effort Apple push delivery
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,

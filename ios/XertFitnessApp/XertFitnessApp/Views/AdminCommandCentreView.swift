@@ -3678,6 +3678,14 @@ private struct AdminBookingRequestsView: View {
 
     var body: some View {
         List {
+            if let warning = admin.bookingDecisionNoticeWarning {
+                Section("Member notification") {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .listRowBackground(Color.xertInk)
+                }
+            }
             Section("Queue filters") {
                 Picker("Status", selection: $status) {
                     Text("All statuses").tag("all")

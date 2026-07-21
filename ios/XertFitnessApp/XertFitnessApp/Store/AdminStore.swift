@@ -53,6 +53,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var promotionNoticeWarning: String?
+    @Published private(set) var bookingDecisionNoticeWarning: String?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
@@ -782,7 +783,9 @@ final class AdminStore: ObservableObject {
         updatingBookingRequestIDs = [booking.id]
         defer { updatingBookingRequestIDs = [] }
         do {
-            try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            bookingDecisionNoticeWarning = nil
+            let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            bookingDecisionNoticeWarning = warning
             try await refreshBookingOperationsSnapshot(session: session)
             lastUpdatedAt = Date()
             return true
@@ -802,7 +805,10 @@ final class AdminStore: ObservableObject {
         defer { updatingBookingRequestIDs = [] }
         var failed: Set<String> = []
         for booking in bookings {
-            do { try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status) }
+            do {
+                let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+                if let warning { bookingDecisionNoticeWarning = warning }
+            }
             catch { failed.insert(booking.id) }
         }
         do {
@@ -903,7 +909,9 @@ final class AdminStore: ObservableObject {
         updatingBookingID = bookingID
         defer { updatingBookingID = nil }
         do {
-            try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
+            bookingDecisionNoticeWarning = nil
+            let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
+            bookingDecisionNoticeWarning = outcome.warning
             classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)

@@ -381,6 +381,24 @@ struct AdminWaitlistPromotionOutcome: Hashable {
     let warning: String?
 }
 
+struct AdminBookingDecision: Codable, Hashable {
+    let request_id: UUID
+    let booking_id: UUID
+    let session_id: UUID
+    let user_id: UUID
+    let previous_status: String
+    let new_status: String
+    let announcement_id: UUID?
+    let notice_created: Bool
+    let decided_at: Date
+}
+
+struct AdminBookingDecisionOutcome: Hashable {
+    let decision: AdminBookingDecision
+    let pushDelivered: Bool
+    let warning: String?
+}
+
 struct AdminFollowUp: Identifiable, Codable, Hashable {
     let id: UUID
     let full_name: String?
@@ -1150,6 +1168,7 @@ enum AdminSchemaReadiness {
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
         "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
         "waitlist_promotion_notifications",
+        "booking_decision_notifications",
         "member_onboarding_foundation", "member_activation_cockpit"
     ]
 

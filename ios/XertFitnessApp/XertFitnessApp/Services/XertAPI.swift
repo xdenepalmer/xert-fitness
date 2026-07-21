@@ -527,15 +527,50 @@ final class XertAPI {
         guard !rows.isEmpty else { throw APIError(message: "This schedule record changed elsewhere. Refresh before removing it.") }
     }
 
-    func adminSetBookingStatus(session auth: AuthSession, bookingID: UUID, status: String) async throws {
-        guard ["requested", "confirmed", "waitlisted", "cancelled", "declined"].contains(status) else {
+    @discardableResult
+    func adminSetBookingStatus(session auth: AuthSession, bookingID: UUID, status: String) async throws -> AdminBookingDecisionOutcome {
+        guard ["requested", "confirmed", "waitlisted", "cancelled", "declined", "attended", "no_show"].contains(status) else {
             throw APIError(message: "Choose a valid booking decision.")
         }
-        let _: EmptyResponse = try await rpc(
-            path: "admin_set_booking_status",
-            body: AdminBookingStatusRequest(p_booking_id: bookingID, p_status: status),
+        let rows: [AdminBookingDecision] = try await rpc(
+            path: "admin_set_booking_status_with_notice",
+            body: AdminBookingStatusRequest(
+                p_booking_id: bookingID,
+                p_status: status,
+                p_request_id: UUID()
+            ),
             auth: auth
         )
+        guard rows.count == 1, let decision = rows.first,
+              decision.booking_id == bookingID, decision.new_status == status else {
+            throw APIError(message: "The booking decision completed without a verifiable receipt. Refresh before continuing.")
+        }
+        guard let announcementID = decision.announcement_id else {
+            return AdminBookingDecisionOutcome(decision: decision, pushDelivered: false, warning: nil)
+        }
+        do {
+            let response: AdminTargetedNoticeResponse = try await vercelRequest(
+                path: "/api/admin-publish-announcement",
+                body: AdminTargetedNoticeRequest(
+                    action: "notify_targeted_announcement",
+                    announcement_id: announcementID
+                ),
+                auth: auth
+            )
+            return AdminBookingDecisionOutcome(
+                decision: decision,
+                pushDelivered: (response.push?.delivered ?? 0) > 0,
+                warning: response.push?.configured == false
+                    ? "The booking was updated and the member's private notice is live, but Apple push is not configured."
+                    : nil
+            )
+        } catch {
+            return AdminBookingDecisionOutcome(
+                decision: decision,
+                pushDelivered: false,
+                warning: "The booking was updated and the member's private notice is live, but Apple push delivery needs attention."
+            )
+        }
     }
 
     @discardableResult
@@ -1005,13 +1040,14 @@ final class XertAPI {
         session auth: AuthSession,
         booking: AdminBookingRequest,
         status: String
-    ) async throws {
+    ) async throws -> String? {
         guard booking.allowedNextStatuses.contains(status) else {
             throw APIError(message: "This booking cannot move from \(booking.status) to \(status). Refresh and review it.")
         }
         if booking.source == .member {
             guard let bookingID = booking.memberBookingID else { throw APIError(message: "The member booking ID is invalid.") }
-            try await adminSetBookingStatus(session: auth, bookingID: bookingID, status: status)
+            let outcome = try await adminSetBookingStatus(session: auth, bookingID: bookingID, status: status)
+            return outcome.warning
         } else {
             let _: UUID? = try await rpc(
                 path: "admin_update_request",
@@ -1024,6 +1060,7 @@ final class XertAPI {
                 ),
                 auth: auth
             )
+            return nil
         }
     }
 
@@ -2049,6 +2086,7 @@ private struct AdminWaitlistPromotionRequest: Encodable {
 private struct AdminBookingStatusRequest: Encodable {
     let p_booking_id: UUID
     let p_status: String
+    let p_request_id: UUID
 }
 private struct AdminAttendanceRequest: Encodable {
     let p_session_id: UUID
