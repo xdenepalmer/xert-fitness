@@ -127,12 +127,20 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Native purchase history includes reconciled refund dates and amounts from the shared Stripe audit workflow.
 - Live member notices authored in the admin command centre, with priority, automatic expiry, member dismissal, and aggregate reach shared across web and iOS.
 - Seven-day credit-expiry warnings for members, backed by an admin follow-up queue for proactive retention.
+- Privacy-minimised member readiness backed by a protected emergency contact,
+  immutable acknowledgement versions and server-timestamped acceptance receipts.
+  Owner directory status never includes the raw emergency contact; opening it
+  requires a deliberate admin-only reveal that writes an access audit event.
 - Refresh-token renewal on launch and focused decoding tests for the Supabase data contract.
 
 Members can enable the privacy lock under **Account → Account Security**. The preference stays on the device; biometric and passcode results are evaluated by iOS and are never sent to XERT or Supabase.
 
 The app expects the same Supabase schema used by the web app in `src/supabase/booking_schema.sql`. Apply
 `src/supabase/booking_modes_upgrade.sql` to the deployed project before using request-to-book classes in either app.
+Apply `src/supabase/member_onboarding_upgrade.sql` before enabling the native
+member-readiness experience. The foundation intentionally stores no screening
+answers, date of birth, diagnoses, injuries, free-text safety notes, waiver or
+clearance outcome.
 
 ## Codemagic
 
@@ -179,7 +187,7 @@ Create or use the shared App Store Connect integration named `codemagic`, then e
 
 The production site serves `/.well-known/apple-app-site-association` for Apple team `25R438YK9F`, bundle `com.xertfitness.app`, and only the canonical `/open/*` task-link namespace. Confirm the XERT App ID belongs to that same Apple team, enable **Associated Domains** for the XERT App ID, and regenerate the App Store provisioning profile. Then add `ENABLE_UNIVERSAL_LINKS=true` to the Codemagic `xert_env` group. CI verifies the live AASA file, injects `applinks:xert-fitness.vercel.app` before project generation, and requires the entitlement in the signed IPA. Until that switch is explicitly enabled, CI removes the entitlement so the current profile keeps building safely.
 
-Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 43 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability. The member booking-switch guard makes **Member App Controls → Bookings enabled** authoritative for website and iOS clients at the database boundary.
+Before starting a signed build, run `src/supabase/release_readiness_check.sql` in the production Supabase SQL editor. All 44 rows must show `installed = true` and `release_ready = true`; otherwise the service-contract preflight stops before signing and names the missing capability. The member booking-switch guard makes **Member App Controls → Bookings enabled** authoritative for website and iOS clients at the database boundary.
 
 Remote member notices also require these server-only Vercel variables. Never place them in `xert_env`, the app bundle, or a `VITE_` variable:
 

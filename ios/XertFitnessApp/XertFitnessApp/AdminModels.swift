@@ -17,6 +17,40 @@ struct AdminMemberSummary: Identifiable, Codable, Hashable {
     var totalSpent: String { (Double(total_spent_cents) / 100).formatted(.currency(code: "AUD")) }
 }
 
+struct AdminMemberOnboardingSummary: Identifiable, Codable, Hashable {
+    var id: UUID { user_id }
+    let user_id: UUID
+    let profile_complete: Bool
+    let emergency_contact_complete: Bool
+    let documents_complete: Bool
+    let onboarding_complete: Bool
+    let accepted_required_count: Int
+    let required_document_count: Int
+
+    var completedSteps: Int {
+        [profile_complete, emergency_contact_complete, documents_complete].filter { $0 }.count
+    }
+
+    var statusLabel: String {
+        onboarding_complete ? "Ready" : "\(completedSteps) of 3 complete"
+    }
+}
+
+struct AdminMemberEmergencyContact: Codable, Hashable {
+    let name: String
+    let phone: String
+    let relationship: String
+    let contact_awareness_confirmed_at: Date
+    let updated_at: Date
+}
+
+struct AdminMemberEmergencyContactReveal: Codable, Hashable {
+    let audit_event_id: UUID
+    let revealed_at: Date
+    let user_id: UUID
+    let emergency_contact: AdminMemberEmergencyContact
+}
+
 struct AdminMemberNote: Identifiable, Codable, Hashable {
     let id: UUID
     let user_id: UUID
@@ -1047,7 +1081,8 @@ enum AdminSchemaReadiness {
         "lead_pipeline_audit", "schedule_change_audit", "content_change_audit",
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
-        "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices"
+        "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
+        "member_onboarding_foundation"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

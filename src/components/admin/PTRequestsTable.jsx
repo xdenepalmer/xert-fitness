@@ -133,8 +133,6 @@ export default function PTRequestsTable() {
           { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
           { key: 'phone', label: 'Phone' }, { key: 'session_type', label: 'Session type' },
           { key: 'preferred_day', label: 'Preferred day' }, { key: 'preferred_time', label: 'Preferred time' },
-          { key: 'training_goal', label: 'Training goal' }, { key: 'experience_level', label: 'Experience level' },
-          { key: 'notes', label: 'Member notes' }, { key: 'admin_notes', label: 'Admin notes' },
         ]
       );
       toast({ title: 'CSV exported', description: `${rows.length} filtered PT request${rows.length === 1 ? '' : 's'} downloaded.` });

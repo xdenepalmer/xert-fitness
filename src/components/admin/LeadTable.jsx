@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Download, RefreshCw, X } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast';
 import { getMemberLeads, getTrainerLeads, getPartnerLeads, updateLead, updateLeadStatuses } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { collectLeadPages, selectedLeadIds } from '@/lib/adminLeads';
+import { collectLeadPages, leadExportColumns, leadExportRows, selectedLeadIds } from '@/lib/adminLeads';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 
 const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
@@ -182,7 +182,11 @@ export default function LeadTable({ type = 'member' }) {
         toast({ title: 'No results to export', variant: 'destructive' });
         return;
       }
-      downloadCsv(`xert_${table}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+      downloadCsv(
+        `xert_${table}_${new Date().toISOString().split('T')[0]}.csv`,
+        leadExportRows(table, rows),
+        leadExportColumns(table)
+      );
       toast({ title: 'CSV exported', description: `${rows.length} filtered result${rows.length === 1 ? '' : 's'} downloaded.` });
     } catch (exportError) {
       toast({ title: 'Export failed', description: exportError.message, variant: 'destructive' });

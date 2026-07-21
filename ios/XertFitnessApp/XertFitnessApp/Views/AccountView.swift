@@ -27,6 +27,7 @@ struct AccountView: View {
     @State private var addingBookingToCalendarID: UUID?
     @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
+    @State private var showingMemberReadiness = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
     @State private var handledRouteSequence: UInt = 0
     @State private var isSubmittingAuthentication = false
@@ -158,6 +159,12 @@ struct AccountView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingMemberReadiness) {
+            MemberOnboardingView()
+                .environmentObject(store)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private func focusRoute(using proxy: ScrollViewProxy) {
@@ -195,13 +202,14 @@ struct AccountView: View {
             }
             .listRowBackground(Color.xertInk)
         }
-        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions]) {
+        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .onboarding, .eventGoals, .privateSessions]) {
             Section {
-                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
+                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .onboarding, .eventGoals, .privateSessions])
             }
             .listRowBackground(Color.xertInk)
         }
 
+        memberReadinessSection
         membershipSection
         activeBookingSections(timeline: timeline)
         privateSessionHistorySection
@@ -213,6 +221,17 @@ struct AccountView: View {
         legalSection
         signOutSection
         accountControlSection
+    }
+
+    private var memberReadinessSection: some View {
+        Section {
+            MemberReadinessStatusCard {
+                showingMemberReadiness = true
+            }
+        } header: {
+            Text("Member Setup").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
     }
 
     private var membershipSection: some View {

@@ -1830,7 +1830,7 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 13)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 14)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
         XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
@@ -1838,6 +1838,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertDataSource.coaches.displayName, "coaches and practitioners")
         XCTAssertEqual(XertDataSource.siteContent.displayName, "public site content")
         XCTAssertEqual(XertDataSource.platformSettings.displayName, "booking and pack purchase availability")
+        XCTAssertEqual(XertDataSource.onboarding.displayName, "member readiness")
     }
 
     func testMemberAnnouncementDecodesPriorityAndExpiry() throws {
@@ -3392,6 +3393,177 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testMemberOnboardingDraftUsesOnlyCurrentServerDocumentAcceptances() throws {
+        let currentDocumentID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000102"
+        ))
+        let staleDocumentID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000101"
+        ))
+        let state = memberOnboardingState(
+            documentIDs: [currentDocumentID],
+            acceptedIDs: [currentDocumentID, staleDocumentID]
+        )
+
+        let draft = MemberOnboardingDraft(state: state)
+
+        XCTAssertEqual(state.requiredDocumentIDs, [currentDocumentID])
+        XCTAssertEqual(state.acceptedDocumentIDs, [currentDocumentID])
+        XCTAssertEqual(state.acceptedCount, 1)
+        XCTAssertEqual(draft.acceptedDocumentIDs, [currentDocumentID])
+        XCTAssertTrue(draft.contactIsAware)
+        XCTAssertTrue(draft.confirmsAdultEligibility)
+    }
+
+    func testMemberOnboardingSaveRequestTrimsAndSendsExactCurrentDocumentSet() throws {
+        let firstID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000002"
+        ))
+        let secondID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000001"
+        ))
+        let unrelatedID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [firstID, secondID],
+            acceptedIDs: []
+        ))
+        draft.fullName = "  Alex Runner  "
+        draft.phone = "  0400 123 456  "
+        draft.emergencyContactName = "  Sam Runner  "
+        draft.emergencyContactPhone = "  +61 400 999 111  "
+        draft.emergencyContactRelationship = "  Partner  "
+        draft.contactIsAware = true
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = [firstID, secondID, unrelatedID]
+
+        let request = try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([firstID, secondID])
+        )
+
+        XCTAssertEqual(request.p_full_name, "Alex Runner")
+        XCTAssertEqual(request.p_phone, "0400 123 456")
+        XCTAssertEqual(request.p_emergency_contact_name, "Sam Runner")
+        XCTAssertEqual(request.p_emergency_contact_phone, "+61 400 999 111")
+        XCTAssertEqual(request.p_emergency_contact_relationship, "Partner")
+        XCTAssertTrue(request.p_contact_is_aware)
+        XCTAssertEqual(request.p_accepted_document_ids, [secondID, firstID])
+        XCTAssertEqual(request.p_source, "ios_app")
+
+        let payload = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(request)
+        ) as? [String: Any]
+        XCTAssertNil(payload?["p_is_adult"])
+        XCTAssertNil(payload?["p_confirms_adult_eligibility"])
+    }
+
+    func testMemberOnboardingSaveRequestRejectsMissingAwarenessAndAcknowledgements() {
+        let adultDocumentID = UUID()
+        let additionalDocumentID = UUID()
+        let documents = memberDocuments([adultDocumentID, additionalDocumentID])
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [adultDocumentID, additionalDocumentID],
+            acceptedIDs: []
+        ))
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = [adultDocumentID]
+        draft.contactIsAware = false
+
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: documents
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("emergency contact knows"))
+        }
+
+        draft.contactIsAware = true
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: documents
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("acknowledge every current"))
+        }
+    }
+
+    func testMemberOnboardingSaveRequestRejectsUnder18OrUnconfirmedAdultEligibility() {
+        let adultDocumentID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [adultDocumentID],
+            acceptedIDs: [adultDocumentID]
+        ))
+        draft.confirmsAdultEligibility = false
+
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([adultDocumentID])
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("only to people aged 18 or older"))
+            XCTAssertTrue(error.localizedDescription.contains("parent or guardian"))
+        }
+
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = []
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([adultDocumentID])
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("adult readiness document"))
+        }
+    }
+
+    func testMemberOnboardingSaveRequestMatchesBackendFieldBoundsAndPhoneCharacters() {
+        let documentID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [documentID],
+            acceptedIDs: [documentID]
+        ))
+
+        draft.phone = "12345"
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.phone = "0400 CALL ME"
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.phone = "+61 (400) 123-456"
+        draft.emergencyContactRelationship = String(repeating: "R", count: 61)
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.emergencyContactRelationship = "Parent"
+        XCTAssertNoThrow(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+    }
+
+    func testMemberOnboardingDocumentOnlyOpensSafeOfficialHTTPSLinks() throws {
+        let id = UUID()
+        let safe = memberDocument(id: id, sourceURL: "https://xertfitness.com.au/member-safety")
+        let insecure = memberDocument(id: id, sourceURL: "http://xertfitness.com.au/member-safety")
+        let credentialed = memberDocument(id: id, sourceURL: "https://member:secret@xertfitness.com.au/safety")
+
+        XCTAssertEqual(safe.sourceURL?.host, "xertfitness.com.au")
+        XCTAssertNil(insecure.sourceURL)
+        XCTAssertNil(credentialed.sourceURL)
+    }
+
+    func testMemberOnboardingStaleDocumentErrorHasActionableCopy() {
+        let message = MemberOnboardingErrorMessage.display(
+            for: "P0001 ONBOARDING_DOCUMENTS_STALE"
+        )
+
+        XCTAssertTrue(message.contains("changed while you were reading"))
+        XCTAssertTrue(message.contains("acknowledge them again"))
+    }
+
     private func creditBatch(remaining: Int, orderID: UUID? = nil) -> CreditBatch {
         CreditBatch(
             id: UUID(),
@@ -3399,6 +3571,70 @@ final class ModelsTests: XCTestCase {
             remaining: remaining,
             expires_at: nil,
             order_id: orderID
+        )
+    }
+
+    private func memberOnboardingState(
+        documentIDs: [UUID],
+        acceptedIDs: [UUID]
+    ) -> MemberOnboardingState {
+        MemberOnboardingState(
+            user_id: UUID(),
+            profile: MemberOnboardingProfile(
+                full_name: "Alex Runner",
+                phone: "0400 123 456",
+                updated_at: Date()
+            ),
+            emergency_contact: MemberEmergencyContact(
+                name: "Sam Runner",
+                phone: "0400 999 111",
+                relationship: "Partner",
+                contact_awareness_confirmed_at: Date(),
+                updated_at: Date()
+            ),
+            required_documents: memberDocuments(documentIDs),
+            accepted_documents: acceptedIDs.map { id in
+                MemberOnboardingAcceptance(
+                    document_id: id,
+                    document_key: "member_safety",
+                    version: "1.0",
+                    content_sha256: "fixture-hash",
+                    accepted_at: Date(),
+                    source: "ios_app"
+                )
+            },
+            profile_complete: true,
+            emergency_contact_complete: true,
+            documents_complete: Set(documentIDs).isSubset(of: Set(acceptedIDs)),
+            is_complete: Set(documentIDs).isSubset(of: Set(acceptedIDs))
+        )
+    }
+
+    private func memberDocuments(_ ids: [UUID]) -> [MemberOnboardingDocument] {
+        ids.enumerated().map { index, id in
+            memberDocument(
+                id: id,
+                documentKey: index == 0
+                    ? MemberOnboardingDocument.adultReadinessDocumentKey
+                    : "additional_readiness_\(index)"
+            )
+        }
+    }
+
+    private func memberDocument(
+        id: UUID,
+        documentKey: String = MemberOnboardingDocument.adultReadinessDocumentKey,
+        sourceURL: String? = "https://xertfitness.com.au/member-safety"
+    ) -> MemberOnboardingDocument {
+        MemberOnboardingDocument(
+            id: id,
+            document_key: documentKey,
+            version: "1.0",
+            title: "Member safety acknowledgement",
+            body: "Read the complete current member safety instructions.",
+            source_url: sourceURL,
+            content_sha256: "fixture-hash",
+            published_at: Date()
         )
     }
 

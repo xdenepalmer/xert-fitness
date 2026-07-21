@@ -314,6 +314,14 @@ final class XertAPI {
         return profiles.first
     }
 
+    func memberOnboarding(session auth: AuthSession) async throws -> MemberOnboardingState {
+        try await rpc(
+            path: "my_member_onboarding",
+            body: EmptyBody(),
+            auth: auth
+        )
+    }
+
     // MARK: - Native admin command centre
 
     func adminDailyOperations(session auth: AuthSession) async throws -> [AdminDailyOperation] {
@@ -601,6 +609,26 @@ final class XertAPI {
         )
     }
 
+    func adminMemberOnboardingSummary(session auth: AuthSession, memberID: UUID) async throws -> AdminMemberOnboardingSummary {
+        let rows: [AdminMemberOnboardingSummary] = try await rpc(
+            path: "admin_member_onboarding_summary",
+            body: AdminMemberIDsRequest(p_user_ids: [memberID]),
+            auth: auth
+        )
+        guard rows.count == 1, rows[0].user_id == memberID else {
+            throw APIError(message: "Member readiness is not available for this account.")
+        }
+        return rows[0]
+    }
+
+    func adminRevealMemberEmergencyContact(session auth: AuthSession, memberID: UUID) async throws -> AdminMemberEmergencyContactReveal {
+        try await rpc(
+            path: "admin_reveal_member_emergency_contact",
+            body: AdminMemberIDRequest(p_user_id: memberID),
+            auth: auth
+        )
+    }
+
     @discardableResult
     func adminGrantCredits(
         session auth: AuthSession,
@@ -683,7 +711,7 @@ final class XertAPI {
             let page: [AdminLead] = try await restRequest(
                 path: "/rest/v1/\(pipeline.rawValue)",
                 queryItems: [
-                    URLQueryItem(name: "select", value: "*"),
+                    URLQueryItem(name: "select", value: adminLeadSelect(for: pipeline)),
                     URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
                     URLQueryItem(name: "limit", value: String(pageSize)),
                     URLQueryItem(name: "offset", value: String(offset))
@@ -693,6 +721,18 @@ final class XertAPI {
             leads.append(contentsOf: page)
             if page.count < pageSize { return leads }
             offset += pageSize
+        }
+    }
+
+    private func adminLeadSelect(for pipeline: AdminLeadPipeline) -> String {
+        let common = "id,full_name,email,phone,status,admin_notes,created_at,utm_source,utm_medium,utm_campaign"
+        switch pipeline {
+        case .members:
+            return common + ",suburb_town,current_training_level,main_training_goals,preferred_training_times"
+        case .trainers:
+            return common + ",qualifications,years_experience,functional_training_experience,specialties,short_intro"
+        case .partners:
+            return common + ",profession,business_name,services_offered,short_intro,website_social_link"
         }
     }
 
@@ -1673,6 +1713,17 @@ final class XertAPI {
         return profile
     }
 
+    func saveMemberOnboarding(
+        session auth: AuthSession,
+        request body: MemberOnboardingSaveRequest
+    ) async throws -> MemberOnboardingState {
+        try await rpc(
+            path: "save_my_member_onboarding",
+            body: body,
+            auth: auth
+        )
+    }
+
     func bookings(session auth: AuthSession) async throws -> [BookingItem] {
         try await rpc(path: "my_bookings", body: EmptyBody(), auth: auth)
     }
@@ -2000,6 +2051,8 @@ private struct AdminMemberNotesRequest: Encodable {
     let p_user_id: UUID
     let p_include_archived: Bool
 }
+private struct AdminMemberIDsRequest: Encodable { let p_user_ids: [UUID] }
+private struct AdminMemberIDRequest: Encodable { let p_user_id: UUID }
 private struct AdminCreditGrantRequest: Encodable {
     let p_user_id: UUID
     let p_sessions: Int

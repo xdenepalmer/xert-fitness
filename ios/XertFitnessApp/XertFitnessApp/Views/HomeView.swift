@@ -8,6 +8,7 @@ struct HomeView: View {
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
     @State private var showingNoticeCenter = false
+    @State private var showingMemberReadiness = false
     @State private var highlightedAnnouncementID: UUID?
     @State private var lastHandledRouteSequence: UInt = 0
 
@@ -39,6 +40,7 @@ struct HomeView: View {
                             StaleMemberDataNotice()
                             DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
                             memberDashboardSection
+                            memberReadinessSection
                             announcementsSection
                             NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
                             todayTrainingSection
@@ -75,6 +77,12 @@ struct HomeView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                 }
+                .sheet(isPresented: $showingMemberReadiness) {
+                    MemberOnboardingView()
+                        .environmentObject(store)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
                 .onChange(of: routeSequence) { sequence in
                     handleRoute(sequence)
                 }
@@ -101,6 +109,17 @@ struct HomeView: View {
                         .accessibilityHidden(true)
 
                     dashboardNextTraining
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var memberReadinessSection: some View {
+        if store.isSignedIn {
+            XertSection(title: "Member readiness") {
+                MemberReadinessStatusCard {
+                    showingMemberReadiness = true
                 }
             }
         }

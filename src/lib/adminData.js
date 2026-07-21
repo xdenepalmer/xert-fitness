@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponses } from './supabaseResults';
-import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
+import { adminLeadSelect, leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
   normalizeMemberNoteArchive, normalizeRoleChange, normalizeTargetedMemberNotice
@@ -25,7 +25,7 @@ import { apiErrorMessage } from './apiError.js';
 
 async function getLeadPage(table, filters = {}) {
   const pagination = normalizeLeadPage(filters.page, filters.pageSize);
-  let query = supabase.from(table).select('*', { count: 'exact' }).order('created_at', { ascending: false });
+  let query = supabase.from(table).select(adminLeadSelect(table), { count: 'exact' }).order('created_at', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
   const search = normalizeLeadSearch(filters.search);
   if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
@@ -215,7 +215,7 @@ export async function getClassBookings(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('class_bookings')
-      .select('*, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, full_name, email, phone, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
@@ -296,7 +296,10 @@ export async function getPTRequests(filters = {}) {
   };
 
   const pageQuery = applyFilters(
-    supabase.from('private_session_requests').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+    supabase.from('private_session_requests').select(
+      'id, full_name, email, phone, requested_session_type, preferred_day, preferred_time, training_goal, experience_level, notes, status, admin_notes, created_at',
+      { count: 'exact' }
+    ).order('created_at', { ascending: false })
   ).range(normalized.from, normalized.to);
   const statusCount = status => applyFilters(
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),

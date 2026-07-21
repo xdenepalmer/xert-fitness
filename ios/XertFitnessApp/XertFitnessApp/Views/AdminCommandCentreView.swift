@@ -158,7 +158,11 @@ struct AdminCommandCentreView: View {
             Text(admin.errorMessage ?? "")
         }
         .onChange(of: scenePhase) { phase in
-            guard phase == .active,
+            guard phase == .active else {
+                admin.clearRevealedMemberEmergencyContact()
+                return
+            }
+            guard
                   let session = authorizedOwnerSession,
                   ownerDataNeedsForegroundRefresh else { return }
             Task { await admin.refresh(session: session) }
@@ -1944,6 +1948,8 @@ private struct AdminMemberDetailView: View {
             }
             .listRowBackground(Color.xertInk)
 
+            memberReadinessSection
+
             Section("Access") {
                 LabeledContent("Current role", value: current.role.capitalized)
                 Button {
@@ -1976,7 +1982,17 @@ private struct AdminMemberDetailView: View {
 
             Section("Staff timeline") {
                 if admin.loadingMemberDetailID == current.id { ProgressView().tint(Color.xertSteel) }
-                if admin.memberNotes.isEmpty && admin.loadingMemberDetailID == nil { Text("No staff notes yet.") }
+                if admin.memberDetailUnavailableSources.contains("staff timeline") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Staff timeline is unavailable.")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Pull down to retry. Existing notes have not been replaced or removed.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.58))
+                    }
+                } else if admin.memberNotes.isEmpty && admin.loadingMemberDetailID == nil {
+                    Text("No staff notes yet.")
+                }
                 ForEach(admin.memberNotes) { note in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -2002,6 +2018,8 @@ private struct AdminMemberDetailView: View {
         .scrollContentBackground(.hidden).background(Color.xertNavy)
         .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
         .task { await admin.loadMemberDetail(session: session, memberID: current.id) }
+        .refreshable { await admin.loadMemberDetail(session: session, memberID: current.id) }
+        .onDisappear { admin.clearMemberDetail(memberID: current.id) }
         .sheet(isPresented: $showingGrant) {
             AdminCreditGrantView(admin: admin, session: session, member: current)
         }
@@ -2017,6 +2035,122 @@ private struct AdminMemberDetailView: View {
         } message: { role in
             Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
         }
+    }
+
+    private var memberReadinessSection: some View {
+        Section("Member readiness") {
+            if admin.loadingMemberDetailID == current.id,
+               admin.memberOnboardingSummary == nil {
+                HStack {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Checking member readiness...")
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                }
+            } else if let summary = admin.memberOnboardingSummary,
+                      summary.user_id == current.id {
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(summary.statusLabel)
+                            .font(.headline)
+                            .foregroundStyle(summary.onboarding_complete ? Color.xertSteel : Color.xertOffWhite)
+                        Text(summary.onboarding_complete
+                             ? "The current profile, emergency contact and required acknowledgements are complete."
+                             : "Readiness is advisory during rollout and does not block existing member actions.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.58))
+                    }
+                } icon: {
+                    Image(systemName: summary.onboarding_complete ? "checkmark.seal.fill" : "person.crop.circle.badge.exclamationmark")
+                        .foregroundStyle(summary.onboarding_complete ? Color.xertSteel : Color.orange)
+                }
+
+                readinessRow("Account details", complete: summary.profile_complete)
+                readinessRow("Emergency contact", complete: summary.emergency_contact_complete)
+                readinessRow(
+                    "Required acknowledgements",
+                    detail: "\(summary.accepted_required_count) of \(summary.required_document_count)",
+                    complete: summary.documents_complete
+                )
+
+                if summary.emergency_contact_complete {
+                    if let reveal = admin.revealedMemberEmergencyContact,
+                       reveal.user_id == current.id {
+                        let contact = reveal.emergency_contact
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(contact.name)
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Text(contact.relationship)
+                                .font(.caption)
+                                .foregroundStyle(Color.xertPale.opacity(0.62))
+                            if let encoded = contact.phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                               let url = URL(string: "tel:\(encoded)") {
+                                Link(contact.phone, destination: url)
+                                    .font(.subheadline.weight(.semibold))
+                            } else {
+                                Text(contact.phone).font(.subheadline)
+                            }
+                            Text("Revealed \(reveal.revealed_at.formatted(date: .abbreviated, time: .shortened)). This access was recorded.")
+                                .font(.caption2)
+                                .foregroundStyle(Color.xertPale.opacity(0.48))
+                        }
+                        .padding(.vertical, 4)
+                        .privacySensitive()
+                        .accessibilityElement(children: .combine)
+                    } else {
+                        Button {
+                            Task { await admin.revealMemberEmergencyContact(session: session, memberID: current.id) }
+                        } label: {
+                            HStack {
+                                Label("Reveal emergency contact", systemImage: "cross.case")
+                                Spacer()
+                                if admin.revealingEmergencyContactMemberID == current.id {
+                                    ProgressView().tint(Color.xertSteel)
+                                }
+                            }
+                        }
+                        .disabled(admin.revealingEmergencyContactMemberID != nil)
+                        Text("Use only when needed for member safety. Every reveal is recorded with the administrator and time.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.52))
+                    }
+                } else {
+                    Text("No emergency contact is available. Ask the member to finish Member Readiness in the XERT app.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.58))
+                }
+            } else if admin.memberDetailUnavailableSources.contains("member readiness") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Member readiness is unavailable.")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Pull down to retry before relying on this record in an emergency.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.58))
+                }
+            } else {
+                Text("No member readiness record is available yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale.opacity(0.68))
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func readinessRow(_ title: String, detail: String? = nil, complete: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: complete ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(complete ? Color.xertSteel : Color.xertPale.opacity(0.42))
+                .accessibilityHidden(true)
+            Text(title)
+            Spacer()
+            if let detail {
+                Text(detail)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Color.xertPale.opacity(0.58))
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(complete ? "complete" : "incomplete")")
     }
 }
 

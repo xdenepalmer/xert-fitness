@@ -47,6 +47,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/class_cancellation_notifications_upgrade.sql', '../supabase/migrations/20260714015000_class_cancellation_notifications.sql'],
     ['../src/supabase/catalog_optimistic_locking_upgrade.sql', '../supabase/migrations/20260714020000_catalog_optimistic_locking.sql'],
     ['../src/supabase/product_commercial_terms_guard_upgrade.sql', '../supabase/migrations/20260720000000_product_commercial_terms_guard.sql'],
+    ['../src/supabase/member_onboarding_upgrade.sql', '../supabase/migrations/20260721010000_member_onboarding_foundation.sql'],
     ['../src/supabase/targeted_member_notices_upgrade.sql', '../supabase/migrations/20260714021000_targeted_member_notices.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {

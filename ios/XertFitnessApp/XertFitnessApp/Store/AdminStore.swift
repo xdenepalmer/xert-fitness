@@ -15,6 +15,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var followUps: [AdminFollowUp] = []
     @Published private(set) var members: [AdminMemberSummary] = []
     @Published private(set) var memberNotes: [AdminMemberNote] = []
+    @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
+    @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
+    @Published private(set) var loadedMemberDetailID: UUID?
+    @Published private(set) var memberDetailUnavailableSources: [String] = []
     @Published private(set) var orders: [OrderItem] = []
     @Published private(set) var settings: AdminPlatformSettings?
     @Published private(set) var ptRequests: [AdminPTRequest] = []
@@ -63,6 +67,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var savingScheduleWindowID: UUID?
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var loadingMemberDetailID: UUID?
+    @Published private(set) var revealingEmergencyContactMemberID: UUID?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
@@ -83,6 +88,8 @@ final class AdminStore: ObservableObject {
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
+    private var memberDetailGeneration: UInt = 0
+    private var emergencyContactRevealGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -298,11 +305,90 @@ final class AdminStore: ObservableObject {
 
     func loadMemberDetail(session: AuthSession, memberID: UUID) async {
         guard loadingMemberDetailID == nil else { return }
+        memberDetailGeneration &+= 1
+        let generation = memberDetailGeneration
+        loadedMemberDetailID = memberID
         memberNotes = []
+        memberOnboardingSummary = nil
+        revealedMemberEmergencyContact = nil
+        memberDetailUnavailableSources = []
         loadingMemberDetailID = memberID
-        defer { loadingMemberDetailID = nil }
-        do { memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID) }
-        catch { errorMessage = error.localizedDescription }
+        defer {
+            if memberDetailGeneration == generation { loadingMemberDetailID = nil }
+        }
+
+        async let notesRequest = api.adminMemberNotes(session: session, memberID: memberID)
+        async let onboardingRequest = api.adminMemberOnboardingSummary(session: session, memberID: memberID)
+        var failures: [String] = []
+
+        do {
+            let notes = try await notesRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberNotes = notes
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("staff timeline")
+        }
+
+        do {
+            let summary = try await onboardingRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberOnboardingSummary = summary
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("member readiness")
+        }
+
+        guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+        memberDetailUnavailableSources = failures
+    }
+
+    func clearMemberDetail(memberID: UUID) {
+        guard loadedMemberDetailID == memberID else { return }
+        memberDetailGeneration &+= 1
+        emergencyContactRevealGeneration &+= 1
+        loadedMemberDetailID = nil
+        loadingMemberDetailID = nil
+        revealingEmergencyContactMemberID = nil
+        memberNotes = []
+        memberOnboardingSummary = nil
+        revealedMemberEmergencyContact = nil
+        memberDetailUnavailableSources = []
+    }
+
+    func clearRevealedMemberEmergencyContact() {
+        emergencyContactRevealGeneration &+= 1
+        revealingEmergencyContactMemberID = nil
+        revealedMemberEmergencyContact = nil
+    }
+
+    func revealMemberEmergencyContact(session: AuthSession, memberID: UUID) async {
+        guard revealingEmergencyContactMemberID == nil,
+              loadedMemberDetailID == memberID,
+              memberOnboardingSummary?.emergency_contact_complete == true else { return }
+        let generation = memberDetailGeneration
+        emergencyContactRevealGeneration &+= 1
+        let revealGeneration = emergencyContactRevealGeneration
+        revealingEmergencyContactMemberID = memberID
+        defer {
+            if memberDetailGeneration == generation,
+               emergencyContactRevealGeneration == revealGeneration {
+                revealingEmergencyContactMemberID = nil
+            }
+        }
+        do {
+            let reveal = try await api.adminRevealMemberEmergencyContact(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  emergencyContactRevealGeneration == revealGeneration,
+                  loadedMemberDetailID == memberID else { return }
+            revealedMemberEmergencyContact = reveal
+            XertHaptics.play(.success)
+        } catch {
+            guard memberDetailGeneration == generation,
+                  emergencyContactRevealGeneration == revealGeneration else { return }
+            errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
+        }
     }
 
     func addMemberNote(session: AuthSession, memberID: UUID, category: String, body: String) async -> Bool {

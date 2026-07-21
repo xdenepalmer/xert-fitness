@@ -1,7 +1,7 @@
 import Foundation
 
 enum XertDataSource: String, CaseIterable, Hashable {
-    case products, sessions, events, coaches, siteContent, platformSettings, credits, bookings, orders, profile, eventGoals, privateSessions, announcements
+    case products, sessions, events, coaches, siteContent, platformSettings, credits, bookings, orders, profile, onboarding, eventGoals, privateSessions, announcements
 
     var displayName: String {
         switch self {
@@ -15,6 +15,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .bookings: return "your bookings"
         case .orders: return "purchase history"
         case .profile: return "member profile"
+        case .onboarding: return "member readiness"
         case .eventGoals: return "training goals"
         case .privateSessions: return "PT requests"
         case .announcements: return "member notices"
@@ -372,6 +373,229 @@ struct MemberProfile: Identifiable, Codable, Hashable {
     let role: String?
 
     var isAdmin: Bool { role == "admin" }
+}
+
+struct MemberOnboardingProfile: Codable, Hashable {
+    let full_name: String?
+    let phone: String?
+    let updated_at: Date
+}
+
+struct MemberEmergencyContact: Codable, Hashable {
+    let name: String
+    let phone: String
+    let relationship: String
+    let contact_awareness_confirmed_at: Date?
+    let updated_at: Date
+}
+
+struct MemberOnboardingDocument: Identifiable, Codable, Hashable {
+    static let adultReadinessDocumentKey = "adult_readiness_acknowledgement"
+
+    let id: UUID
+    let document_key: String
+    let version: String
+    let title: String
+    let body: String
+    let source_url: String?
+    let content_sha256: String
+    let published_at: Date
+
+    var isAdultReadinessAcknowledgement: Bool {
+        document_key == Self.adultReadinessDocumentKey
+    }
+
+    var sourceURL: URL? {
+        guard
+            let source_url,
+            let url = URL(string: source_url),
+            url.scheme?.lowercased() == "https",
+            url.host?.isEmpty == false,
+            url.user == nil,
+            url.password == nil
+        else { return nil }
+        return url
+    }
+}
+
+struct MemberOnboardingAcceptance: Codable, Hashable {
+    let document_id: UUID
+    let document_key: String
+    let version: String
+    let content_sha256: String
+    let accepted_at: Date
+    let source: String
+}
+
+struct MemberOnboardingState: Codable, Hashable {
+    let user_id: UUID
+    let profile: MemberOnboardingProfile
+    let emergency_contact: MemberEmergencyContact?
+    let required_documents: [MemberOnboardingDocument]
+    let accepted_documents: [MemberOnboardingAcceptance]
+    let profile_complete: Bool
+    let emergency_contact_complete: Bool
+    let documents_complete: Bool
+    let is_complete: Bool
+
+    var requiredDocumentIDs: Set<UUID> {
+        Set(required_documents.map(\.id))
+    }
+
+    var acceptedDocumentIDs: Set<UUID> {
+        Set(accepted_documents.map(\.document_id)).intersection(requiredDocumentIDs)
+    }
+
+    var requiredCount: Int { required_documents.count }
+    var acceptedCount: Int { acceptedDocumentIDs.count }
+
+    var adultReadinessDocument: MemberOnboardingDocument? {
+        required_documents.first(where: \.isAdultReadinessAcknowledgement)
+    }
+
+    var hasAcceptedAdultReadinessDocument: Bool {
+        adultReadinessDocument.map { acceptedDocumentIDs.contains($0.id) } == true
+    }
+}
+
+struct MemberOnboardingDraft: Equatable {
+    var fullName: String
+    var phone: String
+    var emergencyContactName: String
+    var emergencyContactPhone: String
+    var emergencyContactRelationship: String
+    var contactIsAware: Bool
+    var confirmsAdultEligibility: Bool
+    var acceptedDocumentIDs: Set<UUID>
+
+    init(state: MemberOnboardingState) {
+        fullName = state.profile.full_name ?? ""
+        phone = state.profile.phone ?? ""
+        emergencyContactName = state.emergency_contact?.name ?? ""
+        emergencyContactPhone = state.emergency_contact?.phone ?? ""
+        emergencyContactRelationship = state.emergency_contact?.relationship ?? ""
+        contactIsAware = state.emergency_contact?.contact_awareness_confirmed_at != nil
+        confirmsAdultEligibility = state.hasAcceptedAdultReadinessDocument
+        acceptedDocumentIDs = state.acceptedDocumentIDs
+    }
+}
+
+struct MemberOnboardingSaveRequest: Encodable, Equatable {
+    let p_full_name: String
+    let p_phone: String
+    let p_emergency_contact_name: String
+    let p_emergency_contact_phone: String
+    let p_emergency_contact_relationship: String
+    let p_contact_is_aware: Bool
+    let p_accepted_document_ids: [UUID]
+    let p_source: String
+
+    init(
+        draft: MemberOnboardingDraft,
+        requiredDocuments: [MemberOnboardingDocument]
+    ) throws {
+        let fullName = Self.clean(draft.fullName)
+        let phone = Self.clean(draft.phone)
+        let contactName = Self.clean(draft.emergencyContactName)
+        let contactPhone = Self.clean(draft.emergencyContactPhone)
+        let relationship = Self.clean(draft.emergencyContactRelationship)
+
+        guard let adultDocument = requiredDocuments.first(where: \.isAdultReadinessAcknowledgement) else {
+            throw APIError(message: "XERT's adult readiness acknowledgement is unavailable. Retry before saving.")
+        }
+        guard draft.confirmsAdultEligibility else {
+            throw APIError(message: "Member Readiness is currently available only to people aged 18 or older. If you are under 18, ask a parent or guardian to contact XERT.")
+        }
+        guard draft.acceptedDocumentIDs.contains(adultDocument.id) else {
+            throw APIError(message: "Read and acknowledge XERT's current adult readiness document.")
+        }
+
+        guard Self.hasValidLengthAndNoLineBreaks(fullName, range: 2...100) else {
+            throw APIError(message: "Enter your full name (up to 100 characters).")
+        }
+        guard Self.isPlausiblePhone(phone) else {
+            throw APIError(message: "Enter a valid mobile number.")
+        }
+        guard Self.hasValidLengthAndNoLineBreaks(contactName, range: 2...100) else {
+            throw APIError(message: "Enter your emergency contact's name (up to 100 characters).")
+        }
+        guard Self.isPlausiblePhone(contactPhone) else {
+            throw APIError(message: "Enter a valid emergency contact number.")
+        }
+        guard Self.hasValidLengthAndNoLineBreaks(relationship, range: 2...60) else {
+            throw APIError(message: "Enter your emergency contact's relationship to you (up to 60 characters).")
+        }
+        guard draft.contactIsAware else {
+            throw APIError(message: "Confirm that your emergency contact knows you have nominated them.")
+        }
+
+        let requiredIDs = Set(requiredDocuments.map(\.id))
+        guard !requiredIDs.isEmpty else {
+            throw APIError(message: "XERT's required documents are not available yet. Retry before saving.")
+        }
+        guard requiredIDs.isSubset(of: draft.acceptedDocumentIDs) else {
+            throw APIError(message: "Read and acknowledge every current XERT member document.")
+        }
+
+        p_full_name = fullName
+        p_phone = phone
+        p_emergency_contact_name = contactName
+        p_emergency_contact_phone = contactPhone
+        p_emergency_contact_relationship = relationship
+        p_contact_is_aware = true
+        p_accepted_document_ids = requiredIDs.sorted { $0.uuidString < $1.uuidString }
+        p_source = "ios_app"
+    }
+
+    private static func clean(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isPlausiblePhone(_ value: String) -> Bool {
+        guard (6...32).contains(value.count) else { return false }
+        let allowedPunctuation = CharacterSet(charactersIn: " ()-")
+        var digitCount = 0
+
+        for (index, scalar) in value.unicodeScalars.enumerated() {
+            if (48...57).contains(scalar.value) {
+                digitCount += 1
+            } else if scalar == "+" {
+                guard index == 0 else { return false }
+            } else if !allowedPunctuation.contains(scalar) {
+                return false
+            }
+        }
+
+        return (6...15).contains(digitCount)
+    }
+
+    private static func hasValidLengthAndNoLineBreaks(
+        _ value: String,
+        range: ClosedRange<Int>
+    ) -> Bool {
+        range.contains(value.count) && !value.contains("\n") && !value.contains("\r")
+    }
+}
+
+enum MemberOnboardingErrorMessage {
+    private static let messages: [(code: String, message: String)] = [
+        ("AUTH_REQUIRED", "Sign in again to update member readiness."),
+        ("MEMBER_PROFILE_NOT_FOUND", "Your member profile is still being prepared. Retry shortly."),
+        ("INVALID_FULL_NAME", "Enter your full name (up to 100 characters)."),
+        ("INVALID_MEMBER_PHONE", "Enter a valid mobile number."),
+        ("INVALID_EMERGENCY_CONTACT_NAME", "Enter your emergency contact's name."),
+        ("INVALID_EMERGENCY_CONTACT_PHONE", "Enter a valid emergency contact number."),
+        ("INVALID_EMERGENCY_CONTACT_RELATIONSHIP", "Enter your emergency contact's relationship to you."),
+        ("CONTACT_AWARENESS_REQUIRED", "Confirm that your emergency contact knows you have nominated them."),
+        ("INVALID_ONBOARDING_SOURCE", "XERT could not verify this app submission. Update the app and retry."),
+        ("ONBOARDING_DOCUMENTS_REQUIRED", "XERT's required member documents are not available yet. Retry shortly."),
+        ("ONBOARDING_DOCUMENTS_STALE", "XERT's member documents changed while you were reading them. Review the current versions and acknowledge them again.")
+    ]
+
+    static func display(for rawMessage: String) -> String {
+        messages.first { rawMessage.contains($0.code) }?.message
+            ?? (rawMessage.isEmpty ? "Could not update member readiness." : rawMessage)
+    }
 }
 
 struct BookingItem: Identifiable, Codable, Hashable {

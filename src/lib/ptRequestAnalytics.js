@@ -75,10 +75,6 @@ export function ptRequestCsvRows(requests) {
     session_type: request.requested_session_type || '',
     preferred_day: request.preferred_day || '',
     preferred_time: request.preferred_time || '',
-    training_goal: request.training_goal || '',
-    experience_level: request.experience_level || '',
-    notes: request.notes || '',
-    admin_notes: request.admin_notes || '',
   }));
 }
 

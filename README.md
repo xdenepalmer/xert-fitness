@@ -162,6 +162,13 @@ The Supabase schema is defined in:
   event and session-pack editing so concurrent administrators cannot overwrite newer catalogue work
 - `supabase/migrations/20260720000000_product_commercial_terms_guard.sql` — prevents an active pack
   from losing its Stripe Price ID and requires a replacement Price when amount, currency, credits or validity change
+- `src/supabase/member_booking_switch_guard_upgrade.sql` — makes the owner
+  booking switch authoritative for new member places at the database boundary
+- `src/supabase/member_onboarding_upgrade.sql` — adds privacy-minimised member
+  readiness: an emergency contact, immutable versioned acknowledgements,
+  append-only acceptance receipts, completion-only owner summaries and audited
+  deliberate emergency-contact reveals; it stores no screening answers, date of
+  birth, diagnoses, injuries, free-text safety notes, waiver or clearance outcome
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
@@ -189,7 +196,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`, then
-`member_booking_switch_guard_upgrade.sql`. This sequence produces the
+`member_booking_switch_guard_upgrade.sql`, then
+`member_onboarding_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -221,14 +229,17 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`, then
-`member_booking_switch_guard_upgrade.sql`. The scripts are idempotent;
+`member_booking_switch_guard_upgrade.sql`, then
+`member_onboarding_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 
 Operations Health and the TestFlight release workflow verify every database
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
-and schedule audit, booking lifecycle, content/configuration history, member push delivery, daily class operations, schedule integrity, public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
+and schedule audit, booking lifecycle, content/configuration history, member
+onboarding, member push delivery, daily class operations, schedule integrity,
+public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.

@@ -16,6 +16,7 @@ final class XertStore: ObservableObject {
     @Published var announcements: [MemberAnnouncement] = []
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
+    @Published private(set) var memberOnboarding: MemberOnboardingState?
     @Published var authSession: AuthSession?
     @Published private(set) var creditBalanceLoaded = false
     @Published private(set) var memberBookingsEnabled = false
@@ -27,6 +28,10 @@ final class XertStore: ObservableObject {
     @Published var bookingSessionID: UUID?
     @Published var cancellingBookingID: UUID?
     @Published var isSavingProfile = false
+    @Published private(set) var onboardingLoaded = false
+    @Published private(set) var isLoadingMemberOnboarding = false
+    @Published private(set) var isSavingMemberOnboarding = false
+    @Published private(set) var onboardingErrorMessage: String?
     @Published var isUpdatingPassword = false
     @Published var isRequestingPasswordReset = false
     @Published var updatingEventGoalID: UUID?
@@ -58,8 +63,9 @@ final class XertStore: ObservableObject {
     private var dataRefreshVersion = MemberStateVersion()
     private var memberStateVersion = MemberStateVersion()
     private var announcementStateVersion = MemberStateVersion()
+    private var onboardingOperationVersion = MemberStateVersion()
     private static let memberDataSources: Set<XertDataSource> = [
-        .credits, .bookings, .orders, .profile, .eventGoals, .privateSessions, .announcements,
+        .credits, .bookings, .orders, .profile, .onboarding, .eventGoals, .privateSessions, .announcements,
     ]
 
     var isSignedIn: Bool {
@@ -305,6 +311,11 @@ final class XertStore: ObservableObject {
             async let bookingRequest = api.bookings(session: authSession)
             async let orderRequest = api.orders(session: authSession)
             async let profileRequest = api.profile(session: authSession)
+            let onboardingVersion = beginMemberOnboardingRead()
+            async let onboardingRequest = loadMemberOnboardingIfRequested(
+                session: authSession,
+                operationVersion: onboardingVersion
+            )
             async let eventGoalRequest = api.eventGoals(session: authSession)
             async let privateSessionRequest = api.privateSessionRequests(session: authSession)
             async let announcementRequest = api.announcements(session: authSession)
@@ -357,6 +368,23 @@ final class XertStore: ObservableObject {
             } catch {
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 unavailableDataSources.insert(.profile)
+            }
+            do {
+                let loadedOnboarding = try await onboardingRequest
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                if let onboardingVersion,
+                   let loadedOnboarding,
+                   onboardingOperationVersion.isCurrent(onboardingVersion) {
+                    finishMemberOnboardingRead(operationVersion: onboardingVersion)
+                    applyMemberOnboarding(loadedOnboarding)
+                }
+            } catch {
+                guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
+                if let onboardingVersion,
+                   onboardingOperationVersion.isCurrent(onboardingVersion) {
+                    finishMemberOnboardingRead(operationVersion: onboardingVersion)
+                    unavailableDataSources.insert(.onboarding)
+                }
             }
             do {
                 let loadedEventGoals = try await eventGoalRequest
@@ -652,6 +680,10 @@ final class XertStore: ObservableObject {
         dataRefreshVersion.invalidate()
         dataRefreshTask?.cancel()
         dataRefreshTask = nil
+        if isLoadingMemberOnboarding {
+            onboardingOperationVersion.invalidate()
+            isLoadingMemberOnboarding = false
+        }
         isLoading = false
     }
 
@@ -1041,6 +1073,88 @@ final class XertStore: ObservableObject {
         }
     }
 
+    func clearMemberOnboardingError() {
+        onboardingErrorMessage = nil
+    }
+
+    func refreshMemberOnboarding() async {
+        guard authSession != nil,
+              !isLoadingMemberOnboarding,
+              !isSavingMemberOnboarding,
+              let onboardingVersion = beginMemberOnboardingRead()
+        else { return }
+        let memberVersion = memberStateVersion.snapshot
+        defer {
+            finishMemberOnboardingRead(operationVersion: onboardingVersion)
+        }
+        do {
+            let memberSession = try await validAuthSession()
+            let loadedOnboarding = try await api.memberOnboarding(session: memberSession)
+            guard canApplyMemberState(memberVersion, session: memberSession),
+                  onboardingOperationVersion.isCurrent(onboardingVersion)
+            else { return }
+            applyMemberOnboarding(loadedOnboarding)
+        } catch {
+            guard memberStateVersion.isCurrent(memberVersion),
+                  onboardingOperationVersion.isCurrent(onboardingVersion),
+                  !Task.isCancelled
+            else { return }
+            unavailableDataSources.insert(.onboarding)
+            onboardingErrorMessage = MemberOnboardingErrorMessage.display(for: error.localizedDescription)
+            XertHaptics.play(.error)
+        }
+    }
+
+    @discardableResult
+    func saveMemberOnboarding(_ draft: MemberOnboardingDraft) async -> Bool {
+        guard !isSavingMemberOnboarding else { return false }
+        let memberVersion = memberStateVersion.snapshot
+        onboardingOperationVersion.invalidate()
+        let onboardingVersion = onboardingOperationVersion.snapshot
+        isLoadingMemberOnboarding = false
+        isSavingMemberOnboarding = true
+        onboardingErrorMessage = nil
+        defer {
+            if memberStateVersion.isCurrent(memberVersion),
+               onboardingOperationVersion.isCurrent(onboardingVersion) {
+                isSavingMemberOnboarding = false
+            }
+        }
+
+        do {
+            guard let current = memberOnboarding else {
+                throw APIError(message: "Member readiness is still loading. Retry before saving.")
+            }
+            let request = try MemberOnboardingSaveRequest(
+                draft: draft,
+                requiredDocuments: current.required_documents
+            )
+            let memberSession = try await validAuthSession()
+            let loadedOnboarding = try await api.saveMemberOnboarding(
+                session: memberSession,
+                request: request
+            )
+            guard canApplyMemberState(memberVersion, session: memberSession),
+                  onboardingOperationVersion.isCurrent(onboardingVersion)
+            else { return false }
+            applyMemberOnboarding(loadedOnboarding)
+            XertHaptics.play(.success)
+            return true
+        } catch {
+            guard memberStateVersion.isCurrent(memberVersion),
+                  onboardingOperationVersion.isCurrent(onboardingVersion),
+                  !Task.isCancelled
+            else { return false }
+            let message = MemberOnboardingErrorMessage.display(for: error.localizedDescription)
+            if error.localizedDescription.contains("ONBOARDING_DOCUMENTS_STALE") {
+                unavailableDataSources.insert(.onboarding)
+            }
+            onboardingErrorMessage = message
+            XertHaptics.play(.error)
+            return false
+        }
+    }
+
     @discardableResult
     func updatePassword(password: String, confirmation: String) async -> Bool {
         let memberVersion = memberStateVersion.snapshot
@@ -1130,9 +1244,31 @@ final class XertStore: ObservableObject {
         return authSession?.access_token == session.access_token
     }
 
+    private func beginMemberOnboardingRead() -> Int? {
+        guard !isSavingMemberOnboarding else { return nil }
+        onboardingOperationVersion.invalidate()
+        isLoadingMemberOnboarding = true
+        onboardingErrorMessage = nil
+        return onboardingOperationVersion.snapshot
+    }
+
+    private func finishMemberOnboardingRead(operationVersion: Int) {
+        guard onboardingOperationVersion.isCurrent(operationVersion) else { return }
+        isLoadingMemberOnboarding = false
+    }
+
+    private func loadMemberOnboardingIfRequested(
+        session: AuthSession,
+        operationVersion: Int?
+    ) async throws -> MemberOnboardingState? {
+        guard operationVersion != nil else { return nil }
+        return try await api.memberOnboarding(session: session)
+    }
+
     private func replaceAuthSession(with session: AuthSession?) {
         memberStateVersion.invalidate()
         announcementStateVersion.invalidate()
+        onboardingOperationVersion.invalidate()
         dataRefreshVersion.invalidate()
         dataRefreshTask?.cancel()
         dataRefreshTask = nil
@@ -1148,6 +1284,9 @@ final class XertStore: ObservableObject {
         updatingEventGoalID = nil
         dismissingAnnouncementID = nil
         isSavingProfile = false
+        isLoadingMemberOnboarding = false
+        isSavingMemberOnboarding = false
+        onboardingErrorMessage = nil
         isUpdatingPassword = false
         errorMessage = nil
     }
@@ -1158,12 +1297,33 @@ final class XertStore: ObservableObject {
         bookings = []
         orders = []
         profile = nil
+        memberOnboarding = nil
+        onboardingLoaded = false
+        isLoadingMemberOnboarding = false
+        onboardingErrorMessage = nil
         eventGoalIDs = []
         privateSessionRequests = []
         announcements = []
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
         unavailableDataSources.subtract(Self.memberDataSources)
+    }
+
+    private func applyMemberOnboarding(_ onboarding: MemberOnboardingState) {
+        memberOnboarding = onboarding
+        onboardingLoaded = true
+        onboardingErrorMessage = nil
+        unavailableDataSources.remove(.onboarding)
+
+        if let currentProfile = profile, currentProfile.id == onboarding.user_id {
+            profile = MemberProfile(
+                id: currentProfile.id,
+                full_name: onboarding.profile.full_name,
+                phone: onboarding.profile.phone,
+                email: currentProfile.email,
+                role: currentProfile.role
+            )
+        }
     }
 
     private func present(_ error: Error) {

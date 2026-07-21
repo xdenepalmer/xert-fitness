@@ -174,6 +174,65 @@ export async function updateMyProfile(updates) {
   if (error) throw new Error(error.message);
 }
 
+const MEMBER_ONBOARDING_ERRORS = {
+  AUTH_REQUIRED: 'Please sign in to update member readiness.',
+  MEMBER_PROFILE_NOT_FOUND: 'Your member profile is unavailable. Sign out, sign back in, and try again.',
+  INVALID_FULL_NAME: 'Enter your full name.',
+  INVALID_MEMBER_PHONE: 'Enter a valid mobile number.',
+  INVALID_EMERGENCY_CONTACT_NAME: 'Enter your emergency contact’s name.',
+  INVALID_EMERGENCY_CONTACT_PHONE: 'Enter a valid phone number for your emergency contact.',
+  INVALID_EMERGENCY_CONTACT_RELATIONSHIP: 'Enter how your emergency contact is connected to you.',
+  CONTACT_AWARENESS_REQUIRED: 'Confirm that your emergency contact knows they are listed.',
+  INVALID_ONBOARDING_SOURCE: 'Member readiness could not verify this app. Refresh and try again.',
+  ONBOARDING_DOCUMENTS_REQUIRED: 'Review and acknowledge every current readiness document.',
+  ONBOARDING_DOCUMENTS_STALE: 'A readiness document changed while you were reviewing it. Reload and review the latest version.',
+};
+
+export function memberOnboardingError(message) {
+  for (const [code, friendlyMessage] of Object.entries(MEMBER_ONBOARDING_ERRORS)) {
+    if (message?.includes(code)) return friendlyMessage;
+  }
+  return message || 'Member readiness is unavailable. Try again.';
+}
+
+function assertMemberOnboardingResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+      || !Array.isArray(data.required_documents)
+      || !Array.isArray(data.accepted_documents)) {
+    throw new Error('Member readiness returned an incomplete response. Refresh and try again.');
+  }
+  return data;
+}
+
+export async function getMyMemberOnboarding() {
+  const { data, error } = await supabase.rpc('my_member_onboarding');
+  if (error) throw new Error(memberOnboardingError(error.message));
+  return assertMemberOnboardingResponse(data);
+}
+
+export async function saveMyMemberOnboarding({
+  fullName,
+  phone,
+  emergencyContactName,
+  emergencyContactPhone,
+  emergencyContactRelationship,
+  contactIsAware,
+  acceptedDocumentIds,
+}) {
+  const { data, error } = await supabase.rpc('save_my_member_onboarding', {
+    p_full_name: String(fullName || '').trim(),
+    p_phone: String(phone || '').trim(),
+    p_emergency_contact_name: String(emergencyContactName || '').trim(),
+    p_emergency_contact_phone: String(emergencyContactPhone || '').trim(),
+    p_emergency_contact_relationship: String(emergencyContactRelationship || '').trim(),
+    p_contact_is_aware: contactIsAware === true,
+    p_accepted_document_ids: Array.isArray(acceptedDocumentIds) ? acceptedDocumentIds : [],
+    p_source: 'web_app',
+  });
+  if (error) throw new Error(memberOnboardingError(error.message));
+  return assertMemberOnboardingResponse(data);
+}
+
 // ─── Public content: coaches & events ─────────────────────────────────────────
 
 export async function getCoaches() {

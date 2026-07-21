@@ -190,7 +190,7 @@ export default function BookingRequestsTable() {
             { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
             { key: 'class', label: 'Class' }, { key: 'class_start', label: 'Class start' },
             { key: 'coach', label: 'Coach' }, { key: 'location', label: 'Location' },
-            { key: 'credit_reserved', label: 'Credit reserved' }, { key: 'admin_notes', label: 'Admin notes' },
+            { key: 'credit_reserved', label: 'Credit reserved' },
           ]
         )} disabled={filteredBookings.length === 0}
           className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
