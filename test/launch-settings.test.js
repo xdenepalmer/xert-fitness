@@ -16,6 +16,7 @@ test('normalizes every live platform control, including the server payment switc
     countdown_enabled: true,
     bookings_enabled: false,
     payments_enabled: true,
+    prices_coming_soon: true,
     announcement_banner_enabled: true,
     target_launch_date: '2026-08-01',
     announcement_banner_text: 'Foundation registrations open',

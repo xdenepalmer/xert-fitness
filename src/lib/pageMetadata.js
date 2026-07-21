@@ -1,4 +1,16 @@
-const SITE_NAME = 'XERT Fitness';
+export const SITE_NAME = 'XERT Fitness';
+
+// Site-wide social-preview image for og:image / twitter:image. The square brand
+// icon is an opaque JPEG, so it renders cleanly on every platform (a transparent
+// PNG would composite unpredictably). A purpose-built 1200x630 card is the
+// recommended future upgrade; swap this one constant when it exists.
+export const SOCIAL_IMAGE = Object.freeze({
+  url: '/assets/xert-manifest-icon.jpg',
+  width: 1024,
+  height: 1024,
+  alt: 'XERT Fitness',
+});
+
 const HOME_TITLE = 'XERT Fitness | Functional Training Kingaroy';
 const HOME_DESCRIPTION = 'Structured, coach-led functional fitness, personal training and event preparation in Kingaroy, Queensland.';
 

@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { ArrowRight, Check, Ticket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getProducts } from '@/lib/bookingData';
-import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
+import { getSoftLaunchSettings } from '@/lib/adminData';
+import { pricesComingSoon } from '@/lib/launchSettings';
+import { formatPackPrice, formatPackValidity, packCta, PRICES_COMING_SOON_LABEL } from '@/lib/products';
 
 const steps = [
   'Purchase a session pack.',
@@ -14,6 +16,9 @@ export default function SessionPacks() {
   const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // Default to hidden so prices never flash before settings load, and stay
+  // hidden if the settings fetch fails.
+  const [comingSoon, setComingSoon] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -29,6 +34,10 @@ export default function SessionPacks() {
       .finally(() => {
         if (active) setLoading(false);
       });
+    // Settings load independently so a settings failure never blocks the packs.
+    getSoftLaunchSettings()
+      .then(settings => { if (active) setComingSoon(pricesComingSoon(settings)); })
+      .catch(() => { if (active) setComingSoon(true); });
     return () => { active = false; };
   }, []);
 
@@ -92,7 +101,11 @@ export default function SessionPacks() {
               </div>
 
               <h3 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h3>
-              <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{formatPackPrice(pack.price_cents, pack.currency)}</p>
+              {comingSoon ? (
+                <p className="font-display text-2xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{PRICES_COMING_SOON_LABEL}</p>
+              ) : (
+                <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{formatPackPrice(pack.price_cents, pack.currency)}</p>
+              )}
               <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>{formatPackValidity(pack.validity_days)}</p>
               <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'rgba(209,221,230,0.68)' }}>{pack.description}</p>
 

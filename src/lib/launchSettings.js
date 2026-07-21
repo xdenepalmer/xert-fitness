@@ -13,6 +13,13 @@ export function sessionPackPaymentsEnabled(settings) {
   return settings?.payments_enabled === true;
 }
 
+// Public pricing is hidden ("Coming soon") unless the flag is explicitly false,
+// so a missing column, an unsaved row or a failed settings fetch all fail safe
+// to hiding amounts rather than leaking prices the business has not published.
+export function pricesComingSoon(settings) {
+  return settings?.prices_coming_soon !== false;
+}
+
 export function normalizeLaunchSettings(settings = {}) {
   const announcement = String(settings.announcement_banner_text || '').trim();
   if (settings.announcement_banner_enabled && !announcement) {
@@ -23,6 +30,7 @@ export function normalizeLaunchSettings(settings = {}) {
     countdown_enabled: Boolean(settings.countdown_enabled),
     bookings_enabled: Boolean(settings.bookings_enabled),
     payments_enabled: Boolean(settings.payments_enabled),
+    prices_coming_soon: settings.prices_coming_soon !== false,
     announcement_banner_enabled: Boolean(settings.announcement_banner_enabled),
     target_launch_date: normalizeDate(settings.target_launch_date),
     announcement_banner_text: announcement || null,
@@ -34,6 +42,7 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'countdown_enabled',
     'bookings_enabled',
     'payments_enabled',
+    'prices_coming_soon',
     'announcement_banner_enabled',
     'target_launch_date',
     'announcement_banner_text',
