@@ -162,16 +162,6 @@ export async function cancelBooking(bookingId) {
 
 // ─── Profile / role ───────────────────────────────────────────────────────────
 
-export async function getMyProfile() {
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-  if (error && error.code !== 'PGRST116') throw new Error(error.message);
-  return data;
-}
-
 export async function updateMyProfile(updates) {
   const {
     data: { user }
