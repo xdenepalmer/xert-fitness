@@ -238,7 +238,7 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   for (const destination of ['health', 'bookingRequests', 'ptRequests', 'classDesk', 'retention', 'orders']) {
     assert.match(view, new RegExp(`workspace: \\.${destination}`));
   }
-  assert.match(view, /openWorkspaceWithFeedback\(priority\.workspace\)/);
+  assert.match(view, /openOwnerRouteWithFeedback\(priority\.route\)/);
   assert.match(view, /All operational queues are clear/);
   assert.match(view, /case \.idle, \.loading:[\s\S]*Checking operational queues/);
   assert.match(view, /case \.partial\(let unavailableSources\)/);
@@ -414,7 +414,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);
   assert.match(view, /private struct AdminWorkspaceSwitcher: View/);
-  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, member, order, pack or event"\)/);
+  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, class, member, order, pack or event"\)/);
   assert.match(view, /\.keyboardShortcut\("k", modifiers: \.command\)/);
   assert.match(view, /workspaceSection\("Needs attention", workspaces: attentionWorkspaces\)/);
   assert.match(view, /workspaceSection\("Recent", workspaces: matchingRecent\)/);
@@ -427,6 +427,68 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /ForEach\(rows\) \{ item in\s*classRow\(item\)/);
   assert.match(view, /private func classStatusActions\(_ item: AdminClassSession\) -> some View/);
   assert.match(view, /if item\.public_visible == true/);
+});
+
+test('native owner class work opens exact protected rosters from overview and search', async () => {
+  const [view, navigation, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+
+  assert.match(navigation, /case classSession\(UUID\)/);
+  assert.match(navigation, /case \.classSession: return \.classDesk/);
+  assert.match(navigation, /case \.classSession\(let id\): return "class\/\\\(id\.uuidString\.lowercased\(\)\)"/);
+  assert.match(navigation, /case \(\.classDesk, "class"\): return \.classSession\(id\)/);
+  assert.match(navigation, /case classSession = "Today's Classes"/);
+  assert.match(navigation, /classes: \[AdminDailyOperation\] = \[\]/);
+  assert.match(navigation, /classes\.map\(classCandidate\)/);
+  assert.match(view, /classes: admin\.dailyOperations/);
+  assert.match(view, /openOwnerRouteWithFeedback\(XertOwnerRoute\(task: \.classSession\(item\.id\)\)\)/);
+  assert.match(view, /singleAttendanceTask[\s\S]*return \.classSession\(operation\.id\)/);
+  assert.match(view, /case \.classSession\(let id\):[\s\S]*AdminClassRosterView/);
+  assert.match(store, /case \.classSession\(let sessionID\):[\s\S]*api\.adminDailyOperations/);
+});
+
+test('native roll call requires explicit complete attendance and provides compact batch controls', async () => {
+  const [view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+  const roster = view.slice(
+    view.indexOf('private struct AdminClassRosterView'),
+    view.indexOf('private struct AdminScheduleView'),
+  );
+
+  assert.match(models, /enum AdminAttendanceMark[\s\S]*case attended[\s\S]*case noShow = "no_show"/);
+  assert.match(models, /struct AdminAttendanceDraft: Equatable/);
+  assert.match(models, /var isComplete: Bool \{ total > 0 && unmarked == 0 \}/);
+  assert.match(models, /case AdminAttendanceMark\.attended\.rawValue/);
+  assert.doesNotMatch(roster, /default: member\.status != "no_show"/);
+  assert.match(roster, /attendanceSummary\.isComplete/);
+  assert.match(roster, /Mark every member present or no show before saving/);
+  assert.match(roster, /Label\("Mark all present", systemImage: "checkmark\.circle"\)/);
+  assert.match(roster, /Label\("Clear marks", systemImage: "arrow\.counterclockwise"\)/);
+  assert.match(roster, /title: "Present"[\s\S]*mark: \.attended/);
+  assert.match(roster, /title: "No show"[\s\S]*mark: \.noShow/);
+  assert.match(roster, /\.disabled\(!canRecordAttendance\)/);
+  assert.match(roster, /attendedIDs: attended[\s\S]*noShowIDs: noShows/);
+});
+
+test('native class desk never presents unavailable operational data as an empty queue', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const desk = view.slice(
+    view.indexOf('private struct AdminClassesView'),
+    view.indexOf('private struct AdminClassRosterView'),
+  );
+
+  assert.match(desk, /admin\.sourceIsCurrent\("today's classes"\)/);
+  assert.match(desk, /admin\.sourceIsCurrent\("waitlists"\)/);
+  assert.match(desk, /Today's classes are unavailable\. Refresh before relying on this desk/);
+  assert.match(desk, /Waitlists are unavailable\. Refresh before assuming every queue is clear/);
+  assert.match(desk, /Showing the last waitlist snapshot\. Refresh before promoting a member/);
+  assert.match(desk, /!waitlistIsCurrent \|\| !item\.can_promote/);
+  assert.match(desk, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
 });
 
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {

@@ -285,6 +285,11 @@ struct AdminCommandCentreView: View {
         openWorkspace(workspace)
     }
 
+    private func openOwnerRouteWithFeedback(_ route: XertOwnerRoute) {
+        XertHaptics.play(.selection)
+        openOwnerRoute(route)
+    }
+
     private func presentQuickAction(_ action: AdminOwnerQuickAction) {
         XertHaptics.play(.lightImpact)
         presentedQuickAction = action
@@ -674,7 +679,7 @@ struct AdminCommandCentreView: View {
                     icon: "checklist",
                     dataState: dashboardDataState(for: "today's classes")
                 ) {
-                    openWorkspaceWithFeedback(.classDesk)
+                    openOwnerRouteWithFeedback(attendancePriorityRoute)
                 }
             }
         }
@@ -738,7 +743,7 @@ struct AdminCommandCentreView: View {
     private func priorityRows(_ priorities: [AdminPriorityAction]) -> some View {
         ForEach(priorities) { priority in
             AdminPriorityRow(priority: priority) {
-                openWorkspaceWithFeedback(priority.workspace)
+                openOwnerRouteWithFeedback(priority.route)
             }
         }
     }
@@ -782,7 +787,8 @@ struct AdminCommandCentreView: View {
                 detail: "Complete outstanding class roll calls",
                 icon: "checklist",
                 count: admin.attendanceDue,
-                workspace: .classDesk
+                workspace: .classDesk,
+                task: singleAttendanceTask
             ),
             AdminPriorityAction(
                 title: "Waitlisted members",
@@ -818,6 +824,17 @@ struct AdminCommandCentreView: View {
         guard !admin.refreshUnavailableSources.contains("session packs") else { return 0 }
         if !admin.products.contains(where: \.active) { return 1 }
         return admin.products.filter { $0.active && !$0.hasStableStripePriceID }.count
+    }
+
+    private var singleAttendanceTask: XertOwnerTask? {
+        let due = admin.dailyOperations.filter(\.attendance_due)
+        guard due.count == 1, let operation = due.first else { return nil }
+        return .classSession(operation.id)
+    }
+
+    private var attendancePriorityRoute: XertOwnerRoute {
+        singleAttendanceTask.map { XertOwnerRoute(task: $0) }
+            ?? XertOwnerRoute(workspace: .classDesk)
     }
 
     private var businessPulse: some View {
@@ -924,7 +941,9 @@ struct AdminCommandCentreView: View {
 
     private var todayClassRows: some View {
         ForEach(admin.dailyOperations.prefix(4)) { item in
-            Button { openWorkspaceWithFeedback(.classDesk) } label: {
+            Button {
+                openOwnerRouteWithFeedback(XertOwnerRoute(task: .classSession(item.id)))
+            } label: {
                 HStack(spacing: 14) {
                     VStack(spacing: 2) {
                         Text(item.start_time.formatted(date: .omitted, time: .shortened))
@@ -958,7 +977,7 @@ struct AdminCommandCentreView: View {
                     + "\(item.confirmed_count) confirmed, \(item.requested_count) requested, "
                     + "\(item.waitlist_count) waiting\(item.attendance_due ? ", attendance due" : "")"
             )
-            .accessibilityHint("Opens today's class desk")
+            .accessibilityHint("Opens this class roster and roll call")
         }
     }
 
@@ -1191,7 +1210,8 @@ private struct AdminWorkspaceSwitcher: View {
             members: admin.ownerMemberSearchResults,
             orders: admin.orders,
             products: admin.products,
-            events: admin.events
+            events: admin.events,
+            classes: admin.dailyOperations
         )
     }
 
@@ -1261,7 +1281,7 @@ private struct AdminWorkspaceSwitcher: View {
             .background(Color.xertNavy)
             .navigationTitle("Owner commands")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: "Workspace, member, order, pack or event")
+            .searchable(text: $query, prompt: "Workspace, class, member, order, pack or event")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
@@ -1408,6 +1428,13 @@ private struct AdminOwnerTaskSheet: View {
                     .toolbar { closeToolbar }
             } else {
                 resolutionView(recordName: "member")
+            }
+        case .classSession(let id):
+            if let operation = admin.dailyOperations.first(where: { $0.id == id }) {
+                AdminClassRosterView(admin: admin, session: session, operation: operation)
+                    .toolbar { closeToolbar }
+            } else {
+                resolutionView(recordName: "class")
             }
         case .order(let id):
             if let order = admin.orders.first(where: { $0.id == id }) {
@@ -1692,56 +1719,91 @@ private struct AdminClassesView: View {
     let session: AuthSession
     @State private var promotion: AdminWaitlistItem?
 
+    private var operationsAreCurrent: Bool { admin.sourceIsCurrent("today's classes") }
+    private var waitlistIsCurrent: Bool { admin.sourceIsCurrent("waitlists") }
+    private var operationsAreLoading: Bool {
+        admin.isLoading && !admin.loadedSources.contains("today's classes")
+    }
+    private var waitlistIsLoading: Bool {
+        admin.isLoading && !admin.loadedSources.contains("waitlists")
+    }
+
     var body: some View {
         List {
             Section("Today") {
-                if admin.dailyOperations.isEmpty {
-                    Text("No classes today.")
-                }
-                ForEach(admin.dailyOperations) { item in
-                    NavigationLink {
-                        AdminClassRosterView(admin: admin, session: session, operation: item)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(item.title).font(.headline)
-                            Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
-                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                            if item.attendance_due {
-                                Label("Roll call is due", systemImage: "checklist")
-                                    .font(.caption.weight(.bold)).foregroundStyle(.orange)
-                            }
-                        }
-                        .foregroundStyle(Color.xertOffWhite)
+                if operationsAreLoading {
+                    operationalLoadingRow("Loading today's classes…")
+                } else {
+                    if !operationsAreCurrent {
+                        operationalWarningRow(
+                            admin.dailyOperations.isEmpty
+                                ? "Today's classes are unavailable. Refresh before relying on this desk."
+                                : "Showing the last class snapshot. Refresh before changing attendance."
+                        )
                     }
-                    .listRowBackground(Color.xertInk)
+                    if admin.dailyOperations.isEmpty, operationsAreCurrent {
+                        operationalEmptyRow("No classes are scheduled today.", icon: "calendar")
+                    }
+                    ForEach(admin.dailyOperations) { item in
+                        NavigationLink {
+                            AdminClassRosterView(admin: admin, session: session, operation: item)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(item.title).font(.headline)
+                                Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
+                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                                if item.attendance_due {
+                                    Label("Roll call is due", systemImage: "checklist")
+                                        .font(.caption.weight(.bold)).foregroundStyle(.orange)
+                                }
+                            }
+                            .foregroundStyle(Color.xertOffWhite)
+                        }
+                        .listRowBackground(Color.xertInk)
+                    }
                 }
             }
             Section("Waitlist desk") {
-                if admin.waitlist.isEmpty {
-                    Text("No members are waiting for a class place.")
-                }
-                ForEach(admin.waitlist) { item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(item.title).font(.headline)
-                        Text("Next: \(item.nextMemberName) · \(item.next_available_credits) credits")
-                            .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                        Button {
-                            promotion = item
-                        } label: {
-                            Label("Promote next member", systemImage: "person.fill.badge.plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.xertSteel)
-                        .disabled(!item.can_promote || item.next_available_credits < 1 || admin.promotingSessionID != nil)
+                if waitlistIsLoading {
+                    operationalLoadingRow("Loading class waitlists…")
+                } else {
+                    if !waitlistIsCurrent {
+                        operationalWarningRow(
+                            admin.waitlist.isEmpty
+                                ? "Waitlists are unavailable. Refresh before assuming every queue is clear."
+                                : "Showing the last waitlist snapshot. Refresh before promoting a member."
+                        )
                     }
-                    .foregroundStyle(Color.xertOffWhite)
-                    .listRowBackground(Color.xertInk)
+                    if admin.waitlist.isEmpty, waitlistIsCurrent {
+                        operationalEmptyRow("No members are waiting for a class place.", icon: "person.2.badge.checkmark")
+                    }
+                    ForEach(admin.waitlist) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.title).font(.headline)
+                            Text("Next: \(item.nextMemberName) · \(item.next_available_credits) credits")
+                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                            Button {
+                                promotion = item
+                            } label: {
+                                Label("Promote next member", systemImage: "person.fill.badge.plus")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.xertSteel)
+                            .disabled(
+                                !waitlistIsCurrent || !item.can_promote
+                                    || item.next_available_credits < 1 || admin.promotingSessionID != nil
+                            )
+                        }
+                        .foregroundStyle(Color.xertOffWhite)
+                        .listRowBackground(Color.xertInk)
+                    }
                 }
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Class Desk")
+        .refreshable { await admin.refresh(session: session) }
         .confirmationDialog(
             "Promote \(promotion?.nextMemberName ?? "next member")?",
             isPresented: Binding(
@@ -1758,18 +1820,42 @@ private struct AdminClassesView: View {
             Text("This confirms the next FIFO waitlisted member into \(item.title) and consumes one available credit.")
         }
     }
+
+    private func operationalLoadingRow(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView().tint(Color.xertSteel)
+            Text(message).foregroundStyle(Color.xertPale.opacity(0.72))
+        }
+        .listRowBackground(Color.xertInk)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func operationalWarningRow(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            .listRowBackground(Color.xertInk)
+    }
+
+    private func operationalEmptyRow(_ message: String, icon: String) -> some View {
+        Label(message, systemImage: icon)
+            .foregroundStyle(Color.xertPale.opacity(0.68))
+            .listRowBackground(Color.xertInk)
+    }
 }
 
 private struct AdminClassRosterView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let operation: AdminDailyOperation
-    @State private var attendance: [UUID: Bool] = [:]
+    @State private var attendance = AdminAttendanceDraft()
     @State private var confirmingRollCall = false
 
     private var eligible: [AdminRosterMember] { admin.classRoster.filter(\.attendanceEligible) }
+    private var attendanceSummary: AdminAttendanceSummary { attendance.summary }
     private var canRecordAttendance: Bool {
-        !eligible.isEmpty && operation.start_time <= Date()
+        attendanceSummary.isComplete && operation.start_time <= Date()
             && admin.recordingAttendanceSessionID == nil
     }
 
@@ -1784,6 +1870,39 @@ private struct AdminClassRosterView: View {
                         .font(.caption).foregroundStyle(Color.xertSteel)
                 }
                 .listRowBackground(Color.xertInk)
+            }
+
+            if operation.start_time <= Date(), !eligible.isEmpty {
+                Section("Roll call") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 14) { attendanceProgressLabels }
+                            VStack(alignment: .leading, spacing: 6) { attendanceProgressLabels }
+                        }
+
+                        ProgressView(
+                            value: Double(attendanceSummary.marked),
+                            total: Double(max(attendanceSummary.total, 1))
+                        )
+                        .tint(attendanceSummary.isComplete ? Color.green : Color.xertSteel)
+
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) { attendanceBulkActions }
+                            VStack(spacing: 10) { attendanceBulkActions }
+                        }
+
+                        if attendanceSummary.unmarked > 0 {
+                            Label(
+                                "Mark every member present or no show before saving.",
+                                systemImage: "exclamationmark.circle"
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.xertInk)
+                }
             }
 
             Section("Member roster") {
@@ -1801,14 +1920,8 @@ private struct AdminClassRosterView: View {
                                     .font(.caption2.weight(.bold)).foregroundStyle(statusColour(member.status))
                             }
                             Spacer()
-                            if member.attendanceEligible && operation.start_time <= Date() {
-                                Toggle("Attended", isOn: Binding(
-                                    get: { attendance[member.id, default: member.status != "no_show"] },
-                                    set: { attendance[member.id] = $0 }
-                                ))
-                                .labelsHidden()
-                                .accessibilityLabel("\(member.displayName) attended")
-                            } else if let actions = bookingActions(member.status), !actions.isEmpty {
+                            if !member.attendanceEligible || operation.start_time > Date(),
+                               let actions = bookingActions(member.status), !actions.isEmpty {
                                 Menu {
                                     ForEach(actions) { action in
                                         Button(role: action.role) {
@@ -1828,6 +1941,9 @@ private struct AdminClassRosterView: View {
                                 .disabled(admin.updatingBookingID != nil)
                                 .accessibilityLabel("Manage \(member.displayName) booking")
                             }
+                        }
+                        if member.attendanceEligible && operation.start_time <= Date() {
+                            attendanceControl(for: member)
                         }
                         HStack(spacing: 14) {
                             if let email = contact(member.email), let url = URL(string: "mailto:\(email)") {
@@ -1852,7 +1968,12 @@ private struct AdminClassRosterView: View {
                         HStack {
                             Spacer()
                             if admin.recordingAttendanceSessionID == operation.id { ProgressView().tint(Color.xertNavy) }
-                            Label("Save complete roll call", systemImage: "checklist")
+                            Label(
+                                attendanceSummary.isComplete
+                                    ? "Save complete roll call"
+                                    : "\(attendanceSummary.marked) of \(attendanceSummary.total) marked",
+                                systemImage: "checklist"
+                            )
                                 .fontWeight(.bold)
                             Spacer()
                         }
@@ -1869,14 +1990,15 @@ private struct AdminClassRosterView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await admin.loadClassRoster(session: session, classSessionID: operation.id)
-            attendance = Dictionary(uniqueKeysWithValues: admin.classRoster.filter(\.attendanceEligible).map {
-                ($0.id, $0.status != "no_show")
-            })
+            attendance = AdminAttendanceDraft(roster: admin.classRoster)
+        }
+        .onChange(of: admin.classRoster) { roster in
+            attendance.reconcile(roster: roster)
         }
         .confirmationDialog("Complete this class?", isPresented: $confirmingRollCall, titleVisibility: .visible) {
             Button("Record attendance and complete class") {
-                let attended = eligible.filter { attendance[$0.id, default: $0.status != "no_show"] }.map(\.id)
-                let noShows = eligible.filter { !attendance[$0.id, default: $0.status != "no_show"] }.map(\.id)
+                let attended = attendance.attendedIDs
+                let noShows = attendance.noShowIDs
                 Task {
                     _ = await admin.recordAttendance(
                         session: session,
@@ -1888,8 +2010,90 @@ private struct AdminClassRosterView: View {
             }
             Button("Review roll call", role: .cancel) {}
         } message: {
-            Text("This records every confirmed member as attended or no-show, completes the class, and removes it from the public timetable.")
+            Text("Record \(attendanceSummary.attended) present and \(attendanceSummary.noShow) no show, complete the class, and remove it from the public timetable.")
         }
+    }
+
+    @ViewBuilder
+    private var attendanceProgressLabels: some View {
+        Label("\(attendanceSummary.marked)/\(attendanceSummary.total) marked", systemImage: "checklist")
+        Label("\(attendanceSummary.attended) present", systemImage: "checkmark.circle.fill")
+            .foregroundStyle(Color.green)
+        Label("\(attendanceSummary.noShow) no show", systemImage: "xmark.circle.fill")
+            .foregroundStyle(Color.orange)
+    }
+
+    @ViewBuilder
+    private var attendanceBulkActions: some View {
+        Button {
+            attendance.markAllPresent()
+            XertHaptics.play(.selection)
+        } label: {
+            Label("Mark all present", systemImage: "checkmark.circle")
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.xertSteel)
+        .foregroundStyle(Color.xertNavy)
+        .disabled(attendanceSummary.total == 0 || attendanceSummary.attended == attendanceSummary.total)
+
+        Button {
+            attendance.clear()
+            XertHaptics.play(.selection)
+        } label: {
+            Label("Clear marks", systemImage: "arrow.counterclockwise")
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.xertSteel)
+        .disabled(attendanceSummary.marked == 0)
+    }
+
+    private func attendanceControl(for member: AdminRosterMember) -> some View {
+        HStack(spacing: 0) {
+            attendanceButton(
+                title: "Present",
+                icon: "checkmark",
+                mark: .attended,
+                member: member,
+                colour: .green
+            )
+            attendanceButton(
+                title: "No show",
+                icon: "xmark",
+                mark: .noShow,
+                member: member,
+                colour: .orange
+            )
+        }
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.34), lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Attendance for \(member.displayName)")
+    }
+
+    private func attendanceButton(
+        title: String,
+        icon: String,
+        mark: AdminAttendanceMark,
+        member: AdminRosterMember,
+        colour: Color
+    ) -> some View {
+        let isSelected = attendance.mark(for: member.id) == mark
+        return Button {
+            attendance.set(mark, for: member.id)
+            XertHaptics.play(.selection)
+        } label: {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isSelected ? Color.xertNavy : Color.xertPale)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(isSelected ? colour : Color.xertDeep.opacity(0.45))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(member.displayName), \(title)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private struct BookingAction: Identifiable {
@@ -5903,9 +6107,14 @@ private struct AdminPriorityAction: Identifiable {
     let icon: String
     let count: Int
     let workspace: XertOwnerWorkspace
+    var task: XertOwnerTask? = nil
     var isCritical = false
 
-    var id: String { "\(workspace.rawValue):\(title)" }
+    var route: XertOwnerRoute {
+        task.map { XertOwnerRoute(task: $0) } ?? XertOwnerRoute(workspace: workspace)
+    }
+
+    var id: String { "\(route.restorationValue):\(title)" }
 }
 
 private struct AdminPriorityRow: View {

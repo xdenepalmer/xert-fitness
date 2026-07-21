@@ -105,8 +105,10 @@ final class ModelsTests: XCTestCase {
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000082"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000083"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000084"))
+        let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000085"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
+            XertOwnerRoute(task: .classSession(classID)),
             XertOwnerRoute(task: .order(orderID)),
             XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
@@ -130,6 +132,11 @@ final class ModelsTests: XCTestCase {
         }
 
         XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/timetable/class/\(classID.uuidString)"))
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/classdesk/class/\(classID.uuidString)"),
+            XertOwnerRoute(task: .classSession(classID))
+        )
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
         XCTAssertEqual(
@@ -260,6 +267,7 @@ final class ModelsTests: XCTestCase {
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a3"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a4"))
+        let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a5"))
         let member = AdminMemberSummary(
             id: memberID,
             full_name: "Alex Runner",
@@ -322,6 +330,25 @@ final class ModelsTests: XCTestCase {
             sort_order: 1,
             updated_at: "2026-07-17T00:00:00Z"
         )
+        let operation = AdminDailyOperation(
+            session_id: classID,
+            title: "XERT Engine",
+            class_type: "conditioning",
+            start_time: Date(timeIntervalSince1970: 3_600),
+            end_time: Date(timeIntervalSince1970: 7_200),
+            status: "published",
+            capacity: 12,
+            coach_name: "Byron",
+            location_zone: "Main floor",
+            booking_mode: "instant_book",
+            requested_count: 0,
+            confirmed_count: 7,
+            waitlist_count: 1,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 0,
+            attendance_due: true
+        )
 
         XCTAssertEqual(
             XertOwnerCommandIndex.matches(
@@ -375,6 +402,28 @@ final class ModelsTests: XCTestCase {
                 events: []
             ).first?.kind,
             .product
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "roll call",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                classes: [operation]
+            ).map(\.route),
+            [XertOwnerRoute(task: .classSession(classID))]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "byron",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                classes: [operation]
+            ).first?.kind,
+            .classSession
         )
 
         let manyEvents = (0..<(XertOwnerCommandIndex.maximumResultsPerKind + 3)).map { index in
@@ -2887,6 +2936,77 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(requested.attendanceEligible)
         XCTAssertTrue(noShow.attendanceEligible)
         XCTAssertEqual(noShow.displayName, "late@example.com")
+    }
+
+    func testAdminAttendanceDraftRequiresExplicitCompleteRollCall() {
+        let confirmedID = UUID()
+        let attendedID = UUID()
+        let noShowID = UUID()
+        let requestedID = UUID()
+        let roster = [
+            AdminRosterMember(
+                booking_id: confirmedID, member_id: UUID(), full_name: "Confirmed",
+                email: nil, phone: nil, status: "confirmed", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: attendedID, member_id: UUID(), full_name: "Present",
+                email: nil, phone: nil, status: "attended", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: noShowID, member_id: UUID(), full_name: "Absent",
+                email: nil, phone: nil, status: "no_show", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: requestedID, member_id: UUID(), full_name: "Requested",
+                email: nil, phone: nil, status: "requested", booked_at: Date()
+            ),
+        ]
+        var draft = AdminAttendanceDraft(roster: roster + [roster[0]])
+
+        XCTAssertEqual(draft.eligibleIDs, [confirmedID, attendedID, noShowID])
+        XCTAssertNil(draft.mark(for: confirmedID))
+        XCTAssertEqual(draft.mark(for: attendedID), .attended)
+        XCTAssertEqual(draft.mark(for: noShowID), .noShow)
+        XCTAssertEqual(
+            draft.summary,
+            AdminAttendanceSummary(total: 3, attended: 1, noShow: 1)
+        )
+        XCTAssertFalse(draft.summary.isComplete)
+
+        draft.set(.noShow, for: confirmedID)
+        draft.set(.attended, for: requestedID)
+        XCTAssertTrue(draft.summary.isComplete)
+        XCTAssertEqual(draft.attendedIDs, [attendedID])
+        XCTAssertEqual(draft.noShowIDs, [confirmedID, noShowID])
+
+        draft.markAllPresent()
+        XCTAssertEqual(draft.summary.attended, 3)
+        XCTAssertTrue(draft.noShowIDs.isEmpty)
+        draft.clear()
+        XCTAssertEqual(draft.summary.unmarked, 3)
+        XCTAssertFalse(draft.summary.isComplete)
+    }
+
+    func testAdminAttendanceDraftReconcilesRosterWithoutLosingLocalMarks() {
+        let firstID = UUID()
+        let secondID = UUID()
+        let first = AdminRosterMember(
+            booking_id: firstID, member_id: UUID(), full_name: "First",
+            email: nil, phone: nil, status: "confirmed", booked_at: Date()
+        )
+        let second = AdminRosterMember(
+            booking_id: secondID, member_id: UUID(), full_name: "Second",
+            email: nil, phone: nil, status: "attended", booked_at: Date()
+        )
+        var draft = AdminAttendanceDraft(roster: [first])
+        draft.set(.noShow, for: firstID)
+        draft.reconcile(roster: [first, second])
+
+        XCTAssertEqual(draft.mark(for: firstID), .noShow)
+        XCTAssertEqual(draft.mark(for: secondID), .attended)
+        draft.reconcile(roster: [second])
+        XCTAssertNil(draft.mark(for: firstID))
+        XCTAssertEqual(draft.eligibleIDs, [secondID])
     }
 
     func testAdminClassDraftHydratesLegacyNullableMetadata() {

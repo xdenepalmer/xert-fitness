@@ -383,6 +383,7 @@ enum XertOwnerWorkspacePinsStore {
 
 enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case member(UUID)
+    case classSession(UUID)
     case order(UUID)
     case product(UUID)
     case event(UUID)
@@ -392,6 +393,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     var workspace: XertOwnerWorkspace {
         switch self {
         case .member: return .members
+        case .classSession: return .classDesk
         case .order: return .orders
         case .product: return .products
         case .event: return .events
@@ -401,6 +403,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .member: return "Member Record"
+        case .classSession: return "Class Roster"
         case .order: return "Order Detail"
         case .product: return "Session Pack"
         case .event: return "Event Detail"
@@ -410,6 +413,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     fileprivate var restorationValue: String {
         switch self {
         case .member(let id): return "member/\(id.uuidString.lowercased())"
+        case .classSession(let id): return "class/\(id.uuidString.lowercased())"
         case .order(let id): return "order/\(id.uuidString.lowercased())"
         case .product(let id): return "product/\(id.uuidString.lowercased())"
         case .event(let id): return "event/\(id.uuidString.lowercased())"
@@ -424,6 +428,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         guard let id = UUID(uuidString: identifier) else { return nil }
         switch (workspace, kind) {
         case (.members, "member"): return .member(id)
+        case (.classDesk, "class"): return .classSession(id)
         case (.orders, "order"), (.finance, "order"): return .order(id)
         case (.products, "product"): return .product(id)
         case (.events, "event"): return .event(id)
@@ -505,6 +510,7 @@ struct XertOwnerRoute: Equatable, Hashable {
 
 enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
     case member = "Members"
+    case classSession = "Today's Classes"
     case order = "Orders"
     case product = "Session Packs"
     case event = "Events"
@@ -537,12 +543,14 @@ enum XertOwnerCommandIndex {
         members: [AdminMemberSummary],
         orders: [OrderItem],
         products: [AdminProduct],
-        events: [AdminEvent]
+        events: [AdminEvent],
+        classes: [AdminDailyOperation] = []
     ) -> [XertOwnerRecordCommand] {
         let normalizedQuery = normalize(query)
         guard normalizedQuery.count >= 2 else { return [] }
 
         let candidates = members.map(memberCandidate)
+            + classes.map(classCandidate)
             + orders.map(orderCandidate)
             + products.map(productCandidate)
             + events.map(eventCandidate)
@@ -604,6 +612,38 @@ enum XertOwnerCommandIndex {
                 order.status,
                 order.stripe_checkout_session_id,
                 order.stripe_payment_intent_id,
+            ].compactMap { $0 }
+        )
+    }
+
+    private static func classCandidate(_ operation: AdminDailyOperation) -> Candidate {
+        let context = [
+            operation.start_time.formatted(date: .abbreviated, time: .shortened),
+            clean(operation.coach_name),
+            clean(operation.location_zone),
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
+        let state = operation.attendance_due
+            ? "Roll call due"
+            : "\(operation.confirmed_count) confirmed · \(operation.waitlist_count) waiting"
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .classSession,
+                route: XertOwnerRoute(task: .classSession(operation.id)),
+                title: operation.title,
+                subtitle: "\(context) · \(state)",
+                icon: operation.attendance_due ? "checklist" : "person.3"
+            ),
+            title: operation.title,
+            identifiers: [operation.id.uuidString],
+            searchableValues: [
+                operation.title,
+                operation.class_type,
+                operation.coach_name,
+                operation.location_zone,
+                operation.status,
+                operation.attendance_due ? "attendance roll call due" : "roster class",
             ].compactMap { $0 }
         )
     }

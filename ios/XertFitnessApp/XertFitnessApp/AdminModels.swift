@@ -66,6 +66,77 @@ struct AdminRosterMember: Identifiable, Codable, Hashable {
     var attendanceEligible: Bool { ["confirmed", "attended", "no_show"].contains(status) }
 }
 
+enum AdminAttendanceMark: String, Equatable {
+    case attended
+    case noShow = "no_show"
+}
+
+struct AdminAttendanceSummary: Equatable {
+    let total: Int
+    let attended: Int
+    let noShow: Int
+
+    var marked: Int { attended + noShow }
+    var unmarked: Int { max(0, total - marked) }
+    var isComplete: Bool { total > 0 && unmarked == 0 }
+}
+
+struct AdminAttendanceDraft: Equatable {
+    private(set) var eligibleIDs: [UUID] = []
+    private(set) var marks: [UUID: AdminAttendanceMark] = [:]
+
+    init(roster: [AdminRosterMember] = []) {
+        reconcile(roster: roster)
+    }
+
+    var summary: AdminAttendanceSummary {
+        AdminAttendanceSummary(
+            total: eligibleIDs.count,
+            attended: eligibleIDs.lazy.filter { marks[$0] == .attended }.count,
+            noShow: eligibleIDs.lazy.filter { marks[$0] == .noShow }.count
+        )
+    }
+
+    var attendedIDs: [UUID] { eligibleIDs.filter { marks[$0] == .attended } }
+    var noShowIDs: [UUID] { eligibleIDs.filter { marks[$0] == .noShow } }
+
+    func mark(for bookingID: UUID) -> AdminAttendanceMark? {
+        marks[bookingID]
+    }
+
+    mutating func set(_ mark: AdminAttendanceMark, for bookingID: UUID) {
+        guard eligibleIDs.contains(bookingID) else { return }
+        marks[bookingID] = mark
+    }
+
+    mutating func markAllPresent() {
+        marks = Dictionary(uniqueKeysWithValues: eligibleIDs.map { ($0, .attended) })
+    }
+
+    mutating func clear() {
+        marks = [:]
+    }
+
+    mutating func reconcile(roster: [AdminRosterMember]) {
+        var seen = Set<UUID>()
+        let eligible = roster.filter { $0.attendanceEligible && seen.insert($0.id).inserted }
+        let ids = eligible.map(\.id)
+        let allowed = Set(ids)
+        marks = marks.filter { allowed.contains($0.key) }
+        for member in eligible where marks[member.id] == nil {
+            switch member.status {
+            case AdminAttendanceMark.attended.rawValue:
+                marks[member.id] = .attended
+            case AdminAttendanceMark.noShow.rawValue:
+                marks[member.id] = .noShow
+            default:
+                break
+            }
+        }
+        eligibleIDs = ids
+    }
+}
+
 struct AdminClassSession: Identifiable, Codable, Hashable {
     let id: UUID
     let class_type: String?

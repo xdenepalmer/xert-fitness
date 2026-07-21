@@ -261,6 +261,8 @@ final class AdminStore: ObservableObject {
         switch task {
         case .member(let memberID):
             guard !members.contains(where: { $0.id == memberID }) else { return }
+        case .classSession(let sessionID):
+            guard !dailyOperations.contains(where: { $0.id == sessionID }) else { return }
         case .product(let productID):
             guard !products.contains(where: { $0.id == productID }) else { return }
         case .order, .event:
@@ -274,6 +276,12 @@ final class AdminStore: ObservableObject {
                 let member = try await api.adminMember(session: session, id: memberID)
                 members.removeAll(where: { $0.id == memberID })
                 members.insert(member, at: 0)
+            case .classSession(let sessionID):
+                let operations = try await api.adminDailyOperations(session: session)
+                guard operations.contains(where: { $0.id == sessionID }) else { return }
+                dailyOperations = operations
+                loadedSources.insert("today's classes")
+                refreshUnavailableSources.removeAll { $0 == "today's classes" }
             case .product(let productID):
                 let refreshedProducts = try await api.adminProducts(session: session)
                 guard refreshedProducts.contains(where: { $0.id == productID }) else { return }
