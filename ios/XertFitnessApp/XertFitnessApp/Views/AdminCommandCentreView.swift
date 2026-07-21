@@ -71,7 +71,8 @@ struct AdminCommandCentreView: View {
                     current: currentWorkspace,
                     recent: recentWorkspaces.workspaces,
                     pinned: pinnedWorkspaces,
-                    badges: workspaceBadges
+                    badges: workspaceBadges,
+                    launchRunway: stripeLaunchState
                 ) { workspace in
                     showingWorkspaceSwitcher = false
                     openWorkspaceWithFeedback(workspace)
@@ -425,6 +426,7 @@ struct AdminCommandCentreView: View {
                         refreshOwnerData(session: session)
                     }
                 }
+                stripeLaunchRunway
                 quickTools
                 priorityQueue
                 attentionGrid
@@ -588,6 +590,104 @@ struct AdminCommandCentreView: View {
                 .xertDisplay(32)
                 .foregroundStyle(Color.xertOffWhite)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var stripeLaunchState: XertStripeLaunchRunway {
+        let requiredSources = ["platform controls", "session packs", "Stripe health"]
+        let sourcesAreCurrent = requiredSources.allSatisfy {
+            admin.loadedSources.contains($0) && !admin.refreshUnavailableSources.contains($0)
+        }
+        let activeProducts = admin.products.filter(\.active)
+        let blockingProductIDs = admin.commerceHealth?.issues?.compactMap { issue in
+            admin.products.first {
+                $0.slug.caseInsensitiveCompare(issue.slug) == .orderedSame
+            }?.id
+        } ?? []
+        return XertStripeLaunchRunway.resolve(
+            hasCompletedRefresh: admin.hasCompletedRefresh,
+            isRefreshing: admin.isLoading,
+            sourcesAreCurrent: sourcesAreCurrent,
+            paymentsEnabled: admin.settings?.payments_enabled,
+            hasActiveProducts: !activeProducts.isEmpty,
+            activeProductsAreLinked: activeProducts.allSatisfy(\.hasStableStripePriceID),
+            healthReady: admin.commerceHealth?.ready,
+            paymentSwitchState: admin.commerceHealth?.payment_switch?.state,
+            activationReceiptReady: admin.commerceHealth?.activation_receipt?.ready,
+            blockingProductIDs: blockingProductIDs
+        )
+    }
+
+    private var stripeLaunchRunway: some View {
+        let runway = stripeLaunchState
+        return Button {
+            openOwnerRouteWithFeedback(runway.route)
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: stripeRunwayIcon(runway.phase))
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(stripeRunwayColour(runway.phase))
+                        .frame(width: 30)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("STRIPE LAUNCH RUNWAY")
+                            .font(.caption2.weight(.black))
+                            .tracking(1.4)
+                            .foregroundStyle(Color.xertSteel)
+                        Text(runway.title)
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text(runway.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 4)
+                }
+                ProgressView(value: Double(runway.completedSteps), total: Double(XertStripeLaunchRunway.totalSteps))
+                    .tint(stripeRunwayColour(runway.phase))
+                HStack(spacing: 10) {
+                    Text("\(runway.completedSteps)/\(XertStripeLaunchRunway.totalSteps) gates")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.xertPale.opacity(0.58))
+                    Spacer()
+                    Label(runway.actionTitle, systemImage: "arrow.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.xertSteel)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .xertCardStyle()
+            .overlay(alignment: .leading) {
+                Rectangle().fill(stripeRunwayColour(runway.phase)).frame(width: 3)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Stripe launch runway, \(runway.title), \(runway.completedSteps) of \(XertStripeLaunchRunway.totalSteps) gates complete")
+        .accessibilityHint(runway.actionTitle)
+        .accessibilityIdentifier("owner.stripeLaunchRunway")
+    }
+
+    private func stripeRunwayIcon(_ phase: XertStripeLaunchPhase) -> String {
+        switch phase {
+        case .checking: return "arrow.triangle.2.circlepath"
+        case .unavailable: return "wifi.exclamationmark"
+        case .catalogBlocked: return "ticket"
+        case .healthBlocked: return "exclamationmark.shield"
+        case .readyToActivate: return "checkmark.shield"
+        case .live: return "bolt.shield.fill"
+        }
+    }
+
+    private func stripeRunwayColour(_ phase: XertStripeLaunchPhase) -> Color {
+        switch phase {
+        case .checking: return Color.xertSteel
+        case .unavailable, .catalogBlocked, .healthBlocked: return Color.orange
+        case .readyToActivate: return Color.xertSteel
+        case .live: return Color.green
         }
     }
 
@@ -1178,6 +1278,7 @@ private struct AdminWorkspaceSwitcher: View {
     let recent: [XertOwnerWorkspace]
     let pinned: [XertOwnerWorkspace]
     let badges: [XertOwnerWorkspace: Int]
+    let launchRunway: XertStripeLaunchRunway
     let onSelect: (XertOwnerWorkspace) -> Void
     let onOpenRoute: (XertOwnerRoute) -> Void
     let onTogglePin: (XertOwnerWorkspace) -> Void
@@ -1215,10 +1316,23 @@ private struct AdminWorkspaceSwitcher: View {
         )
     }
 
+    private var launchRunwayMatches: Bool {
+        let terms = normalizedQuery.lowercased().split(whereSeparator: { $0.isWhitespace })
+        guard !terms.isEmpty else { return false }
+        let searchIndex = [
+            "stripe launch checkout payments activation",
+            launchRunway.title,
+            launchRunway.detail,
+            launchRunway.actionTitle,
+        ].joined(separator: " ").lowercased()
+        return terms.allSatisfy { searchIndex.contains($0) }
+    }
+
     private var hasNoResults: Bool {
         !normalizedQuery.isEmpty
             && matchingWorkspaces.isEmpty
             && matchingRecords.isEmpty
+            && !launchRunwayMatches
             && !admin.isSearchingOwnerMembers
     }
 
@@ -1226,6 +1340,9 @@ private struct AdminWorkspaceSwitcher: View {
         NavigationStack {
             List {
                 if !normalizedQuery.isEmpty {
+                    if launchRunwayMatches {
+                        Section("Launch") { launchRunwayRow }
+                    }
                     workspaceSection("Results", workspaces: matchingWorkspaces)
                     ForEach(XertOwnerRecordKind.allCases) { kind in
                         recordSection(
@@ -1281,7 +1398,7 @@ private struct AdminWorkspaceSwitcher: View {
             .background(Color.xertNavy)
             .navigationTitle("Owner commands")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: "Workspace, class, member, order, pack or event")
+            .searchable(text: $query, prompt: "Workspace, Stripe launch, class, member or record")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
@@ -1368,6 +1485,35 @@ private struct AdminWorkspaceSwitcher: View {
             }
         }
         .padding(.vertical, 3)
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var launchRunwayRow: some View {
+        Button { onOpenRoute(launchRunway.route) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bolt.shield")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(launchRunway.title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("\(launchRunway.completedSteps)/\(XertStripeLaunchRunway.totalSteps) gates · \(launchRunway.actionTitle)")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.65))
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.forward.square")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.xertSteel)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the exact next Stripe launch action")
+        .accessibilityIdentifier("owner.commands.stripeLaunch")
         .listRowBackground(Color.xertInk)
     }
 

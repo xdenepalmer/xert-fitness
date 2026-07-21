@@ -414,7 +414,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /onChange\(of: compactPath\)[\s\S]*let workspace = path\.last \?\? \.overview/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*toolbar \{ ownerWorkspaceToolbar \}/);
   assert.match(view, /private struct AdminWorkspaceSwitcher: View/);
-  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, class, member, order, pack or event"\)/);
+  assert.match(view, /\.searchable\(text: \$query, prompt: "Workspace, Stripe launch, class, member or record"\)/);
   assert.match(view, /\.keyboardShortcut\("k", modifiers: \.command\)/);
   assert.match(view, /workspaceSection\("Needs attention", workspaces: attentionWorkspaces\)/);
   assert.match(view, /workspaceSection\("Recent", workspaces: matchingRecent\)/);
@@ -427,6 +427,33 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /ForEach\(rows\) \{ item in\s*classRow\(item\)/);
   assert.match(view, /private func classStatusActions\(_ item: AdminClassSession\) -> some View/);
   assert.match(view, /if item\.public_visible == true/);
+});
+
+test('native owner overview turns Stripe launch evidence into one exact next action', async () => {
+  const [view, navigation] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+  ]);
+
+  assert.match(navigation, /enum XertStripeLaunchPhase: Equatable/);
+  assert.match(navigation, /struct XertStripeLaunchRunway: Equatable/);
+  assert.match(navigation, /guard sourcesAreCurrent else/);
+  assert.match(navigation, /guard hasActiveProducts else/);
+  assert.match(navigation, /guard activeProductsAreLinked else/);
+  assert.match(navigation, /guard healthReady == true else/);
+  assert.match(navigation, /guard paymentsEnabled == true else/);
+  assert.match(navigation, /paymentSwitchState\?\.lowercased\(\) == "enabled", activationReceiptReady == true/);
+  assert.match(navigation, /route: exactProductRoute\(blockingProductIDs\) \?\? XertOwnerRoute\(workspace: \.products\)/);
+  assert.match(navigation, /phase: \.readyToActivate[\s\S]*route: XertOwnerRoute\(workspace: \.controls\)/);
+  assert.match(view, /stripeLaunchRunway[\s\S]*quickTools/);
+  assert.match(view, /requiredSources = \["platform controls", "session packs", "Stripe health"\]/);
+  assert.match(view, /activeProducts\.allSatisfy\(\\\.hasStableStripePriceID\)/);
+  assert.match(view, /accessibilityIdentifier\("owner\.stripeLaunchRunway"\)/);
+  assert.match(view, /launchRunway: stripeLaunchState/);
+  assert.match(view, /private var launchRunwayMatches: Bool/);
+  assert.match(view, /"stripe launch checkout payments activation"/);
+  assert.match(view, /Button \{ onOpenRoute\(launchRunway\.route\) \}/);
+  assert.match(view, /accessibilityIdentifier\("owner\.commands\.stripeLaunch"\)/);
 });
 
 test('native owner class work opens exact protected rosters from overview and search', async () => {

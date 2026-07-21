@@ -166,6 +166,77 @@ final class ModelsTests: XCTestCase {
         ), .deny)
     }
 
+    func testStripeLaunchRunwayFailsClosedAndRoutesTheExactNextAction() throws {
+        let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000096"))
+        func runway(
+            refreshed: Bool = true,
+            current: Bool = true,
+            paymentsEnabled: Bool? = false,
+            hasProducts: Bool = true,
+            linked: Bool = true,
+            healthReady: Bool? = true,
+            switchState: String? = "paused",
+            receiptReady: Bool? = true,
+            blockingProducts: [UUID] = []
+        ) -> XertStripeLaunchRunway {
+            XertStripeLaunchRunway.resolve(
+                hasCompletedRefresh: refreshed,
+                isRefreshing: !refreshed,
+                sourcesAreCurrent: current,
+                paymentsEnabled: paymentsEnabled,
+                hasActiveProducts: hasProducts,
+                activeProductsAreLinked: linked,
+                healthReady: healthReady,
+                paymentSwitchState: switchState,
+                activationReceiptReady: receiptReady,
+                blockingProductIDs: blockingProducts
+            )
+        }
+
+        let checking = runway(refreshed: false, current: false, healthReady: nil)
+        XCTAssertEqual(checking.phase, .checking)
+        XCTAssertEqual(checking.completedSteps, 0)
+        XCTAssertEqual(checking.route, XertOwnerRoute(workspace: .health))
+
+        let unavailable = runway(current: false)
+        XCTAssertEqual(unavailable.phase, .unavailable)
+        XCTAssertEqual(unavailable.route, XertOwnerRoute(workspace: .health))
+
+        let noCatalogue = runway(hasProducts: false)
+        XCTAssertEqual(noCatalogue.phase, .catalogBlocked)
+        XCTAssertEqual(noCatalogue.route, XertOwnerRoute(workspace: .products))
+
+        let exactPack = runway(linked: false, blockingProducts: [productID, productID])
+        XCTAssertEqual(exactPack.phase, .catalogBlocked)
+        XCTAssertEqual(exactPack.route, XertOwnerRoute(task: .product(productID)))
+
+        let blockedHealth = runway(healthReady: false, blockingProducts: [productID])
+        XCTAssertEqual(blockedHealth.phase, .healthBlocked)
+        XCTAssertEqual(blockedHealth.route, XertOwnerRoute(task: .product(productID)))
+
+        let ready = runway()
+        XCTAssertEqual(ready.phase, .readyToActivate)
+        XCTAssertEqual(ready.completedSteps, 3)
+        XCTAssertEqual(ready.route, XertOwnerRoute(workspace: .controls))
+
+        let unverifiedActivation = runway(
+            paymentsEnabled: true,
+            switchState: "enabled",
+            receiptReady: false
+        )
+        XCTAssertEqual(unverifiedActivation.phase, .healthBlocked)
+        XCTAssertEqual(unverifiedActivation.route, XertOwnerRoute(workspace: .health))
+
+        let live = runway(
+            paymentsEnabled: true,
+            switchState: "ENABLED",
+            receiptReady: true
+        )
+        XCTAssertEqual(live.phase, .live)
+        XCTAssertEqual(live.completedSteps, XertStripeLaunchRunway.totalSteps)
+        XCTAssertEqual(live.route, XertOwnerRoute(workspace: .health))
+    }
+
     func testOwnerWorkspaceRecencyIsBoundedDeduplicatedAndRestorable() {
         var recency = XertOwnerWorkspaceRecency(workspaces: [
             .overview, .finance, .members, .finance, .health, .products,

@@ -508,6 +508,124 @@ struct XertOwnerRoute: Equatable, Hashable {
     }
 }
 
+enum XertStripeLaunchPhase: Equatable {
+    case checking
+    case unavailable
+    case catalogBlocked
+    case healthBlocked
+    case readyToActivate
+    case live
+}
+
+struct XertStripeLaunchRunway: Equatable {
+    static let totalSteps = 4
+
+    let phase: XertStripeLaunchPhase
+    let completedSteps: Int
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let route: XertOwnerRoute
+
+    static func resolve(
+        hasCompletedRefresh: Bool,
+        isRefreshing: Bool,
+        sourcesAreCurrent: Bool,
+        paymentsEnabled: Bool?,
+        hasActiveProducts: Bool,
+        activeProductsAreLinked: Bool,
+        healthReady: Bool?,
+        paymentSwitchState: String?,
+        activationReceiptReady: Bool?,
+        blockingProductIDs: [UUID]
+    ) -> Self {
+        guard hasCompletedRefresh else {
+            return Self(
+                phase: .checking,
+                completedSteps: 0,
+                title: isRefreshing ? "Checking Stripe launch gates" : "Stripe launch status pending",
+                detail: "Refresh owner data to verify the catalogue, Stripe services and payment switch.",
+                actionTitle: "Open Operations Health",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard sourcesAreCurrent else {
+            return Self(
+                phase: .unavailable,
+                completedSteps: 0,
+                title: "Stripe launch status unavailable",
+                detail: "One or more live launch sources could not be verified. Keep payments paused and retry health checks.",
+                actionTitle: "Review unavailable checks",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard hasActiveProducts else {
+            return Self(
+                phase: .catalogBlocked,
+                completedSteps: 1,
+                title: "Session-pack catalogue required",
+                detail: "Create at least one active session pack before opening checkout.",
+                actionTitle: "Open Session Packs",
+                route: XertOwnerRoute(workspace: .products)
+            )
+        }
+        guard activeProductsAreLinked else {
+            return Self(
+                phase: .catalogBlocked,
+                completedSteps: 1,
+                title: "Stripe catalogue needs attention",
+                detail: "Every active pack needs a verified stable Stripe Price ID before live checkout.",
+                actionTitle: blockingProductIDs.count == 1 ? "Fix blocking pack" : "Review active packs",
+                route: exactProductRoute(blockingProductIDs) ?? XertOwnerRoute(workspace: .products)
+            )
+        }
+        guard healthReady == true else {
+            return Self(
+                phase: .healthBlocked,
+                completedSteps: 2,
+                title: "Stripe launch checks need attention",
+                detail: "Resolve account, webhook, database or delivery checks before activation.",
+                actionTitle: blockingProductIDs.count == 1 ? "Fix blocking pack" : "Open Operations Health",
+                route: exactProductRoute(blockingProductIDs) ?? XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard paymentsEnabled == true else {
+            return Self(
+                phase: .readyToActivate,
+                completedSteps: 3,
+                title: "Ready for guarded activation",
+                detail: "All current Stripe launch checks pass. Payments remain paused until you confirm activation.",
+                actionTitle: "Review payment switch",
+                route: XertOwnerRoute(workspace: .controls)
+            )
+        }
+        guard paymentSwitchState?.lowercased() == "enabled", activationReceiptReady == true else {
+            return Self(
+                phase: .healthBlocked,
+                completedSteps: 3,
+                title: "Payment activation needs verification",
+                detail: "Checkout is marked enabled, but its live switch or immutable activation receipt is not verified.",
+                actionTitle: "Verify activation",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        return Self(
+            phase: .live,
+            completedSteps: totalSteps,
+            title: "Session-pack checkout is live",
+            detail: "Stripe services, catalogue links and the immutable activation receipt are verified.",
+            actionTitle: "Monitor Stripe health",
+            route: XertOwnerRoute(workspace: .health)
+        )
+    }
+
+    private static func exactProductRoute(_ productIDs: [UUID]) -> XertOwnerRoute? {
+        let uniqueIDs = Array(Set(productIDs))
+        guard uniqueIDs.count == 1, let productID = uniqueIDs.first else { return nil }
+        return XertOwnerRoute(task: .product(productID))
+    }
+}
+
 enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
     case member = "Members"
     case classSession = "Today's Classes"
