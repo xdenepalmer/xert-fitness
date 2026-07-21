@@ -482,8 +482,8 @@ test('native class desk never presents unavailable operational data as an empty 
     view.indexOf('private struct AdminClassRosterView'),
   );
 
-  assert.match(desk, /admin\.sourceIsCurrent\("today's classes"\)/);
-  assert.match(desk, /admin\.sourceIsCurrent\("waitlists"\)/);
+  assert.match(desk, /admin\.loadedSources\.contains\("today's classes"\)[\s\S]*!admin\.refreshUnavailableSources\.contains\("today's classes"\)/);
+  assert.match(desk, /admin\.loadedSources\.contains\("waitlists"\)[\s\S]*!admin\.refreshUnavailableSources\.contains\("waitlists"\)/);
   assert.match(desk, /Today's classes are unavailable\. Refresh before relying on this desk/);
   assert.match(desk, /Waitlists are unavailable\. Refresh before assuming every queue is clear/);
   assert.match(desk, /Showing the last waitlist snapshot\. Refresh before promoting a member/);

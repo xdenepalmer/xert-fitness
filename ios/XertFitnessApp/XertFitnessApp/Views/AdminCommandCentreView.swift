@@ -1719,8 +1719,14 @@ private struct AdminClassesView: View {
     let session: AuthSession
     @State private var promotion: AdminWaitlistItem?
 
-    private var operationsAreCurrent: Bool { admin.sourceIsCurrent("today's classes") }
-    private var waitlistIsCurrent: Bool { admin.sourceIsCurrent("waitlists") }
+    private var operationsAreCurrent: Bool {
+        admin.loadedSources.contains("today's classes")
+            && !admin.refreshUnavailableSources.contains("today's classes")
+    }
+    private var waitlistIsCurrent: Bool {
+        admin.loadedSources.contains("waitlists")
+            && !admin.refreshUnavailableSources.contains("waitlists")
+    }
     private var operationsAreLoading: Bool {
         admin.isLoading && !admin.loadedSources.contains("today's classes")
     }
