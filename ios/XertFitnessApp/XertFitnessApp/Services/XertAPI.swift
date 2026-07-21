@@ -1765,6 +1765,23 @@ final class XertAPI {
         }
     }
 
+    func adminProvisionProductPrice(session auth: AuthSession, product: AdminProduct) async throws -> AdminProduct {
+        do {
+            return try await vercelRequest(
+                path: "/api/admin-commerce-health",
+                body: AdminProductPriceProvisionRequest(
+                    action: "provision_product_price",
+                    confirmation: "CREATE STRIPE PRICE",
+                    product_id: product.id,
+                    expected_updated_at: product.updated_at
+                ),
+                auth: auth
+            )
+        } catch let error as APIError {
+            throw friendlyProductError(error)
+        }
+    }
+
     @discardableResult
     func adminAddMemberNote(
         session auth: AuthSession,
@@ -2322,6 +2339,13 @@ private struct AdminProductActivationRequest: Encodable {
     let action: String
     let product_id: UUID
     let product: AdminProductPayload
+    let expected_updated_at: String
+}
+
+private struct AdminProductPriceProvisionRequest: Encodable {
+    let action: String
+    let confirmation: String
+    let product_id: UUID
     let expected_updated_at: String
 }
 

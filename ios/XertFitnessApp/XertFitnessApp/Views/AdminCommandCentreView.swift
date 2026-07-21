@@ -625,9 +625,9 @@ struct AdminCommandCentreView: View {
                         refreshOwnerData(session: session)
                     }
                 }
+                priorityQueue
                 stripeLaunchRunway
                 quickTools
-                priorityQueue
                 attentionGrid
                 businessPulse
                 activationPulse
@@ -6210,6 +6210,7 @@ private struct AdminProductEditor: View {
     private let baseline: AdminProductDraft
     @State private var draft: AdminProductDraft
     @State private var confirmingDiscard = false
+    @State private var confirmingPriceProvision = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable { case slug, name, description, price, currency, stripePrice }
@@ -6243,6 +6244,8 @@ private struct AdminProductEditor: View {
     private var isCreating: Bool { product == nil }
     private var isDirty: Bool { draft != baseline }
     private var isSaving: Bool { admin.savingProductID != nil }
+    private var isProvisioningPrice: Bool { admin.provisioningProductPriceID == product?.id }
+    private var isProductMutationInFlight: Bool { isSaving || isProvisioningPrice }
     private var pricingDataIsCurrent: Bool {
         admin.loadedSources.contains("session packs")
             && !admin.refreshUnavailableSources.contains("session packs")
@@ -6252,7 +6255,7 @@ private struct AdminProductEditor: View {
     }
     private var validationMessage: String? { draft.validationMessage(existingProduct: product) }
     private var canSave: Bool {
-        isDirty && validationMessage == nil && !isSaving && pricingMutationAvailable
+        isDirty && validationMessage == nil && !isProductMutationInFlight && pricingMutationAvailable
     }
 
     var body: some View {
@@ -6302,7 +6305,7 @@ private struct AdminProductEditor: View {
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     .focused($focusedField, equals: .currency)
             }
-            .disabled(!pricingMutationAvailable || isSaving)
+            .disabled(!pricingMutationAvailable || isProductMutationInFlight)
             Section("Credits") {
                 Stepper("Sessions: \(draft.sessions)", value: $draft.sessions, in: 1...1_000)
                 Stepper("Validity: \(draft.validityDays) days", value: $draft.validityDays, in: 1...3_650)
@@ -6312,7 +6315,7 @@ private struct AdminProductEditor: View {
                     LabeledContent("Price per session", value: amount.formatted(.currency(code: draft.currency.uppercased())))
                 }
             }
-            .disabled(!pricingMutationAvailable || isSaving)
+            .disabled(!pricingMutationAvailable || isProductMutationInFlight)
             Section("Sale state") {
                 Toggle("Featured pack", isOn: $draft.featured)
                 if isCreating {
@@ -6345,9 +6348,25 @@ private struct AdminProductEditor: View {
                         Text("Clear or replace the Stripe Price ID before changing price, currency, sessions or validity.")
                             .font(.caption).foregroundStyle(.orange)
                     }
+                    if let product,
+                       !product.active,
+                       product.stripe_price_id == nil,
+                       !isDirty {
+                        Button {
+                            confirmingPriceProvision = true
+                        } label: {
+                            Label(
+                                isProvisioningPrice ? "Preparing Stripe Price..." : "Create & link exact Stripe Price",
+                                systemImage: "link.badge.plus"
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isProvisioningPrice || !pricingMutationAvailable)
+                    }
                 }
             }
-            .disabled(!pricingMutationAvailable || isSaving)
+            .disabled(!pricingMutationAvailable || isProductMutationInFlight)
 
             if let validationMessage, isDirty || !isCreating {
                 Section {
@@ -6365,12 +6384,12 @@ private struct AdminProductEditor: View {
         .navigationTitle(isCreating ? "New Session Pack" : product?.name ?? "Session Pack")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("owner.productEditor.form")
-        .interactiveDismissDisabled(isDirty || isSaving)
+        .interactiveDismissDisabled(isDirty || isProductMutationInFlight)
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { requestDismiss() }
-                    .disabled(isSaving)
+                    .disabled(isProductMutationInFlight)
                     .accessibilityIdentifier("owner.productEditor.close")
             }
             ToolbarItemGroup(placement: .keyboard) {
@@ -6387,6 +6406,23 @@ private struct AdminProductEditor: View {
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The session-pack pricing details in this draft have not been saved.")
+        }
+        .confirmationDialog(
+            "Create this exact Stripe Price?",
+            isPresented: $confirmingPriceProvision,
+            titleVisibility: .visible
+        ) {
+            Button("Create Stripe Price") {
+                guard let product else { return }
+                Task {
+                    if await admin.provisionProductPrice(session: session, product: product) != nil {
+                        dismiss()
+                    }
+                }
+            }
+            Button("Keep private", role: .cancel) {}
+        } message: {
+            Text("XERT creates or reuses the exact one-time Stripe Price and links it to this draft. The pack stays private until you activate it separately.")
         }
     }
 
@@ -7422,4 +7458,5 @@ private func adminHeading(_ title: String) -> some View {
         .font(.caption.weight(.bold))
         .tracking(1.8)
         .foregroundStyle(Color.xertSteel)
+        .accessibilityAddTraits(.isHeader)
 }

@@ -68,6 +68,7 @@ struct BookingView: View {
                 .tint(.xertSteel)
                 .xertListBackground()
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
                 .navigationTitle("Book")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .tabBar)

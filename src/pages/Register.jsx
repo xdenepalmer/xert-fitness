@@ -1,6 +1,6 @@
 // @ts-nocheck -- typed wrapper props are introduced during the UI migration.
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   requireSupabaseConfiguration,
   supabase,
@@ -12,12 +12,17 @@ import { Label } from "@/components/ui/label";
 import { UserPlus, Mail, Lock, Loader2, CheckCircle2, User } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+import { useSupabaseAuth } from "@/lib/SupabaseAuthContext";
+import { authPathWithNext, safeAuthReturnPath } from "@/lib/authRedirect";
 
 const fieldClasses =
   "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
 const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
 
 export default function Register() {
+  const { session } = useSupabaseAuth();
+  const [searchParams] = useSearchParams();
+  const returnPath = safeAuthReturnPath(searchParams.get("next"));
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,6 +30,10 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
+
+  useEffect(() => {
+    if (session) window.location.replace(returnPath);
+  }, [returnPath, session]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,14 +51,14 @@ export default function Register() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: `${window.location.origin}${authPathWithNext('/login', returnPath)}`,
           data: { full_name: fullName.trim() },
         },
       });
 
       if (signUpError) throw signUpError;
       if (data.session) {
-        window.location.href = "/";
+        window.location.replace(returnPath);
         return;
       }
 
@@ -69,7 +78,7 @@ export default function Register() {
         type: "signup",
         email: email.trim(),
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: `${window.location.origin}${authPathWithNext('/login', returnPath)}`,
         },
       });
       if (resendError) throw resendError;
@@ -85,7 +94,7 @@ export default function Register() {
       const { error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}${authPathWithNext('/login', returnPath)}`,
         },
       });
       if (signInError) throw signInError;
@@ -106,7 +115,7 @@ export default function Register() {
         title="Check your email"
         subtitle={`We sent a confirmation link to ${email}`}
         footer={
-          <Link to="/login" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
+          <Link to={authPathWithNext('/login', returnPath)} className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Back to log in
           </Link>
         }
@@ -142,7 +151,7 @@ export default function Register() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
+          <Link to={authPathWithNext('/login', returnPath)} className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Log in
           </Link>
         </>

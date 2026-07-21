@@ -177,6 +177,7 @@ The Supabase schema is defined in:
   admin-only, derived 30-day activation journey and bounded follow-up queue for
   current readiness, training access, first booking and recorded attendance;
   it exposes no emergency-contact values or document contents
+- `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/waitlist_promotion_notifications_upgrade.sql` — makes FIFO promotion
@@ -248,7 +249,8 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `admin_settings_singleton_upgrade.sql`, then
 `member_booking_switch_guard_upgrade.sql`, then
 `member_onboarding_upgrade.sql`, then
-`supabase/migrations/20260721020000_member_activation_cockpit.sql`. The scripts are idempotent;
+`supabase/migrations/20260721020000_member_activation_cockpit.sql`, then
+`supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

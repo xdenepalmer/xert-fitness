@@ -93,7 +93,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /Create session pack/);
   assert.match(view, /AdminProductRow/);
   assert.match(view, /dynamicTypeSize\.isAccessibilitySize/);
-  assert.match(view, /interactiveDismissDisabled\(isDirty \|\| isSaving\)/);
+  assert.match(view, /interactiveDismissDisabled\(isDirty \|\| isProductMutationInFlight\)/);
   assert.match(view, /Discard unsaved pack changes/);
   assert.match(view, /ToolbarItemGroup\(placement: \.keyboard\)/);
   assert.match(view, /safeAreaInset\(edge: \.bottom/);
@@ -231,6 +231,9 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
 
   assert.match(view, /private var priorityQueue: some View/);
+  const dashboard = view.slice(view.indexOf('private func dashboard(session:'), view.indexOf('private var accessDenied:'));
+  assert.ok(dashboard.indexOf('priorityQueue') < dashboard.indexOf('stripeLaunchRunway'));
+  assert.ok(dashboard.indexOf('priorityQueue') < dashboard.indexOf('quickTools'));
   assert.match(view, /private var operationalPriorities: \[AdminPriorityAction\]/);
   assert.match(view, /private struct AdminPriorityRow: View/);
   assert.match(view, /ForEach\(priorities\) \{ priority in/);
@@ -245,6 +248,7 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
   assert.match(view, /Button \{\s*openWorkspaceWithFeedback\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
+  assert.match(view, /private func adminHeading\(_ title: String\)[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {
@@ -332,7 +336,7 @@ test('native session-pack tools require a current catalogue before exposing muta
   assert.ok((products.match(/disabled\(!pricingMutationAvailable\)/g) || []).length >= 2);
   assert.match(editor, /private var pricingMutationAvailable: Bool/);
   assert.match(editor, /Session-pack data is unavailable\. Retry before changing prices or sale state/);
-  assert.match(editor, /isDirty && validationMessage == nil && !isSaving && pricingMutationAvailable/);
+  assert.match(editor, /isDirty && validationMessage == nil && !isProductMutationInFlight && pricingMutationAvailable/);
   assert.match(store, /guard loadedSources\.contains\("session packs"\),[\s\S]*Refresh Session Packs & Pricing before saving/);
 });
 

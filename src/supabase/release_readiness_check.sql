@@ -48,7 +48,9 @@ with required (capability, migration) as (
     ('catalog_optimistic_locking', 'supabase/migrations/20260714020000_catalog_optimistic_locking.sql'),
     ('product_commercial_terms_guard', 'supabase/migrations/20260720000000_product_commercial_terms_guard.sql'),
     ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql'),
-    ('waitlist_promotion_notifications', 'supabase/migrations/20260721030000_waitlist_promotion_notifications.sql')
+    ('waitlist_promotion_notifications', 'supabase/migrations/20260721030000_waitlist_promotion_notifications.sql'),
+    ('booking_decision_notifications', 'supabase/migrations/20260722000000_booking_decision_notifications.sql'),
+    ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql')
 ), readiness as (
   select
     required.capability,

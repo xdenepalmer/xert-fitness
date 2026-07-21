@@ -336,6 +336,8 @@ workflows:
               "product_commercial_terms_guard",
               "targeted_member_notices",
               "waitlist_promotion_notifications",
+              "booking_decision_notifications",
+              "owner_stripe_price_provisioning",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

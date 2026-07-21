@@ -59,6 +59,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var isPublishingAnnouncement = false
     @Published private(set) var savingProductID: UUID?
+    @Published private(set) var provisioningProductPriceID: UUID?
     @Published private(set) var savingEventID: UUID?
     @Published private(set) var deletingEventID: UUID?
     @Published private(set) var loadingEventRosterID: UUID?
@@ -189,7 +190,21 @@ final class AdminStore: ObservableObject {
             loadedSource = true
         } catch { failures.append("activation actions"); queueFailures.append("activation actions") }
         do { members = try await memberRequest; successfulSources.insert("members"); loadedSource = true }
-        catch { failures.append("members") }
+        catch {
+            // The member directory and server-backed health endpoints are the
+            // most likely reads to meet a cold connection on first open. Retry
+            // them once before presenting partial data, but never retry a stale
+            // foreground refresh or a cancelled Command Centre task.
+            if !loadedSources.contains("members"), !Task.isCancelled {
+                do {
+                    members = try await api.adminMembers(session: session)
+                    successfulSources.insert("members")
+                    loadedSource = true
+                } catch { failures.append("members") }
+            } else {
+                failures.append("members")
+            }
+        }
         do { orders = try await orderRequest; successfulSources.insert("orders"); loadedSource = true }
         catch { failures.append("orders"); queueFailures.append("orders") }
         do { settings = try await settingsRequest; successfulSources.insert("platform controls"); loadedSource = true }
@@ -201,9 +216,29 @@ final class AdminStore: ObservableObject {
         do { schemaCapabilities = try await capabilitiesRequest; successfulSources.insert("schema health"); loadedSource = true }
         catch { failures.append("schema health") }
         do { commerceHealth = try await commerceRequest; successfulSources.insert("Stripe health"); loadedSource = true }
-        catch { failures.append("Stripe health") }
+        catch {
+            if !loadedSources.contains("Stripe health"), !Task.isCancelled {
+                do {
+                    commerceHealth = try await api.adminCommerceHealth(session: session)
+                    successfulSources.insert("Stripe health")
+                    loadedSource = true
+                } catch { failures.append("Stripe health") }
+            } else {
+                failures.append("Stripe health")
+            }
+        }
         do { pushHealth = try await pushRequest; successfulSources.insert("push health"); loadedSource = true }
-        catch { failures.append("push health") }
+        catch {
+            if !loadedSources.contains("push health"), !Task.isCancelled {
+                do {
+                    pushHealth = try await api.adminPushHealth(session: session)
+                    successfulSources.insert("push health")
+                    loadedSource = true
+                } catch { failures.append("push health") }
+            } else {
+                failures.append("push health")
+            }
+        }
         do { auditEntries = try await auditRequest; successfulSources.insert("admin audit"); loadedSource = true }
         catch { failures.append("admin audit") }
         do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
@@ -1135,7 +1170,7 @@ final class AdminStore: ObservableObject {
     }
 
     func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {
-        guard savingProductID == nil else { return false }
+        guard savingProductID == nil, provisioningProductPriceID == nil else { return false }
         guard loadedSources.contains("session packs"),
               !refreshUnavailableSources.contains("session packs"),
               !isLoading else {
@@ -1168,6 +1203,29 @@ final class AdminStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    func provisionProductPrice(session: AuthSession, product: AdminProduct) async -> AdminProduct? {
+        guard provisioningProductPriceID == nil, savingProductID == nil else { return nil }
+        guard !product.active, product.stripe_price_id == nil else {
+            errorMessage = "Only an unlinked private pack can create a Stripe Price."
+            return nil
+        }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        provisioningProductPriceID = product.id
+        defer { provisioningProductPriceID = nil }
+        do {
+            let saved = try await api.adminProvisionProductPrice(session: session, product: product)
+            mergeProduct(saved)
+            loadedSources.insert("session packs")
+            refreshUnavailableSources.removeAll { $0 == "session packs" }
+            lastUpdatedAt = Date()
+            return saved
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 

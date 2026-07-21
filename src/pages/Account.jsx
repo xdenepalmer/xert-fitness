@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, BellRing, CalendarDays, CheckCircle2, Clock, Dumbbell, ExternalLink, Loader2, Receipt, ShieldCheck, Target, Ticket, X } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
@@ -19,6 +19,7 @@ import {
 } from '@/lib/webCheckoutRecovery';
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
+import { authPathWithNext } from '@/lib/authRedirect';
 
 function formatDateTime(iso) {
   if (!iso) return '';
@@ -75,6 +76,7 @@ function officialSourceURL(value) {
 }
 
 export default function Account() {
+  const location = useLocation();
   const { session, user, profile, loading: authLoading, signOut } = useSupabaseAuth();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -574,6 +576,7 @@ export default function Account() {
   }
 
   if (!session) {
+    const accountReturnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
         <PublicNav />
@@ -583,11 +586,11 @@ export default function Account() {
             View your class credits, bookings and purchases.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <Link to="/login" className="px-6 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+            <Link to={authPathWithNext('/login', accountReturnPath)} className="px-6 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
               Log In
             </Link>
             <Link
-              to="/register"
+              to={authPathWithNext('/register', accountReturnPath)}
               className="px-6 py-3 font-display text-base uppercase tracking-wide border"
               style={{
                 borderColor: 'rgba(123,167,188,0.35)',

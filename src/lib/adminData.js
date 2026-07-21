@@ -1336,6 +1336,28 @@ export async function updateProduct(id, updates, expectedUpdatedAt) {
   throw new Error('Install the catalog optimistic-locking migration before editing session packs.');
 }
 
+export async function provisionProductPrice(id, expectedUpdatedAt, confirmation) {
+  if (!expectedUpdatedAt) throw new Error('Session pack version is missing. Refresh pricing and try again.');
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-commerce-health', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      action: 'provision_product_price',
+      confirmation,
+      product_id: id,
+      expected_updated_at: expectedUpdatedAt,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Stripe could not prepare this draft price.'));
+  return body;
+}
+
 // ─── Business stats (admin overview) ─────────────────────────────────────────
 
 export async function getBusinessStats() {

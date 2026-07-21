@@ -1,6 +1,6 @@
 // @ts-nocheck -- typed wrapper props are introduced during the UI migration.
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   requireSupabaseConfiguration,
   supabase,
@@ -12,16 +12,25 @@ import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+import { useSupabaseAuth } from "@/lib/SupabaseAuthContext";
+import { authPathWithNext, safeAuthReturnPath } from "@/lib/authRedirect";
 
 const fieldClasses =
   "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
 const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
 
 export default function Login() {
+  const { session } = useSupabaseAuth();
+  const [searchParams] = useSearchParams();
+  const returnPath = safeAuthReturnPath(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (session) window.location.replace(returnPath);
+  }, [returnPath, session]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,7 +43,7 @@ export default function Login() {
         password,
       });
       if (signInError) throw signInError;
-      window.location.href = "/";
+      window.location.replace(returnPath);
     } catch (err) {
       setError(err.message || "Invalid email or password");
     } finally {
@@ -49,7 +58,7 @@ export default function Login() {
       const { error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}${authPathWithNext('/login', returnPath)}`,
         },
       });
       if (signInError) throw signInError;
@@ -71,7 +80,7 @@ export default function Login() {
       footer={
         <>
           Don't have an account?{" "}
-          <Link to="/register" className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
+          <Link to={authPathWithNext('/register', returnPath)} className="text-xert-steel font-medium hover:text-xert-pale hover:underline">
             Create one
           </Link>
         </>

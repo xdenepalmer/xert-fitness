@@ -166,6 +166,118 @@ export function normalizeProductActivationRequest(body) {
   };
 }
 
+export function normalizeProductPriceProvisionRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || body.action !== 'provision_product_price'
+    || body.confirmation !== 'CREATE STRIPE PRICE') {
+    throw new Error('INVALID_PRODUCT_PRICE_PROVISION');
+  }
+  const productId = String(body.product_id || '').trim();
+  const expectedUpdatedAt = String(body.expected_updated_at || '').trim();
+  if (!UUID_PATTERN.test(productId)
+    || expectedUpdatedAt.length > 64
+    || !Number.isFinite(Date.parse(expectedUpdatedAt))) {
+    throw new Error('INVALID_PRODUCT_PRICE_PROVISION');
+  }
+  return { productId, expectedUpdatedAt };
+}
+
+function stripeCatalogMetadata(product) {
+  return {
+    xert_product_id: product.id,
+    xert_catalog_slug: product.slug,
+    xert_sessions: String(product.sessions_count),
+    xert_validity_days: String(product.validity_days),
+  };
+}
+
+export async function provisionStripePriceForDraft({
+  admin, stripe, request, expectedLivemode, actorId,
+}) {
+  const { data: product, error } = await admin
+    .from('products')
+    .select('*')
+    .eq('id', request.productId)
+    .maybeSingle();
+  if (error) throw new Error('PRODUCT_PRICE_LOOKUP_FAILED');
+  if (!product) throw new Error('PRODUCT_NOT_FOUND');
+  if (product.updated_at !== request.expectedUpdatedAt) throw new Error('PRODUCT_STALE');
+  if (product.active || product.stripe_price_id) throw new Error('PRODUCT_PRICE_ALREADY_LINKED');
+  assertCheckoutProduct(product);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(product.slug || ''))
+    || !String(product.name || '').trim()) {
+    throw new Error('Product configuration is invalid.');
+  }
+
+  const metadata = stripeCatalogMetadata(product);
+  const productSearch = await stripe.products.search({
+    query: `metadata['xert_catalog_slug']:'${product.slug}'`,
+    limit: 10,
+  });
+  let stripeProduct = (productSearch.data || []).find(candidate => (
+    candidate.active === true
+    && candidate.livemode === expectedLivemode
+    && candidate.metadata?.xert_product_id === product.id
+    && candidate.metadata?.xert_catalog_slug === product.slug
+  ));
+  if (!stripeProduct) {
+    stripeProduct = await stripe.products.create({
+      name: String(product.name).trim(),
+      description: String(product.description || '').trim() || undefined,
+      metadata,
+    }, { idempotencyKey: `xert-owner-product-v1-${expectedLivemode ? 'live' : 'test'}-${product.id}` });
+  }
+
+  const prices = await stripe.prices.list({
+    product: stripeProduct.id,
+    active: true,
+    type: 'one_time',
+    limit: 100,
+  });
+  let stripePrice = (prices.data || []).find(candidate => {
+    try {
+      assertStripePriceMatchesProduct({ ...product, stripe_price_id: candidate.id }, candidate, expectedLivemode);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!stripePrice) {
+    stripePrice = await stripe.prices.create({
+      product: stripeProduct.id,
+      unit_amount: product.price_cents,
+      currency: String(product.currency).toLowerCase(),
+      metadata,
+    }, {
+      idempotencyKey: [
+        'xert-owner-price-v1', expectedLivemode ? 'live' : 'test', product.id,
+        String(product.currency).toLowerCase(), product.price_cents,
+        product.sessions_count, product.validity_days,
+      ].join('-'),
+    });
+  }
+  assertStripePriceMatchesProduct({ ...product, stripe_price_id: stripePrice.id }, stripePrice, expectedLivemode);
+
+  const { data: linked, error: linkError } = await admin.rpc('admin_link_verified_product_price', {
+    p_product_id: product.id,
+    p_stripe_price_id: stripePrice.id,
+    p_expected_updated_at: request.expectedUpdatedAt,
+    p_actor_id: actorId,
+  });
+  if (linkError && (['42883', 'PGRST202'].includes(linkError.code)
+    || /admin_link_verified_product_price.*(?:not found|schema cache|does not exist)/i.test(linkError.message || ''))) {
+    throw new Error('PRODUCT_PRICE_PROVISIONING_NOT_INSTALLED');
+  }
+  if (linkError && /PRODUCT_STALE/i.test(linkError.message || '')) throw new Error('PRODUCT_STALE');
+  if (linkError && /PRODUCT_PRICE_ALREADY_LINKED/i.test(linkError.message || '')) throw new Error('PRODUCT_PRICE_ALREADY_LINKED');
+  if (linkError) throw new Error('PRODUCT_PRICE_LINK_FAILED');
+  const saved = Array.isArray(linked) ? linked[0] : linked;
+  if (!saved || saved.active || saved.stripe_price_id !== stripePrice.id) {
+    throw new Error('PRODUCT_PRICE_LINK_FAILED');
+  }
+  return saved;
+}
+
 export async function activateVerifiedProduct({ admin, stripe, activation, expectedLivemode, actorId }) {
   const { data: current, error: currentError } = await admin
     .from('products')
@@ -638,6 +750,7 @@ export default async function handler(request, response) {
 
   let activation;
   let productActivation;
+  let productPriceProvision;
   let reviewResolution;
   let webhookRetry;
   if (request.method === 'POST') {
@@ -649,6 +762,8 @@ export default async function handler(request, response) {
         webhookRetry = normalizeStripeRetryRequest(body);
       } else if (body?.action === 'activate_product') {
         productActivation = normalizeProductActivationRequest(body);
+      } else if (body?.action === 'provision_product_price') {
+        productPriceProvision = normalizeProductPriceProvisionRequest(body);
       } else {
         activation = normalizePaymentActivationRequest(body);
       }
@@ -661,6 +776,9 @@ export default async function handler(request, response) {
       }
       if (error.message === 'INVALID_PRODUCT_ACTIVATION') {
         return json({ error: 'Session pack activation details are invalid.' }, 400);
+      }
+      if (error.message === 'INVALID_PRODUCT_PRICE_PROVISION') {
+        return json({ error: 'Type CREATE STRIPE PRICE to confirm this exact draft price.' }, 400);
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
@@ -761,6 +879,48 @@ export default async function handler(request, response) {
         code: String(error?.code || error?.message || 'PRODUCT_ACTIVATION_FAILED'),
       });
       return json({ error: 'The pack could not be activated safely. It remains private.' }, 500);
+    }
+  }
+
+  if (productPriceProvision) {
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') {
+      return json({ error: 'Stripe price creation is unavailable. The pack remains private.' }, 503);
+    }
+    try {
+      const saved = await provisionStripePriceForDraft({
+        admin,
+        stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+        request: productPriceProvision,
+        expectedLivemode: stripeMode === 'live',
+        actorId: user.id,
+      });
+      console.info('Stripe Price created and linked to private pack.', {
+        requestId: trace.requestId,
+        productId: saved.id,
+        actorId: user.id,
+      });
+      return json(saved);
+    } catch (error) {
+      if (error.message === 'PRODUCT_NOT_FOUND') return json({ error: 'This session pack no longer exists.' }, 404);
+      if (error.message === 'PRODUCT_STALE') {
+        return json({ error: 'This pack changed while Stripe was being prepared. Refresh pricing; the pack remains private.' }, 409);
+      }
+      if (error.message === 'PRODUCT_PRICE_ALREADY_LINKED') {
+        return json({ error: 'This pack is already active or linked. Refresh pricing before continuing.' }, 409);
+      }
+      if (error.message === 'PRODUCT_PRICE_LINK_FAILED') {
+        return json({ error: 'Stripe prepared the exact Price, but XERT could not link it. The pack remains private; refresh and retry safely.' }, 503);
+      }
+      if (error.message === 'PRODUCT_PRICE_PROVISIONING_NOT_INSTALLED') {
+        return json({ error: 'Install the owner Stripe Price provisioning migration. The pack remains private.' }, 503);
+      }
+      console.error('Stripe Price provisioning failed.', {
+        requestId: trace.requestId,
+        productId: productPriceProvision.productId,
+        code: String(error?.code || error?.message || 'PRODUCT_PRICE_PROVISION_FAILED'),
+      });
+      return json({ error: 'Stripe could not prepare this draft price. The pack remains private.' }, 500);
     }
   }
 
