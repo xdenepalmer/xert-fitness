@@ -4,6 +4,10 @@ const PACK_CTAS = {
   'performance-10': 'Commit To Your Training',
 };
 
+// Shown in place of a pack's amount while the "prices coming soon" launch toggle
+// is on. Kept short so it fits the price slot on the pack cards.
+export const PRICES_COMING_SOON_LABEL = 'Coming soon';
+
 export function formatPackPrice(priceCents, currency = 'aud') {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
