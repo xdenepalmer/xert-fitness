@@ -1837,7 +1837,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertDataSource.announcements.displayName, "member notices")
         XCTAssertEqual(XertDataSource.coaches.displayName, "coaches and practitioners")
         XCTAssertEqual(XertDataSource.siteContent.displayName, "public site content")
-        XCTAssertEqual(XertDataSource.platformSettings.displayName, "pack purchase availability")
+        XCTAssertEqual(XertDataSource.platformSettings.displayName, "booking and pack purchase availability")
     }
 
     func testMemberAnnouncementDecodesPriorityAndExpiry() throws {
