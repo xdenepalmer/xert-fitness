@@ -21,8 +21,37 @@ struct AdminCommandCentreView: View {
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
     @State private var presentedQuickAction: AdminOwnerQuickAction?
+    @State private var platformDraftSnapshot: AdminPlatformSettings?
+    @State private var pendingOwnerExitRequest: OwnerExitRequest?
+    @State private var showingPlatformExitConfirmation = false
+    @State private var isSavingPlatformExit = false
     let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
+
+    private enum OwnerExitRequest: Equatable {
+        case route(XertOwnerRoute, resolvesTask: Bool)
+        case previous(XertOwnerRoute)
+        case next(XertOwnerRoute)
+        case close
+
+        var destinationTitle: String {
+            switch self {
+            case .route(let route, _), .previous(let route), .next(let route):
+                return route.navigationTitle
+            case .close:
+                return "the member app"
+            }
+        }
+
+        var targetWorkspace: XertOwnerWorkspace? {
+            switch self {
+            case .route(let route, _), .previous(let route), .next(let route):
+                return route.workspace
+            case .close:
+                return nil
+            }
+        }
+    }
 
     init(
         requestedRoute: XertOwnerRoute? = nil,
@@ -46,6 +75,7 @@ struct AdminCommandCentreView: View {
         }
         .focusedSceneValue(\.xertNavigationCommandContext, ownerNavigationCommandContext)
         .background(Color.xertNavy.ignoresSafeArea())
+        .interactiveDismissDisabled(hasUnsavedPlatformDraft || admin.isSavingSettings || isSavingPlatformExit)
         .task {
             guard let session = authorizedOwnerSession, let userID = session.user?.id else { return }
             prepareOwnerNavigation(for: userID)
@@ -95,6 +125,30 @@ struct AdminCommandCentreView: View {
                 quickActionSheet(action, session: session)
             }
         }
+        .confirmationDialog(
+            "Unsaved Member App Controls",
+            isPresented: $showingPlatformExitConfirmation,
+            titleVisibility: .visible,
+            presenting: pendingOwnerExitRequest
+        ) { request in
+            Button(platformExitSaveButtonLabel) {
+                isSavingPlatformExit = true
+                showingPlatformExitConfirmation = false
+                savePlatformDraftAndComplete(request)
+            }
+            .disabled(!canSavePlatformDraftForExit)
+
+            Button("Discard changes and continue", role: .destructive) {
+                discardPlatformDraftAndComplete(request)
+            }
+            .disabled(admin.isSavingSettings || isSavingPlatformExit)
+
+            Button("Keep editing", role: .cancel) {
+                pendingOwnerExitRequest = nil
+            }
+        } message: { request in
+            Text(platformExitMessage(for: request))
+        }
         .alert("Command Centre", isPresented: Binding(
             get: { admin.errorMessage != nil },
             set: { if !$0 { admin.errorMessage = nil } }
@@ -108,6 +162,11 @@ struct AdminCommandCentreView: View {
                   let session = authorizedOwnerSession,
                   ownerDataNeedsForegroundRefresh else { return }
             Task { await admin.refresh(session: session) }
+        }
+        .onChange(of: showingPlatformExitConfirmation) { isPresented in
+            if !isPresented && !isSavingPlatformExit {
+                pendingOwnerExitRequest = nil
+            }
         }
     }
 
@@ -123,15 +182,57 @@ struct AdminCommandCentreView: View {
     }
 
     private var ownerDataNeedsForegroundRefresh: Bool {
-        guard !admin.isLoading else { return false }
+        guard !admin.isLoading, !admin.isSavingSettings, !isSavingPlatformExit else { return false }
         guard let updatedAt = admin.lastUpdatedAt else { return true }
         return Date().timeIntervalSince(updatedAt) >= 120
+    }
+
+    private var hasUnsavedPlatformDraft: Bool {
+        currentWorkspace == .controls
+            && platformDraftSnapshot != nil
+            && platformDraftSnapshot != admin.settings
+    }
+
+    private var canSavePlatformDraftForExit: Bool {
+        hasUnsavedPlatformDraft
+            && authorizedOwnerSession != nil
+            && admin.loadedSources.contains("platform controls")
+            && !admin.refreshUnavailableSources.contains("platform controls")
+            && !admin.isLoading
+            && !admin.isSavingSettings
+            && !isSavingPlatformExit
+    }
+
+    private var platformExitWouldEnablePayments: Bool {
+        platformDraftSnapshot?.payments_enabled == true
+            && admin.settings?.payments_enabled != true
+    }
+
+    private var platformExitSaveButtonLabel: String {
+        platformExitWouldEnablePayments ? "Save, verify checkout and continue" : "Save changes and continue"
     }
 
     private var workspaceSelection: Binding<XertOwnerWorkspace?> {
         Binding(
             get: { currentWorkspace },
             set: { openWorkspace($0 ?? .overview) }
+        )
+    }
+
+    private var compactNavigationPath: Binding<[XertOwnerWorkspace]> {
+        Binding(
+            get: { compactPath },
+            set: { path in
+                guard path != compactPath else { return }
+                let workspace = path.last ?? .overview
+                if currentWorkspace == .controls,
+                   workspace != .controls,
+                   hasUnsavedPlatformDraft {
+                    requestOwnerExit(.route(XertOwnerRoute(workspace: workspace), resolvesTask: true))
+                    return
+                }
+                compactPath = path
+            }
         )
     }
 
@@ -157,6 +258,9 @@ struct AdminCommandCentreView: View {
     private var ownerNavigationCommandContext: XertNavigationCommandContext {
         let isAvailable = authorizedOwnerSession != nil
             && !showingWorkspaceSwitcher
+            && !showingPlatformExitConfirmation
+            && !admin.isSavingSettings
+            && !isSavingPlatformExit
         return XertNavigationCommandContext(
             isAvailable: isAvailable,
             scope: .owner(currentWorkspace),
@@ -172,12 +276,89 @@ struct AdminCommandCentreView: View {
     }
 
     private func openOwnerRoute(_ route: XertOwnerRoute, resolvesTask: Bool = true) {
+        requestOwnerExit(.route(route, resolvesTask: resolvesTask))
+    }
+
+    private func performOpenOwnerRoute(_ route: XertOwnerRoute, resolvesTask: Bool = true) {
         var history = ownerRouteHistory
         history.visit(route)
         restoredWorkspaceHistory = history.restorationValue
         applyOwnerRoute(route)
         guard resolvesTask, let task = route.task, let session = authorizedOwnerSession else { return }
         Task { await admin.resolveOwnerTask(session: session, task: task) }
+    }
+
+    private func requestOwnerExit(_ request: OwnerExitRequest) {
+        guard !isSavingPlatformExit else { return }
+        let leavesPlatformControls = request.targetWorkspace != .controls
+        guard leavesPlatformControls, hasUnsavedPlatformDraft else {
+            performOwnerExit(request)
+            return
+        }
+        pendingOwnerExitRequest = request
+        showingPlatformExitConfirmation = true
+        XertHaptics.play(.warning)
+    }
+
+    private func performOwnerExit(_ request: OwnerExitRequest) {
+        pendingOwnerExitRequest = nil
+        showingPlatformExitConfirmation = false
+        if request.targetWorkspace != .controls {
+            platformDraftSnapshot = nil
+        }
+
+        switch request {
+        case .route(let route, let resolvesTask):
+            performOpenOwnerRoute(route, resolvesTask: resolvesTask)
+        case .previous:
+            performReturnToPreviousOwnerRoute()
+        case .next:
+            performAdvanceToNextOwnerRoute()
+        case .close:
+            onClose?()
+        }
+    }
+
+    private func savePlatformDraftAndComplete(_ request: OwnerExitRequest) {
+        guard let session = authorizedOwnerSession, let draft = platformDraftSnapshot else {
+            isSavingPlatformExit = false
+            pendingOwnerExitRequest = nil
+            admin.errorMessage = "Member App Controls could not be saved. Keep editing and try again."
+            XertHaptics.play(.error)
+            return
+        }
+
+        Task {
+            let didSave = await admin.saveSettings(session: session, draft: draft)
+            isSavingPlatformExit = false
+            if didSave {
+                XertHaptics.play(.success)
+                platformDraftSnapshot = admin.settings
+                performOwnerExit(request)
+            } else {
+                pendingOwnerExitRequest = nil
+                XertHaptics.play(.error)
+            }
+        }
+    }
+
+    private func discardPlatformDraftAndComplete(_ request: OwnerExitRequest) {
+        platformDraftSnapshot = admin.settings
+        XertHaptics.play(.softImpact)
+        performOwnerExit(request)
+    }
+
+    private func platformExitMessage(for request: OwnerExitRequest) -> String {
+        let destination = request == .close
+            ? "closing the Command Centre"
+            : "opening \(request.destinationTitle)"
+        if !canSavePlatformDraftForExit {
+            return "Live member-app settings have unsaved changes. Saving is unavailable until Platform Controls refreshes successfully. Discard them before \(destination), or keep editing."
+        }
+        if platformExitWouldEnablePayments {
+            return "Live member-app settings have unsaved changes. Saving will run Stripe launch checks before enabling checkout and \(destination). You can also discard the draft or keep editing."
+        }
+        return "Save the live member-app settings before \(destination), discard the draft, or keep editing."
     }
 
     private func reloadPinnedWorkspaces() {
@@ -198,6 +379,10 @@ struct AdminCommandCentreView: View {
         presentedOwnerTask = nil
         presentedQuickAction = nil
         showingAllWorkspaces = false
+        platformDraftSnapshot = nil
+        pendingOwnerExitRequest = nil
+        showingPlatformExitConfirmation = false
+        isSavingPlatformExit = false
     }
 
     private func togglePinnedWorkspace(_ workspace: XertOwnerWorkspace) {
@@ -224,6 +409,11 @@ struct AdminCommandCentreView: View {
     }
 
     private func returnToPreviousOwnerRoute() {
+        guard let route = ownerRouteHistory.previous else { return }
+        requestOwnerExit(.previous(route))
+    }
+
+    private func performReturnToPreviousOwnerRoute() {
         var history = ownerRouteHistory
         guard let route = history.goBack() else { return }
         restoredWorkspaceHistory = history.restorationValue
@@ -232,6 +422,11 @@ struct AdminCommandCentreView: View {
     }
 
     private func advanceToNextOwnerRoute() {
+        guard let route = ownerRouteHistory.next else { return }
+        requestOwnerExit(.next(route))
+    }
+
+    private func performAdvanceToNextOwnerRoute() {
         var history = ownerRouteHistory
         guard let route = history.goForward() else { return }
         restoredWorkspaceHistory = history.restorationValue
@@ -252,9 +447,9 @@ struct AdminCommandCentreView: View {
             showingWorkspaceSwitcher = true
         case .refresh:
             guard let session = authorizedOwnerSession else { return }
-            Task { await admin.refresh(session: session) }
+            refreshOwnerData(session: session)
         case .closeOwner:
-            onClose?()
+            requestOwnerExit(.close)
         case .destination(_), .owner:
             return
         }
@@ -297,7 +492,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func refreshOwnerData(session: AuthSession, announcesResult: Bool = true) {
-        guard !admin.isLoading else { return }
+        guard !admin.isLoading, !admin.isSavingSettings, !isSavingPlatformExit else { return }
         XertHaptics.play(.softImpact)
         Task {
             await admin.refresh(session: session)
@@ -337,7 +532,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
-        NavigationStack(path: $compactPath) {
+        NavigationStack(path: compactNavigationPath) {
             dashboard(session: session)
                 .navigationTitle("Command Centre")
                 .navigationBarTitleDisplayMode(.inline)
@@ -464,9 +659,9 @@ struct AdminCommandCentreView: View {
 
     @ToolbarContentBuilder
     private var closeToolbar: some ToolbarContent {
-        if let onClose {
+        if onClose != nil {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: onClose) {
+                Button { requestOwnerExit(.close) } label: {
                     Label("Close", systemImage: "xmark")
                 }
                 .foregroundStyle(Color.xertSteel)
@@ -488,7 +683,7 @@ struct AdminCommandCentreView: View {
                     Button { refreshOwnerData(session: session) } label: {
                         Label(admin.isLoading ? "Refreshing owner data" : "Refresh owner data", systemImage: "arrow.clockwise")
                     }
-                    .disabled(admin.isLoading)
+                    .disabled(admin.isLoading || admin.isSavingSettings || isSavingPlatformExit)
                 }
 
                 if currentWorkspace != .overview {
@@ -1249,7 +1444,11 @@ struct AdminCommandCentreView: View {
             AdminPlatformView(
                 admin: admin,
                 session: session,
-                onOpenPricing: { openWorkspace(.products) }
+                initialDraft: platformDraftSnapshot,
+                isExitSaving: isSavingPlatformExit,
+                onOpenPricing: { openWorkspace(.products) },
+                onOpenNotices: { openWorkspace(.notices) },
+                onDraftChange: { platformDraftSnapshot = $0 }
             )
         case .health:
             AdminOperationsHealthView(
@@ -4367,13 +4566,15 @@ private struct AdminPTNotesEditor: View {
 private struct AdminPlatformView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    let initialDraft: AdminPlatformSettings?
+    let isExitSaving: Bool
     let onOpenPricing: () -> Void
+    let onOpenNotices: () -> Void
+    let onDraftChange: (AdminPlatformSettings?) -> Void
     @State private var draft: AdminPlatformSettings?
     @State private var lastLoadedSettings: AdminPlatformSettings?
     @State private var saved = false
     @State private var confirmingPaymentActivation = false
-    @State private var confirmingPricingNavigation = false
-    @State private var openPricingAfterPaymentActivation = false
     @State private var staleDraftRequiresReset = false
 
     private var pricingDataUnavailable: Bool {
@@ -4390,13 +4591,31 @@ private struct AdminPlatformView: View {
     }
 
     private var platformMutationAvailable: Bool {
-        platformDataIsCurrent && !admin.isLoading
+        platformDataIsCurrent
+            && !admin.isLoading
+            && !admin.isSavingSettings
+            && !isExitSaving
     }
 
     private var stripeHealthIsCurrent: Bool {
         admin.loadedSources.contains("Stripe health")
             && !admin.refreshUnavailableSources.contains("Stripe health")
             && admin.commerceHealth != nil
+    }
+
+    private var memberNoticeDataIsCurrent: Bool {
+        admin.loadedSources.contains("member notices")
+            && !admin.refreshUnavailableSources.contains("member notices")
+    }
+
+    private var bookingGuardReady: Bool? {
+        guard admin.loadedSources.contains("schema health"),
+              !admin.refreshUnavailableSources.contains("schema health") else { return nil }
+        return admin.schemaCapabilities.contains { $0.capability == "member_booking_switch_guard" }
+    }
+
+    private var liveMemberNoticeCount: Int {
+        admin.announcements.filter { $0.stateLabel == "Live" }.count
     }
 
     var body: some View {
@@ -4419,7 +4638,7 @@ private struct AdminPlatformView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color.orange)
-                            .disabled(admin.isLoading)
+                            .disabled(admin.isLoading || admin.isSavingSettings || isExitSaving)
                         }
                     } else if admin.isLoading {
                         Section {
@@ -4427,6 +4646,50 @@ private struct AdminPlatformView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.xertSteel)
                         }
+                    }
+                    Section("Member app experience") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("XERT member companion", systemImage: "iphone.gen3")
+                                .font(.headline)
+                                .foregroundStyle(Color.xertOffWhite)
+                            Text("Members can browse published content and manage only their own credits, bookings, purchases, PT requests, goals and notification preferences. Owner workspaces and other member records stay protected.")
+                                .font(.caption)
+                                .foregroundStyle(Color.xertPale.opacity(0.7))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 4)
+
+                        memberCapabilityRow(
+                            title: "Class booking",
+                            value: draft?.bookings_enabled == true ? "Book & waitlist" : "Interest only",
+                            icon: "calendar.badge.plus",
+                            color: draft?.bookings_enabled == true ? .green : Color.xertSteel
+                        )
+                        memberCapabilityRow(
+                            title: "Booking protection",
+                            value: bookingGuardReady.map { $0 ? "Verified" : "Migration required" } ?? "Unavailable",
+                            icon: "checkmark.shield",
+                            color: bookingGuardReady == true ? .green : .orange
+                        )
+                        memberCapabilityRow(
+                            title: "Session packs",
+                            value: draft?.payments_enabled == true ? "Checkout live" : "Browse only",
+                            icon: "ticket",
+                            color: draft?.payments_enabled == true ? .green : Color.xertSteel
+                        )
+                        memberCapabilityRow(
+                            title: "Member notices",
+                            value: memberNoticeDataIsCurrent
+                                ? (liveMemberNoticeCount == 0 ? "None live" : "\(liveMemberNoticeCount) live")
+                                : "Unavailable",
+                            icon: "bell.badge",
+                            color: memberNoticeDataIsCurrent ? Color.xertSteel : .orange
+                        )
+
+                        Button(action: onOpenNotices) {
+                            Label("Manage member notices", systemImage: "arrow.right.circle")
+                        }
+                        .disabled(admin.isLoading || admin.isSavingSettings || isExitSaving)
                     }
                     Section("Pack sales") {
                         LabeledContent(
@@ -4442,7 +4705,7 @@ private struct AdminPlatformView: View {
                         Button(action: requestPricingNavigation) {
                             Label("Open session packs & pricing", systemImage: "ticket")
                         }
-                        .disabled(admin.isLoading)
+                        .disabled(admin.isLoading || admin.isSavingSettings || isExitSaving)
                         if pricingDataUnavailable {
                             Label("Session-pack data could not be refreshed. Pricing counts may be stale.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                                 .font(.caption).foregroundStyle(.orange)
@@ -4452,9 +4715,9 @@ private struct AdminPlatformView: View {
                                 .font(.caption).foregroundStyle(.orange)
                         }
                     }
-                    Section("Live platform") {
+                    Section("Member booking & purchases") {
                         Toggle("Bookings enabled", isOn: settingBinding(\.bookings_enabled))
-                        Text("Disabling bookings changes public class actions to registration interest.")
+                        Text("Controls both website and iOS class actions. When off, members can browse and register interest but cannot book or join waitlists.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         Toggle("Session pack payments", isOn: settingBinding(\.payments_enabled))
                         Text("Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass.")
@@ -4506,11 +4769,12 @@ private struct AdminPlatformView: View {
             }
         }
         .background(Color.xertNavy)
-        .navigationTitle("Platform Controls")
+        .navigationTitle("Member App Controls")
         .onAppear {
-            draft = admin.settings
+            draft = initialDraft ?? admin.settings
             lastLoadedSettings = admin.settings
             staleDraftRequiresReset = platformDataUnavailable
+            onDraftChange(draft)
         }
         .onChange(of: admin.settings) { settings in
             if draft == nil || draft == lastLoadedSettings { draft = settings }
@@ -4518,6 +4782,7 @@ private struct AdminPlatformView: View {
         }
         .onChange(of: draft) { value in
             if value != admin.settings { saved = false }
+            onDraftChange(value)
         }
         .onChange(of: platformDataUnavailable) { isUnavailable in
             if isUnavailable {
@@ -4532,28 +4797,12 @@ private struct AdminPlatformView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if draft != nil { platformSaveBar }
         }
-        .confirmationDialog(
-            "Open session packs & pricing?",
-            isPresented: $confirmingPricingNavigation,
-            titleVisibility: .visible
-        ) {
-            Button("Save changes and open") { saveAndOpenPricing() }
-            Button("Discard changes and open", role: .destructive) {
-                draft = admin.settings
-                onOpenPricing()
-            }
-            Button("Keep editing", role: .cancel) {}
-        } message: {
-            Text("Platform settings have unsaved changes. Save or discard them before leaving this workspace.")
-        }
         .confirmationDialog("Open session pack checkout?", isPresented: $confirmingPaymentActivation, titleVisibility: .visible) {
             Button("Enable pack checkout") {
                 guard let draft else { return }
-                let shouldOpenPricing = openPricingAfterPaymentActivation
-                openPricingAfterPaymentActivation = false
-                save(draft, thenOpenPricing: shouldOpenPricing)
+                save(draft)
             }
-            Button("Keep payments paused", role: .cancel) { openPricingAfterPaymentActivation = false }
+            Button("Keep payments paused", role: .cancel) {}
         } message: {
             Text(stripeHealthIsCurrent && admin.commerceHealth?.ready == true
                 ? "Stripe launch checks passed recently. XERT will run them again on the server before enabling purchases."
@@ -4596,37 +4845,17 @@ private struct AdminPlatformView: View {
     }
 
     private func requestPricingNavigation() {
-        guard platformDataIsCurrent else {
-            onOpenPricing()
-            return
-        }
-        guard platformMutationAvailable else { return }
-        guard draft != admin.settings else {
-            onOpenPricing()
-            return
-        }
-        confirmingPricingNavigation = true
+        guard !admin.isLoading else { return }
+        onOpenPricing()
     }
 
-    private func saveAndOpenPricing() {
-        guard platformMutationAvailable else { return }
-        guard let draft else { return }
-        if draft.payments_enabled && admin.settings?.payments_enabled != true {
-            openPricingAfterPaymentActivation = true
-            confirmingPaymentActivation = true
-        } else {
-            save(draft, thenOpenPricing: true)
-        }
-    }
-
-    private func save(_ settings: AdminPlatformSettings, thenOpenPricing: Bool = false) {
+    private func save(_ settings: AdminPlatformSettings) {
         guard platformMutationAvailable else { return }
         Task {
             saved = await admin.saveSettings(session: session, draft: settings)
             if saved {
                 XertHaptics.play(.success)
                 draft = admin.settings
-                if thenOpenPricing { onOpenPricing() }
             } else {
                 XertHaptics.play(.error)
             }
@@ -4653,6 +4882,29 @@ private struct AdminPlatformView: View {
                 draft = value
             }
         )
+    }
+
+    private func memberCapabilityRow(
+        title: String,
+        value: String,
+        icon: String,
+        color: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 22)
+            Text(title)
+                .foregroundStyle(Color.xertOffWhite)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+                .multilineTextAlignment(.trailing)
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(value)")
     }
 }
 
@@ -5112,6 +5364,7 @@ private struct HealthStatusRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(stateLabel). \(detail)")
     }
+
 }
 
 private struct HealthCheckRow: View {

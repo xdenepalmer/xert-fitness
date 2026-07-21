@@ -424,7 +424,7 @@ test('scene commands follow the active member or owner navigation scope', async 
   assert.match(ownerView, /private func executeOwnerSceneNavigationCommand/);
   assert.match(ownerView, /case \.ownerWorkspace\(let workspace\):[\s\S]*openWorkspace\(workspace\)/);
   assert.match(ownerView, /case \.refresh:[\s\S]*admin\.refresh\(session: session\)/);
-  assert.match(ownerView, /case \.closeOwner:[\s\S]*onClose\?\(\)/);
+  assert.match(ownerView, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
 });
 
 test('navigation carries operational state and native interaction feedback', async () => {

@@ -2,6 +2,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_role_safety: 'Apply src/supabase/admin_role_safety_upgrade.sql in Supabase.',
   audited_credit_grants: 'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
   booking_waitlist_withdrawal: 'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
+  member_booking_switch_guard: 'Apply supabase/migrations/20260721000000_member_booking_switch_guard.sql in Supabase.',
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
   waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
   attendance_roll_call: 'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',

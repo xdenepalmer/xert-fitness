@@ -800,13 +800,20 @@ struct RootView: View {
     private func consumePendingAnnouncementRoute() {
         guard let pendingAnnouncementID = AnnouncementPushNavigation.consumePendingAnnouncementID() else { return }
         if openMemberRoute(.notices(pendingAnnouncementID), source: .pushNotification) {
+            XertHaptics.play(.mediumImpact)
             Task { await store.refreshAnnouncements() }
         }
     }
 
     private func consumePendingReminderRoute() {
+        if ClassReminderNavigation.consumePendingBrowseClasses() {
+            openMemberRoute(.booking, source: .pushNotification)
+            XertHaptics.play(.mediumImpact)
+            return
+        }
         guard let bookingID = ClassReminderNavigation.consumePendingBookingID() else { return }
         openMemberRoute(.upcomingBookings(bookingID), source: .pushNotification)
+        XertHaptics.play(.mediumImpact)
     }
 
     private func consumePendingQuickActionRoute() {

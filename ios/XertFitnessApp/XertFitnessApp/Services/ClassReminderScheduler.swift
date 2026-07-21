@@ -59,6 +59,10 @@ enum ClassReminderLeadTime: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum ClassReminderPlanner {
+    /// Leave capacity for other app notifications under iOS's pending-request
+    /// limit while keeping the member's nearest confirmed classes actionable.
+    static let maximumScheduledReminders = 32
+
     static func reminderDate(
         for startTime: Date,
         leadTime: ClassReminderLeadTime = .twoHours,
@@ -73,10 +77,12 @@ enum ClassReminderPlanner {
         leadTime: ClassReminderLeadTime = .twoHours,
         now: Date = Date()
     ) -> [BookingItem] {
-        bookings.filter {
+        Array(bookings.filter {
             $0.status == "confirmed"
                 && reminderDate(for: $0.start_time, leadTime: leadTime, now: now) != nil
         }
+        .sorted { $0.start_time < $1.start_time }
+        .prefix(maximumScheduledReminders))
     }
 }
 
@@ -113,6 +119,8 @@ actor ClassReminderScheduler {
             content.title = "XERT class reminder"
             content.body = "\(booking.title) starts in \(leadTime.notificationLead)."
             content.sound = .default
+            content.categoryIdentifier = XertNotificationCategories.classReminder
+            content.threadIdentifier = "xert-class-reminders"
             content.userInfo = [ClassReminderNotification.bookingIDKey: booking.booking_id.uuidString]
 
             let trigger = UNTimeIntervalNotificationTrigger(

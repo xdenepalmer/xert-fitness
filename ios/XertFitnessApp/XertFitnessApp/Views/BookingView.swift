@@ -40,9 +40,7 @@ struct BookingView: View {
                             title: "Train. Book. Repeat.",
                             subtitle: store.publicContent(for: .booking).intro
                                 ?? "Choose the session that matches your goal, reserve your place and arrive ready to work.",
-                            badge: store.isSignedIn
-                                ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
-                                : "Your first coached session starts here"
+                            badge: bookingHeroBadge
                         )
                     }
                     .listRowInsets(EdgeInsets())
@@ -142,9 +140,9 @@ struct BookingView: View {
             .listRowBackground(Color.xertInk)
             .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
         }
-        if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .credits, .bookings]) {
+        if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .platformSettings, .credits, .bookings]) {
             Section {
-                DataAvailabilityNotice(sources: [.products, .sessions, .credits, .bookings])
+                DataAvailabilityNotice(sources: [.products, .sessions, .platformSettings, .credits, .bookings])
             }
             .listRowBackground(Color.xertInk)
             .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
@@ -158,9 +156,25 @@ struct BookingView: View {
                     Text("Available credits")
                         .foregroundStyle(Color.xertOffWhite)
                     Spacer()
-                    Text("\(store.creditTotal)")
+                    Text(bookingCreditValue)
                         .foregroundStyle(.xertSteel)
                         .fontWeight(.bold)
+                }
+                if let status = bookingCreditStatus {
+                    HStack(spacing: 8) {
+                        if bookingCreditIsInitiallyLoading {
+                            ProgressView()
+                                .tint(.xertSteel)
+                        } else {
+                            Image(systemName: store.unavailableDataSources.contains(.credits)
+                                ? "wifi.exclamationmark"
+                                : "clock.arrow.circlepath")
+                        }
+                        Text(status)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(bookingCreditStatusColor)
+                    .accessibilityElement(children: .combine)
                 }
                 if store.isReconcilingCheckout {
                     HStack(spacing: 10) {
@@ -199,6 +213,53 @@ struct BookingView: View {
         .id(ScrollTarget.credits)
         .listRowBackground(Color.xertInk)
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var hasKnownCreditBalance: Bool {
+        store.creditBalanceLoaded
+    }
+
+    private var bookingCreditIsInitiallyLoading: Bool {
+        !hasKnownCreditBalance
+            && !store.unavailableDataSources.contains(.credits)
+            && (!store.hasBootstrapped || store.isLoading)
+    }
+
+    private var bookingCreditValue: String {
+        hasKnownCreditBalance ? "\(store.creditTotal)" : "—"
+    }
+
+    private var bookingCreditStatus: String? {
+        if store.unavailableDataSources.contains(.credits) {
+            return hasKnownCreditBalance ? "Last known balance — pull to refresh" : "Balance unavailable — pull to refresh"
+        }
+        if bookingCreditIsInitiallyLoading {
+            return "Loading your credit balance…"
+        }
+        if store.isUsingStaleMemberData {
+            return "Last synced balance"
+        }
+        return nil
+    }
+
+    private var bookingCreditStatusColor: Color {
+        if store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData {
+            return .orange
+        }
+        return Color.xertPale
+    }
+
+    private var bookingHeroBadge: String {
+        guard store.isSignedIn else { return "Your first coached session starts here" }
+        guard hasKnownCreditBalance else {
+            return store.unavailableDataSources.contains(.credits)
+                ? "Credit balance unavailable"
+                : "Checking credit balance"
+        }
+        let balance = "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
+        return store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData
+            ? "\(balance) · last synced"
+            : balance
     }
 
     private var packsSection: some View {
@@ -314,6 +375,25 @@ struct BookingView: View {
         activeBookings: [UUID: BookingItem]
     ) -> some View {
         Section {
+            if store.bookingAvailabilityLoaded,
+               !store.memberBookingsEnabled,
+               !store.unavailableDataSources.contains(.platformSettings) {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Online bookings are paused")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Browse the timetable and register interest. XERT will follow up about your place.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertMuted)
+                    }
+                } icon: {
+                    Image(systemName: "person.2.badge.plus")
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             if store.sessions.isEmpty {
                 if store.isLoading || !store.hasBootstrapped {
                     bookingLoadingRow("Loading upcoming classes…")
@@ -612,7 +692,15 @@ struct BookingView: View {
             )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.xertSteel)
-        } else if session.booking_mode == "interest_only" {
+        } else if !store.bookingAvailabilityLoaded {
+            Label("Checking booking availability…", systemImage: "arrow.clockwise")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertMuted)
+        } else if store.unavailableDataSources.contains(.platformSettings) {
+            Label("Booking status unavailable", systemImage: "wifi.exclamationmark")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.orange)
+        } else if !store.memberBookingsEnabled || session.booking_mode == "interest_only" {
             Button {
                 activeSheet = .classInterest(session)
             } label: {

@@ -17,6 +17,9 @@ final class XertStore: ObservableObject {
     @Published var eventGoalIDs: Set<UUID> = []
     @Published var profile: MemberProfile?
     @Published var authSession: AuthSession?
+    @Published private(set) var creditBalanceLoaded = false
+    @Published private(set) var memberBookingsEnabled = false
+    @Published private(set) var bookingAvailabilityLoaded = false
     @Published private(set) var sessionPackPaymentsEnabled = false
     @Published private(set) var paymentAvailabilityLoaded = false
     @Published var isLoading = false
@@ -224,10 +227,14 @@ final class XertStore: ObservableObject {
         do {
             let loadedSettings = try await platformSettingsRequest
             guard canApplyRefresh(refreshVersion) else { return }
+            memberBookingsEnabled = loadedSettings?.bookings_enabled == true
+            bookingAvailabilityLoaded = true
             sessionPackPaymentsEnabled = loadedSettings?.payments_enabled == true
             paymentAvailabilityLoaded = true
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }
+            memberBookingsEnabled = false
+            bookingAvailabilityLoaded = true
             sessionPackPaymentsEnabled = false
             paymentAvailabilityLoaded = true
             unavailableDataSources.insert(.platformSettings)
@@ -309,6 +316,7 @@ final class XertStore: ObservableObject {
                 let loadedCredits = try await creditRequest
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 credits = loadedCredits
+                creditBalanceLoaded = true
                 creditsLoaded = true
             } catch {
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
@@ -501,6 +509,11 @@ final class XertStore: ObservableObject {
     }
 
     func book(_ session: ClassSession) async {
+        if let message = memberBookingControlError() {
+            errorMessage = message
+            XertHaptics.play(.warning)
+            return
+        }
         guard bookingSessionID == nil, cancellingBookingID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
@@ -522,6 +535,11 @@ final class XertStore: ObservableObject {
     }
 
     func joinWaitlist(_ session: ClassSession) async {
+        if let message = memberBookingControlError() {
+            errorMessage = message
+            XertHaptics.play(.warning)
+            return
+        }
         guard bookingSessionID == nil, cancellingBookingID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         bookingSessionID = session.id
@@ -590,6 +608,7 @@ final class XertStore: ObservableObject {
             let loadedCredits = try await creditRequest
             guard canApplyMemberState(memberVersion, session: session) else { return }
             credits = loadedCredits
+            creditBalanceLoaded = true
             unavailableDataSources.remove(.credits)
             creditsLoaded = true
         } catch {
@@ -634,6 +653,19 @@ final class XertStore: ObservableObject {
         dataRefreshTask?.cancel()
         dataRefreshTask = nil
         isLoading = false
+    }
+
+    private func memberBookingControlError() -> String? {
+        guard bookingAvailabilityLoaded else {
+            return "XERT is still checking whether online bookings are available. Try again in a moment."
+        }
+        guard !unavailableDataSources.contains(.platformSettings) else {
+            return "XERT could not verify online booking availability. Pull to refresh before trying again."
+        }
+        guard memberBookingsEnabled else {
+            return "Online class bookings are currently paused. You can still register interest and XERT will follow up."
+        }
+        return nil
     }
 
     func setClassRemindersEnabled(_ enabled: Bool) async {
@@ -888,6 +920,7 @@ final class XertStore: ObservableObject {
                 let (loadedCredits, loadedOrders) = try await (creditRequest, orderRequest)
                 guard canApplyMemberState(memberVersion, session: memberSession) else { return }
                 credits = loadedCredits
+                creditBalanceLoaded = true
                 orders = loadedOrders
                 unavailableDataSources.subtract([.credits, .orders])
                 memberDataUpdatedAt = Date()
@@ -1121,6 +1154,7 @@ final class XertStore: ObservableObject {
 
     private func clearMemberData() {
         credits = []
+        creditBalanceLoaded = false
         bookings = []
         orders = []
         profile = nil

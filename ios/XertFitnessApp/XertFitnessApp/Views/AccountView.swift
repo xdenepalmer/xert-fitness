@@ -8,6 +8,7 @@ struct AccountView: View {
 
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @AppStorage(XertHapticPreference.preferenceKey) private var hapticFeedbackEnabled = true
     @State private var email = ""
@@ -216,65 +217,193 @@ struct AccountView: View {
 
     private var membershipSection: some View {
         Section {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 12) {
-                        creditSummary
-                        signedInSummary
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 12) {
-                        creditSummary
-                        signedInSummary
-                    }
+            VStack(alignment: .leading, spacing: 16) {
+                signedInSummary
+                creditSummary
+
+                Divider()
+                    .overlay(Color.xertMuted.opacity(0.35))
+
+                creditBatchWallet
+
+                Button {
+                    guard let url = URL(string: "xertfitness://booking/packs") else { return }
+                    openURL(url)
+                } label: {
+                    Label("Buy session packs", systemImage: "plus.circle.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .buttonStyle(.xertPrimary)
+                .accessibilityHint("Opens session packs on the Book page")
             }
+            .padding(14)
+            .xertCardStyle()
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             .listRowSeparator(.hidden)
         } header: {
-            Text("Membership").xertEyebrow()
+            Text("Session credits & packs").xertEyebrow()
         }
     }
 
     private var creditSummary: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    creditBalance
+                    nextCreditExpiry
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        creditBalance
+                        Spacer(minLength: 8)
+                        nextCreditExpiry
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        creditBalance
+                        nextCreditExpiry
+                    }
+                }
+            }
+        }
+    }
+
+    private var signedInSummary: some View {
+        Label(store.authSession?.user?.email ?? "Member wallet", systemImage: "person.crop.circle")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.xertPale)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel("Credit wallet for \(store.authSession?.user?.email ?? "this member")")
+    }
+
+    private var creditBalance: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Credits")
+            Text("Available balance")
                 .xertEyebrow()
             Text(creditsUnavailableOrLoading ? "—" : "\(store.creditTotal)")
                 .xertDisplay(34)
-            if store.isLoading && store.credits.isEmpty {
-                Text("Refreshing…")
-                    .font(.caption)
-                    .foregroundStyle(Color.xertMuted)
-            } else if store.unavailableDataSources.contains(.credits) {
-                Text("Unavailable · retry below")
-                    .font(.caption)
-                    .foregroundStyle(Color.orange)
-            } else if let expiry = store.creditExpirySummary {
-                Text("\(expiry.credits) expire \(expiry.expiresAt.formatted(date: .abbreviated, time: .omitted))")
+            Text(store.creditTotal == 1 ? "session credit" : "session credits")
+                .font(.caption)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var nextCreditExpiry: some View {
+        if let batch = nextExpiringCreditBatch, let expiry = batch.expires_at {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Next expiry")
+                    .xertEyebrow()
+                Text(expiry.formatted(date: .abbreviated, time: .omitted))
+                    .font(.headline)
+                    .foregroundStyle(Color.xertPale)
+                Text("\(batch.remaining) credit\(batch.remaining == 1 ? "" : "s") in this batch")
                     .font(.caption)
                     .foregroundStyle(Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255))
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .accessibilityElement(children: .combine)
         }
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .padding(14)
-        .xertCardStyle()
     }
 
-    private var signedInSummary: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Signed in")
-                .xertEyebrow()
-            Text(store.authSession?.user?.email ?? "Member")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.xertPale)
-                .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder
+    private var creditBatchWallet: some View {
+        if store.isLoading && !store.creditBalanceLoaded {
+            accountLoadingRow("Loading your credit wallet…")
+        } else if store.unavailableDataSources.contains(.credits) && !store.creditBalanceLoaded {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Credit wallet unavailable")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Pull down to retry. No balance is being shown until your credits refresh.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            if store.unavailableDataSources.contains(.credits) {
+                Label("Showing your last saved wallet. Pull down to retry.", systemImage: "clock.arrow.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if activeCreditBatches.isEmpty {
+                Text("No active session credits. Choose a pack when you're ready to book.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Active credit batches")
+                        .xertEyebrow()
+                    ForEach(activeCreditBatches) { batch in
+                        creditBatchRow(batch)
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .padding(14)
-        .xertCardStyle()
+    }
+
+    private func creditBatchRow(_ batch: CreditBatch) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                creditBatchIdentity(batch)
+                Spacer(minLength: 8)
+                creditBatchExpiry(batch)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                creditBatchIdentity(batch)
+                creditBatchExpiry(batch)
+            }
+        }
+        .padding(.top, 10)
+        .overlay(alignment: .top) {
+            Divider().overlay(Color.xertMuted.opacity(0.2))
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func creditBatchIdentity(_ batch: CreditBatch) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(creditBatchName(batch))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertOffWhite)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(batch.remaining) of \(batch.total) remaining")
+                .font(.footnote)
+                .foregroundStyle(Color.xertPale)
+        }
+    }
+
+    private func creditBatchExpiry(_ batch: CreditBatch) -> some View {
+        Text(batch.expires_at.map { "Expires \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "No expiry")
+            .font(.caption)
+            .foregroundStyle(Color.xertMuted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var activeCreditBatches: [CreditBatch] {
+        let now = Date()
+        return store.credits
+            .filter { batch in
+                batch.remaining > 0 && (batch.expires_at.map { $0 > now } ?? true)
+            }
+            .sorted { lhs, rhs in
+                (lhs.expires_at ?? .distantFuture) < (rhs.expires_at ?? .distantFuture)
+            }
+    }
+
+    private var nextExpiringCreditBatch: CreditBatch? {
+        activeCreditBatches.first { $0.expires_at != nil }
+    }
+
+    private func creditBatchName(_ batch: CreditBatch) -> String {
+        guard let orderID = batch.order_id else { return "Session credits" }
+        return store.orders.first(where: { $0.id == orderID })?.products?.name ?? "Purchased session pack"
     }
 
     private var reminderSettingsSection: some View {
@@ -685,7 +814,7 @@ struct AccountView: View {
     }
 
     private var creditsUnavailableOrLoading: Bool {
-        (store.isLoading && store.credits.isEmpty) || store.unavailableDataSources.contains(.credits)
+        !store.creditBalanceLoaded
     }
 
     private func accountLoadingRow(_ title: String) -> some View {

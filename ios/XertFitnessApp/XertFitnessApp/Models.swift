@@ -10,7 +10,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
         case .events: return "event calendar"
         case .coaches: return "coaches and practitioners"
         case .siteContent: return "public site content"
-        case .platformSettings: return "pack purchase availability"
+        case .platformSettings: return "booking and pack purchase availability"
         case .credits: return "class credits"
         case .bookings: return "your bookings"
         case .orders: return "purchase history"
@@ -23,6 +23,7 @@ enum XertDataSource: String, CaseIterable, Hashable {
 }
 
 struct PublicPlatformSettings: Codable, Hashable {
+    let bookings_enabled: Bool
     let payments_enabled: Bool
 }
 

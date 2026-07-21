@@ -38,11 +38,12 @@ struct HomeView: View {
                             CachedPublicDataNotice()
                             StaleMemberDataNotice()
                             DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
+                            memberDashboardSection
                             announcementsSection
                             NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
                             todayTrainingSection
                             creditExpirySection
-                            nextUpSection
+                            if !store.isSignedIn { nextUpSection }
                             quickActions
                             glanceSection
                             nextEventSection
@@ -84,6 +85,297 @@ struct HomeView: View {
         }
         .ignoresSafeArea(edges: .top)
     }
+
+    // MARK: - Member dashboard
+
+    @ViewBuilder
+    private var memberDashboardSection: some View {
+        if store.isSignedIn {
+            XertSection(title: "Member dashboard") {
+                VStack(alignment: .leading, spacing: 16) {
+                    dashboardMembershipSummary
+
+                    Rectangle()
+                        .fill(Color.xertSteel.opacity(0.18))
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+
+                    dashboardNextTraining
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardMembershipSummary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardCreditSummary
+                dashboardNoticeButton
+            }
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                dashboardCreditSummary
+                Spacer(minLength: 8)
+                dashboardNoticeButton
+            }
+        }
+    }
+
+    private var dashboardCreditSummary: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Session credits")
+                .xertEyebrow()
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(dashboardCreditValue)
+                    .xertDisplay(36)
+                Text(store.creditTotal == 1 ? "credit" : "credits")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.xertPale)
+            }
+            Text(dashboardCreditCaption)
+                .font(.caption)
+                .foregroundStyle(dashboardCreditCaptionColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session credits. \(dashboardCreditAccessibilityLabel)")
+    }
+
+    @ViewBuilder
+    private var dashboardNoticeButton: some View {
+        if !store.announcements.isEmpty {
+            Button(action: openNoticeCenter) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.fill")
+                    Text("\(store.announcements.count) notice\(store.announcements.count == 1 ? "" : "s")")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, minHeight: 44)
+                .padding(.horizontal, 12)
+                .background(Color.xertSteel.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.xertSteel.opacity(0.38), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Member notices, \(store.announcements.count) available")
+            .accessibilityHint("Opens member notices")
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardNextTraining: some View {
+        if let booking = dashboardNextBooking {
+            dashboardBookingCard(booking)
+        } else if dashboardBookingsAreInitiallyLoading {
+            HStack(alignment: .center, spacing: 12) {
+                ProgressView()
+                    .tint(Color.xertSteel)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Loading your next class")
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("Checking your bookings and waitlist places…")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        } else if store.unavailableDataSources.contains(.bookings) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Next class unavailable", systemImage: "wifi.exclamationmark")
+                    .font(.headline)
+                    .foregroundStyle(Color.orange)
+                Text("Your bookings could not refresh. Retry before relying on your next class status.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label(store.isLoading ? "Retrying…" : "Retry now", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.xertPrimary)
+                .disabled(store.isLoading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("No upcoming class booked", systemImage: "calendar.badge.plus")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Choose a session that suits you and lock in your next training day.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Book a class") {
+                    onNavigate(.booking)
+                }
+                .buttonStyle(.xertPrimary)
+            }
+        }
+    }
+
+    private func dashboardBookingCard(_ booking: BookingItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Next class")
+                        .xertEyebrow()
+                    Text(booking.title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color.xertOffWhite)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                Text(booking.stateLabel.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.xertSteel)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label(Self.dashboardBookingFormatter.string(from: booking.start_time), systemImage: "calendar")
+                if let location = booking.location_zone {
+                    Label(location, systemImage: "mappin.and.ellipse")
+                }
+                if let coach = booking.coach_name {
+                    Label(coach, systemImage: "person.fill")
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(Color.xertPale)
+            .accessibilityElement(children: .combine)
+
+            if store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings) {
+                Label("Booking details may be out of date", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+            }
+
+            dashboardBookingActions(booking)
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardBookingActions(_ booking: BookingItem) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                dashboardManageBookingButton(booking)
+                dashboardBookAnotherButton
+            }
+        } else {
+            HStack(spacing: 10) {
+                dashboardManageBookingButton(booking)
+                dashboardBookAnotherButton
+            }
+        }
+    }
+
+    private func dashboardManageBookingButton(_ booking: BookingItem) -> some View {
+        Button {
+            guard let url = URL(
+                string: "xertfitness://account/bookings/\(booking.id.uuidString.lowercased())"
+            ) else { return }
+            openURL(url)
+        } label: {
+            Text("Manage booking")
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .buttonStyle(.xertPrimary)
+        .accessibilityHint("Opens your booking timeline")
+    }
+
+    private var dashboardBookAnotherButton: some View {
+        Button {
+            onNavigate(.booking)
+        } label: {
+            Text("Book another")
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .buttonStyle(.xertGhost)
+    }
+
+    private var dashboardNextBooking: BookingItem? {
+        let now = Date()
+        return store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now }
+            .min { $0.start_time < $1.start_time }
+    }
+
+    private var dashboardBookingsAreInitiallyLoading: Bool {
+        store.bookings.isEmpty
+            && (!store.hasBootstrapped || (store.isLoading && store.memberDataUpdatedAt == nil))
+    }
+
+    private var dashboardCreditValue: String {
+        let hasNoKnownBalance = !store.creditBalanceLoaded
+        if hasNoKnownBalance
+            && (!store.hasBootstrapped || store.isLoading || store.unavailableDataSources.contains(.credits)) {
+            return "—"
+        }
+        return "\(store.creditTotal)"
+    }
+
+    private var dashboardCreditCaption: String {
+        if store.unavailableDataSources.contains(.credits) {
+            return store.creditBalanceLoaded ? "Last known balance" : "Balance unavailable"
+        }
+        if store.isLoading {
+            return store.creditBalanceLoaded ? "Refreshing balance…" : "Loading balance…"
+        }
+        if store.isUsingStaleMemberData {
+            return "Last synced balance"
+        }
+        if let summary = store.creditExpirySummary {
+            return "\(summary.credits) expire in \(summary.daysRemaining) day\(summary.daysRemaining == 1 ? "" : "s")"
+        }
+        return store.creditTotal == 0 ? "No credits available" : "Ready to book"
+    }
+
+    private var dashboardCreditCaptionColor: Color {
+        if store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData {
+            return .orange
+        }
+        if store.creditExpirySummary != nil {
+            return Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255)
+        }
+        return Color.xertPale
+    }
+
+    private var dashboardCreditAccessibilityLabel: String {
+        dashboardCreditValue == "—"
+            ? dashboardCreditCaption
+            : "\(store.creditTotal) available. \(dashboardCreditCaption)"
+    }
+
+    private static let dashboardBookingFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
+        formatter.dateFormat = "EEE d MMM · h:mm a"
+        return formatter
+    }()
 
     // MARK: - Member notices
 
@@ -202,9 +494,19 @@ struct HomeView: View {
 
     @ViewBuilder
     private var glanceMetrics: some View {
-        MetricView(value: "\(store.sessions.count)", label: "Classes")
-        MetricView(value: "\(store.creditTotal)", label: "Credits")
-        MetricView(value: "\(store.events.count)", label: "Events")
+        MetricView(value: dashboardPublicMetricValue(store.sessions.count, source: .sessions), label: "Classes")
+        MetricView(value: dashboardCreditValue, label: "Credits")
+        MetricView(value: dashboardPublicMetricValue(store.events.count, source: .events), label: "Events")
+    }
+
+    private func dashboardPublicMetricValue(_ count: Int, source: XertDataSource) -> String {
+        guard count == 0 else { return "\(count)" }
+        let hasNoKnownPublicSnapshot = store.publicDataUpdatedAt == nil
+        if hasNoKnownPublicSnapshot
+            && (!store.hasBootstrapped || store.isLoading || store.unavailableDataSources.contains(source)) {
+            return "—"
+        }
+        return "0"
     }
 
     private var nextUpSection: some View {
@@ -258,7 +560,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private var todayTrainingSection: some View {
-        if store.isSignedIn && !todayBookings.isEmpty {
+        if store.isSignedIn && todayBookings.count > 1 {
             XertSection(title: "Today's training") {
                 VStack(spacing: 10) {
                     ForEach(todayBookings) { booking in
@@ -359,8 +661,9 @@ struct HomeView: View {
     }
 
     private var todayBookings: [BookingItem] {
-        store.bookings
-            .filter { $0.isActiveClassPlace && $0.occursOnBrisbaneDay() }
+        let now = Date()
+        return store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now && $0.occursOnBrisbaneDay() }
             .sorted { $0.start_time < $1.start_time }
     }
 

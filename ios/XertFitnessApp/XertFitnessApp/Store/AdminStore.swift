@@ -731,6 +731,14 @@ final class AdminStore: ObservableObject {
             errorMessage = "Refresh Platform Controls before saving live settings."
             return false
         }
+        if draft.bookings_enabled {
+            guard loadedSources.contains("schema health"),
+                  !refreshUnavailableSources.contains("schema health"),
+                  schemaCapabilities.contains(where: { $0.capability == "member_booking_switch_guard" }) else {
+                errorMessage = "Bookings stay paused until Operations Health verifies the member booking-switch guard."
+                return false
+            }
+        }
         isSavingSettings = true
         defer { isSavingSettings = false }
         do {

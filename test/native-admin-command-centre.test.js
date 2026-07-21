@@ -299,8 +299,10 @@ test('native platform controls and health recovery remain safe and reachable on 
   assert.match(platform, /Live platform settings could not be refreshed/);
   assert.match(platform, /No safe settings snapshot is available/);
   assert.match(platform, /private var platformMutationAvailable: Bool/);
+  assert.match(platform, /!admin\.isSavingSettings[\s\S]*!isExitSaving/);
   assert.ok((platform.match(/disabled\(!platformMutationAvailable\)/g) || []).length >= 3);
-  assert.match(platform, /private func saveAndOpenPricing\(\) \{\s*guard platformMutationAvailable else \{ return \}/);
+  assert.match(platform, /let onDraftChange: \(AdminPlatformSettings\?\) -> Void/);
+  assert.match(platform, /onDraftChange\(value\)/);
   assert.match(platform, /private func save\(_ settings:[\s\S]*guard platformMutationAvailable else \{ return \}/);
   assert.match(platform, /platformMutationAvailable[\s\S]*draft != admin\.settings/);
   assert.match(store, /loadedSources\.insert\("platform controls"\)/);
@@ -344,11 +346,22 @@ test('native owner cross-workspace actions preserve compact workflow context', a
   assert.doesNotMatch(retention, /onOpenTask/);
 
   const platform = view.slice(view.indexOf('private struct AdminPlatformView'), view.indexOf('private struct AdminCommunicationsView'));
-  assert.match(platform, /confirmingPricingNavigation/);
-  assert.match(platform, /Save changes and open/);
-  assert.match(platform, /Discard changes and open/);
-  assert.match(platform, /Keep editing/);
-  assert.match(platform, /openPricingAfterPaymentActivation/);
+  assert.match(view, /@State private var platformDraftSnapshot: AdminPlatformSettings\?/);
+  assert.match(view, /private enum OwnerExitRequest: Equatable/);
+  assert.match(view, /"Unsaved Member App Controls"/);
+  assert.match(view, /"Discard changes and continue"/);
+  assert.match(view, /"Keep editing"/);
+  assert.match(view, /private func requestOwnerExit\(_ request: OwnerExitRequest\)/);
+  assert.match(view, /private func savePlatformDraftAndComplete\(_ request: OwnerExitRequest\)/);
+  assert.match(view, /private func discardPlatformDraftAndComplete\(_ request: OwnerExitRequest\)/);
+  assert.match(view, /interactiveDismissDisabled\(hasUnsavedPlatformDraft \|\| admin\.isSavingSettings \|\| isSavingPlatformExit\)/);
+  assert.match(view, /let didSave = await admin\.saveSettings\(session: session, draft: draft\)[\s\S]*if didSave \{[\s\S]*performOwnerExit\(request\)/);
+  assert.match(view, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
+  assert.match(view, /Button \{ requestOwnerExit\(\.close\) \}/);
+  assert.match(view, /private var compactNavigationPath:[\s\S]*hasUnsavedPlatformDraft[\s\S]*requestOwnerExit/);
+  assert.match(platform, /initialDraft \?\? admin\.settings/);
+  assert.match(platform, /requestPricingNavigation\(\)[\s\S]*onOpenPricing\(\)/);
+  assert.doesNotMatch(platform, /confirmingPricingNavigation/);
 });
 
 test('owner queue freshness and booking mutations keep dashboard counts trustworthy', async () => {
@@ -396,7 +409,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /NavigationSplitView \{/);
   assert.match(view, /List\(selection: workspaceSelection\)/);
   assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
-  assert.match(view, /NavigationStack\(path: \$compactPath\)/);
+  assert.match(view, /NavigationStack\(path: compactNavigationPath\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*workspaceDestination\(workspace, session: session\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
   assert.match(view, /applyRequestedRoute\(requestedRoute, resolvesTask: false\)/);

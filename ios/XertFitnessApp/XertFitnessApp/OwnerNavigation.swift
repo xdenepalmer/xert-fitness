@@ -53,7 +53,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .finance: return "Finance"
         case .orders: return "Orders"
         case .products: return "Session Packs & Pricing"
-        case .controls: return "Platform Controls"
+        case .controls: return "Member App Controls"
         case .health: return "Operations Health"
         case .audit: return "Admin Audit"
         }
@@ -78,7 +78,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .finance: return "Review revenue and sales performance"
         case .orders: return "Recover payments, fulfil sales and issue refunds"
         case .products: return "Control pricing, credits and Stripe links"
-        case .controls: return "Control launch, bookings and messaging"
+        case .controls: return "Control member booking, purchases, launch and messaging"
         case .health: return "Verify Stripe, schema and APNs readiness"
         case .audit: return "Review protected operational changes"
         }
@@ -140,7 +140,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .finance: return ["revenue", "sales", "performance", "income", "Stripe"]
         case .orders: return ["payment", "order", "checkout", "recovery", "refund", "fulfilment", "Stripe"]
         case .products: return ["session pack", "pack", "price", "credit", "Stripe", "product"]
-        case .controls: return ["launch", "payment", "booking", "platform", "settings"]
+        case .controls: return ["member app", "client access", "launch", "payment", "booking", "platform", "settings"]
         case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
         case .audit: return ["audit", "history", "change", "operator"]
         }

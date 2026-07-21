@@ -145,7 +145,7 @@ final class XertAPI {
         let settings: [PublicPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "payments_enabled"),
+                URLQueryItem(name: "select", value: "bookings_enabled,payments_enabled"),
                 URLQueryItem(name: "limit", value: "2")
             ]
         )

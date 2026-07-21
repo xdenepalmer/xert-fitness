@@ -43,6 +43,7 @@ export function buildAnnouncementPush(announcement) {
     aps: {
       alert: { title, body },
       sound: 'default',
+      category: 'xert.member-notice',
       'thread-id': 'xert-member-notices',
     },
     announcement_id: announcement.id,
