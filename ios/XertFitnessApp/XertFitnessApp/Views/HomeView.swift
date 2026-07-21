@@ -7,6 +7,7 @@ struct HomeView: View {
     let route: XertMemberRoute
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+    let onOpenRoute: (XertMemberRoute) -> Void
     @State private var showingNoticeCenter = false
     @State private var showingMemberReadiness = false
     @State private var highlightedAnnouncementID: UUID?
@@ -32,6 +33,13 @@ struct HomeView: View {
                             deviceTopInset: viewport.safeAreaInsets.top,
                             usesAccessibilityText: dynamicTypeSize.isAccessibilitySize
                         ))
+
+                        MemberLaunchGuideCard(
+                            state: memberLaunchGuideState,
+                            onAction: handleMemberLaunchGuideAction
+                        )
+                        .padding(.horizontal)
+                        .padding(.vertical, memberLaunchGuideState.isCompact ? 10 : 14)
 
                         NativeValueStrip()
 
@@ -118,6 +126,53 @@ struct HomeView: View {
                     dashboardTrainingMomentum
                 }
             }
+        }
+    }
+
+    private var memberLaunchGuideState: MemberLaunchGuideState {
+        let now = Date()
+        let activeBookings = store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now }
+            .sorted { $0.start_time < $1.start_time }
+        let nextConfirmedBookingID = activeBookings.first(where: { $0.status == "confirmed" })?.booking_id
+        let bookingsLoaded = store.hasBootstrapped
+            && !store.isLoading
+            && !store.unavailableDataSources.contains(.bookings)
+
+        return MemberLaunchGuideResolver.resolve(
+            isSignedIn: store.isSignedIn,
+            onboardingLoaded: store.onboardingLoaded,
+            readinessComplete: store.memberOnboarding?.is_complete == true,
+            creditBalanceLoaded: store.creditBalanceLoaded,
+            creditTotal: store.creditTotal,
+            bookingsLoaded: bookingsLoaded,
+            nextActiveBookingID: activeBookings.first?.booking_id,
+            nextConfirmedBookingID: nextConfirmedBookingID,
+            classRemindersEnabled: store.classRemindersEnabled,
+            onboardingUnavailable: store.unavailableDataSources.contains(.onboarding),
+            creditsUnavailable: store.unavailableDataSources.contains(.credits),
+            bookingsUnavailable: store.unavailableDataSources.contains(.bookings)
+        )
+    }
+
+    private func handleMemberLaunchGuideAction(_ state: MemberLaunchGuideState) {
+        switch state {
+        case .signIn:
+            onNavigate(.account)
+        case .checking:
+            return
+        case .retry:
+            Task { await store.refresh() }
+        case .completeReadiness:
+            showingMemberReadiness = true
+        case .chooseAccess:
+            onOpenRoute(.sessionPacks)
+        case .bookFirstClass:
+            onOpenRoute(.booking)
+        case .enableReminder:
+            Task { await store.setClassRemindersEnabled(true) }
+        case .activated(let bookingID):
+            onOpenRoute(.upcomingBookings(bookingID))
         }
     }
 
@@ -765,6 +820,165 @@ struct HomeView: View {
             .filter { !$0.isComplete }
             .sorted { ($0.event_date ?? "") < ($1.event_date ?? "") }
             .first
+    }
+}
+
+private struct MemberLaunchGuideCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let state: MemberLaunchGuideState
+    let onAction: (MemberLaunchGuideState) -> Void
+
+    var body: some View {
+        Group {
+            if state.isCompact {
+                compactContent
+            } else {
+                expandedContent
+            }
+        }
+        .padding(state.isCompact ? 12 : 14)
+        .xertCardStyle()
+        .accessibilityElement(children: .contain)
+    }
+
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            guideHeader
+            Button(actionTitle) { onAction(state) }
+                .buttonStyle(.xertPrimary)
+                .disabled(state == .checking)
+                .accessibilityHint(actionHint)
+        }
+    }
+
+    private var compactContent: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                guideHeader
+                Spacer(minLength: 4)
+                compactButton
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                guideHeader
+                compactButton
+            }
+        }
+    }
+
+    private var guideHeader: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: iconName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .frame(width: 36, height: 36)
+                .background(accentColor.opacity(0.1))
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(eyebrow)
+                    .xertEyebrow()
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !state.isCompact || dynamicTypeSize.isAccessibilitySize {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var compactButton: some View {
+        Button(actionTitle) { onAction(state) }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.xertSteel)
+            .frame(minHeight: 44)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityHint(actionHint)
+    }
+
+    private var eyebrow: String { state.isCompact ? "Ready" : "Your next step" }
+
+    private var title: String {
+        switch state {
+        case .signIn: return "Start your XERT membership"
+        case .checking: return "Checking your member progress"
+        case .retry: return "Member progress needs a refresh"
+        case .completeReadiness: return "Complete member readiness"
+        case .chooseAccess: return "Choose your session access"
+        case .bookFirstClass: return "Book your first class"
+        case .enableReminder: return "Never miss your next class"
+        case .activated: return "You're ready to train"
+        }
+    }
+
+    private var detail: String {
+        switch state {
+        case .signIn:
+            return "Create an account or sign in, then XERT will keep your next step here."
+        case .checking:
+            return "XERT is securely loading your readiness, credits and bookings."
+        case .retry:
+            return "Some member details could not be refreshed. Your saved account remains protected."
+        case .completeReadiness:
+            return "Add your contact details and acknowledge the current member documents."
+        case .chooseAccess:
+            return "Choose the session pack that fits your training plan."
+        case .bookFirstClass:
+            return "Your credits are ready. Choose a coached session that works for you."
+        case .enableReminder:
+            return "Turn on an optional device reminder for confirmed classes."
+        case .activated:
+            return "Your next class is booked."
+        }
+    }
+
+    private var actionTitle: String {
+        switch state {
+        case .signIn: return "Create Account or Sign In"
+        case .checking: return "Checking…"
+        case .retry: return "Retry Member Progress"
+        case .completeReadiness: return "Complete Readiness"
+        case .chooseAccess: return "View Session Packs"
+        case .bookFirstClass: return "Browse Classes"
+        case .enableReminder: return "Enable Class Reminder"
+        case .activated: return "View Booking"
+        }
+    }
+
+    private var actionHint: String {
+        switch state {
+        case .signIn: return "Opens secure member access"
+        case .checking: return "Member progress is still loading"
+        case .retry: return "Retries readiness, credits and bookings"
+        case .completeReadiness: return "Opens your private member readiness form"
+        case .chooseAccess: return "Opens session pack options on the Book page"
+        case .bookFirstClass: return "Opens class discovery on the Book page"
+        case .enableReminder: return "Requests notification permission, then schedules eligible class reminders"
+        case .activated: return "Opens your upcoming bookings"
+        }
+    }
+
+    private var iconName: String {
+        switch state {
+        case .signIn: return "person.crop.circle.badge.plus"
+        case .checking: return "arrow.clockwise"
+        case .retry: return "wifi.exclamationmark"
+        case .completeReadiness: return "person.text.rectangle"
+        case .chooseAccess: return "creditcard"
+        case .bookFirstClass: return "calendar.badge.plus"
+        case .enableReminder: return "bell.badge"
+        case .activated: return "checkmark.circle.fill"
+        }
+    }
+
+    private var accentColor: Color {
+        state.isCompact ? .green : .xertSteel
     }
 }
 

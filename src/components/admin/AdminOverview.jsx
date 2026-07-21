@@ -375,7 +375,7 @@ export default function AdminOverview({ onNavigate }) {
         />
       )}
 
-      {/* ── Launch checklist + class fill rate ── */}
+      {/* Business milestones + class fill rate. Operational go/no-go lives in Operations Health. */}
       {launch && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Checklist */}
@@ -394,7 +394,7 @@ export default function AdminOverview({ onNavigate }) {
               <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
-                    Launch Checklist
+                    Business Milestones
                   </h3>
                   <span className="font-display text-sm tabular-nums" style={{ color: '#7BA7BC' }}>{doneCount}/{items.length}</span>
                 </div>
@@ -423,6 +423,11 @@ export default function AdminOverview({ onNavigate }) {
                     </button>
                   ))}
                 </div>
+                <button type="button" onClick={() => onNavigate?.('health')}
+                  className="mt-4 inline-flex min-h-11 w-full items-center justify-between border border-xert-steel/20 px-3 font-body text-xs uppercase tracking-wider text-xert-steel">
+                  Open launch go/no-go gate
+                  <ArrowRight className="size-4" />
+                </button>
               </div>
             );
           })()}

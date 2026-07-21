@@ -151,7 +151,8 @@ struct RootView: View {
             HomeView(
                 route: navigation.route,
                 routeSequence: navigation.routeSequence,
-                onNavigate: navigate
+                onNavigate: navigate,
+                onOpenRoute: { openMemberRoute($0, source: .content) }
             )
                 .toolbar(.hidden, for: .tabBar)
                 .tabItem {

@@ -62,6 +62,10 @@ Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the
 complete test-mode setup, owner health checks, purchase/refund proof, live
 cutover and rollback sequence.
 
+Use [docs/LAUNCH_DAY_RUNBOOK.md](docs/LAUNCH_DAY_RUNBOOK.md) for the complete
+owner go/no-go check, member smoke path, kill switches, incident response and
+evidence checklist for public launch day.
+
 The live cutover uses two read-only gates: `npm run stripe:launch:check` requires
 checkout to remain paused while configuration is verified, then
 `npm run stripe:launch:verify` proves guarded activation is retained and has a

@@ -5308,6 +5308,67 @@ private struct AdminOperationsHealthView: View {
             : "\(admin.missingSchemaCapabilities.count) required database capabilities are missing."
     }
 
+    private func sourceIsCurrent(_ source: String) -> Bool {
+        admin.loadedSources.contains(source) && !admin.refreshUnavailableSources.contains(source)
+    }
+
+    private var activeLinkedPacksReady: Bool? {
+        guard sourceIsCurrent("session packs") else { return nil }
+        return admin.products.contains { $0.active && $0.hasStableStripePriceID }
+    }
+
+    private var bookableClassesReady: Bool? {
+        guard sourceIsCurrent("full timetable") else { return nil }
+        let now = Date()
+        return admin.classSessions.contains { item in
+            item.status == "published"
+                && item.public_visible == true
+                && (item.start_time ?? .distantPast) > now
+                && ["instant_book", "request_to_book"].contains(item.booking_mode ?? "instant_book")
+                && (item.capacity ?? 0) > 0
+        }
+    }
+
+    private var launchSwitches: (bookings: Bool?, payments: Bool?) {
+        guard sourceIsCurrent("platform controls"), let settings = admin.settings else { return (nil, nil) }
+        return (settings.bookings_enabled, settings.payments_enabled)
+    }
+
+    private var memberLaunchGate: XertOwnerLaunchGate {
+        guard admin.launchGateUpdatedAt != nil else {
+            return XertOwnerLaunchGate.resolve(
+                databaseReady: nil,
+                stripeReady: nil,
+                activeLinkedPacksReady: nil,
+                bookableClassesReady: nil,
+                bookingsEnabled: nil,
+                paymentsEnabled: nil
+            )
+        }
+        return XertOwnerLaunchGate.resolve(
+            databaseReady: databaseReady,
+            stripeReady: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
+            activeLinkedPacksReady: activeLinkedPacksReady,
+            bookableClassesReady: bookableClassesReady,
+            bookingsEnabled: launchSwitches.bookings,
+            paymentsEnabled: launchSwitches.payments
+        )
+    }
+
+    private var launchGateNextWorkspace: XertOwnerWorkspace? {
+        guard databaseReady == true,
+              stripeHealthIsCurrent,
+              admin.commerceHealth?.ready == true else { return nil }
+        if activeLinkedPacksReady == false { return .products }
+        guard activeLinkedPacksReady == true else { return nil }
+        if bookableClassesReady == false { return .timetable }
+        guard bookableClassesReady == true else { return nil }
+        if let bookings = launchSwitches.bookings,
+           let payments = launchSwitches.payments,
+           bookings != payments { return .controls }
+        return nil
+    }
+
     var body: some View {
         List {
             if !unavailableHealthSources.isEmpty {
@@ -5322,19 +5383,84 @@ private struct AdminOperationsHealthView: View {
                         Button {
                             XertHaptics.play(.softImpact)
                             Task {
-                                await admin.refresh(session: session)
-                                XertHaptics.play(admin.refreshUnavailableSources.isEmpty ? .success : .warning)
+                                await admin.refreshHealth(session: session)
+                                XertHaptics.play(unavailableHealthSources.isEmpty ? .success : .warning)
                             }
                         } label: {
-                            Label(admin.isLoading ? "Refreshing health…" : "Retry health checks", systemImage: "arrow.clockwise")
+                            Label(admin.isRefreshingHealth ? "Refreshing health…" : "Retry health checks", systemImage: "arrow.clockwise")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.orange)
-                        .disabled(admin.isLoading)
+                        .disabled(admin.isLoading || admin.isRefreshingHealth)
                     }
                     .listRowBackground(Color.xertInk)
                 }
+            }
+
+            Section("Member launch gate") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(memberLaunchGate.title, systemImage: launchGateIcon)
+                        .font(.headline)
+                        .foregroundStyle(launchGateColor)
+                    Text(memberLaunchGate.detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                    ProgressView(
+                        value: Double(memberLaunchGate.completedChecks),
+                        total: Double(XertOwnerLaunchGate.totalChecks)
+                    )
+                    .tint(launchGateColor)
+                    Text("\(memberLaunchGate.completedChecks)/\(XertOwnerLaunchGate.totalChecks) required gates")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.xertPale.opacity(0.5))
+                    if let nextAction = memberLaunchGate.nextAction {
+                        Text("Next: \(nextAction)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button {
+                        XertHaptics.play(.softImpact)
+                        Task {
+                            await admin.refreshHealth(session: session)
+                            XertHaptics.play(memberLaunchGate.phase == .verifying ? .warning : .success)
+                        }
+                    } label: {
+                        Label(admin.isRefreshingHealth ? "Refreshing launch gatesâ€¦" : "Refresh launch gates", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
+                    .disabled(
+                        admin.isLoading
+                            || admin.isRefreshingHealth
+                            || admin.isSavingSettings
+                            || admin.savingProductID != nil
+                            || admin.savingClassID != nil
+                            || admin.cancellingClassID != nil
+                            || admin.resolvingStripeIncidentID != nil
+                            || admin.retryingStripeIncidentID != nil
+                    )
+                    if let verifiedAt = admin.launchGateUpdatedAt {
+                        Text("Verified \(verifiedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.xertPale.opacity(0.48))
+                    }
+                    if let workspace = launchGateNextWorkspace {
+                        Button { onOpenWorkspace(workspace) } label: {
+                            Label("Open next gate", systemImage: "arrow.up.forward.square")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.xertSteel)
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowBackground(Color.xertInk)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("owner.launchGate")
             }
 
             Section("Release readiness") {
@@ -5552,6 +5678,9 @@ private struct AdminOperationsHealthView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Operations Health")
+        .refreshable {
+            await admin.refreshHealth(session: session)
+        }
         .confirmationDialog(
             "Mark Stripe incident handled?",
             isPresented: Binding(
@@ -5581,6 +5710,22 @@ private struct AdminOperationsHealthView: View {
             Button("Cancel", role: .cancel) {}
         } message: { incident in
             Text("Retrieve \(incident.event_id) directly from Stripe and run it through XERT's idempotent recovery path. XERT verifies its identity and payment mode before processing.")
+        }
+    }
+
+    private var launchGateIcon: String {
+        switch memberLaunchGate.phase {
+        case .preflightReady, .liveReady: return "checkmark.seal.fill"
+        case .blocked: return "hand.raised.fill"
+        case .verifying: return "questionmark.circle.fill"
+        }
+    }
+
+    private var launchGateColor: Color {
+        switch memberLaunchGate.phase {
+        case .preflightReady, .liveReady: return .green
+        case .blocked: return .red
+        case .verifying: return .orange
         }
     }
 

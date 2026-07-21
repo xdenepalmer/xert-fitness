@@ -1378,7 +1378,8 @@ async function healthCheck(key, label, fn) {
       detail: result.detail || 'Ready',
       action: result.action || null,
       count: result.count ?? null,
-      incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : []
+      incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : [],
+      phase: result.phase || null,
     };
   } catch (error) {
     return {
@@ -1482,6 +1483,27 @@ export async function getOperationsHealth() {
           };
     }),
 
+    healthCheck('platform-controls', 'Member launch switches', async () => {
+      const settings = await getSoftLaunchSettings();
+      const bookingsEnabled = settings.bookings_enabled === true;
+      const paymentsEnabled = settings.payments_enabled === true;
+      if (bookingsEnabled === paymentsEnabled) {
+        return bookingsEnabled
+          ? { phase: 'live', detail: 'Member bookings and session-pack checkout are enabled.' }
+          : { phase: 'preflight', detail: 'Member bookings and session-pack checkout are safely paused for preflight.' };
+      }
+      const paused = [
+        !bookingsEnabled ? 'bookings' : null,
+        !paymentsEnabled ? 'payments' : null,
+      ].filter(Boolean);
+      return {
+        status: 'attention',
+        detail: `Member ${paused.join(' and ')} ${paused.length === 1 ? 'is' : 'are'} still paused.`,
+        phase: 'unsafe',
+        action: 'Use Soft Launch Settings to pause both switches for preflight or enable both for the controlled live launch.',
+      };
+    }),
+
     healthCheck('products', 'Session packs', async () => {
       const { data, error } = await supabase.from('products').select('slug, active, stripe_price_id').eq('active', true);
       if (error) throw error;
@@ -1570,19 +1592,31 @@ export async function getOperationsHealth() {
       };
     }),
 
-    healthCheck('classes', 'Published classes', async () => {
-      const { count, error } = await supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').eq('public_visible', true).gte('start_time', nowIso);
+    healthCheck('classes', 'Bookable launch classes', async () => {
+      const { data, error } = await supabase.from('class_sessions')
+        .select('id, booking_mode, capacity')
+        .eq('status', 'published')
+        .eq('public_visible', true)
+        .gte('start_time', nowIso);
       if (error) throw error;
-      return count > 0
+      const sessions = data || [];
+      const actionable = sessions.filter(session => (
+        ['instant_book', 'request_to_book'].includes(session.booking_mode || 'instant_book')
+        && Number.isInteger(session.capacity)
+        && session.capacity > 0
+      ));
+      return actionable.length > 0
         ? {
-            count,
-            detail: `${count} upcoming public class${count === 1 ? '' : 'es'} available.`
+            count: actionable.length,
+            detail: `${actionable.length} upcoming member-bookable class${actionable.length === 1 ? '' : 'es'} available.`
           }
         : {
             status: 'attention',
             count: 0,
-            detail: 'No upcoming public classes.',
-            action: 'Publish launch classes in Class Calendar.'
+            detail: sessions.length > 0
+              ? 'Upcoming public classes are interest-only or have invalid capacity.'
+              : 'No upcoming public classes.',
+            action: 'Publish at least one instant-book or request-to-book class with a valid capacity in Class Calendar.'
           };
     }),
 
