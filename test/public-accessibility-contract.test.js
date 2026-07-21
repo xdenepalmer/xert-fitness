@@ -60,7 +60,9 @@ test('member account failures stay inline and never masquerade as empty account 
   assert.match(account, /Could not refresh your account/);
   assert.match(account, /Your previously loaded details are still shown below/);
   assert.match(account, /onClick=\{refresh\}/);
-  assert.ok((account.match(/firstLoadFailed \? \(/g) || []).length >= 4);
+  assert.match(account, /firstLoadFailed \|\| bookingsUnavailable/);
+  assert.match(account, /firstLoadFailed \|\| ordersUnavailable/);
+  assert.match(account, /Credit balance unavailable/);
 });
 
 test('public motion uses native reduced-motion-aware effects without a runtime dependency', () => {

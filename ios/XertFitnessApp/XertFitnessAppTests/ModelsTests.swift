@@ -2040,6 +2040,7 @@ final class ModelsTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_784_006_400)
         let batches = [
             CreditBatch(id: UUID(), total: 2, remaining: 2, expires_at: now.addingTimeInterval(2 * 86_400)),
+            CreditBatch(id: UUID(), total: 1, remaining: 1, expires_at: now.addingTimeInterval((2 * 86_400) + 3_600)),
             CreditBatch(id: UUID(), total: 3, remaining: 3, expires_at: now.addingTimeInterval(6 * 86_400)),
             CreditBatch(id: UUID(), total: 4, remaining: 4, expires_at: now.addingTimeInterval(8 * 86_400)),
             CreditBatch(id: UUID(), total: 5, remaining: 5, expires_at: nil),
@@ -2048,7 +2049,7 @@ final class ModelsTests: XCTestCase {
 
         let summary = try XCTUnwrap(batches.expirySummary(now: now))
 
-        XCTAssertEqual(summary.credits, 5)
+        XCTAssertEqual(summary.credits, 3)
         XCTAssertEqual(summary.expiresAt, now.addingTimeInterval(2 * 86_400))
         XCTAssertEqual(summary.daysRemaining, 2)
     }
@@ -2785,6 +2786,48 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertTrue(sameBrisbaneDay.occursOnBrisbaneDay(containing: reference))
         XCTAssertFalse(nextBrisbaneDay.occursOnBrisbaneDay(containing: reference))
+    }
+
+    func testTrainingProgressCountsOnlyRecordedAttendanceAndDeduplicatesSessions() {
+        let now = queenslandDate(2026, 7, 21, 12, 0)
+        let duplicateSessionID = UUID()
+        let progress = MemberTrainingProgress(bookings: [
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 18, 0), sessionID: duplicateSessionID),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 18, 0), sessionID: duplicateSessionID),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 13, 18, 0)),
+            booking(status: "attended", startTime: queenslandDate(2026, 6, 1, 18, 0)),
+            booking(status: "confirmed", startTime: queenslandDate(2026, 7, 19, 18, 0)),
+            booking(status: "no_show", startTime: queenslandDate(2026, 7, 12, 18, 0)),
+            booking(status: "cancelled", startTime: queenslandDate(2026, 7, 10, 18, 0)),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 22, 18, 0)),
+        ], now: now)
+
+        XCTAssertEqual(progress.totalAttended, 3)
+        XCTAssertEqual(progress.attendedLast30Days, 2)
+        XCTAssertEqual(progress.activeWeeksLastFour, 2)
+        XCTAssertEqual(progress.lastAttendedAt, queenslandDate(2026, 7, 20, 18, 0))
+    }
+
+    func testTrainingProgressUsesMondayBrisbaneWeekBoundaries() {
+        let now = queenslandDate(2026, 7, 20, 1, 30)
+        let progress = MemberTrainingProgress(bookings: [
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 19, 23, 30)),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 0, 30)),
+            booking(status: "attended", startTime: queenslandDate(2026, 6, 21, 23, 30)),
+        ], now: now)
+
+        XCTAssertEqual(progress.totalAttended, 3)
+        XCTAssertEqual(progress.attendedLast30Days, 3)
+        XCTAssertEqual(progress.activeWeeksLastFour, 2)
+    }
+
+    func testTrainingProgressHasAnHonestEmptyState() {
+        let progress = MemberTrainingProgress(bookings: [], now: queenslandDate(2026, 7, 21, 12, 0))
+
+        XCTAssertEqual(progress.totalAttended, 0)
+        XCTAssertEqual(progress.attendedLast30Days, 0)
+        XCTAssertEqual(progress.activeWeeksLastFour, 0)
+        XCTAssertNil(progress.lastAttendedAt)
     }
 
     private func booking(

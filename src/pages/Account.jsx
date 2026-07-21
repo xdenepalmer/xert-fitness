@@ -8,6 +8,7 @@ import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyB
 import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
+import { summarizeMemberProgress } from '@/lib/memberProgress';
 import { announcementAction } from '@/lib/memberAnnouncements';
 import {
   clearPendingWebCheckout,
@@ -88,6 +89,9 @@ export default function Account() {
   const [hasLoadedAccount, setHasLoadedAccount] = useState(false);
   const [loadedAccountUserId, setLoadedAccountUserId] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [accountSourceErrors, setAccountSourceErrors] = useState(
+    /** @type {Record<string, string>} */ ({}),
+  );
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -106,10 +110,13 @@ export default function Account() {
   const [readinessError, setReadinessError] = useState('');
   const [readinessSavedMessage, setReadinessSavedMessage] = useState('');
   const expiringCredits = useMemo(() => summarizeExpiringCredits(credits?.batches), [credits]);
+  const trainingProgress = useMemo(() => summarizeMemberProgress(bookings), [bookings]);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
   const [purchaseStatus, setPurchaseStatus] = useState(purchaseSuccess ? 'confirming' : null);
   const [purchaseRefreshKey, setPurchaseRefreshKey] = useState(0);
+  const accountDataOwnerIDRef = useRef('');
+  const accountRefreshRequestIDRef = useRef(0);
   const commerceRequestIDRef = useRef(0);
   const readinessRequestIDRef = useRef(0);
   const readinessSaveIDRef = useRef(0);
@@ -188,38 +195,86 @@ export default function Account() {
   }, [setReadinessFromServer]);
 
   const refresh = useCallback(async () => {
-    const commerceRequestID = ++commerceRequestIDRef.current;
+    const accountRequestID = ++accountRefreshRequestIDRef.current;
+    const requestedUserID = user?.id || '';
     setLoading(true);
     setLoadError('');
+    setAccountSourceErrors({});
     try {
-      const [c, b, o, goals, ptRequests, memberNotices] = await Promise.all([
+      const results = await Promise.allSettled([
         getMyCredits(),
         getMyBookings(),
         getMyOrders(),
-        // Event goals ship as an additive migration. Do not make the rest of
-        // the member account unavailable while an existing install catches up.
-        getMyEventGoals().catch(() => []),
-        // PT tracking is additive for existing Supabase installs.
-        getMyPrivateSessionRequests().catch(() => []),
-        // Member notices are additive and must never block account essentials.
-        getMemberAnnouncements().catch(() => []),
+        getMyEventGoals(),
+        getMyPrivateSessionRequests(),
+        getMemberAnnouncements(),
       ]);
-      if (commerceRequestID === commerceRequestIDRef.current) {
-        setCredits(c);
-        setOrders(o);
-      }
-      setBookings(b);
-      setEventGoals(goals);
-      setPrivateSessionRequests(ptRequests);
-      setAnnouncements(memberNotices);
-      setLoadedAccountUserId(user?.id || '');
+      if (accountRequestID !== accountRefreshRequestIDRef.current) return;
+
+      const sources = [
+        { name: 'credits', apply: value => setCredits(value) },
+        { name: 'bookings', apply: value => setBookings(value) },
+        { name: 'orders', apply: value => setOrders(value) },
+        { name: 'eventGoals', apply: value => setEventGoals(value) },
+        { name: 'privateSessions', apply: value => setPrivateSessionRequests(value) },
+        { name: 'announcements', apply: value => setAnnouncements(value) },
+      ];
+      const nextErrors = /** @type {Record<string, string>} */ ({});
+      results.forEach((result, index) => {
+        const { name: source, apply } = sources[index];
+        if (result.status === 'fulfilled') {
+          apply(result.value);
+        } else {
+          nextErrors[source] = result.reason?.message || `${source} could not be refreshed.`;
+        }
+      });
+
+      setAccountSourceErrors(nextErrors);
+      const failedLabels = Object.keys(nextErrors).map(source => ({
+        credits: 'credits',
+        bookings: 'bookings',
+        orders: 'purchases',
+        eventGoals: 'training goals',
+        privateSessions: 'PT requests',
+        announcements: 'notices',
+      })[source]);
+      setLoadError(failedLabels.length > 0
+        ? `Some account details could not be refreshed: ${failedLabels.join(', ')}.`
+        : '');
+      setLoadedAccountUserId(requestedUserID);
       setHasLoadedAccount(true);
     } catch (e) {
-      setLoadError(e.message || 'Your account data could not be reached.');
+      if (accountRequestID === accountRefreshRequestIDRef.current) {
+        setLoadError(e.message || 'Your account data could not be reached.');
+      }
     } finally {
-      setLoading(false);
+      if (accountRequestID === accountRefreshRequestIDRef.current) setLoading(false);
     }
   }, [user?.id]);
+
+  const accountUserID = user?.id || '';
+  useEffect(() => {
+    if (accountDataOwnerIDRef.current === accountUserID) return;
+
+    // Member data may be retained after a same-account transient failure, but
+    // it must never survive an identity change. Invalidate both request lanes
+    // before clearing every user-scoped source.
+    accountDataOwnerIDRef.current = accountUserID;
+    accountRefreshRequestIDRef.current += 1;
+    commerceRequestIDRef.current += 1;
+    setCredits(null);
+    setBookings([]);
+    setOrders([]);
+    setEventGoals([]);
+    setPrivateSessionRequests([]);
+    setAnnouncements([]);
+    setAccountSourceErrors({});
+    setLoadError('');
+    setLoadedAccountUserId('');
+    setHasLoadedAccount(false);
+    setCancellationTarget(null);
+    setPurchaseStatus(null);
+  }, [accountUserID]);
 
   useEffect(() => {
     if (session) refresh();
@@ -553,6 +608,9 @@ export default function Account() {
   const accountReady = hasLoadedAccount && loadedAccountUserId === user?.id;
   const firstLoadFailed = !accountReady && Boolean(loadError);
   const initialAccountLoad = !accountReady && !loadError;
+  const creditsUnavailable = Boolean(accountSourceErrors.credits);
+  const bookingsUnavailable = Boolean(accountSourceErrors.bookings);
+  const ordersUnavailable = Boolean(accountSourceErrors.orders);
   const unavailableMessage = (
     <p className="font-body text-sm" role="status" style={{ color: '#e0b36a' }}>
       Account data unavailable. Retry above to check again.
@@ -663,7 +721,7 @@ export default function Account() {
           <section id="notices" className="mb-10 scroll-mt-32" aria-labelledby="member-notices-title">
             <div className="mb-4 flex items-center gap-2">
               <BellRing className="h-5 w-5 text-xert-steel" aria-hidden="true" />
-              <h2 id="member-notices-title" className="font-display text-2xl uppercase text-xert-offwhite">Member Notices</h2>
+              <h2 id="member-notices-title" className="font-display text-2xl uppercase text-xert-offwhite">Member notices</h2>
             </div>
             <div className="space-y-3">
               {announcements.map(notice => {
@@ -956,6 +1014,13 @@ export default function Account() {
 
         {/* Credits */}
         <section className="mb-10">
+          {accountReady && creditsUnavailable && (
+            <div className="mb-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
+              <p className="font-body text-sm text-xert-pale" role="status">
+                Credit balance unavailable. {credits ? 'Your last loaded balance is shown below.' : 'Retry before relying on your balance.'}
+              </p>
+            </div>
+          )}
           {accountReady && expiringCredits && (
             <div role="status" className="mb-3 flex flex-wrap items-center gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
               <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
@@ -973,7 +1038,7 @@ export default function Account() {
                 <Ticket className="w-6 h-6" style={{ color: '#101820' }} />
               </div>
               <div>
-                <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{initialAccountLoad || firstLoadFailed ? '—' : (credits?.total ?? 0)}</p>
+                <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{initialAccountLoad || firstLoadFailed || (creditsUnavailable && !credits) ? '—' : (credits?.total ?? 0)}</p>
                 <p className="font-body text-xs uppercase tracking-wider mt-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
                   Class credits available
                 </p>
@@ -992,6 +1057,60 @@ export default function Account() {
           </div>
         </section>
 
+        {/* Attendance-derived progress */}
+        <section id="progress" className="mb-10 scroll-mt-32">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+                Training Momentum
+              </h2>
+              <p className="mt-1 font-body text-xs" style={{ color: 'rgba(209,221,230,0.48)' }}>
+                Based only on attendance recorded by XERT.
+              </p>
+            </div>
+            <Link to="/booking" className="inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+              Book next class
+            </Link>
+          </div>
+
+          {initialAccountLoad ? (
+            <div className="flex min-h-28 items-center gap-3 border p-6" style={cardStyle} role="status">
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#7BA7BC' }} aria-hidden="true" />
+              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.6)' }}>Loading your progress…</p>
+            </div>
+          ) : firstLoadFailed || bookingsUnavailable ? (
+            <div className="border p-6" style={cardStyle}>{unavailableMessage}</div>
+          ) : trainingProgress.totalAttended === 0 ? (
+            <div className="flex flex-col gap-4 border p-6 sm:flex-row sm:items-center" style={cardStyle}>
+              <CheckCircle2 className="h-8 w-8 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-xl uppercase text-xert-offwhite">Your progress starts here</p>
+                <p className="mt-1 font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                  Completed classes appear after Byron or the XERT team records attendance. Confirmed, cancelled and missed classes never inflate your totals.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="border p-5 sm:p-6" style={cardStyle}>
+              <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-3">
+                {[
+                  [trainingProgress.attendedLast30Days, 'Completed · 30 days'],
+                  [`${trainingProgress.activeWeeksLastFour}/4`, 'Active weeks'],
+                  [trainingProgress.totalAttended, 'Completed · all time'],
+                ].map(([value, label]) => (
+                  <div key={label} className="border border-[#7BA7BC]/15 bg-[#101820]/35 p-4">
+                    <p className="font-display text-3xl uppercase leading-none text-xert-offwhite">{value}</p>
+                    <p className="mt-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.52)' }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 font-body text-xs" style={{ color: 'rgba(209,221,230,0.48)' }}>
+                Last completed class: {formatDateTime(trainingProgress.lastAttendedAt)}
+              </p>
+            </div>
+          )}
+        </section>
+
         {/* Event goals */}
         <section id="goals" className="mb-10 scroll-mt-32">
           <div className="flex items-center justify-between gap-4 mb-4">
@@ -1006,7 +1125,7 @@ export default function Account() {
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading goals…
             </p>
-          ) : firstLoadFailed ? (
+          ) : firstLoadFailed || accountSourceErrors.eventGoals ? (
             unavailableMessage
           ) : eventGoals.length === 0 ? (
             <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
@@ -1062,7 +1181,7 @@ export default function Account() {
           </div>
           {initialAccountLoad ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading PT requests…</p>
-          ) : firstLoadFailed ? (
+          ) : firstLoadFailed || accountSourceErrors.privateSessions ? (
             unavailableMessage
           ) : privateSessionRequests.length === 0 ? (
             <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
@@ -1148,7 +1267,7 @@ export default function Account() {
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading…
             </p>
-          ) : firstLoadFailed ? (
+          ) : firstLoadFailed || bookingsUnavailable ? (
             unavailableMessage
           ) : upcoming.length === 0 ? (
             <div className="border p-6" style={cardStyle}>
@@ -1205,7 +1324,7 @@ export default function Account() {
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
               Loading…
             </p>
-          ) : firstLoadFailed ? (
+          ) : firstLoadFailed || ordersUnavailable ? (
             unavailableMessage
           ) : orders.length === 0 ? (
             <div className="border p-6" style={cardStyle}>

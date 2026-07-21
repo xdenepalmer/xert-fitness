@@ -39,7 +39,8 @@ test('every PT policy entry point enforces trusted request state, consent, and o
 test('web and native clients expose owned PT request history', () => {
   assert.match(webData, /export async function getMyPrivateSessionRequests/);
   assert.match(webData, /\.eq\('user_id', userId\)/);
-  assert.match(webAccount, /getMyPrivateSessionRequests\(\)\.catch\(\(\) => \[\]\)/);
+  assert.match(webAccount, /Promise\.allSettled\([\s\S]*getMyPrivateSessionRequests\(\)/);
+  assert.match(webAccount, /accountSourceErrors\.privateSessions/);
   assert.match(webAccount, /privateSessionRequests\.map/);
   assert.match(webAccount, />\s*PT Requests\s*</);
   assert.match(models, /struct PrivateSessionStatusItem/);

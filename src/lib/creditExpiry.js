@@ -1,6 +1,11 @@
 export const CREDIT_EXPIRY_WINDOW_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BRISBANE_UTC_OFFSET_MS = 10 * 60 * 60 * 1000;
+
+function brisbaneDayKey(value) {
+  return new Date(value.getTime() + BRISBANE_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}
 
 export function summarizeExpiringCredits(batches, now = new Date(), windowDays = CREDIT_EXPIRY_WINDOW_DAYS) {
   const nowMs = new Date(now).getTime();
@@ -22,7 +27,12 @@ export function summarizeExpiringCredits(batches, now = new Date(), windowDays =
 
   const expiresAt = expiring[0].expiresAt;
   return {
-    credits: expiring.reduce((sum, batch) => sum + Number(batch.remaining), 0),
+    // The count must describe the timestamp shown to the member. Batches that
+    // expire later in the warning window are intentionally not attributed to
+    // this earliest expiry.
+    credits: expiring
+      .filter(batch => brisbaneDayKey(batch.expiresAt) === brisbaneDayKey(expiresAt))
+      .reduce((sum, batch) => sum + Number(batch.remaining), 0),
     expiresAt,
     daysRemaining: Math.max(1, Math.ceil((expiresAt.getTime() - nowMs) / DAY_MS)),
   };

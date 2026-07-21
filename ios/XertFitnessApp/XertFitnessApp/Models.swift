@@ -236,8 +236,10 @@ struct CreditExpirySummary: Equatable {
 
 extension Collection where Element == CreditBatch {
     func expirySummary(now: Date = Date(), windowDays: Int = 7) -> CreditExpirySummary? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane")!
         guard windowDays > 0,
-              let cutoff = Calendar.current.date(byAdding: .day, value: windowDays, to: now)
+              let cutoff = calendar.date(byAdding: .day, value: windowDays, to: now)
         else { return nil }
 
         let expiring = compactMap { batch -> (CreditBatch, Date)? in
@@ -251,7 +253,12 @@ extension Collection where Element == CreditBatch {
         .sorted { $0.1 < $1.1 }
 
         guard let earliest = expiring.first?.1 else { return nil }
-        let credits = expiring.reduce(0) { $0 + $1.0.remaining }
+        // Keep the quantity tied to the date we display. Summing every batch
+        // inside the warning window would incorrectly imply later credits all
+        // expire at the earliest batch's timestamp.
+        let credits = expiring
+            .filter { calendar.isDate($0.1, inSameDayAs: earliest) }
+            .reduce(0) { $0 + $1.0.remaining }
         let daysRemaining = Swift.max(1, Int(ceil(earliest.timeIntervalSince(now) / 86_400)))
         return CreditExpirySummary(credits: credits, expiresAt: earliest, daysRemaining: daysRemaining)
     }
@@ -741,6 +748,41 @@ struct BookingTimeline: Equatable {
         self.pending = pending
         self.upcoming = upcoming
         self.history = history
+    }
+}
+
+struct MemberTrainingProgress: Equatable {
+    let totalAttended: Int
+    let attendedLast30Days: Int
+    let activeWeeksLastFour: Int
+    let lastAttendedAt: Date?
+
+    init(bookings: [BookingItem], now: Date = Date(), calendar inputCalendar: Calendar? = nil) {
+        var calendar = inputCalendar ?? Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane")!
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+
+        var attendanceBySession: [UUID: Date] = [:]
+        for booking in bookings where booking.status == "attended" && booking.start_time <= now {
+            if let current = attendanceBySession[booking.session_id], current >= booking.start_time { continue }
+            attendanceBySession[booking.session_id] = booking.start_time
+        }
+
+        let attendedDates = attendanceBySession.values.sorted(by: >)
+        let recentCutoff = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+        let allowedWeeks = Set((0..<4).compactMap { offset -> Date? in
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -offset, to: now) else { return nil }
+            return calendar.dateInterval(of: .weekOfYear, for: date)?.start
+        })
+        let activeWeeks = Set(attendedDates.compactMap {
+            calendar.dateInterval(of: .weekOfYear, for: $0)?.start
+        })
+
+        totalAttended = attendedDates.count
+        attendedLast30Days = attendedDates.filter { $0 >= recentCutoff }.count
+        activeWeeksLastFour = activeWeeks.intersection(allowedWeeks).count
+        lastAttendedAt = attendedDates.first
     }
 }
 

@@ -42,6 +42,7 @@ final class XertStore: ObservableObject {
     @Published var isSubmittingInterest = false
     @Published private(set) var classRemindersEnabled = ClassReminderPreference.isEnabled()
     @Published private(set) var classReminderLeadTime = ClassReminderPreference.leadTime()
+    @Published private(set) var classReminderSyncState: ClassReminderSyncState = .off
     @Published private(set) var memberPushEnabled = MemberPushPreference.isEnabled()
     @Published private(set) var isUpdatingMemberPush = false
     @Published private(set) var isUpdatingReminderPreference = false
@@ -338,12 +339,14 @@ final class XertStore: ObservableObject {
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 bookings = loadedBookings
                 if classRemindersEnabled {
-                    await ClassReminderScheduler.shared.sync(
+                    let reminderState = await ClassReminderScheduler.shared.sync(
                         bookings: loadedBookings,
                         leadTime: classReminderLeadTime
                     )
+                    applyClassReminderSyncState(reminderState)
                 } else {
                     await ClassReminderScheduler.shared.clearAll()
+                    classReminderSyncState = .off
                 }
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 bookingsLoaded = true
@@ -650,12 +653,14 @@ final class XertStore: ObservableObject {
             bookings = loadedBookings
             unavailableDataSources.remove(.bookings)
             if classRemindersEnabled {
-                await ClassReminderScheduler.shared.sync(
+                let reminderState = await ClassReminderScheduler.shared.sync(
                     bookings: loadedBookings,
                     leadTime: classReminderLeadTime
                 )
+                applyClassReminderSyncState(reminderState)
             } else {
                 await ClassReminderScheduler.shared.clearAll()
+                classReminderSyncState = .off
             }
             guard canApplyMemberState(memberVersion, session: session) else { return }
             bookingsLoaded = true
@@ -706,23 +711,31 @@ final class XertStore: ObservableObject {
         defer { isUpdatingReminderPreference = false }
 
         if enabled {
-            let authorized = await ClassReminderScheduler.shared.requestAuthorizationAndSync(
+            let reminderState = await ClassReminderScheduler.shared.requestAuthorizationAndSync(
                 bookings: bookings,
                 leadTime: classReminderLeadTime
             )
-            guard authorized else {
+            guard reminderState != .permissionDenied else {
                 ClassReminderPreference.setEnabled(false)
                 classRemindersEnabled = false
+                classReminderSyncState = .permissionDenied
                 errorMessage = "Notifications are disabled for XERT. Allow them in Settings to enable class reminders."
                 XertHaptics.play(.warning)
                 return
             }
             ClassReminderPreference.setEnabled(true)
             classRemindersEnabled = true
+            classReminderSyncState = reminderState
+            if case .failed = reminderState {
+                errorMessage = "Some class reminders could not be scheduled. XERT will retry when your bookings refresh."
+                XertHaptics.play(.warning)
+                return
+            }
         } else {
             ClassReminderPreference.setEnabled(false)
             classRemindersEnabled = false
             await ClassReminderScheduler.shared.clearAll()
+            classReminderSyncState = .off
         }
         XertHaptics.play(.lightImpact)
     }
@@ -735,9 +748,22 @@ final class XertStore: ObservableObject {
         ClassReminderPreference.setLeadTime(leadTime)
         classReminderLeadTime = leadTime
         if classRemindersEnabled {
-            await ClassReminderScheduler.shared.sync(bookings: bookings, leadTime: leadTime)
+            let reminderState = await ClassReminderScheduler.shared.sync(bookings: bookings, leadTime: leadTime)
+            applyClassReminderSyncState(reminderState)
+            if case .failed = reminderState {
+                errorMessage = "Some class reminders could not be rescheduled. XERT will retry when your bookings refresh."
+                XertHaptics.play(.warning)
+                return
+            }
         }
         XertHaptics.play(.selection)
+    }
+
+    private func applyClassReminderSyncState(_ state: ClassReminderSyncState) {
+        classReminderSyncState = state
+        guard state == .permissionDenied else { return }
+        ClassReminderPreference.setEnabled(false)
+        classRemindersEnabled = false
     }
 
     func setMemberPushEnabled(_ enabled: Bool) async {
@@ -1295,6 +1321,7 @@ final class XertStore: ObservableObject {
         credits = []
         creditBalanceLoaded = false
         bookings = []
+        classReminderSyncState = .off
         orders = []
         profile = nil
         memberOnboarding = nil

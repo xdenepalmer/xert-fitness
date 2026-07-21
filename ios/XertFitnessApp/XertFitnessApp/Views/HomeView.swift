@@ -109,6 +109,13 @@ struct HomeView: View {
                         .accessibilityHidden(true)
 
                     dashboardNextTraining
+
+                    Rectangle()
+                        .fill(Color.xertSteel.opacity(0.18))
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+
+                    dashboardTrainingMomentum
                 }
             }
         }
@@ -344,6 +351,73 @@ struct HomeView: View {
     private var dashboardBookingsAreInitiallyLoading: Bool {
         store.bookings.isEmpty
             && (!store.hasBootstrapped || (store.isLoading && store.memberDataUpdatedAt == nil))
+    }
+
+    @ViewBuilder
+    private var dashboardTrainingMomentum: some View {
+        let progress = MemberTrainingProgress(bookings: store.bookings)
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Training momentum", systemImage: "chart.line.uptrend.xyaxis")
+                .font(.headline)
+                .foregroundStyle(Color.xertOffWhite)
+
+            if dashboardBookingsAreInitiallyLoading {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading recorded attendance…")
+                        .font(.footnote)
+                        .foregroundStyle(Color.xertPale)
+                }
+            } else if store.bookings.isEmpty && store.unavailableDataSources.contains(.bookings) {
+                Text("Progress is unavailable until bookings refresh.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if progress.totalAttended == 0 {
+                Text("Completed classes will appear after the XERT team records your attendance.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        dashboardProgressMetric("\(progress.attendedLast30Days)", label: "30 days")
+                        dashboardProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        dashboardProgressMetric("\(progress.totalAttended)", label: "All time")
+                    }
+                    VStack(spacing: 8) {
+                        dashboardProgressMetric("\(progress.attendedLast30Days)", label: "Completed · 30 days")
+                        dashboardProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        dashboardProgressMetric("\(progress.totalAttended)", label: "Completed · all time")
+                    }
+                }
+            }
+
+            Text("Attendance only · Brisbane weeks")
+                .font(.caption2)
+                .foregroundStyle(Color.xertMuted)
+        }
+    }
+
+    private func dashboardProgressMetric(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .xertDisplay(25)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(0.5)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .padding(9)
+        .background(Color.xertNavy.opacity(0.35))
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.xertSteel.opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var dashboardCreditValue: String {

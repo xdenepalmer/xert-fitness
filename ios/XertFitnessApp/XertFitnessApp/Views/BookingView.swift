@@ -3,6 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @StateObject private var checkoutBrowser = CheckoutBrowser()
     @State private var activeSheet: BookingSheet?
     @State private var expandedSessionIDs: Set<UUID> = []
@@ -686,12 +687,27 @@ struct BookingView: View {
         let isWorking = store.bookingSessionID == session.id
         let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
         if let booking {
-            Label(
-                booking.stateLabel,
-                systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
-            )
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.xertSteel)
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    booking.stateLabel,
+                    systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.xertSteel)
+
+                Button {
+                    guard let destination = URL(
+                        string: "xertfitness://account/bookings/\(booking.id.uuidString.lowercased())"
+                    ) else { return }
+                    openURL(destination)
+                } label: {
+                    Label("Manage booking", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.xertGhost)
+                .accessibilityHint("Opens this booking to add it to your calendar or cancel it")
+            }
         } else if !store.bookingAvailabilityLoaded {
             Label("Checking booking availability…", systemImage: "arrow.clockwise")
                 .font(.subheadline.weight(.semibold))

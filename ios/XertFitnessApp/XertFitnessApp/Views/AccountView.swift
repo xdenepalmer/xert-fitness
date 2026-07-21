@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AccountView: View {
     let route: XertMemberRoute
@@ -211,6 +212,7 @@ struct AccountView: View {
 
         memberReadinessSection
         membershipSection
+        trainingProgressSection
         activeBookingSections(timeline: timeline)
         privateSessionHistorySection
         purchaseHistorySection
@@ -232,6 +234,105 @@ struct AccountView: View {
             Text("Member Setup").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    private var trainingProgressSection: some View {
+        let progress = MemberTrainingProgress(bookings: store.bookings)
+        return Section {
+            if store.bookings.isEmpty && store.isLoading && store.memberDataUpdatedAt == nil {
+                accountLoadingRow("Loading your training progress…")
+            } else if store.bookings.isEmpty && store.unavailableDataSources.contains(.bookings) {
+                accountUnavailableRow("Training progress")
+            } else {
+                trainingProgressCard(progress)
+            }
+        } header: {
+            Text("Training Momentum").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func trainingProgressCard(_ progress: MemberTrainingProgress) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings) {
+                Label("Showing last synced attendance", systemImage: "clock.arrow.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+            }
+
+            if progress.totalAttended == 0 {
+                Label("Your progress starts here", systemImage: "checkmark.seal")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Completed classes appear after Byron or the XERT team records attendance. Confirmed, cancelled and missed classes never inflate your totals.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        trainingProgressMetric("\(progress.attendedLast30Days)", label: "30 days")
+                        trainingProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        trainingProgressMetric("\(progress.totalAttended)", label: "All time")
+                    }
+                    VStack(spacing: 8) {
+                        trainingProgressMetric("\(progress.attendedLast30Days)", label: "Completed · 30 days")
+                        trainingProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        trainingProgressMetric("\(progress.totalAttended)", label: "Completed · all time")
+                    }
+                }
+
+                if let lastAttendedAt = progress.lastAttendedAt {
+                    Label(
+                        "Last completed \(lastAttendedAt.formatted(date: .abbreviated, time: .omitted))",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale)
+                }
+            }
+
+            Button {
+                guard let url = URL(string: "xertfitness://booking") else { return }
+                openURL(url)
+            } label: {
+                Label("Book your next class", systemImage: "calendar.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.xertPrimary)
+
+            Text("Attendance only · active weeks use Brisbane Monday–Sunday weeks")
+                .font(.caption2)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .xertCardStyle()
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        .listRowSeparator(.hidden)
+    }
+
+    private func trainingProgressMetric(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .xertDisplay(28)
+                .foregroundStyle(Color.xertOffWhite)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(0.7)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .padding(10)
+        .background(Color.xertNavy.opacity(0.38))
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.xertSteel.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var membershipSection: some View {
@@ -467,6 +568,8 @@ struct AccountView: View {
                 .disabled(store.isUpdatingReminderPreference)
             }
 
+            reminderDeliveryStatus
+
             Toggle("Haptic feedback", isOn: $hapticFeedbackEnabled)
                 .tint(.xertSteel)
                 .accessibilityHint("Adds subtle touch feedback to important XERT actions")
@@ -493,6 +596,49 @@ struct AccountView: View {
             Text("App Preferences").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private var reminderDeliveryStatus: some View {
+        switch store.classReminderSyncState {
+        case .off:
+            EmptyView()
+        case .scheduled(let count):
+            Label(
+                "\(count) class reminder\(count == 1 ? "" : "s") scheduled on this device",
+                systemImage: "bell.badge.fill"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.xertSteel)
+        case .noEligibleBookings:
+            Label(
+                "Reminders are on. Your next confirmed class will be scheduled automatically.",
+                systemImage: "bell"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.xertPale)
+        case .permissionDenied:
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Class reminders are off in iOS Settings.", systemImage: "bell.slash.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                Button("Open iOS Settings") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                }
+                .buttonStyle(.borderless)
+                .frame(minHeight: 44, alignment: .leading)
+            }
+        case .failed(let scheduledCount):
+            Label(
+                scheduledCount == 0
+                    ? "No class reminders could be scheduled. Pull down to retry."
+                    : "\(scheduledCount) reminders scheduled; another reminder needs retrying.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.orange)
+        }
     }
 
     private var accountDetailsSection: some View {
