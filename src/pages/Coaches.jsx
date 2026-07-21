@@ -29,7 +29,7 @@ function CoachCard({ coach }) {
     <article className="border flex flex-col" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
       <div className="aspect-[4/5] overflow-hidden relative" style={{ backgroundColor: 'rgba(16,24,32,0.6)' }}>
         {coach.photo_url ? (
-          <img src={coach.photo_url} alt={coach.name} className="w-full h-full object-cover" style={{ filter: 'saturate(0.85)' }} />
+          <img src={coach.photo_url} alt={coach.name} loading="lazy" decoding="async" className="w-full h-full object-cover" style={{ filter: 'saturate(0.85)' }} />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <span className="font-display text-5xl uppercase" style={{ color: 'rgba(123,167,188,0.4)' }}>

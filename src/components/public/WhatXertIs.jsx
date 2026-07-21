@@ -39,7 +39,7 @@ export default function WhatXertIs() {
             {/* Horizontal rule with icon */}
             <div className="flex items-center gap-4 mb-6">
               <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
-              <img src={LOGO_ICON} alt="" className="h-6 w-auto opacity-60" />
+              <img src={LOGO_ICON} alt="" loading="lazy" decoding="async" width="712" height="412" className="h-6 w-auto opacity-60" />
               <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
             </div>
           </div>
