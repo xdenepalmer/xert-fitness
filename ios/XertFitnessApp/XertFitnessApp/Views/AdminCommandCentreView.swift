@@ -1317,7 +1317,10 @@ private struct AdminWorkspaceSwitcher: View {
     }
 
     private var launchRunwayMatches: Bool {
-        let terms = normalizedQuery.lowercased().split(whereSeparator: { $0.isWhitespace })
+        let terms = normalizedQuery
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
         guard !terms.isEmpty else { return false }
         let searchIndex = [
             "stripe launch checkout payments activation",
