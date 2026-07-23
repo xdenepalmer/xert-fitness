@@ -1,13 +1,12 @@
 export const SITE_NAME = 'XERT Fitness';
 
-// Site-wide social-preview image for og:image / twitter:image. The square brand
-// icon is an opaque JPEG, so it renders cleanly on every platform (a transparent
-// PNG would composite unpredictably). A purpose-built 1200x630 card is the
-// recommended future upgrade; swap this one constant when it exists.
+// Site-wide social-preview image for og:image / twitter:image: a purpose-built
+// 1200x630 card (navy blueprint backdrop + wordmark) at the exact ratio social
+// platforms crop to, saved as an opaque JPEG so it composites predictably.
 export const SOCIAL_IMAGE = Object.freeze({
-  url: '/assets/xert-manifest-icon.jpg',
-  width: 1024,
-  height: 1024,
+  url: '/assets/xert-social-card.jpg',
+  width: 1200,
+  height: 630,
   alt: 'XERT Fitness',
 });
 
