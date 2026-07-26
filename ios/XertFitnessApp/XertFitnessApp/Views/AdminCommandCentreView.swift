@@ -735,7 +735,7 @@ struct AdminCommandCentreView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ownerWorkspaceToolbar }
                 .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
-                    workspaceDestination(workspace, session: session)
+                    ownerWorkspaceSurface(workspace, session: session)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar { ownerWorkspaceToolbar }
                 }
@@ -796,7 +796,7 @@ struct AdminCommandCentreView: View {
             .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 320)
         } detail: {
             NavigationStack {
-                workspaceDestination(currentWorkspace, session: session)
+                ownerWorkspaceSurface(currentWorkspace, session: session)
                     .id(currentWorkspace)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { workspaceSwitcherToolbar }
@@ -918,6 +918,14 @@ struct AdminCommandCentreView: View {
     private var workspaceSwitcherToolbar: some ToolbarContent {
         ToolbarItem(placement: .secondaryAction) {
             Menu {
+                if !admin.refreshUnavailableSources.isEmpty {
+                    Label(
+                        "\(admin.refreshUnavailableSources.count) data service"
+                            + (admin.refreshUnavailableSources.count == 1 ? " needs attention" : "s need attention"),
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                }
+
                 if currentWorkspace != .overview {
                     Button { openWorkspaceWithFeedback(.overview) } label: {
                         Label("Owner overview", systemImage: "waveform.path.ecg.rectangle")
@@ -962,11 +970,14 @@ struct AdminCommandCentreView: View {
             } label: {
                 if admin.isLoading {
                     ProgressView().tint(Color.xertSteel)
+                } else if !admin.refreshUnavailableSources.isEmpty {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.orange)
                 } else {
                     Image(systemName: "ellipsis.circle")
                 }
             }
-            .accessibilityLabel(admin.isLoading ? "Owner actions, refreshing" : "Owner actions")
+            .accessibilityLabel(ownerActionsAccessibilityLabel)
             .accessibilityHint("Refreshes data, pins workspaces, or opens owner navigation history")
         }
 
@@ -1132,6 +1143,16 @@ struct AdminCommandCentreView: View {
         case .readyToOpenBookings, .readyToActivate: return Color.xertSteel
         case .live: return Color.green
         }
+    }
+
+    private var ownerActionsAccessibilityLabel: String {
+        if admin.isLoading { return "Owner actions, refreshing" }
+        let unavailableCount = admin.refreshUnavailableSources.count
+        if unavailableCount > 0 {
+            return "Owner actions, \(unavailableCount) data service"
+                + (unavailableCount == 1 ? " needs attention" : "s need attention")
+        }
+        return "Owner actions"
     }
 
     private func incidentControl(session: AuthSession) -> some View {
@@ -2809,6 +2830,21 @@ struct AdminCommandCentreView: View {
         default:
             return nil
         }
+    }
+
+    @ViewBuilder
+    private func ownerWorkspaceSurface(_ workspace: XertOwnerWorkspace, session: AuthSession) -> some View {
+        workspaceDestination(workspace, session: session)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if workspace != .overview, !admin.refreshUnavailableSources.isEmpty {
+                    AdminOwnerDataHealthBar(
+                        unavailableCount: admin.refreshUnavailableSources.count,
+                        retainedSnapshotCount: admin.refreshUnavailableSources.filter(admin.loadedSources.contains).count,
+                        isRetrying: admin.isLoading,
+                        onRetry: { refreshOwnerData(session: session) }
+                    )
+                }
+            }
     }
 
     @ViewBuilder
@@ -15025,6 +15061,58 @@ private struct AdminOperationalDataWarning: View {
                 .stroke(Color.orange.opacity(0.42), lineWidth: 1)
         }
         .accessibilityLabel("Operational data is partial. Unavailable: \(unavailableSources.joined(separator: ", "))")
+    }
+}
+
+private struct AdminOwnerDataHealthBar: View {
+    let unavailableCount: Int
+    let retainedSnapshotCount: Int
+    let isRetrying: Bool
+    let onRetry: () -> Void
+
+    private var statusText: String {
+        let serviceText = "\(unavailableCount) data service" + (unavailableCount == 1 ? "" : "s")
+        guard retainedSnapshotCount > 0 else {
+            return "\(serviceText) unavailable"
+        }
+        let attentionVerb = unavailableCount == 1 ? "needs" : "need"
+        return "\(serviceText) \(attentionVerb) attention, \(retainedSnapshotCount) showing last snapshot"
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.orange)
+
+            Text(statusText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.xertOffWhite)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 4)
+
+            Button(action: onRetry) {
+                if isRetrying {
+                    ProgressView()
+                        .tint(Color.orange)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .frame(width: 44, height: 44)
+            .foregroundStyle(Color.orange)
+            .disabled(isRetrying)
+            .accessibilityLabel(isRetrying ? "Retrying owner data" : "Retry unavailable owner data")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .background(Color.xertInk.opacity(0.98))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.orange.opacity(0.5))
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

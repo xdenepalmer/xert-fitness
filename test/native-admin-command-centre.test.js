@@ -32,6 +32,35 @@ test('compact owner overview keeps one freshness-gated run-next action above pho
   assert.match(runNext, /AdminOwnerRunNextRefreshBar[\s\S]*dynamicTypeSize\.isAccessibilitySize/);
 });
 
+test('every native owner workspace keeps partial-data health visible and retryable', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const surface = view.slice(
+    view.indexOf('private func ownerWorkspaceSurface('),
+    view.indexOf('private func workspaceDestination('),
+  );
+  const toolbar = view.slice(
+    view.indexOf('private var workspaceSwitcherToolbar'),
+    view.indexOf('private var ownerWorkspaceToolbar'),
+  );
+  const healthBar = view.slice(
+    view.indexOf('private struct AdminOwnerDataHealthBar'),
+    view.indexOf('private struct AdminRefreshDataWarning'),
+  );
+
+  assert.match(view, /ownerWorkspaceSurface\(workspace, session: session\)/);
+  assert.match(view, /ownerWorkspaceSurface\(currentWorkspace, session: session\)/);
+  assert.match(surface, /\.safeAreaInset\(edge: \.top, spacing: 0\)/);
+  assert.match(surface, /workspace != \.overview/);
+  assert.match(surface, /!admin\.refreshUnavailableSources\.isEmpty/);
+  assert.match(surface, /admin\.refreshUnavailableSources\.filter\(admin\.loadedSources\.contains\)\.count/);
+  assert.match(surface, /onRetry: \{ refreshOwnerData\(session: session\) \}/);
+  assert.match(toolbar, /exclamationmark\.triangle\.fill/);
+  assert.match(toolbar, /ownerActionsAccessibilityLabel/);
+  assert.match(healthBar, /showing last snapshot/);
+  assert.match(healthBar, /frame\(width: 44, height: 44\)/);
+  assert.match(healthBar, /Retry unavailable owner data/);
+});
+
 test('native member directory has complete server-backed operator controls', async () => {
   const [api, store, models, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
@@ -1098,11 +1127,11 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /XertOwnerWorkspace\.workspaces\(in: section\)/);
   assert.match(view, /NavigationStack\(path: compactNavigationPath\)/);
   assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)/);
-  assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*workspaceDestination\(workspace, session: session\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
+  assert.match(view, /navigationDestination\(for: XertOwnerWorkspace\.self\)[\s\S]*ownerWorkspaceSurface\(workspace, session: session\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
   assert.match(view, /applyRequestedRoute\(requestedRoute, resolvesTask: false\)/);
   assert.match(view, /navigationSplitViewColumnWidth\(min: 230, ideal: 270, max: 320\)/);
   assert.match(view, /navigationSplitViewStyle\(\.balanced\)/);
-  assert.match(view, /workspaceDestination\(currentWorkspace, session: session\)[\s\S]*\.id\(currentWorkspace\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
+  assert.match(view, /ownerWorkspaceSurface\(currentWorkspace, session: session\)[\s\S]*\.id\(currentWorkspace\)[\s\S]*navigationBarTitleDisplayMode\(\.inline\)/);
   assert.match(view, /private func workspaceBadge/);
   assert.match(view, /@ViewBuilder\s+private func workspaceDestination[\s\S]*-> some View/);
   assert.doesNotMatch(view, /AnyView\(/);

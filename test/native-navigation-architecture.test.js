@@ -358,7 +358,9 @@ test('owner navigation restores exact record routes with back, forward, and v1 m
   assert.match(ownerView, /private func advanceToNextOwnerRoute\(\)/);
   assert.match(ownerView, /keyboardShortcut\("\[", modifiers: \.command\)/);
   assert.match(ownerView, /keyboardShortcut\("\]", modifiers: \.command\)/);
-  assert.match(ownerView, /accessibilityLabel\(admin\.isLoading \? "Owner actions, refreshing" : "Owner actions"\)/);
+  assert.match(ownerView, /\.accessibilityLabel\(ownerActionsAccessibilityLabel\)/);
+  assert.match(ownerView, /if admin\.isLoading \{ return "Owner actions, refreshing" \}/);
+  assert.match(ownerView, /data service"[\s\S]*needs attention/);
   assert.match(ownerView, /workspace == current \? "checkmark" : "chevron\.right"/);
   assert.match(modelsTests, /testOwnerRouteHistoryPreservesExactTasksForwardStateAndMigration/);
   assert.match(modelsTests, /v1\|1\|members,finance/);
