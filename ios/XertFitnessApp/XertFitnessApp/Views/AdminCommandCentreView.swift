@@ -2064,6 +2064,14 @@ struct AdminCommandCentreView: View {
                 task: singleWaitlistClassTask
             ),
             AdminPriorityAction(
+                title: "Member activation actions",
+                detail: "Complete onboarding and first-session outreach",
+                icon: "person.crop.circle.badge.exclamationmark",
+                count: admin.activationQueue.count,
+                workspace: .retention,
+                task: singleActivationTask
+            ),
+            AdminPriorityAction(
                 title: "Retention follow-ups",
                 detail: "Contact members who need support",
                 icon: "phone.arrow.up.right",
@@ -2157,6 +2165,12 @@ struct AdminCommandCentreView: View {
         let pendingRequests = admin.ptRequests.filter(\.isPending)
         guard pendingRequests.count == 1, let request = pendingRequests.first else { return nil }
         return .ptRequest(request.id)
+    }
+
+    private var singleActivationTask: XertOwnerTask? {
+        guard admin.activationQueue.count == 1,
+              let member = admin.activationQueue.first else { return nil }
+        return .member(member.id)
     }
 
     private var singleRetentionTask: XertOwnerTask? {
@@ -2546,7 +2560,7 @@ struct AdminCommandCentreView: View {
         case .ptRequests:
             return admin.pendingPTRequests
         case .retention:
-            return admin.followUps.count
+            return admin.activationQueue.count + admin.followUps.count
         case .notices:
             return admin.liveAnnouncements
         case .orders:

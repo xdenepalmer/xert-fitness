@@ -327,6 +327,7 @@ test('native owner priorities open the exact protected task when one workload is
   assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestTask \?\? singleBookingRequestClassTask/);
   assert.match(priorities, /title: "PT enquiries"[\s\S]*task: singlePTRequestTask/);
   assert.match(priorities, /title: "Waitlisted members"[\s\S]*task: singleWaitlistClassTask/);
+  assert.match(priorities, /title: "Member activation actions"[\s\S]*task: singleActivationTask/);
   assert.match(priorities, /title: "Retention follow-ups"[\s\S]*task: singleRetentionTask/);
   assert.match(priorities, /title: "Orders to reconcile"[\s\S]*task: singleRecoverableOrderTask/);
 
@@ -334,9 +335,11 @@ test('native owner priorities open the exact protected task when one workload is
   assert.match(priorities, /private var singleBookingRequestTask:[\s\S]*admin\.bookingRequests\.filter \{ \$0\.status == "requested" \}[\s\S]*let recordID = request\.routeRecordID[\s\S]*return \.bookingRequest\(request\.source, recordID\)/);
   assert.match(priorities, /private var singleBookingRequestClassTask:[\s\S]*requested_count \+ \$0\.public_request_count > 0[\s\S]*return \.classSession\(operation\.id\)/);
   assert.match(priorities, /private var singlePTRequestTask:[\s\S]*admin\.ptRequests\.filter\(\\\.isPending\)[\s\S]*return \.ptRequest\(request\.id\)/);
+  assert.match(priorities, /private var singleActivationTask:[\s\S]*admin\.activationQueue\.count == 1[\s\S]*return \.member\(member\.id\)/);
   assert.match(priorities, /private var singleWaitlistClassTask:[\s\S]*\$0\.waitlist_count > 0[\s\S]*return \.classSession\(item\.session_id\)/);
   assert.match(priorities, /private var singleRetentionTask:[\s\S]*admin\.followUps\.count == 1[\s\S]*return \.member\(followUp\.id\)/);
   assert.match(priorities, /private var singleRecoverableOrderTask:[\s\S]*admin\.orders\.filter\(\\\.isRecoverable\)[\s\S]*return \.order\(order\.id\)/);
+  assert.match(view, /case \.retention:[\s\S]*admin\.activationQueue\.count \+ admin\.followUps\.count/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {
