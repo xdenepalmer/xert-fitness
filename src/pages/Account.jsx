@@ -944,6 +944,17 @@ export default function Account() {
           {editingProfile ? (
             <form onSubmit={handleProfileSave} className="border p-5" style={cardStyle}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                    Email
+                  </p>
+                  <p className="font-body text-sm mt-2" style={{ color: '#D1DDE6' }}>
+                    {user?.email || 'Unavailable'}
+                  </p>
+                  <p className="font-body text-xs mt-1.5" style={{ color: 'rgba(209,221,230,0.45)' }}>
+                    Email is managed by your sign-in and cannot be changed here. Contact XERT if you need it updated.
+                  </p>
+                </div>
                 <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
                   Full name
                   <input
@@ -959,7 +970,7 @@ export default function Account() {
                     style={{ borderColor: 'rgba(123,167,188,0.3)' }}
                   />
                 </label>
-                <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <label className="font-body text-xs uppercase tracking-wider sm:col-span-2" style={{ color: 'rgba(209,221,230,0.55)' }}>
                   Mobile number
                   <input
                     value={profileForm.phone}

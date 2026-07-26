@@ -83,8 +83,9 @@ export default function OperationsHealth({ onNavigate }) {
         setLoading(false);
         setRefreshing(false);
         lastRefreshAtRef.current = Date.now();
+        // Only the current generation may release the slot — same race guard as AdminOverview.
+        requestInFlightRef.current = false;
       }
-      requestInFlightRef.current = false;
     }
   }, []);
 

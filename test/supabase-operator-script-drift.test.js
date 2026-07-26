@@ -302,6 +302,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     'fulfillment_erasure_and_refunded_pack_guard.sql',
     'public_booking_switch_gate.sql',
     'member_onboarding_booking_gate.sql',
+    'waitlist_skip_notice_accuracy.sql',
   ]) {
     assert.match(
       readme,
@@ -309,14 +310,14 @@ test('README operator apply order includes the newest Ops Health migrations', ()
       `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
     );
   }
-  // Fresh + already-deployed apply sequences both end with the onboarding booking gate.
+  // Fresh + already-deployed apply sequences both end with the waitlist skip notice fix.
   assert.match(
     readme,
-    /public_booking_switch_gate\.sql` and\n`member_onboarding_booking_gate\.sql`\. This/,
+    /member_onboarding_booking_gate\.sql` and\n`waitlist_skip_notice_accuracy\.sql`\. This/,
   );
   assert.match(
     readme,
-    /public_booking_switch_gate\.sql` and\n`member_onboarding_booking_gate\.sql`\. The/,
+    /member_onboarding_booking_gate\.sql` and\n`waitlist_skip_notice_accuracy\.sql`\. The/,
   );
 });
 

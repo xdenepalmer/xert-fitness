@@ -643,6 +643,17 @@ struct AccountView: View {
 
     private var accountDetailsSection: some View {
         Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.authSession?.user?.email ?? "Email unavailable")
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Email is managed by your sign-in and cannot be changed here. Contact XERT if you need it updated.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Email \(store.authSession?.user?.email ?? "unavailable"). Managed by sign-in and cannot be changed here.")
+
             TextField("Full name", text: $fullName)
                 .textContentType(.name)
                 .focused($focusedProfileField, equals: .fullName)

@@ -142,8 +142,15 @@ actor ClassReminderScheduler {
             content.threadIdentifier = "xert-class-reminders"
             content.userInfo = [ClassReminderNotification.bookingIDKey: booking.booking_id.uuidString]
 
-            let trigger = UNTimeIntervalNotificationTrigger(
-                timeInterval: reminderDate.timeIntervalSince(now),
+            // Absolute calendar fire time survives resync and clock-relative drift
+            // better than an interval trigger counted from "now".
+            var fireComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: reminderDate
+            )
+            fireComponents.calendar = Calendar.current
+            let trigger = UNCalendarNotificationTrigger(
+                dateMatching: fireComponents,
                 repeats: false
             )
             let request = UNNotificationRequest(

@@ -166,57 +166,64 @@ export default function AdminOverview({ onNavigate }) {
     ]);
 
     try {
-      const [s, settingsResult, businessResult, feed, dailyResult] = await Promise.all([
-        getDashboardStats(),
-        getSoftLaunchSettings()
-          .then(data => ({ data, error: null }))
-          .catch(error => ({ data: null, error })),
-        getBusinessStats()
-          .then(data => ({ data, error: null }))
-          .catch(error => ({ data: null, error })),
-        Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]).then(activityFromSettled),
-        getAdminDailyOperations()
-          .then(data => ({ data, error: null }))
-          .catch(error => ({ data: null, error }))
-      ]);
-      if (requestId !== requestIdRef.current) return;
-      setStats(s);
-      if (s.errors?.length) {
-        setPartialWarning(current => [current, `Dashboard metrics incomplete: ${s.errors.join(' | ')}`].filter(Boolean).join(' '));
+      try {
+        const [s, settingsResult, businessResult, feed, dailyResult] = await Promise.all([
+          getDashboardStats(),
+          getSoftLaunchSettings()
+            .then(data => ({ data, error: null }))
+            .catch(error => ({ data: null, error })),
+          getBusinessStats()
+            .then(data => ({ data, error: null }))
+            .catch(error => ({ data: null, error })),
+          Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]).then(activityFromSettled),
+          getAdminDailyOperations()
+            .then(data => ({ data, error: null }))
+            .catch(error => ({ data: null, error }))
+        ]);
+        if (requestId !== requestIdRef.current) return;
+        setStats(s);
+        if (s.errors?.length) {
+          setPartialWarning(current => [current, `Dashboard metrics incomplete: ${s.errors.join(' | ')}`].filter(Boolean).join(' '));
+        }
+        if (s.insightsSampled) {
+          setPartialWarning(current => [current, `Interest insights use the latest ${s.insightSampleSize.toLocaleString('en-AU')} of ${s.totalMembers.toLocaleString('en-AU')} leads.`].filter(Boolean).join(' '));
+        }
+        if (settingsResult.data) setSettings(settingsResult.data);
+        if (settingsResult.error) {
+          setPartialWarning(current => [current, `Launch settings unavailable: ${settingsResult.error.message || 'check Supabase permissions.'}`].filter(Boolean).join(' '));
+        }
+        setBiz(businessResult.data);
+        setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
+        setActivity(feed.feed);
+        if (feed.errors.length) setPartialWarning(current => [current, `Recent activity incomplete: ${feed.errors.join(' | ')}`].filter(Boolean).join(' '));
+        if (dailyResult.data) {
+          setDailyOperations(dailyResult.data.rows);
+          setDailyOperationsAvailable(dailyResult.data.available);
+        }
+        if (dailyResult.error) setDailyOperationsError(dailyResult.error.message || 'Check Supabase permissions.');
+        setLastUpdated(new Date());
+      } catch (loadError) {
+        if (requestId === requestIdRef.current) setError(loadError.message);
       }
-      if (s.insightsSampled) {
-        setPartialWarning(current => [current, `Interest insights use the latest ${s.insightSampleSize.toLocaleString('en-AU')} of ${s.totalMembers.toLocaleString('en-AU')} leads.`].filter(Boolean).join(' '));
-      }
-      if (settingsResult.data) setSettings(settingsResult.data);
-      if (settingsResult.error) {
-        setPartialWarning(current => [current, `Launch settings unavailable: ${settingsResult.error.message || 'check Supabase permissions.'}`].filter(Boolean).join(' '));
-      }
-      setBiz(businessResult.data);
-      setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
-      setActivity(feed.feed);
-      if (feed.errors.length) setPartialWarning(current => [current, `Recent activity incomplete: ${feed.errors.join(' | ')}`].filter(Boolean).join(' '));
-      if (dailyResult.data) {
-        setDailyOperations(dailyResult.data.rows);
-        setDailyOperationsAvailable(dailyResult.data.available);
-      }
-      if (dailyResult.error) setDailyOperationsError(dailyResult.error.message || 'Check Supabase permissions.');
-      setLastUpdated(new Date());
-    } catch (loadError) {
-      if (requestId === requestIdRef.current) setError(loadError.message);
-    }
 
-    const readiness = readinessFromSettled(await readinessRequest);
-    if (requestId === requestIdRef.current) {
-      setFillRates(readiness.data.classes);
-      setLaunch(readiness.launch);
-      if (readiness.errors.length) {
-        setPartialWarning(current => [current, `Readiness incomplete: ${readiness.errors.join(' | ')}`].filter(Boolean).join(' '));
+      const readiness = readinessFromSettled(await readinessRequest);
+      if (requestId === requestIdRef.current) {
+        setFillRates(readiness.data.classes);
+        setLaunch(readiness.launch);
+        if (readiness.errors.length) {
+          setPartialWarning(current => [current, `Readiness incomplete: ${readiness.errors.join(' | ')}`].filter(Boolean).join(' '));
+        }
+        setLoading(false);
+        setRefreshing(false);
+        lastRefreshAtRef.current = Date.now();
       }
-      setLoading(false);
-      setRefreshing(false);
-      lastRefreshAtRef.current = Date.now();
+    } finally {
+      // Only the current generation may release the slot. A stale response after
+      // unmount+remount must not clear a newer load's in-flight guard.
+      if (requestId === requestIdRef.current) {
+        requestInFlightRef.current = false;
+      }
     }
-    requestInFlightRef.current = false;
   }, []);
 
   useEffect(() => {

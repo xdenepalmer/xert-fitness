@@ -182,14 +182,18 @@ export async function cancelBooking(bookingId) {
 
 // ─── Profile / role ───────────────────────────────────────────────────────────
 
-export async function updateMyProfile(updates) {
+export async function updateMyProfile(updates = {}) {
   const {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in.');
+  // Email and role are auth/admin managed — never accept them from the client body.
+  const payload = { updated_at: new Date().toISOString() };
+  if ('full_name' in updates) payload.full_name = updates.full_name;
+  if ('phone' in updates) payload.phone = updates.phone;
   const { error } = await supabase
     .from('profiles')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', user.id);
   if (error) throw new Error(error.message);
 }

@@ -1,5 +1,32 @@
 # Overnight status — 26 July 2026
 
+## Morning owner briefing
+
+**What was made safer overnight (plain English)**
+- Waitlist “Skip — no credits” no longer texts the member that a credit was
+  returned (they never held one). Promote still creates the private “place
+  confirmed” notice for the next credited member.
+- Class reminders on iPhone now fire at the real clock time before class, not a
+  countdown that can drift after the app refreshes.
+- Account Details shows email as locked on web and iOS, and the save path will
+  not accept an email or role change from the browser.
+- Owner overview metrics no longer let a late refresh clear another in-flight
+  load and paint stale numbers after you leave and return to the tab.
+- Soft-launch booking pause, Member Readiness gate, archived-notice push block,
+  refund drawer races, and checkout burst limits from earlier overnight batches
+  stay in place. Staff roles were **not** built.
+
+**What you must apply in Supabase tomorrow**
+1. Run any missing migrations in timestamp order through
+   `20260726115000_waitlist_skip_notice_accuracy.sql` (full list below).
+2. Run `src/supabase/release_readiness_check.sql` — every row must show
+   `installed = true` and `release_ready = true`, including
+   `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`.
+3. Smoke: Skip a no-credit waitlist head → member notice says no credit charged;
+   then Promote next → they get the confirmed-place notice/push.
+
+---
+
 Branch: `cursor/xert-audit-continuation-8c8e`.
 
 Audit queue remains **56 FIXED / 0 OPEN**. Completeness-critic items from
@@ -95,6 +122,19 @@ Migration / operator mirror:
 `supabase/migrations/20260726114000_member_onboarding_booking_gate.sql`
 ↔ `src/supabase/member_onboarding_booking_gate.sql`.
 
+### 12. This batch — waitlist skip notice, reminders, email UI, overview race
+| Area | Defect | Fix |
+|---|---|---|
+| Waitlist skip notices | Skip routes through `admin_set_booking_status_with_notice`; cancelled copy always said a reserved credit was returned, including for waitlisted heads who never held one | Waitlisted→cancelled notice: “Waitlist place removed” / “No class credit was charged”; capability `waitlist_skip_notice_accuracy` |
+| Class reminders (iOS) | Reminders used `UNTimeIntervalNotificationTrigger` from sync “now”, so fire time could drift across resync | `UNCalendarNotificationTrigger` at the absolute lead-time wall clock |
+| Account email UI | Edit hid email; `updateMyProfile` spread arbitrary columns (email/role attempts) | Read-only email + copy on web/iOS; whitelist `full_name`/`phone` only |
+| Admin overview metrics | Stale load after unmount+remount always cleared `requestInFlightRef`, allowing overlapping refreshes and stale paints | Only the current request generation releases the in-flight guard (Ops Health aligned) |
+| Release gate (26114*) | `member_onboarding_booking_gate` already in readiness; new skip-notice capability synced | `waitlist_skip_notice_accuracy` in `schemaCapabilities.js` + `release_readiness_check.sql` |
+
+Migration / operator mirror:
+`supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql`
+↔ `src/supabase/waitlist_skip_notice_accuracy.sql`.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -118,6 +158,7 @@ source of truth.
 | 11 | `20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql` | `stripe_fulfillment_deleted_email_erasure` + `refund_skips_stripe_refunded_batches` |
 | 12 | `20260726113000_public_booking_switch_gate.sql` | `public_booking_switch_gate` — public `class_bookings` respect `bookings_enabled` |
 | 13 | `20260726114000_member_onboarding_booking_gate.sql` | `member_onboarding_booking_gate` — book/waitlist require Member Readiness |
+| 14 | `20260726115000_waitlist_skip_notice_accuracy.sql` | `waitlist_skip_notice_accuracy` — waitlist Skip notice does not claim a credit return |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -125,14 +166,14 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`public_booking_switch_gate` and `member_onboarding_booking_gate`.
+`member_onboarding_booking_gate` and `waitlist_skip_notice_accuracy`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726114000_member_onboarding_booking_gate.sql`. Confirm readiness SQL.
+   `20260726115000_waitlist_skip_notice_accuracy.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -152,5 +193,10 @@ show `installed = true` and `release_ready = true`, including
 9. **Erasure / refunded packs (batch 9)** — Delete account → delayed fulfillment
    keeps null order email; Stripe-refunded pack does not regain credits from
    later cancel / roll-call.
-10. **Do not** implement staff roles yet — owner/legal gates in
+10. **Waitlist skip notice** — Skip a no-credit head → private notice says no
+    credit was charged (not that one was returned); Promote next → confirmed
+    notice/push still fires.
+11. **Account email** — Edit Account Details: email visible and not editable;
+    save only updates name/phone.
+12. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

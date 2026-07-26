@@ -32,6 +32,9 @@ test('native class reminders require explicit member opt-in', () => {
 test('native class reminders reconcile timing changes and successful cancellations', () => {
   assert.match(scheduler, /func remove\(bookingID: UUID\)/);
   assert.match(scheduler, /content\.body = "\\\(booking\.title\) starts in \\\(leadTime\.notificationLead\)\."/);
+  assert.match(scheduler, /UNCalendarNotificationTrigger/);
+  assert.match(scheduler, /dateMatching: fireComponents/);
+  assert.doesNotMatch(scheduler, /UNTimeIntervalNotificationTrigger/);
   assert.match(store, /func setClassReminderLeadTime\(_ leadTime: ClassReminderLeadTime\) async/);
   assert.match(store, /ClassReminderPreference\.setLeadTime\(leadTime\)/);
   assert.match(store, /sync\(bookings: bookings, leadTime: leadTime\)/);
