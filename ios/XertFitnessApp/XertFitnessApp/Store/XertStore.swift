@@ -643,6 +643,13 @@ final class XertStore: ObservableObject {
         }
     }
 
+    func expireUnauthorizedOwnerSession() async {
+        guard authSession != nil else { return }
+        await expireCurrentSession(
+            message: "Your owner session has expired. Sign in again to reopen the Command Centre."
+        )
+    }
+
     /// Booking mutations only invalidate the timetable, credits and bookings.
     /// Refreshing these three sources keeps the UI authoritative while avoiding
     /// the ten unrelated requests in a complete app refresh.
@@ -1493,15 +1500,21 @@ final class XertStore: ObservableObject {
               (error as? APIError)?.isUnauthorized == true
         else { return false }
 
+        await expireCurrentSession(
+            message: "Your XERT session has expired. Sign in again to continue."
+        )
+        return true
+    }
+
+    private func expireCurrentSession(message: String) async {
         let currentUserID = authSession?.user?.id ?? profile?.id
         MemberPushRegistration.stopReceivingPrivateNotices()
         clearLocalMemberState(for: currentUserID)
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         await ClassReminderScheduler.shared.clearAll()
-        errorMessage = "Your XERT session has expired. Sign in again to continue."
+        errorMessage = message
         XertHaptics.play(.warning)
-        return true
     }
 
     private func applyMemberOnboarding(_ onboarding: MemberOnboardingState) {

@@ -160,6 +160,14 @@ struct AdminCommandCentreView: View {
             if let userID { prepareOwnerNavigation(for: userID) }
             reloadPinnedWorkspaces()
         }
+        .onChange(of: admin.requiresReauthentication) { requiresReauthentication in
+            guard requiresReauthentication else { return }
+            Task {
+                await store.expireUnauthorizedOwnerSession()
+                admin.acknowledgeReauthenticationRequest()
+                onClose?()
+            }
+        }
         .onChange(of: requestedRoute) { route in
             applyRequestedRoute(route)
         }

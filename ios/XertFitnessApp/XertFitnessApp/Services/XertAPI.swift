@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let xertAPIUnauthorizedResponse = Notification.Name("com.xertfitness.api.unauthorized")
+}
+
 struct APIError: LocalizedError {
     let message: String
     let statusCode: Int?
@@ -2799,6 +2803,9 @@ final class XertAPI {
             throw APIError(message: "Invalid network response.")
         }
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401 {
+                NotificationCenter.default.post(name: .xertAPIUnauthorizedResponse, object: self)
+            }
             let rawMessage = String(data: data, encoding: .utf8)
             let message = (try? decoder.decode(SupabaseErrorResponse.self, from: data))?.displayMessage
                 ?? (rawMessage?.isEmpty == false ? rawMessage : nil)

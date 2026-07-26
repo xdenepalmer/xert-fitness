@@ -197,8 +197,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var loadedSources: Set<String> = []
     @Published private(set) var healthSourceUpdatedAt: [String: Date] = [:]
     @Published private(set) var launchGateUpdatedAt: Date?
+    @Published private(set) var requiresReauthentication = false
 
-    private let api = XertAPI()
+    private let api: XertAPI
+    private var apiSubscriptions = Set<AnyCancellable>()
     private var memberDirectoryGeneration: UInt = 0
     private var ownerMemberSearchGeneration: UInt = 0
     private var ownerTaskResolutionGeneration: UInt = 0
@@ -209,6 +211,23 @@ final class AdminStore: ObservableObject {
     private var eventRosterGeneration: UInt = 0
     private var rosterLoadGeneration: UInt = 0
     private var requestedRosterSessionID: UUID?
+
+    init(api: XertAPI = XertAPI()) {
+        self.api = api
+        NotificationCenter.default.publisher(for: .xertAPIUnauthorizedResponse, object: api)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard self?.requiresReauthentication == false else { return }
+                    self?.requiresReauthentication = true
+                }
+            }
+            .store(in: &apiSubscriptions)
+    }
+
+    func acknowledgeReauthenticationRequest() {
+        requiresReauthentication = false
+    }
 
     var memberCount: Int {
         max(members.map(\.total_count).max() ?? 0, members.count)
