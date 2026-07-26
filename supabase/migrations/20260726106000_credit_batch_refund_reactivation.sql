@@ -11,6 +11,9 @@
 -- pure expires_at expression it wraps). Waitlisted places still never refund.
 -- Attended/no_show refund only when credit_batch_id is present (they hold the
 -- credit; cancelling them must not double-count a null batch).
+--
+-- Re-run safe: 26112 / operator mirrors add o.status = 'refunded' skips on the
+-- helper, roll-call release and class-cancel restore. Keep those newer bodies.
 
 create or replace function public.credit_batch_expires_at_after_refund(
   p_expires_at timestamptz,
@@ -28,6 +31,20 @@ as $$
   end;
 $$;
 
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -36,7 +53,7 @@ create or replace function public.refund_credits_to_batch(
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 begin
   if p_batch_id is null or p_count is null or p_count <= 0 then
     return;
@@ -46,7 +63,11 @@ begin
          expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
    where id = p_batch_id;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
   from public, anon, authenticated;
@@ -164,12 +185,26 @@ end; $$;
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;
 
+do $install_admin_record_session_attendance$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_record_session_attendance'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid, p_attended_ids uuid[], p_no_show_ids uuid[]';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_record_session_attendance';
+  else
+    execute $fn$
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
   p_attended_ids uuid[],
   p_no_show_ids uuid[]
 )
-returns integer language plpgsql security definer set search_path = public as $$
+returns integer language plpgsql security definer set search_path = public as $body$
 declare
   v_session_status text;
   v_start_time timestamptz;
@@ -246,7 +281,11 @@ begin
    where id = p_session_id;
 
   return v_updated_count;
-end; $$;
+end; $body$;
+$fn$;
+  end if;
+end;
+$install_admin_record_session_attendance$;
 
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
@@ -324,12 +363,26 @@ $$;
 
 revoke all on function public.create_class_cancellation_notice(uuid) from public, anon, authenticated;
 
+do $install_admin_cancel_class_session$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_cancel_class_session'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_cancel_class_session';
+  else
+    execute $fn$
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 declare
   v_status text;
   v_start timestamptz;
@@ -398,7 +451,11 @@ begin
 
   return v_cancelled_count + v_enquiry_cancelled_count;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_cancel_class_session$;
 
 revoke all on function public.admin_cancel_class_session(uuid) from public, anon;
 grant execute on function public.admin_cancel_class_session(uuid) to authenticated;

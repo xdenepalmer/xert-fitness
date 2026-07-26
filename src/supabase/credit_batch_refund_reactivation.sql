@@ -131,6 +131,21 @@ $install_cancel_booking$;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 
+-- Re-run safe: keep a helper-backed status RPC (Stripe-refunded pack skip).
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -206,10 +221,31 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;
 
+-- Re-run safe: keep request-credit release + Stripe-refunded pack skip on roll call.
+do $install_admin_record_session_attendance$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_record_session_attendance'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid, p_attended_ids uuid[], p_no_show_ids uuid[]';
+  if v_def is not null
+     and v_def ilike '%status = ''requested''%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_record_session_attendance';
+  else
+    execute $fn$
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
   p_attended_ids uuid[],
@@ -299,6 +335,10 @@ begin
 
   return v_updated_count;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_record_session_attendance$;
 
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;

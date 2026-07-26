@@ -67,3 +67,11 @@ test('execute stays restricted to authenticated callers behind the admin gate', 
   assert.match(text, /revoke execute on function public\.admin_set_booking_status\(uuid, text\) from public, anon;/);
   assert.match(text, /grant execute on function public\.admin_set_booking_status\(uuid, text\) to authenticated;/);
 });
+
+test('re-run keeps a helper-backed status RPC instead of restoring inline remaining+1', async () => {
+  const text = await body();
+  assert.match(text, /keeping newer admin_set_booking_status/);
+  assert.match(text, /refund_credits_to_batch/);
+  // Historical bootstrap body is still present for databases that never got the helper.
+  assert.match(text, /remaining = remaining \+ 1/);
+});

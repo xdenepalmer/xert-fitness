@@ -1,7 +1,12 @@
 -- Stops a roll-call correction charging the member a second credit.
 -- Operator re-run copy: also uses the shared expired-pack reactivation helper
 -- so a staff cancel/decline from attended/no_show returns a usable credit.
--- The historical migration 20260726003000_* remains the original charge-side fix.
+-- The historical migration 20260726003000_* remains the original charge-side fix
+-- (skip-if-newer so it cannot restore an inline remaining+1 refund).
+--
+-- Re-run safe: keep helper-backed refund/cancel/status bodies that skip
+-- Stripe-refunded packs. Unconditional recreate would race Ops Health remediations
+-- that already installed refund_credits_to_batch with o.status = 'refunded'.
 
 create or replace function public.credit_batch_expires_at_after_refund(
   p_expires_at timestamptz,
@@ -19,6 +24,20 @@ as $$
   end;
 $$;
 
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -44,12 +63,30 @@ begin
      );
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
   from public, anon, authenticated;
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+do $install_cancel_booking$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'cancel_booking'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer cancel_booking';
+  else
+    execute $fn$
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -78,10 +115,28 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_cancel_booking$;
 
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -157,10 +212,13 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;
 
 insert into public.xert_schema_capabilities (capability)
 values ('credit_batch_refund_reactivation') on conflict (capability) do nothing;
-

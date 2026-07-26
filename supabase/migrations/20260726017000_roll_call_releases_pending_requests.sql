@@ -28,13 +28,31 @@
 -- attended and no-show booking exactly once, attendance is still only reachable
 -- from a session that has started, and the returned count is still the number
 -- of attendance rows written.
+--
+-- Re-run safe: later fulfillment_erasure / operator mirrors refuse to restore
+-- credits onto Stripe-refunded packs. Keep that attendance body; this bootstrap
+-- still releases without the refunded-order skip for databases that never got it.
 
+do $install_admin_record_session_attendance$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_record_session_attendance'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid, p_attended_ids uuid[], p_no_show_ids uuid[]';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_record_session_attendance';
+  else
+    execute $fn$
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
   p_attended_ids uuid[],
   p_no_show_ids uuid[]
 )
-returns integer language plpgsql security definer set search_path = public as $$
+returns integer language plpgsql security definer set search_path = public as $body$
 declare
   v_session_status text;
   v_start_time timestamptz;
@@ -110,7 +128,11 @@ begin
    where id = p_session_id;
 
   return v_updated_count;
-end; $$;
+end; $body$;
+$fn$;
+  end if;
+end;
+$install_admin_record_session_attendance$;
 
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;

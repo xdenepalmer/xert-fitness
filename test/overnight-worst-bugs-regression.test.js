@@ -369,3 +369,113 @@ test('deleted-buyer fulfillment keeps Stripe email erased on orphaned orders', (
     assert.doesNotMatch(sql, /set status = 'paid',\s*email = coalesce\(nullif\(btrim\(p_email\)/s);
   }
 });
+
+/**
+ * Money / privacy operator re-run markers that must stay in the overnight
+ * bundle: skip-if-newer notices for helper refunds, Stripe-refunded pack skips,
+ * deleted-buyer email erasure, and audited health reveal.
+ */
+test('overnight money/privacy skip-if-newer markers stay locked for operator re-runs', () => {
+  const executable = text => text.split('\n').filter(line => !line.trimStart().startsWith('--')).join('\n');
+  const markers = [
+    {
+      path: '../src/supabase/credit_batch_refund_reactivation.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/o\.status = 'refunded'/, /p_anchor timestamp with time zone/],
+    },
+    {
+      path: '../src/supabase/roll_call_correction_double_credit_fix.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
+      ],
+      shapes: [/o\.status = 'refunded'/, /p_anchor timestamp with time zone/],
+    },
+    {
+      path: '../src/supabase/cancel_booking_expired_batch_refund.sql',
+      notices: [/keeping newer cancel_booking/],
+      shapes: [/refund_credits_to_batch/],
+    },
+    {
+      path: '../src/supabase/stripe_fulfillment_deleted_member_fix.sql',
+      notices: [/keeping newer fulfill_stripe_checkout/],
+      shapes: [/user_id is null then null/],
+    },
+    {
+      path: '../src/supabase/booking_modes_upgrade.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/p_anchor timestamp with time zone/],
+    },
+    {
+      path: '../src/supabase/admin_cms_schema.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_set_booking_status/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/p_anchor timestamp with time zone/],
+    },
+    {
+      path: '../src/supabase/attendance_roll_call_upgrade.sql',
+      notices: [/keeping newer admin_record_session_attendance/],
+      shapes: [/status = 'requested'/, /o\.status = 'refunded'/],
+    },
+    {
+      path: '../src/supabase/waitlist_fifo_promotion_upgrade.sql',
+      notices: [/keeping newer admin_set_booking_status/],
+      shapes: [/refund_credits_to_batch/],
+    },
+    {
+      path: '../src/supabase/request_notes_health_consent.sql',
+      notices: [/keeping audited admin_reveal_member_interest_health/],
+      shapes: [/member_interest_health_reveals/, /audit_event_id/],
+    },
+    {
+      path: '../src/supabase/booking_decision_notifications_upgrade.sql',
+      notices: [/keeping newer admin_set_booking_status_with_notice/],
+      shapes: [/Waitlist place removed/],
+    },
+    {
+      path: '../supabase/migrations/20260726003000_roll_call_correction_double_credit_fix.sql',
+      notices: [/keeping newer admin_set_booking_status/],
+      shapes: [],
+    },
+    {
+      path: '../supabase/migrations/20260726017000_roll_call_releases_pending_requests.sql',
+      notices: [/keeping newer admin_record_session_attendance/],
+      shapes: [],
+    },
+    {
+      path: '../supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/p_anchor timestamp with time zone/],
+    },
+  ];
+
+  for (const { path, notices, shapes } of markers) {
+    const sql = executable(read(path));
+    for (const notice of notices) {
+      assert.match(sql, notice, `${path} missing skip-if-newer ${notice}`);
+    }
+    for (const shape of shapes) {
+      assert.match(sql, shape, `${path} missing money/privacy shape ${shape}`);
+    }
+  }
+});

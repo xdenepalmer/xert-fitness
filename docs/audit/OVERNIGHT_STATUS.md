@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Money operator re-runs: `credit_batch_refund_reactivation` now skip-if-newer on
+  status + roll-call too; `roll_call_correction` skip-if-newer on refund/cancel/
+  status. Historical `260030` / `260170` / `261060` migrations keep newer
+  helper-backed / Stripe-refunded-pack-skipping bodies. Bootstrap
+  `booking_modes` / `admin_cms` refund skip guards match Postgres identity args
+  (`timestamp with time zone`). Overnight + drift tests lock the full money/
+  privacy skip-if-newer marker set.
 - Public-form / waitlist / onboarding Ops Health remediations no longer point at
   historical migrations that could strip `bookings_enabled`, notes health-consent
   WITH CHECK, waitlist Skip notice accuracy, or helper-backed refunds. Older
@@ -473,6 +480,15 @@ No new migration for this batch (operator tip). Apply through **26116** remains 
 | Operator SQL drift (privacy reveal) | Re-running `20260726109000_request_notes_health_consent.sql` still installed the unaudited reveal bootstrap | Migration synced to operator skip-if-audited / restore-audited reveal install |
 | Operator SQL drift (waitlist Skip) | Re-running `booking_decision_notifications` / `waitlist_fifo_promotion` migrations could restore false credit-return Skip notices or inline `remaining+1` refunds used by Skip | Skip-if-newer on those migrations (`keeping newer…`) |
 | Ops Health / release gate | Remediations for public-form, booking switch, request notes, waitlist skip/FIFO/notices, onboarding gate, and reveal authz still pointed at the historical migration filenames | Retargeted to strong `src/supabase/` mirrors; drift test pins path parity + installer WITH CHECK markers |
+
+No new migration for this batch (operator tip). Apply through **26116** remains current.
+
+### 33. This batch — roll-call / refund reactivation skip-if-newer + identity-arg fix
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (money) | `credit_batch_refund_reactivation` still unconditionally replaced `admin_set_booking_status` / `admin_record_session_attendance`; `roll_call_correction` replaced refund/cancel/status without skip-if-newer | Skip-if-newer on those RPCs (`keeping newer…`) |
+| Historical migration re-run (money) | `260030` restored inline `remaining+1`; `260170` restored roll-call release without Stripe-refunded skip; `261060` restored helper/cancel/attendance without `o.status = 'refunded'` | Skip-if-newer on those migrations |
+| Operator SQL drift (skip guard bug) | `booking_modes` / `admin_cms` compared `pg_get_function_identity_arguments` to `p_anchor timestamptz`, which never matches Postgres’s `timestamp with time zone` — skip-if-newer never kept the helper | Identity args corrected; drift + overnight tests pin the canonical form and the full money/privacy skip marker set |
 
 No new migration for this batch (operator tip). Apply through **26116** remains current.
 

@@ -32,9 +32,27 @@
 -- it, or the credit is stranded: charged at confirmation and never given back.
 -- That stranding already existed; making the charge side correct without the
 -- refund side would have entrenched it.
+--
+-- Re-run safe: later helpers put credit returns through refund_credits_to_batch
+-- (skips Stripe-refunded packs). Keep that shape; this bootstrap still inlines
+-- remaining+1 for databases that have never received the helper.
 
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $body$
 declare
   v_batch uuid;
   v_current text;
@@ -104,7 +122,11 @@ begin
     and v_current in ('requested', 'confirmed', 'attended', 'no_show') and v_batch is not null then
     update public.credit_batches set remaining = remaining + 1 where id = v_batch;
   end if;
-end; $$;
+end; $body$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;

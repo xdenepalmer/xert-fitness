@@ -354,6 +354,8 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
       notice: /keeping newer refund_credits_to_batch/,
       mustMatch: [
         /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
+        /keeping newer admin_record_session_attendance/,
         /keeping newer admin_cancel_class_session/,
         /o\.status = 'refunded'/,
         /attended/,
@@ -383,6 +385,7 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
         /keeping newer admin_cancel_class_session/,
         /keeping newer admin_set_booking_status/,
         /o\.status = 'refunded'/,
+        /p_anchor timestamp with time zone/,
       ],
     },
     {
@@ -394,12 +397,23 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
         /keeping newer admin_record_session_attendance/,
         /o\.status = 'refunded'/,
         /status = 'requested'/,
+        /p_anchor timestamp with time zone/,
       ],
     },
     {
       name: 'attendance_roll_call_upgrade.sql',
       notice: /keeping newer admin_record_session_attendance/,
       mustMatch: [/status = 'requested'/, /o\.status = 'refunded'/],
+    },
+    {
+      name: 'roll_call_correction_double_credit_fix.sql',
+      notice: /keeping newer admin_set_booking_status/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer cancel_booking/,
+        /o\.status = 'refunded'/,
+        /p_anchor timestamp with time zone/,
+      ],
     },
   ];
 
@@ -413,6 +427,44 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
         pattern,
         `${name} is not re-run safe against a newer money/privacy shape (${pattern})`,
       );
+    }
+  }
+});
+
+test('historical money migrations skip-if-newer so re-runs cannot strip refunded-pack guards', () => {
+  const migrationDir = fileURLToPath(new URL('../supabase/migrations/', import.meta.url));
+  const guarded = [
+    {
+      name: '20260726003000_roll_call_correction_double_credit_fix.sql',
+      notice: /keeping newer admin_set_booking_status/,
+      // Bootstrap still documents the original inline remaining+1 path.
+      bootstrapWeak: /remaining = remaining \+ 1/,
+    },
+    {
+      name: '20260726017000_roll_call_releases_pending_requests.sql',
+      notice: /keeping newer admin_record_session_attendance/,
+      bootstrapWeak: /status = 'requested'/,
+    },
+    {
+      name: '20260726106000_credit_batch_refund_reactivation.sql',
+      notice: /keeping newer refund_credits_to_batch/,
+      mustMatch: [
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+        /p_anchor timestamp with time zone/,
+      ],
+    },
+  ];
+
+  for (const { name, notice, bootstrapWeak, mustMatch = [] } of guarded) {
+    const sql = readFileSync(path.join(migrationDir, name), 'utf8')
+      .split('\n')
+      .filter(line => !line.trimStart().startsWith('--'))
+      .join('\n');
+    assert.match(sql, notice, `${name} must skip-if-newer`);
+    if (bootstrapWeak) assert.match(sql, bootstrapWeak, `${name} must retain historical bootstrap body`);
+    for (const pattern of mustMatch) {
+      assert.match(sql, pattern, `${name} missing ${pattern}`);
     }
   }
 });

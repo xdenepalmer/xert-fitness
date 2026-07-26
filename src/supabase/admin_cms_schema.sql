@@ -442,7 +442,7 @@ begin
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname = 'refund_credits_to_batch'
-    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamptz';
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
   if v_def is not null and v_def ilike '%status = ''refunded''%' then
     raise notice 'keeping newer refund_credits_to_batch';
   else
