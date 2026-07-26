@@ -500,7 +500,7 @@ test('native member communications supports a safe complete notice lifecycle', a
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
   ]);
 
-  assert.match(models, /struct AdminAnnouncementDraft: Equatable/);
+  assert.match(models, /struct AdminAnnouncementDraft: Codable, Hashable/);
   assert.match(models, /struct AdminAnnouncementDeliveryMetrics: Hashable/);
   assert.match(models, /var pushAttemptedCount: Int/);
   assert.match(models, /published_at > now \{ return "Scheduled" \}/);

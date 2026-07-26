@@ -2446,7 +2446,7 @@ struct AdminAnnouncement: Identifiable, Codable, Hashable {
     var wasPublished: Bool { first_published_at != nil || published_at != nil }
 }
 
-struct AdminAnnouncementDraft: Equatable {
+struct AdminAnnouncementDraft: Codable, Hashable {
     static let memberOperationsPausedTitle = "Bookings and checkout temporarily paused"
     static let memberBookingsRestoredTitle = "Bookings are available again"
     static let memberCommerceRestoredTitle = "Bookings and checkout are available again"

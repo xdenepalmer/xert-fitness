@@ -677,27 +677,28 @@ struct AdminCommandCentreView: View {
             AdminAnnouncementComposer(
                 announcement: nil,
                 initialDraft: quickNoticeDraft,
+                ownerID: session.user?.id,
                 isSaving: admin.announcementMutationID != nil,
                 isPublishing: admin.isPublishingAnnouncement,
                 onSave: { draft in
-                    Task {
-                        if await admin.saveAnnouncement(session: session, announcement: nil, draft: draft) {
-                            XertHaptics.play(.success)
-                            presentedQuickAction = nil
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.saveAnnouncement(
+                        session: session,
+                        announcement: nil,
+                        draft: draft
+                    )
+                    if succeeded { quickNoticeDraft = nil }
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 },
                 onPublish: { draft in
-                    Task {
-                        if await admin.publishAnnouncement(session: session, announcement: nil, draft: draft) {
-                            XertHaptics.play(.success)
-                            presentedQuickAction = nil
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.publishAnnouncement(
+                        session: session,
+                        announcement: nil,
+                        draft: draft
+                    )
+                    if succeeded { quickNoticeDraft = nil }
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 }
             )
         case .newSessionPack:
@@ -11684,36 +11685,27 @@ private struct AdminAnnouncementDetailView: View {
         .sheet(item: $editor) { context in
             AdminAnnouncementComposer(
                 announcement: context.announcement,
+                ownerID: session.user?.id,
                 publishesOnOpen: context.publishesOnOpen,
                 isSaving: admin.announcementMutationID != nil,
                 isPublishing: admin.isPublishingAnnouncement,
                 onSave: { draft in
-                    Task {
-                        if await admin.saveAnnouncement(
-                            session: session,
-                            announcement: context.announcement,
-                            draft: draft
-                        ) {
-                            editor = nil
-                            XertHaptics.play(.success)
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.saveAnnouncement(
+                        session: session,
+                        announcement: context.announcement,
+                        draft: draft
+                    )
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 },
                 onPublish: { draft in
-                    Task {
-                        if await admin.publishAnnouncement(
-                            session: session,
-                            announcement: context.announcement,
-                            draft: draft
-                        ) {
-                            editor = nil
-                            XertHaptics.play(.success)
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.publishAnnouncement(
+                        session: session,
+                        announcement: context.announcement,
+                        draft: draft
+                    )
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 }
             )
         }
@@ -11859,6 +11851,12 @@ private struct AdminAnnouncementDetailView: View {
                 succeeded = await admin.deleteAnnouncement(
                     session: session,
                     announcement: notice
+                )
+            }
+            if succeeded, case .delete(let notice) = action {
+                AdminAnnouncementDraftStore.clear(
+                    ownerID: session.user?.id,
+                    announcementID: notice.id
                 )
             }
             XertHaptics.play(succeeded ? .success : .error)
@@ -12071,36 +12069,27 @@ private struct AdminCommunicationsView: View {
         .sheet(item: $editor) { context in
             AdminAnnouncementComposer(
                 announcement: context.announcement,
+                ownerID: session.user?.id,
                 publishesOnOpen: context.publishesOnOpen,
                 isSaving: admin.announcementMutationID != nil,
                 isPublishing: admin.isPublishingAnnouncement,
                 onSave: { draft in
-                    Task {
-                        if await admin.saveAnnouncement(
-                            session: session,
-                            announcement: context.announcement,
-                            draft: draft
-                        ) {
-                            editor = nil
-                            XertHaptics.play(.success)
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.saveAnnouncement(
+                        session: session,
+                        announcement: context.announcement,
+                        draft: draft
+                    )
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 },
                 onPublish: { draft in
-                    Task {
-                        if await admin.publishAnnouncement(
-                            session: session,
-                            announcement: context.announcement,
-                            draft: draft
-                        ) {
-                            editor = nil
-                            XertHaptics.play(.success)
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
+                    let succeeded = await admin.publishAnnouncement(
+                        session: session,
+                        announcement: context.announcement,
+                        draft: draft
+                    )
+                    XertHaptics.play(succeeded ? .success : .error)
+                    return succeeded
                 }
             )
         }
@@ -12179,6 +12168,12 @@ private struct AdminCommunicationsView: View {
                 succeeded = await admin.setAnnouncementArchived(session: session, announcement: notice, archived: false)
             case .delete(let notice):
                 succeeded = await admin.deleteAnnouncement(session: session, announcement: notice)
+            }
+            if succeeded, case .delete(let notice) = action {
+                AdminAnnouncementDraftStore.clear(
+                    ownerID: session.user?.id,
+                    announcementID: notice.id
+                )
             }
             XertHaptics.play(succeeded ? .success : .error)
         }
@@ -14713,14 +14708,19 @@ private struct AdminCoachEditor: View {
 private struct AdminAnnouncementComposer: View {
     @Environment(\.dismiss) private var dismiss
     let announcement: AdminAnnouncement?
+    let ownerID: UUID?
     let publishesOnOpen: Bool
     let isSaving: Bool
     let isPublishing: Bool
-    let onSave: (AdminAnnouncementDraft) -> Void
-    let onPublish: (AdminAnnouncementDraft) -> Void
+    let onSave: (AdminAnnouncementDraft) async -> Bool
+    let onPublish: (AdminAnnouncementDraft) async -> Bool
     private let baseline: AdminAnnouncementDraft
+    private let baselineUpdatedAt: String?
     @State private var draft: AdminAnnouncementDraft
     @State private var hasExpiry: Bool
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingPublish: Bool
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
@@ -14736,24 +14736,36 @@ private struct AdminAnnouncementComposer: View {
     init(
         announcement: AdminAnnouncement?,
         initialDraft: AdminAnnouncementDraft? = nil,
+        ownerID: UUID?,
         publishesOnOpen: Bool = false,
         isSaving: Bool,
         isPublishing: Bool,
-        onSave: @escaping (AdminAnnouncementDraft) -> Void,
-        onPublish: @escaping (AdminAnnouncementDraft) -> Void
+        onSave: @escaping (AdminAnnouncementDraft) async -> Bool,
+        onPublish: @escaping (AdminAnnouncementDraft) async -> Bool
     ) {
-        let initial = announcement.map(AdminAnnouncementDraft.init)
+        let baseline = announcement.map(AdminAnnouncementDraft.init)
             ?? initialDraft
             ?? AdminAnnouncementDraft()
+        let recovered = initialDraft == nil
+            ? AdminAnnouncementDraftStore.load(
+                ownerID: ownerID,
+                announcementID: announcement?.id,
+                baselineUpdatedAt: announcement?.updated_at
+            )
+            : nil
+        let initial = recovered?.draft ?? baseline
         self.announcement = announcement
+        self.ownerID = ownerID
         self.publishesOnOpen = publishesOnOpen
         self.isSaving = isSaving
         self.isPublishing = isPublishing
         self.onSave = onSave
         self.onPublish = onPublish
-        baseline = initial
+        self.baseline = baseline
+        baselineUpdatedAt = announcement?.updated_at
         _draft = State(initialValue: initial)
         _hasExpiry = State(initialValue: initial.expiresAt != nil)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
         _confirmingPublish = State(initialValue: publishesOnOpen)
     }
 
@@ -14765,6 +14777,22 @@ private struct AdminAnnouncementComposer: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let recoveredAt {
+                    Section {
+                        Label(
+                            "Recovered unsaved edits from \(recoveredAt.formatted(date: .omitted, time: .shortened))",
+                            systemImage: "arrow.counterclockwise.circle.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                        Button(role: .destructive) {
+                            discardRecoveredEdits()
+                        } label: {
+                            Label("Discard recovered edits", systemImage: "trash")
+                        }
+                    }
+                }
+
                 Section("Member notice") {
                     TextField("Title", text: $draft.title)
                         .focused($focusedField, equals: .title)
@@ -14872,14 +14900,16 @@ private struct AdminAnnouncementComposer: View {
                 }
             }
             .confirmationDialog("Publish this member notice now?", isPresented: $confirmingPublish, titleVisibility: .visible) {
-                Button("Publish to members") { onPublish(draft) }
+                Button("Publish to members") {
+                    Task { await publishDraft() }
+                }
                     .disabled(publishValidation != nil || isBusy)
                 Button("Keep editing", role: .cancel) {}
             } message: {
                 Text(publishValidation ?? "The notice becomes live on the website and iOS app, and push delivery starts immediately.")
             }
             .confirmationDialog("Discard unsaved notice changes?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
-                Button("Discard changes", role: .destructive) { dismiss() }
+                Button("Discard changes", role: .destructive) { discardAndDismiss() }
                 Button("Keep editing", role: .cancel) {}
             } message: {
                 Text("Your title, message, action and expiry edits will be lost.")
@@ -14892,6 +14922,12 @@ private struct AdminAnnouncementComposer: View {
             isBusy: isBusy
         )
         .interactiveDismissDisabled(isDirty || isBusy)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
     }
 
     private var actionBar: some View {
@@ -14911,7 +14947,7 @@ private struct AdminAnnouncementComposer: View {
     private var actionButtons: some View {
         Button {
             focusedField = nil
-            onSave(draft)
+            Task { await saveDraft() }
         } label: {
             Label(isSaving ? "Saving..." : announcement == nil ? "Save Draft" : "Save Changes", systemImage: "square.and.arrow.down")
                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -14940,8 +14976,68 @@ private struct AdminAnnouncementComposer: View {
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearRecoveryDraft()
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation {
+                clearRecoveryDraft()
+            }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !isBusy else { return }
+        AdminAnnouncementDraftStore.save(
+            draft,
+            ownerID: ownerID,
+            announcementID: announcement?.id,
+            baselineUpdatedAt: baselineUpdatedAt
+        )
+    }
+
+    @MainActor
+    private func saveDraft() async {
+        guard !isBusy, saveValidation == nil else { return }
+        guard await onSave(draft) else { return }
+        finishCommittedDraft()
+    }
+
+    @MainActor
+    private func publishDraft() async {
+        guard !isBusy, publishValidation == nil else { return }
+        guard await onPublish(draft) else { return }
+        finishCommittedDraft()
+    }
+
+    @MainActor
+    private func finishCommittedDraft() {
+        hasCommitted = true
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        hasExpiry = baseline.expiresAt != nil
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func discardAndDismiss() {
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminAnnouncementDraftStore.clear(
+            ownerID: ownerID,
+            announcementID: announcement?.id
+        )
     }
 }
 

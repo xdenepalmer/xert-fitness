@@ -2598,6 +2598,16 @@ final class ModelsTests: XCTestCase {
             ),
             defaults: defaults
         )
+        var announcementDraft = AdminAnnouncementDraft()
+        announcementDraft.title = "Unpublished owner update"
+        announcementDraft.body = "Members will see this only after publishing."
+        AdminAnnouncementDraftStore.save(
+            announcementDraft,
+            ownerID: userID,
+            announcementID: announcementID,
+            baselineUpdatedAt: "2027-01-15T08:00:00.000Z",
+            defaults: defaults
+        )
 
         MemberLocalState.clear(for: userID, defaults: defaults)
 
@@ -2617,6 +2627,12 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
         XCTAssertNil(AdminSiteContentDraftStore.load(.hero, ownerID: userID, defaults: defaults))
         XCTAssertNil(MemberBookingCache.load(for: userID, defaults: defaults))
+        XCTAssertNil(AdminAnnouncementDraftStore.load(
+            ownerID: userID,
+            announcementID: announcementID,
+            baselineUpdatedAt: "2027-01-15T08:00:00.000Z",
+            defaults: defaults
+        ))
     }
 
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
@@ -5470,6 +5486,96 @@ final class ModelsTests: XCTestCase {
             ),
             "Choose a future expiry before publishing."
         )
+    }
+
+    func testAdminAnnouncementDraftRecoveryIsOwnerScopedAndBaselineGuarded() throws {
+        let suiteName = "AdminAnnouncementDraftStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let announcementID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminAnnouncementDraft()
+        draft.title = "Class location update"
+        draft.body = "Saturday training has moved to the outdoor zone."
+        draft.tone = "action"
+
+        AdminAnnouncementDraftStore.save(
+            draft,
+            ownerID: ownerID,
+            announcementID: announcementID,
+            baselineUpdatedAt: "version-1",
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restored = try XCTUnwrap(AdminAnnouncementDraftStore.load(
+            ownerID: ownerID,
+            announcementID: announcementID,
+            baselineUpdatedAt: "version-1",
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertEqual(restored.draft, draft)
+        XCTAssertEqual(restored.savedAt, savedAt)
+        XCTAssertNil(AdminAnnouncementDraftStore.load(
+            ownerID: UUID(),
+            announcementID: announcementID,
+            baselineUpdatedAt: "version-1",
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertNil(AdminAnnouncementDraftStore.load(
+            ownerID: ownerID,
+            announcementID: announcementID,
+            baselineUpdatedAt: "version-2",
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+    }
+
+    func testAdminAnnouncementDraftRecoveryExpiresAndRejectsOversizedCopy() throws {
+        let suiteName = "AdminAnnouncementDraftExpiryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminAnnouncementDraft()
+        draft.title = "Operations update"
+        draft.body = "Bookings remain available."
+
+        AdminAnnouncementDraftStore.save(
+            draft,
+            ownerID: ownerID,
+            announcementID: nil,
+            baselineUpdatedAt: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+        XCTAssertNil(AdminAnnouncementDraftStore.load(
+            ownerID: ownerID,
+            announcementID: nil,
+            baselineUpdatedAt: nil,
+            now: savedAt.addingTimeInterval(AdminAnnouncementDraftStore.maximumAge + 1),
+            defaults: defaults
+        ))
+
+        draft.body = String(repeating: "x", count: 2_001)
+        AdminAnnouncementDraftStore.save(
+            draft,
+            ownerID: ownerID,
+            announcementID: nil,
+            baselineUpdatedAt: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+        XCTAssertNil(AdminAnnouncementDraftStore.load(
+            ownerID: ownerID,
+            announcementID: nil,
+            baselineUpdatedAt: nil,
+            now: savedAt,
+            defaults: defaults
+        ))
     }
 
     private func adminAnnouncement(
