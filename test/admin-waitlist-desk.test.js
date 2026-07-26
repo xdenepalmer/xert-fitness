@@ -11,7 +11,9 @@ test('admin waitlist overview is bounded and rollout compatible', async () => {
     source.indexOf('export async function adminSetBookingStatus')
   );
 
+  assert.match(helper, /limit = 50/);
   assert.match(helper, /Math\.max\(1, Math\.min\(50,/);
+  assert.match(helper, /\|\| 50\)/);
   assert.match(helper, /rpc\('admin_waitlist_overview', \{ p_limit: safeLimit \}\)/);
   assert.match(helper, /\['42883', 'PGRST202'\]/);
   assert.match(helper, /return \{ rows: \[\], available: false \}/);

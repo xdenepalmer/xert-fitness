@@ -10,7 +10,9 @@ test('follow-up data loader is bounded and degrades only when its migration is a
     source.indexOf('export async function adminListMemberFollowUps'),
     source.indexOf('async function getAuditProfiles')
   );
+  assert.match(helper, /limit = 50/);
   assert.match(helper, /Math\.max\(1, Math\.min\(50/);
+  assert.match(helper, /\|\| 50\)/);
   assert.match(helper, /rpc\('admin_member_follow_up_queue', \{ p_limit: safeLimit \}\)/);
   assert.match(helper, /\['42883', 'PGRST202'\]/);
   assert.match(helper, /available: false/);

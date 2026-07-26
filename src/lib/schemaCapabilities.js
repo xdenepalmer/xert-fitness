@@ -46,7 +46,8 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   content_change_audit: 'Apply supabase/migrations/20260714013000_content_change_audit.sql in Supabase.',
   booking_lifecycle_audit: 'Apply supabase/migrations/20260714014000_booking_lifecycle_audit.sql in Supabase.',
   class_cancellation_notifications: 'Apply supabase/migrations/20260714015000_class_cancellation_notifications.sql in Supabase.',
-  admin_daily_operations: 'Apply supabase/migrations/20260714016000_admin_daily_operations.sql in Supabase.',
+  // Tip 26125 drops the historical hard limit 50; prefer the full-day mirror.
+  admin_daily_operations: 'Apply src/supabase/admin_daily_operations_upgrade.sql in Supabase.',
   schedule_optimistic_locking: 'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
   shared_admin_optimistic_locking: 'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
   catalog_optimistic_locking: 'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
@@ -94,6 +95,8 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   class_cancel_notice_credit_honesty: 'Apply src/supabase/class_cancel_notice_credit_honesty.sql in Supabase.',
   booking_decision_notice_credit_honesty: 'Apply src/supabase/booking_decision_notice_credit_honesty.sql in Supabase.',
   admin_member_service_history_paging: 'Apply src/supabase/admin_member_service_history_paging.sql in Supabase.',
+  admin_daily_operations_full_day: 'Apply src/supabase/admin_ops_desk_and_notice_metrics.sql in Supabase.',
+  admin_announcement_metrics_paging: 'Apply src/supabase/admin_ops_desk_and_notice_metrics.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

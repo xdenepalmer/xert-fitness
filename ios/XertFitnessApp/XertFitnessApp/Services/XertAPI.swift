@@ -410,7 +410,25 @@ final class XertAPI {
     // MARK: - Native admin command centre
 
     func adminDailyOperations(session auth: AuthSession) async throws -> [AdminDailyOperation] {
-        try await rpc(path: "admin_daily_operations", body: EmptyBody(), auth: auth)
+        // Page past PostgREST max_rows after the hard limit 50 was removed —
+        // a truncated Brisbane-day desk silently hid later roll-call classes.
+        let pageSize = 500
+        var offset = 0
+        var rows: [AdminDailyOperation] = []
+        while true {
+            let page: [AdminDailyOperation] = try await rpc(
+                path: "admin_daily_operations",
+                body: EmptyBody(),
+                auth: auth,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ]
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     // Default to the RPC ceiling (50). Callers that omit limit used to collapse

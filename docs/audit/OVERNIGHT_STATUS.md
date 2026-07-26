@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726124000_admin_member_service_history_paging.sql` (**26124**). Tip
+`20260726125000_admin_ops_desk_and_notice_metrics.sql` (**26125**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Today desk / announcement metrics silence + booking-desk cancel honesty
+  (**26125** + app tip): `admin_daily_operations` no longer hard-cuts at 50
+  Brisbane-day classes (web + iPhone page past max_rows) so later roll-call
+  classes cannot vanish; Announcements Seen/Push metrics page the same way so
+  later notices cannot show 0 deliveries; booking-desk cancel / bulk cancel
+  (web + iPhone) say credit returns when the pack is still live; waitlist /
+  follow-up helper defaults use the RPC ceiling (50) instead of collapsing to 20.
 - Class roster / training-group silence + cancel follow-up honesty + iPhone
   waitlist collapse (app-only tip after **26124**): `admin_session_roster` and
   `admin_event_goal_members` page past PostgREST `max_rows` (web + iPhone) so
@@ -267,7 +274,7 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726123000_booking_decision_notice_credit_honesty.sql` (**26123** —
+   `20260726125000_admin_ops_desk_and_notice_metrics.sql` (**26125** —
    full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
@@ -276,8 +283,10 @@ were **not** built.
    `roll_call_stripe_refund_clears_credit_batch` (26120*),
    `terminal_booking_clears_stale_credit_batch` (26121*),
    `class_cancel_notice_credit_honesty` (26122*),
-   `booking_decision_notice_credit_honesty` (26123*), and
-   `admin_member_service_history_paging` (26124*).
+   `booking_decision_notice_credit_honesty` (26123*),
+   `admin_member_service_history_paging` (26124*),
+   `admin_daily_operations_full_day` (26125*), and
+   `admin_announcement_metrics_paging` (26125*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
@@ -309,7 +318,9 @@ were **not** built.
    Class roster / event training group with >1000 members still lists every
    contact (CSV too); class-cancel follow-up does not say every booking was
    refunded; iPhone promote/skip/cancel/status still shows up to 50 waitlisted
-   classes afterwards.
+   classes afterwards. Today desk with >50 Brisbane-day classes still lists
+   every class; Announcements Seen/Push counts stay accurate past max_rows;
+   booking-desk cancel says credit returns when the pack is still live.
 
 ---
 
@@ -780,6 +791,19 @@ No new migration for this batch (app-only tip). Apply through **26124** remains 
 
 No new migration for this batch (app-only tip). Apply through **26124** remains current.
 
+### 48. This batch — Today desk / notice metrics silence + booking-desk cancel honesty
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (ops) | `admin_daily_operations` hard-`limit 50` — later Brisbane-day classes vanished from Today / roll-call shortcuts | Drop the hard cut; web + iPhone page past max_rows; capability `admin_daily_operations_full_day` (**26125**) |
+| Silent failure (ops) | `admin_announcement_metrics` / push metrics hit PostgREST `max_rows` unordered — later notices painted Seen/Push as 0 | `ORDER BY announcement_id` + client Range paging; capability `admin_announcement_metrics_paging` (**26125**) |
+| Money honesty | Booking-desk cancel / bulk cancel (web + iPhone) said “server cancellation credit policy” — vague vs Stripe-refunded pack no-op | Honest “pack is still live” copy |
+| Silent failure (ops) | `adminWaitlistOverview` / `adminListMemberFollowUps` defaulted to 20 while desks use 50 — omitted callers silently collapsed queues | Defaults use RPC ceiling 50 |
+
+Migration / operator mirror:
+`supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql`
+↔ `src/supabase/admin_ops_desk_and_notice_metrics.sql` (daily-ops upgrade /
+`admin_cms_schema` aligned). Apply through **26125**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -829,7 +853,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26124)
+### Copy-paste ordered filenames (overnight catch-up through 26125)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -857,6 +881,7 @@ supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sq
 supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
 supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
 supabase/migrations/20260726124000_admin_member_service_history_paging.sql
+supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -878,7 +903,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726124000_admin_member_service_history_paging.sql
+  -f supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -916,6 +941,7 @@ row shows `installed = true` and `release_ready = true`.
 | 21 | `20260726122000_class_cancel_notice_credit_honesty.sql` | `class_cancel_notice_credit_honesty` — class-cancel notice does not claim waitlist/consumed places returned a credit |
 | 22 | `20260726123000_booking_decision_notice_credit_honesty.sql` | `booking_decision_notice_credit_honesty` — waitlist/decline/cancel notices do not claim an unconditional credit return |
 | 23 | `20260726124000_admin_member_service_history_paging.sql` | `admin_member_service_history_paging` — member notes/notices page past hard 100 / 50 cuts |
+| 24 | `20260726125000_admin_ops_desk_and_notice_metrics.sql` | `admin_daily_operations_full_day` + `admin_announcement_metrics_paging` — Today desk full Brisbane day; announcement Seen/Push metrics page past max_rows |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -927,15 +953,17 @@ show `installed = true` and `release_ready = true`, including
 `roll_call_stripe_refund_clears_credit_batch`,
 `terminal_booking_clears_stale_credit_batch`,
 `class_cancel_notice_credit_honesty`,
-`booking_decision_notice_credit_honesty`, and
-`admin_member_service_history_paging`.
+`booking_decision_notice_credit_honesty`,
+`admin_member_service_history_paging`,
+`admin_daily_operations_full_day`, and
+`admin_announcement_metrics_paging`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726124000_admin_member_service_history_paging.sql`. Confirm readiness SQL.
+   `20260726125000_admin_ops_desk_and_notice_metrics.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -1096,3 +1124,8 @@ show `installed = true` and `release_ready = true`, including
     contact (CSV too); class-cancel follow-up does not claim every booking was
     refunded; iPhone promote/skip/cancel/status/Mark Contacted still show up to
     50 waitlisted / follow-up rows afterwards.
+47. **Today desk / notice metrics + booking-desk cancel honesty** — Today desk
+    with >50 Brisbane-day classes still lists every class (**26125**);
+    Announcements Seen/Push counts stay accurate past max_rows; booking-desk
+    cancel / bulk cancel (web + iPhone) say credit returns when the pack is
+    still live; waitlist / follow-up helper defaults stay at the RPC ceiling 50.

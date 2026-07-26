@@ -1208,6 +1208,8 @@ enum AdminSchemaReadiness {
         "class_cancel_notice_credit_honesty",
         "booking_decision_notice_credit_honesty",
         "admin_member_service_history_paging",
+        "admin_daily_operations_full_day",
+        "admin_announcement_metrics_paging",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

@@ -730,7 +730,17 @@ export async function deleteEvent(id, expectedUpdatedAt) {
 export async function getAllMemberAnnouncements() {
   // Page past PostgREST max_rows / the old iOS hard 100 cut — later broadcast
   // notices silently vanished from the Announcements desk after ops growth.
-  const [announcements, metricResult, pushMetricResult] = await Promise.all([
+  // Metric RPCs must page too — an unordered / uncapped result painted Seen /
+  // Push counts as 0 for later announcements once max_rows clipped the RPC.
+  const loadMetricBatches = rpcName => collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc(rpcName)
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+  const [announcements, metricRows, pushMetricRows] = await Promise.all([
     collectAdminBatches(async (page, pageSize) => {
       const from = (page - 1) * pageSize;
       const { data, error } = await supabase
@@ -743,13 +753,11 @@ export async function getAllMemberAnnouncements() {
       if (error) throw new Error(error.message);
       return data || [];
     }),
-    supabase.rpc('admin_announcement_metrics'),
-    supabase.rpc('admin_announcement_push_metrics'),
+    loadMetricBatches('admin_announcement_metrics'),
+    loadMetricBatches('admin_announcement_push_metrics'),
   ]);
-  if (metricResult.error) throw new Error(metricResult.error.message);
-  if (pushMetricResult.error) throw new Error(pushMetricResult.error.message);
-  const metrics = new Map((metricResult.data || []).map(item => [item.announcement_id, item]));
-  const pushMetrics = new Map((pushMetricResult.data || []).map(item => [item.announcement_id, item]));
+  const metrics = new Map(metricRows.map(item => [item.announcement_id, item]));
+  const pushMetrics = new Map(pushMetricRows.map(item => [item.announcement_id, item]));
   return announcements.map(item => ({
     ...item,
     read_count: Number(metrics.get(item.id)?.read_count) || 0,
@@ -1128,8 +1136,10 @@ async function notifyTargetedAnnouncementPush(announcementId) {
   }
 }
 
-export async function adminListMemberFollowUps(limit = 20) {
-  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 20));
+export async function adminListMemberFollowUps(limit = 50) {
+  // RPC ceiling is 50 — defaulting to 20 silently hid later follow-ups when a
+  // caller omitted the explicit ceiling (Members desk / iPhone Overview parity).
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 50));
   const { data, error } = await supabase.rpc('admin_member_follow_up_queue', { p_limit: safeLimit });
   if (!error) return { rows: data || [], available: true };
   const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
@@ -1304,24 +1314,25 @@ export async function adminSessionRoster(sessionId) {
         .rpc('admin_session_roster', { p_session_id: sessionId })
         .range(from, from + pageSize - 1);
       if (error) {
-        const failure = new Error(error.message);
-        failure.code = error.code;
-        throw failure;
+        throw Object.assign(new Error(error.message), { code: error.code });
       }
       return data || [];
     });
   } catch (error) {
     // Rolling-upgrade only: missing RPC is not "empty class". Real fetch/RLS
     // failures must surface so roll call / roster never look vacant by mistake.
-    const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
-      || /admin_session_roster.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    const functionUnavailable = ['42883', 'PGRST202'].includes(code)
+      || /admin_session_roster.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
     if (functionUnavailable) return [];
-    throw new Error(error.message);
+    throw new Error(error?.message || 'Class roster unavailable.');
   }
 }
 
-export async function adminWaitlistOverview(limit = 20) {
-  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 20));
+export async function adminWaitlistOverview(limit = 50) {
+  // RPC ceiling is 50 — defaulting to 20 silently hid later waitlisted classes
+  // when a caller omitted the explicit ceiling (Class Calendar / iPhone parity).
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 50));
   const { data, error } = await supabase.rpc('admin_waitlist_overview', { p_limit: safeLimit });
   if (!error) return { rows: data || [], available: true };
   const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
@@ -1331,12 +1342,27 @@ export async function adminWaitlistOverview(limit = 20) {
 }
 
 export async function getAdminDailyOperations() {
-  const { data, error } = await supabase.rpc('admin_daily_operations');
-  if (!error) return { rows: data || [], available: true };
-  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
-    || /admin_daily_operations.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
-  if (functionUnavailable) return { rows: [], available: false };
-  throw new Error(error.message);
+  // Page past PostgREST max_rows — after the hard limit 50 was removed, a
+  // truncated RPC still could hide later Brisbane-day classes from Today desk.
+  try {
+    const rows = await collectAdminBatches(async (page, pageSize) => {
+      const from = (page - 1) * pageSize;
+      const { data, error } = await supabase
+        .rpc('admin_daily_operations')
+        .range(from, from + pageSize - 1);
+      if (error) {
+        throw Object.assign(new Error(error.message), { code: error.code });
+      }
+      return data || [];
+    });
+    return { rows, available: true };
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    const functionUnavailable = ['42883', 'PGRST202'].includes(code)
+      || /admin_daily_operations.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+    if (functionUnavailable) return { rows: [], available: false };
+    throw new Error(error?.message || 'Daily operations unavailable.');
+  }
 }
 
 export async function adminSetBookingStatus(bookingId, status, requestId = globalThis.crypto?.randomUUID?.()) {

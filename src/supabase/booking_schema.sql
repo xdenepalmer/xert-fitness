@@ -1056,7 +1056,8 @@ begin
          count(receipt.user_id) filter (where receipt.dismissed_at is not null)::bigint
   from public.member_announcements as announcement
   left join public.member_announcement_receipts as receipt on receipt.announcement_id = announcement.id
-  group by announcement.id;
+  group by announcement.id
+  order by announcement.id;
 end;
 $$;
 

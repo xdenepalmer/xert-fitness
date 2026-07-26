@@ -44,7 +44,7 @@ with required (capability, migration) as (
     ('content_change_audit', 'supabase/migrations/20260714013000_content_change_audit.sql'),
     ('booking_lifecycle_audit', 'supabase/migrations/20260714014000_booking_lifecycle_audit.sql'),
     ('class_cancellation_notifications', 'supabase/migrations/20260714015000_class_cancellation_notifications.sql'),
-    ('admin_daily_operations', 'supabase/migrations/20260714016000_admin_daily_operations.sql'),
+    ('admin_daily_operations', 'src/supabase/admin_daily_operations_upgrade.sql'),
     ('schedule_optimistic_locking', 'supabase/migrations/20260714018000_schedule_optimistic_locking.sql'),
     ('shared_admin_optimistic_locking', 'supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql'),
     ('catalog_optimistic_locking', 'supabase/migrations/20260714020000_catalog_optimistic_locking.sql'),
@@ -88,7 +88,9 @@ with required (capability, migration) as (
     ('terminal_booking_clears_stale_credit_batch', 'src/supabase/terminal_booking_clears_stale_credit_batch.sql'),
     ('class_cancel_notice_credit_honesty', 'src/supabase/class_cancel_notice_credit_honesty.sql'),
     ('booking_decision_notice_credit_honesty', 'src/supabase/booking_decision_notice_credit_honesty.sql'),
-    ('admin_member_service_history_paging', 'src/supabase/admin_member_service_history_paging.sql')
+    ('admin_member_service_history_paging', 'src/supabase/admin_member_service_history_paging.sql'),
+    ('admin_daily_operations_full_day', 'src/supabase/admin_ops_desk_and_notice_metrics.sql'),
+    ('admin_announcement_metrics_paging', 'src/supabase/admin_ops_desk_and_notice_metrics.sql')
 ), readiness as (
   select
     required.capability,

@@ -110,7 +110,7 @@ export default function BookingRequestsTable() {
   const bulkConfirmation = useMemo(() => {
     if (!bulkStatus || selectedBookings.length === 0) return null;
     const warning = bulkStatus === 'cancelled'
-      ? 'Confirmed member bookings will follow the server cancellation credit policy.'
+      ? 'Reserved credits on open credit places are returned when the pack is still live.'
       : 'This updates every selected enquiry and member booking.';
     const [description, detail] = adminBulkConfirmation({
       count: selectedBookings.length,

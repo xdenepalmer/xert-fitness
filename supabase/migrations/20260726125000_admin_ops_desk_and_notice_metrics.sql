@@ -1,7 +1,15 @@
--- XERT admin daily operations desk.
--- One Brisbane-local day of class workload for the command centre.
--- Tip 26125 removes the historical hard limit 50 so a busy day cannot hide
--- later roll-call classes (the day window already bounds the result set).
+-- Today desk hard-capped at 50 Brisbane-local classes, and announcement
+-- read/push metric RPCs returned unordered rows that PostgREST silently
+-- truncates at max_rows. A busy day hid later roll-call classes; a large
+-- notice history painted Seen/Push counts as 0 for later announcements.
+-- Drop the day-desk hard limit (the Brisbane day window already bounds the
+-- set) and order metric rows so web clients can page past max_rows.
+
+create table if not exists public.xert_schema_capabilities (
+  capability text primary key,
+  installed_at timestamptz not null default now()
+);
+alter table public.xert_schema_capabilities enable row level security;
 
 create or replace function public.admin_daily_operations()
 returns table (
@@ -88,15 +96,68 @@ grant execute on function public.admin_daily_operations() to authenticated;
 comment on function public.admin_daily_operations() is
   'Admin-only, Brisbane-local class workload for the current operational day (full day; no hard row cut).';
 
-create index if not exists class_sessions_admin_daily_operations_idx
-  on public.class_sessions (start_time, status);
+create or replace function public.admin_announcement_metrics()
+returns table (announcement_id uuid, read_count bigint, dismissed_count bigint)
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
+  return query
+  select announcement.id,
+         count(receipt.user_id)::bigint,
+         count(receipt.user_id) filter (where receipt.dismissed_at is not null)::bigint
+  from public.member_announcements as announcement
+  left join public.member_announcement_receipts as receipt on receipt.announcement_id = announcement.id
+  group by announcement.id
+  order by announcement.id;
+end;
+$$;
 
-create table if not exists public.xert_schema_capabilities (
-  capability text primary key,
-  installed_at timestamptz not null default now()
-);
-alter table public.xert_schema_capabilities enable row level security;
+revoke execute on function public.admin_announcement_metrics() from public, anon;
+grant execute on function public.admin_announcement_metrics() to authenticated;
+
+create or replace function public.admin_announcement_push_metrics()
+returns table (
+  announcement_id uuid,
+  delivered_count bigint,
+  failed_count bigint,
+  invalid_token_count bigint,
+  last_attempted_at timestamptz
+)
+language plpgsql
+security definer
+stable
+set search_path = public, pg_temp
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+
+  return query
+  select
+    delivery.announcement_id,
+    count(*) filter (where delivery.status = 'delivered')::bigint,
+    count(*) filter (where delivery.status = 'failed')::bigint,
+    count(*) filter (where delivery.status = 'invalid_token')::bigint,
+    max(delivery.attempted_at)
+  from public.push_notification_deliveries delivery
+  where delivery.announcement_id is not null
+  group by delivery.announcement_id
+  order by delivery.announcement_id;
+end;
+$$;
+
+revoke execute on function public.admin_announcement_push_metrics() from public, anon;
+grant execute on function public.admin_announcement_push_metrics() to authenticated;
+
 insert into public.xert_schema_capabilities (capability)
-values ('admin_daily_operations') on conflict (capability) do nothing;
+values ('admin_daily_operations_full_day')
+on conflict (capability) do nothing;
+
 insert into public.xert_schema_capabilities (capability)
-values ('admin_daily_operations_full_day') on conflict (capability) do nothing;
+values ('admin_announcement_metrics_paging')
+on conflict (capability) do nothing;

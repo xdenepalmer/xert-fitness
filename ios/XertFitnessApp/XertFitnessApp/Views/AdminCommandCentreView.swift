@@ -3893,7 +3893,7 @@ private struct AdminBookingRequestsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(bulkStatus == "cancelled" ? "Confirmed member bookings follow the server credit-return policy." : "Every selected enquiry and member booking will be updated.")
+            Text(bulkStatus == "cancelled" ? "Reserved credits on open credit places are returned when the pack is still live." : "Every selected enquiry and member booking will be updated.")
         }
     }
 
@@ -4010,7 +4010,7 @@ private struct AdminBookingRequestDetailView: View {
             Button("Keep current status", role: .cancel) { pendingStatus = nil }
         } message: {
             Text(pendingStatus == "cancelled" && booking.source == .member
-                ? "The server will return the reserved class credit according to the cancellation policy."
+                ? "Reserved credit is returned when the pack is still live."
                 : "This change is recorded in the permanent admin request audit.")
         }
     }

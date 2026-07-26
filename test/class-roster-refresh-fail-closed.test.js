@@ -27,7 +27,8 @@ test('adminSessionRoster only degrades to empty when the RPC is missing', () => 
   );
   assert.match(block, /functionUnavailable/);
   assert.match(block, /admin_session_roster/);
-  assert.match(block, /throw new Error\(error\.message\)/);
+  assert.match(block, /Object\.assign\(new Error\(error\.message\), \{ code: error\.code \}\)/);
+  assert.match(block, /throw new Error\(error\?\.message \|\| 'Class roster unavailable\.'\)/);
 });
 
 test('adminSessionRoster pages past PostgREST max_rows', () => {

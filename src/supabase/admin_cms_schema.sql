@@ -719,8 +719,7 @@ begin
     ) public_counts on true
    where s.start_time >= v_day_start and s.start_time < v_day_end
      and s.status <> 'draft'
-   order by s.start_time, s.id
-   limit 50;
+   order by s.start_time, s.id;
 end; $$;
 
 create index if not exists class_sessions_admin_daily_operations_idx
@@ -1092,6 +1091,10 @@ insert into public.xert_schema_capabilities (capability)
 values ('admin_member_service_history_paging') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('admin_daily_operations') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('admin_daily_operations_full_day') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('admin_announcement_metrics_paging') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()
 returns table (capability text)
 language sql security definer stable set search_path = public as $$
