@@ -39,7 +39,7 @@ test('ledger stores bounded error codes but never raw provider error messages', 
   for (const path of paths) {
     const sql = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.match(sql, /char_length\(last_error_code\) between 1 and 120/i);
-    assert.match(sql, /last_error_code ~ '\^\[A-Za-z0-9_\.:\-\]\+\$'/i);
+    assert.match(sql, /last_error_code ~ '\^\[A-Za-z0-9_.:-\]\+\$'/i);
     assert.doesNotMatch(sql, /error_message|stack_trace|request_body/i);
   }
 });

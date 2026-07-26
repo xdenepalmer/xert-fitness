@@ -1,0 +1,9 @@
+{
+  "extends": "./jsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["api/**/*.js"],
+  "exclude": ["node_modules", "dist"]
+}

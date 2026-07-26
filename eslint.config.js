@@ -5,39 +5,79 @@ import pluginReactHooks from "eslint-plugin-react-hooks";
 import pluginUnusedImports from "eslint-plugin-unused-imports";
 
 export default [
+  // Flat config does not read .gitignore; this object has only `ignores`, so
+  // ESLint treats it as a global ignore for every config that follows.
   {
-    files: [
-      "src/components/**/*.{js,mjs,cjs,jsx}",
-      "src/pages/**/*.{js,mjs,cjs,jsx}",
-      "src/Layout.jsx",
-    ],
-    ignores: ["src/lib/**/*", "src/components/ui/**/*"],
+    ignores: ["dist/**", "coverage/**"],
+  },
+  {
+    files: ["**/*.{js,mjs,cjs,jsx}"],
     ...pluginJs.configs.recommended,
-    ...pluginReact.configs.flat.recommended,
     languageOptions: {
-      globals: globals.browser,
+      ecmaVersion: 2022,
+      sourceType: "module",
       parserOptions: {
-        ecmaVersion: 2022,
-        sourceType: "module",
         ecmaFeatures: {
           jsx: true,
         },
       },
+    },
+  },
+  {
+    files: ["src/**/*.{js,jsx}"],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+  {
+    files: [
+      "api/**/*.js",
+      "scripts/**/*.mjs",
+      "test/**/*.js",
+      "*.config.js",
+    ],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ["public/**/*.js"],
+    languageOptions: {
+      globals: globals.serviceworker,
+    },
+  },
+  {
+    files: ["**/*.jsx"],
+    plugins: {
+      react: pluginReact,
+      "react-hooks": pluginReactHooks,
     },
     settings: {
       react: {
         version: "detect",
       },
     },
+    rules: {
+      ...pluginReact.configs.flat.recommended.rules,
+      "react/prop-types": "off",
+      "react/react-in-jsx-scope": "off",
+      // Apostrophes read better unescaped in body copy. `>` and `}` are the
+      // ones that signal a genuinely mistyped expression or tag.
+      "react/no-unescaped-entities": ["error", { forbid: [">", "}"] }],
+      "react/no-unknown-property": [
+        "error",
+        { ignore: ["cmdk-input-wrapper", "toast-close"] },
+      ],
+      "react-hooks/rules-of-hooks": "error",
+    },
+  },
+  {
+    files: ["**/*.{js,mjs,cjs,jsx}"],
     plugins: {
-      react: pluginReact,
-      "react-hooks": pluginReactHooks,
       "unused-imports": pluginUnusedImports,
     },
     rules: {
       "no-unused-vars": "off",
-      "react/jsx-uses-vars": "error",
-      "react/jsx-uses-react": "error",
       "unused-imports/no-unused-imports": "error",
       "unused-imports/no-unused-vars": [
         "warn",
@@ -48,13 +88,6 @@ export default [
           argsIgnorePattern: "^_",
         },
       ],
-      "react/prop-types": "off",
-      "react/react-in-jsx-scope": "off",
-      "react/no-unknown-property": [
-        "error",
-        { ignore: ["cmdk-input-wrapper", "toast-close"] },
-      ],
-      "react-hooks/rules-of-hooks": "error",
     },
   },
 ];

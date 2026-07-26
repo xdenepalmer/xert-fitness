@@ -20,7 +20,7 @@ test('native Explore mirrors public CMS, team, training and acquisition workflow
   for (const feature of ['About XERT Fitness', 'Coaches and practitioners', 'Functional training guide', 'Frequently asked questions', 'Contact XERT']) {
     assert.match(explore, new RegExp(feature));
   }
-  for (const kind of ['\.member', '\.trainer', '\.partner']) assert.match(explore, new RegExp(`NativeInterestFormView\\(kind: ${kind}\\)`));
+  for (const kind of ['member', 'trainer', 'partner']) assert.match(explore, new RegExp(`NativeInterestFormView\\(kind: \\.${kind}\\)`));
   assert.match(explore, /NativeMultiSelect/);
   assert.match(home, /content: store\.publicContent\(for: \.hero\)/);
   assert.match(home, /content\.photos[\s\S]*compactMap[\s\S]*publicPhotoURL/);
