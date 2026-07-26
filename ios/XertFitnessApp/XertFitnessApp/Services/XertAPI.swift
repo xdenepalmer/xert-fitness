@@ -13,6 +13,7 @@ struct APIError: LocalizedError {
     var invalidatesSession: Bool {
         statusCode.map { [400, 401, 403].contains($0) } ?? false
     }
+    var isUnauthorized: Bool { statusCode == 401 }
 }
 
 enum NetworkFailureMessage {

@@ -3089,6 +3089,9 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(APIError(message: "forbidden", statusCode: 403).invalidatesSession)
         XCTAssertFalse(APIError(message: "server unavailable", statusCode: 503).invalidatesSession)
         XCTAssertFalse(APIError(message: "network offline").invalidatesSession)
+        XCTAssertTrue(APIError(message: "unauthorized", statusCode: 401).isUnauthorized)
+        XCTAssertFalse(APIError(message: "invalid form", statusCode: 400).isUnauthorized)
+        XCTAssertFalse(APIError(message: "forbidden", statusCode: 403).isUnauthorized)
     }
 
     func testBookingErrorsAreSafeAndActionableForMembers() {

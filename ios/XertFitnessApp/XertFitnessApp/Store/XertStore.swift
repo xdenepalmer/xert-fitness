@@ -570,6 +570,9 @@ final class XertStore: ObservableObject {
             return .completed
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return .failed }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return .failed
+            }
             if error.localizedDescription.contains("NO_CREDITS") {
                 XertHaptics.play(.warning)
                 return .needsCredits
@@ -603,6 +606,9 @@ final class XertStore: ObservableObject {
             return .completed
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return .failed }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return .failed
+            }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
             return .failed
@@ -628,6 +634,9 @@ final class XertStore: ObservableObject {
             return canApplyMemberState(memberVersion, session: authSession) ? receipt : nil
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return nil }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return nil
+            }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
             return nil
@@ -878,6 +887,9 @@ final class XertStore: ObservableObject {
             XertHaptics.play(.lightImpact)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return
+            }
             present(error)
             XertHaptics.play(.error)
         }
@@ -922,6 +934,9 @@ final class XertStore: ObservableObject {
             XertHaptics.play(.softImpact)
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return
+            }
             present(error)
             XertHaptics.play(.error)
         }
@@ -961,6 +976,9 @@ final class XertStore: ObservableObject {
             return checkout.url
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return nil }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return nil
+            }
             errorMessage = error.localizedDescription
             XertHaptics.play(.error)
             return nil
@@ -1189,6 +1207,9 @@ final class XertStore: ObservableObject {
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return false
+            }
             present(error)
             XertHaptics.play(.error)
             return false
@@ -1221,6 +1242,9 @@ final class XertStore: ObservableObject {
                   onboardingOperationVersion.isCurrent(onboardingVersion),
                   !Task.isCancelled
             else { return }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return
+            }
             unavailableDataSources.insert(.onboarding)
             onboardingErrorMessage = MemberOnboardingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
@@ -1267,6 +1291,9 @@ final class XertStore: ObservableObject {
                   onboardingOperationVersion.isCurrent(onboardingVersion),
                   !Task.isCancelled
             else { return false }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return false
+            }
             let message = MemberOnboardingErrorMessage.display(for: error.localizedDescription)
             if error.localizedDescription.contains("ONBOARDING_DOCUMENTS_STALE") {
                 unavailableDataSources.insert(.onboarding)
@@ -1295,6 +1322,9 @@ final class XertStore: ObservableObject {
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return false
+            }
             present(error)
             XertHaptics.play(.error)
             return false
@@ -1453,6 +1483,25 @@ final class XertStore: ObservableObject {
         classRemindersEnabled = false
         classReminderSyncState = .off
         memberPushEnabled = false
+    }
+
+    private func recoverUnauthorizedMemberSession(
+        _ error: Error,
+        memberVersion: Int
+    ) async -> Bool {
+        guard memberStateVersion.isCurrent(memberVersion),
+              (error as? APIError)?.isUnauthorized == true
+        else { return false }
+
+        let currentUserID = authSession?.user?.id ?? profile?.id
+        MemberPushRegistration.stopReceivingPrivateNotices()
+        clearLocalMemberState(for: currentUserID)
+        replaceAuthSession(with: nil)
+        KeychainStore.clearSession()
+        await ClassReminderScheduler.shared.clearAll()
+        errorMessage = "Your XERT session has expired. Sign in again to continue."
+        XertHaptics.play(.warning)
+        return true
     }
 
     private func applyMemberOnboarding(_ onboarding: MemberOnboardingState) {
