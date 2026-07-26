@@ -859,12 +859,31 @@ final class XertAPI {
         )
     }
 
+    func adminMemberOnboardingSummaries(
+        session auth: AuthSession,
+        memberIDs: [UUID]
+    ) async throws -> [AdminMemberOnboardingSummary] {
+        let uniqueIDs = Array(Set(memberIDs))
+        guard !uniqueIDs.isEmpty else { return [] }
+        var summaries: [AdminMemberOnboardingSummary] = []
+        for start in stride(from: 0, to: uniqueIDs.count, by: 100) {
+            let end = min(start + 100, uniqueIDs.count)
+            let rows: [AdminMemberOnboardingSummary] = try await rpc(
+                path: "admin_member_onboarding_summary",
+                body: AdminMemberIDsRequest(p_user_ids: Array(uniqueIDs[start..<end])),
+                auth: auth
+            )
+            summaries.append(contentsOf: rows)
+        }
+        let returnedIDs = Set(summaries.map(\.user_id))
+        guard summaries.count == uniqueIDs.count, returnedIDs == Set(uniqueIDs) else {
+            throw APIError(message: "Readiness could not be verified for every roster member.")
+        }
+        return summaries
+    }
+
     func adminMemberOnboardingSummary(session auth: AuthSession, memberID: UUID) async throws -> AdminMemberOnboardingSummary {
-        let rows: [AdminMemberOnboardingSummary] = try await rpc(
-            path: "admin_member_onboarding_summary",
-            body: AdminMemberIDsRequest(p_user_ids: [memberID]),
-            auth: auth
-        )
+        let rows = try await adminMemberOnboardingSummaries(session: auth, memberIDs: [memberID])
         guard rows.count == 1, rows[0].user_id == memberID else {
             throw APIError(message: "Member readiness is not available for this account.")
         }

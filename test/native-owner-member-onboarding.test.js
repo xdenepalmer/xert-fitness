@@ -14,7 +14,7 @@ test('owner member records show readiness without leaking emergency details into
 
   assert.match(models, /struct AdminMemberOnboardingSummary:[\s\S]*let onboarding_complete: Bool/);
   assert.match(models, /struct AdminMemberEmergencyContactReveal:[\s\S]*let audit_event_id: UUID/);
-  assert.match(api, /adminMemberOnboardingSummary[\s\S]*admin_member_onboarding_summary/);
+  assert.match(api, /adminMemberOnboardingSummaries[\s\S]*admin_member_onboarding_summary/);
   assert.match(api, /adminRevealMemberEmergencyContact[\s\S]*admin_reveal_member_emergency_contact/);
   assert.match(store, /memberDetailGeneration/);
   assert.match(store, /async let onboardingRequest = api\.adminMemberOnboardingSummary/);

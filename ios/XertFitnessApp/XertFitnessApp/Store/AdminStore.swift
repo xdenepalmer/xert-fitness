@@ -95,6 +95,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var teamDirectoryStatusMessage: String?
     @Published private(set) var classRoster: [AdminRosterMember] = []
+    @Published private(set) var classRosterReadiness: [UUID: AdminMemberOnboardingSummary] = [:]
+    @Published private(set) var loadedRosterSessionID: UUID?
+    @Published private(set) var rosterReadinessStatusMessage: String?
     @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var classCancellationFollowUp: AdminClassCancellationFollowUp?
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
@@ -191,6 +194,7 @@ final class AdminStore: ObservableObject {
     private var healthRefreshGeneration: UInt = 0
     private var operationalRefreshGeneration: UInt = 0
     private var eventRosterGeneration: UInt = 0
+    private var rosterLoadGeneration: UInt = 0
 
     var memberCount: Int {
         max(members.map(\.total_count).max() ?? 0, members.count)
@@ -1677,12 +1681,38 @@ final class AdminStore: ObservableObject {
     }
 
     func loadClassRoster(session: AuthSession, classSessionID: UUID) async {
-        guard loadingRosterSessionID == nil else { return }
+        rosterLoadGeneration &+= 1
+        let generation = rosterLoadGeneration
         loadingRosterSessionID = classSessionID
-        defer { loadingRosterSessionID = nil }
+        loadedRosterSessionID = nil
+        classRoster = []
+        classRosterReadiness = [:]
+        rosterReadinessStatusMessage = nil
+        defer {
+            if rosterLoadGeneration == generation {
+                loadingRosterSessionID = nil
+            }
+        }
         do {
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            guard rosterLoadGeneration == generation else { return }
+            loadedRosterSessionID = classSessionID
+            classRoster = roster
+            do {
+                let summaries = try await api.adminMemberOnboardingSummaries(
+                    session: session,
+                    memberIDs: roster.map(\.member_id)
+                )
+                guard rosterLoadGeneration == generation else { return }
+                classRosterReadiness = Dictionary(
+                    uniqueKeysWithValues: summaries.map { ($0.user_id, $0) }
+                )
+            } catch {
+                guard rosterLoadGeneration == generation else { return }
+                rosterReadinessStatusMessage = "Member readiness is unavailable. Open a member record before relying on their training clearance."
+            }
         } catch {
+            guard rosterLoadGeneration == generation else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -1700,7 +1730,7 @@ final class AdminStore: ObservableObject {
             bookingDecisionNoticeWarning = nil
             let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
             bookingDecisionNoticeWarning = outcome.warning
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            await loadClassRoster(session: session, classSessionID: classSessionID)
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)
             lastUpdatedAt = Date()
@@ -1727,7 +1757,7 @@ final class AdminStore: ObservableObject {
                 attendedIDs: attendedIDs,
                 noShowIDs: noShowIDs
             )
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            await loadClassRoster(session: session, classSessionID: classSessionID)
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true

@@ -1146,6 +1146,41 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.match(roster, /didRecord[\s\S]*attendanceBaseline = attendance[\s\S]*XertHaptics\.play\(\.success\)/);
 });
 
+test('native class rosters surface privacy-safe readiness and reject stale class data', async () => {
+  const [view, api, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+  const roster = view.slice(
+    view.indexOf('private struct AdminClassRosterView'),
+    view.indexOf('private struct AdminScheduleView'),
+  );
+  const rosterLoader = store.slice(
+    store.indexOf('func loadClassRoster('),
+    store.indexOf('func setBookingStatus('),
+  );
+
+  assert.match(api, /func adminMemberOnboardingSummaries[\s\S]*stride\(from: 0, to: uniqueIDs\.count, by: 100\)/);
+  assert.match(api, /summaries\.count == uniqueIDs\.count[\s\S]*returnedIDs == Set\(uniqueIDs\)/);
+  assert.match(store, /@Published private\(set\) var classRosterReadiness: \[UUID: AdminMemberOnboardingSummary\]/);
+  assert.match(store, /@Published private\(set\) var loadedRosterSessionID: UUID\?/);
+  assert.match(rosterLoader, /rosterLoadGeneration &\+= 1/);
+  assert.match(rosterLoader, /loadedRosterSessionID = nil[\s\S]*classRoster = \[\]/);
+  assert.match(rosterLoader, /guard rosterLoadGeneration == generation else \{ return \}/);
+  assert.match(rosterLoader, /adminMemberOnboardingSummaries[\s\S]*Dictionary\([\s\S]*summaries\.map \{ \(\$0\.user_id, \$0\) \}/);
+  assert.match(roster, /private var rosterIsCurrent: Bool \{ admin\.loadedRosterSessionID == operation\.id \}/);
+  assert.match(roster, /Section\("Training readiness"\)/);
+  assert.match(roster, /Every active booking has completed the required readiness steps/);
+  assert.match(roster, /need readiness review before training/);
+  assert.match(roster, /readinessIssueLabel[\s\S]*emergency contact[\s\S]*documents/);
+  assert.match(roster, /Label\([\s\S]*"Member record"[\s\S]*systemImage: "person\.text\.rectangle"/);
+  assert.match(roster, /await admin\.resolveOwnerTask\(session: session, task: \.member\(memberID\)\)/);
+  assert.match(roster, /\.sheet\(item: \$presentedMember\)/);
+  assert.match(roster, /\.safeAreaInset\(edge: \.bottom, spacing: 0\)/);
+  assert.doesNotMatch(roster, /contact_name|contact_phone|relationship/);
+});
+
 test('high-consequence owner drafts share command-centre exit protection', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const taskSheet = view.slice(

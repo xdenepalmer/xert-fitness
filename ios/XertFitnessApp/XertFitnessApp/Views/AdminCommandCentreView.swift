@@ -4802,8 +4802,20 @@ private struct AdminClassRosterView: View {
     @State private var confirmingRollCall = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
+    @State private var presentedMember: AdminMemberSummary?
+    @State private var openingMemberID: UUID?
 
-    private var eligible: [AdminRosterMember] { admin.classRoster.filter(\.attendanceEligible) }
+    private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
+    private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
+    private var eligible: [AdminRosterMember] { roster.filter(\.attendanceEligible) }
+    private var readinessRelevant: [AdminRosterMember] {
+        roster.filter { ["requested", "confirmed", "attended"].contains($0.status) }
+    }
+    private var incompleteReadiness: [AdminRosterMember] {
+        readinessRelevant.filter {
+            admin.classRosterReadiness[$0.member_id]?.onboarding_complete == false
+        }
+    }
     private var attendanceSummary: AdminAttendanceSummary { attendance.summary }
     private var isDirty: Bool { attendance != attendanceBaseline }
     private var isBusy: Bool { admin.recordingAttendanceSessionID == operation.id }
@@ -4858,13 +4870,46 @@ private struct AdminClassRosterView: View {
                 }
             }
 
+            if rosterIsCurrent, !readinessRelevant.isEmpty {
+                Section("Training readiness") {
+                    if let warning = admin.rosterReadinessStatusMessage {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if admin.loadingRosterSessionID == operation.id {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(Color.xertSteel)
+                            Text("Checking member readiness...")
+                        }
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                    } else if incompleteReadiness.isEmpty {
+                        Label(
+                            "Every active booking has completed the required readiness steps.",
+                            systemImage: "checkmark.shield.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.green)
+                    } else {
+                        Label(
+                            "\(incompleteReadiness.count) active booking\(incompleteReadiness.count == 1 ? "" : "s") need readiness review before training.",
+                            systemImage: "person.crop.circle.badge.exclamationmark"
+                        )
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
             Section("Member roster") {
-                if admin.loadingRosterSessionID == operation.id {
+                if !rosterIsCurrent, admin.loadingRosterSessionID == operation.id {
                     HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
-                } else if admin.classRoster.isEmpty {
+                } else if rosterIsCurrent, roster.isEmpty {
                     Text("No member bookings for this class.")
                 }
-                ForEach(admin.classRoster) { member in
+                ForEach(roster) { member in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -4895,46 +4940,50 @@ private struct AdminClassRosterView: View {
                                 .accessibilityLabel("Manage \(member.displayName) booking")
                             }
                         }
+                        readinessBadge(for: member)
                         if member.attendanceEligible && operation.start_time <= Date() {
                             attendanceControl(for: member)
                         }
-                        HStack(spacing: 14) {
-                            if let email = contact(member.email), let url = URL(string: "mailto:\(email)") {
-                                Link(destination: url) { Label("Email", systemImage: "envelope") }
-                            }
-                            if let phone = contact(member.phone),
-                               let encoded = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-                               let url = URL(string: "tel:\(encoded)") {
-                                Link(destination: url) { Label("Call", systemImage: "phone") }
-                            }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 14) { memberActions(for: member) }
+                            VStack(alignment: .leading, spacing: 10) { memberActions(for: member) }
                         }
-                        .font(.caption.weight(.semibold)).foregroundStyle(Color.xertSteel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
                     }
                     .padding(.vertical, 5)
                     .listRowBackground(Color.xertInk)
                 }
             }
-
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if operation.start_time <= Date() {
-                Section {
+                VStack(spacing: 0) {
+                    Divider().overlay(Color.xertSteel.opacity(0.25))
                     Button { confirmingRollCall = true } label: {
                         HStack {
-                            Spacer()
-                            if admin.recordingAttendanceSessionID == operation.id { ProgressView().tint(Color.xertNavy) }
+                            if admin.recordingAttendanceSessionID == operation.id {
+                                ProgressView().tint(Color.xertNavy)
+                            }
                             Label(
                                 attendanceSummary.isComplete
                                     ? "Save complete roll call"
                                     : "\(attendanceSummary.marked) of \(attendanceSummary.total) marked",
                                 systemImage: "checklist"
                             )
-                                .fontWeight(.bold)
-                            Spacer()
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity)
                         }
                     }
-                    .disabled(!canRecordAttendance)
-                    .listRowBackground(Color.xertSteel)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
                     .foregroundStyle(Color.xertNavy)
+                    .controlSize(.large)
+                    .disabled(!canRecordAttendance)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
+                .background(.ultraThinMaterial)
             }
         }
         .scrollContentBackground(.hidden)
@@ -4947,8 +4996,14 @@ private struct AdminClassRosterView: View {
             attendanceBaseline = attendance
         }
         .onChange(of: admin.classRoster) { roster in
+            guard rosterIsCurrent else { return }
             attendance.reconcile(roster: roster)
             attendanceBaseline.reconcile(roster: roster)
+        }
+        .sheet(item: $presentedMember) { member in
+            NavigationStack {
+                AdminMemberDetailView(admin: admin, session: session, member: member)
+            }
         }
         .navigationBarBackButtonHidden(isDirty)
         .toolbar {
@@ -5118,6 +5173,65 @@ private struct AdminClassRosterView: View {
         case "requested", "waitlisted": return .orange
         case "declined", "cancelled", "no_show": return .red
         default: return Color.xertSteel
+        }
+    }
+
+    @ViewBuilder
+    private func readinessBadge(for member: AdminRosterMember) -> some View {
+        if ["requested", "confirmed", "attended"].contains(member.status),
+           let readiness = admin.classRosterReadiness[member.member_id] {
+            if readiness.onboarding_complete {
+                Label("Training ready", systemImage: "checkmark.shield.fill")
+                    .foregroundStyle(Color.green)
+            } else {
+                Label(readinessIssueLabel(readiness), systemImage: "exclamationmark.shield.fill")
+                    .foregroundStyle(Color.orange)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberActions(for member: AdminRosterMember) -> some View {
+        Button { openMemberRecord(member.member_id) } label: {
+            Label(
+                openingMemberID == member.member_id ? "Opening..." : "Member record",
+                systemImage: "person.text.rectangle"
+            )
+            .frame(minHeight: 32)
+        }
+        .buttonStyle(.plain)
+        .disabled(openingMemberID != nil)
+        if let email = contact(member.email), let url = URL(string: "mailto:\(email)") {
+            Link(destination: url) { Label("Email", systemImage: "envelope").frame(minHeight: 32) }
+        }
+        if let phone = contact(member.phone),
+           let encoded = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           let url = URL(string: "tel:\(encoded)") {
+            Link(destination: url) { Label("Call", systemImage: "phone").frame(minHeight: 32) }
+        }
+    }
+
+    private func readinessIssueLabel(_ readiness: AdminMemberOnboardingSummary) -> String {
+        var issues: [String] = []
+        if !readiness.profile_complete { issues.append("profile") }
+        if !readiness.emergency_contact_complete { issues.append("emergency contact") }
+        if !readiness.documents_complete { issues.append("documents") }
+        return "Review " + issues.joined(separator: ", ")
+    }
+
+    private func openMemberRecord(_ memberID: UUID) {
+        guard openingMemberID == nil else { return }
+        if let member = admin.members.first(where: { $0.id == memberID }) {
+            presentedMember = member
+            return
+        }
+        openingMemberID = memberID
+        Task {
+            await admin.resolveOwnerTask(session: session, task: .member(memberID))
+            if let member = admin.members.first(where: { $0.id == memberID }) {
+                presentedMember = member
+            }
+            openingMemberID = nil
         }
     }
 
