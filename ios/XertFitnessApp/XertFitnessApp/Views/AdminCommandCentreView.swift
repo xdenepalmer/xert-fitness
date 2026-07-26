@@ -1087,6 +1087,20 @@ struct AdminCommandCentreView: View {
                 ) {
                     presentQuickAction(.newSessionPack)
                 }
+                AdminQuickToolButton(
+                    title: "Access control",
+                    detail: "Review admins and recovery cover",
+                    icon: "person.badge.key"
+                ) {
+                    openWorkspaceWithFeedback(.access)
+                }
+                AdminQuickToolButton(
+                    title: "Launch health",
+                    detail: admin.healthIssues == 0 ? "Review release evidence" : "\(admin.healthIssues) issue\(admin.healthIssues == 1 ? "" : "s") need attention",
+                    icon: "checkmark.shield"
+                ) {
+                    openWorkspaceWithFeedback(.health)
+                }
             }
         }
     }
@@ -1830,6 +1844,8 @@ struct AdminCommandCentreView: View {
         switch workspace {
         case .members:
             return "Search \(admin.memberCount) accounts and review member value"
+        case .access:
+            return "Review administrators, role changes and recovery cover"
         case .notices:
             return "\(admin.liveAnnouncements) live · publish to web and iOS"
         case .health:
@@ -1881,6 +1897,13 @@ struct AdminCommandCentreView: View {
                 admin: admin,
                 session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
+            )
+        case .access:
+            AdminAccessControlView(
+                admin: admin,
+                session: session,
+                onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) },
+                onOpenAudit: { openWorkspace(.audit) }
             )
         case .classDesk:
             AdminClassesView(admin: admin, session: session)
@@ -2369,6 +2392,442 @@ private struct AdminOwnerTaskSheet: View {
     }
 }
 
+private enum AdminAccessDirectoryMode: String, CaseIterable, Identifiable {
+    case administrators
+    case candidates
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .administrators: return "Administrators"
+        case .candidates: return "Add backup"
+        }
+    }
+    var role: String {
+        switch self {
+        case .administrators: return "admin"
+        case .candidates: return "member"
+        }
+    }
+}
+
+private struct AdminAccessControlView: View {
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let onOpenTask: (XertOwnerTask) -> Void
+    let onOpenAudit: () -> Void
+    @State private var mode = AdminAccessDirectoryMode.administrators
+    @State private var query = ""
+    @State private var page = 1
+    @State private var hasRequestedDirectory = false
+
+    private let pageSize = 50
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var canRequestDirectory: Bool {
+        mode == .administrators || normalizedQuery.count >= 2
+    }
+    private var requestKey: String {
+        "\(mode.rawValue)|\(normalizedQuery)|\(page)"
+    }
+    private var directoryIsCurrent: Bool {
+        canRequestDirectory
+            && admin.hasLoadedMemberDirectory
+            && !admin.memberDirectoryUnavailable
+            && admin.memberDirectorySearch == normalizedQuery
+            && admin.memberDirectoryRole == mode.role
+            && admin.memberDirectoryCredit == "all"
+            && admin.memberDirectoryPage == page
+    }
+    private var rows: [AdminMemberSummary] {
+        directoryIsCurrent ? admin.memberDirectoryRows : []
+    }
+    private var pageCount: Int {
+        max(1, Int(ceil(Double(admin.memberDirectoryTotal) / Double(pageSize))))
+    }
+    private var accessSnapshot: AdminAccessSnapshot {
+        AdminAccessSnapshot(
+            administrators: rows,
+            totalCount: directoryIsCurrent && mode == .administrators
+                ? admin.memberDirectoryTotal
+                : 0,
+            currentUserID: session.user?.id
+        )
+    }
+    private var recentAccessChanges: [AdminAuditEntry] {
+        admin.auditEntries
+            .filter { $0.category == "Access" }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(5)
+            .map { $0 }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Access directory", selection: $mode) {
+                    ForEach(AdminAccessDirectoryMode.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Owner access")
+            } footer: {
+                Text("Administrator access includes member records, finance, publishing and platform controls.")
+            }
+            .listRowBackground(Color.xertInk)
+
+            if mode == .administrators {
+                accessPosture
+            } else if normalizedQuery.count < 2 {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Find a trusted existing member", systemImage: "person.crop.circle.badge.plus")
+                            .font(.headline)
+                        Text("Enter at least two characters of their name, email or phone. Access is granted only after reviewing the exact account and confirming the role change.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.62))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            if canRequestDirectory
+                && hasRequestedDirectory
+                && !directoryIsCurrent
+                && !admin.isSearchingMembers {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(
+                            admin.memberDirectoryStatusMessage
+                                ?? "Access evidence is unavailable. Refresh before changing administrator roles.",
+                            systemImage: "lock.trianglebadge.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            Task { await loadDirectory() }
+                        } label: {
+                            Label("Retry access directory", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.orange)
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            if admin.isSearchingMembers {
+                Section {
+                    HStack(spacing: 12) {
+                        ProgressView().tint(Color.xertSteel)
+                        Text(mode == .administrators ? "Loading administrators..." : "Searching eligible members...")
+                    }
+                    .frame(minHeight: 52)
+                    .listRowBackground(Color.xertInk)
+                }
+            } else if directoryIsCurrent {
+                accessDirectory
+            }
+
+            accessHistory
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Access Control")
+        .searchable(
+            text: $query,
+            prompt: mode == .administrators
+                ? "Filter administrators"
+                : "Member name, email or phone"
+        )
+        .task(id: requestKey) {
+            guard canRequestDirectory else { return }
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                await loadDirectory()
+            } catch {}
+        }
+        .task { await admin.loadAudit(session: session) }
+        .refreshable {
+            if canRequestDirectory { await loadDirectory() }
+            await admin.loadAudit(session: session, force: true)
+        }
+        .onChange(of: mode) { _ in
+            query = ""
+            page = 1
+            hasRequestedDirectory = false
+        }
+        .onChange(of: query) { _ in
+            page = 1
+            hasRequestedDirectory = false
+        }
+        .onChange(of: page) { _ in hasRequestedDirectory = false }
+        .onChange(of: admin.memberDirectoryTotal) { _ in
+            if page > pageCount { page = pageCount }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task {
+                        if canRequestDirectory { await loadDirectory() }
+                        await admin.loadAudit(session: session, force: true)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(admin.isSearchingMembers || admin.isLoadingAudit)
+                .accessibilityLabel("Refresh access control")
+            }
+        }
+    }
+
+    private var accessPosture: some View {
+        Section("Access posture") {
+            if directoryIsCurrent {
+                let snapshot = accessSnapshot
+                VStack(alignment: .leading, spacing: 12) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            accessPostureIcon(snapshot)
+                            accessPostureCopy(snapshot)
+                            Spacer(minLength: 8)
+                            Text(snapshot.administratorCount.formatted())
+                                .font(.title2.weight(.black).monospacedDigit())
+                                .foregroundStyle(Color.xertOffWhite)
+                        }
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                accessPostureIcon(snapshot)
+                                Text(snapshot.administratorCount.formatted())
+                                    .font(.title2.weight(.black).monospacedDigit())
+                                    .foregroundStyle(Color.xertOffWhite)
+                            }
+                            accessPostureCopy(snapshot)
+                        }
+                    }
+                    if snapshot.currentUserListingIsComplete && !snapshot.currentUserIsListed {
+                        Label(
+                            "Your signed-in account is missing from this administrator snapshot. Do not change roles until the directory is refreshed.",
+                            systemImage: "person.crop.circle.badge.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !snapshot.hasOperationalBackup {
+                        Button {
+                            mode = .candidates
+                        } label: {
+                            Label("Find a backup administrator", systemImage: "person.badge.plus")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.xertSteel)
+                        .foregroundStyle(Color.xertNavy)
+                    }
+                }
+                .padding(.vertical, 6)
+            } else if admin.isSearchingMembers {
+                ProgressView().tint(Color.xertSteel)
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func accessPostureIcon(_ snapshot: AdminAccessSnapshot) -> some View {
+        Image(systemName: snapshot.hasOperationalBackup ? "person.2.fill" : "exclamationmark.shield.fill")
+            .font(.title2)
+            .foregroundStyle(snapshot.hasOperationalBackup ? Color.green : Color.orange)
+            .frame(width: 44, height: 44)
+            .background((snapshot.hasOperationalBackup ? Color.green : Color.orange).opacity(0.1))
+            .accessibilityHidden(true)
+    }
+
+    private func accessPostureCopy(_ snapshot: AdminAccessSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(snapshot.statusTitle)
+                .font(.headline)
+                .foregroundStyle(Color.xertOffWhite)
+            Text(snapshot.statusDetail)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var accessDirectory: some View {
+        Section(mode == .administrators ? "Administrator accounts" : "Eligible member accounts") {
+            if rows.isEmpty {
+                Text(
+                    mode == .administrators
+                        ? "No matching administrators. Refresh before relying on this result."
+                        : "No eligible members match this search."
+                )
+                .foregroundStyle(Color.xertPale.opacity(0.62))
+            }
+            ForEach(rows) { member in
+                Button { onOpenTask(.member(member.id)) } label: {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            accessIdentity(member)
+                            Spacer(minLength: 8)
+                            accessAccountBadge(member)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            accessIdentity(member)
+                            HStack {
+                                accessAccountBadge(member)
+                                Spacer()
+                                Label(
+                                    mode == .administrators ? "Review access" : "Review and grant",
+                                    systemImage: "chevron.right"
+                                )
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if admin.memberDirectoryTotal > pageSize {
+                HStack {
+                    Button {
+                        page = max(1, page - 1)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .frame(width: 44, height: 44)
+                    }
+                    .disabled(page <= 1 || admin.isSearchingMembers)
+                    Spacer()
+                    Text("Page \(page) of \(pageCount)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                    Spacer()
+                    Button {
+                        page = min(pageCount, page + 1)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .frame(width: 44, height: 44)
+                    }
+                    .disabled(page >= pageCount || admin.isSearchingMembers)
+                }
+                .foregroundStyle(Color.xertSteel)
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func accessIdentity(_ member: AdminMemberSummary) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(member.displayName)
+                .font(.headline)
+                .foregroundStyle(Color.xertOffWhite)
+                .lineLimit(2)
+            Text(member.email ?? member.phone ?? "No contact details")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+                .lineLimit(2)
+        }
+    }
+
+    private func accessAccountBadge(_ member: AdminMemberSummary) -> some View {
+        Text(member.id == session.user?.id ? "YOU" : member.role.uppercased())
+            .font(.caption2.weight(.black))
+            .foregroundStyle(member.id == session.user?.id ? Color.green : Color.xertSteel)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 28)
+            .overlay(
+                Rectangle()
+                    .stroke(
+                        member.id == session.user?.id ? Color.green.opacity(0.45) : Color.xertSteel.opacity(0.3),
+                        lineWidth: 1
+                    )
+            )
+    }
+
+    private var accessHistory: some View {
+        Section {
+            if admin.isLoadingAudit && !admin.hasLoadedAudit {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading access history...")
+                }
+            } else if !admin.auditIsCurrent {
+                Label(
+                    admin.auditStatusMessage
+                        ?? "Access history is not current. Refresh before relying on it.",
+                    systemImage: "clock.badge.exclamationmark"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if recentAccessChanges.isEmpty {
+                Text("No administrator role changes in the current audit window.")
+                    .foregroundStyle(Color.xertPale.opacity(0.62))
+            } else {
+                ForEach(recentAccessChanges) { entry in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text(entry.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(Color.xertPale.opacity(0.42))
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+            if admin.auditIsCurrent {
+                Button(action: onOpenAudit) {
+                    Label("Open full Admin Audit", systemImage: "clock.arrow.circlepath")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.xertSteel)
+            }
+        } header: {
+            Text("Recent access changes")
+        } footer: {
+            Text("Every administrator role change is recorded in the protected audit ledger.")
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func loadDirectory() async {
+        guard canRequestDirectory else { return }
+        hasRequestedDirectory = true
+        await admin.searchMembers(
+            session: session,
+            query: normalizedQuery,
+            role: mode.role,
+            credit: "all",
+            page: page,
+            pageSize: pageSize
+        )
+    }
+}
+
 private struct AdminMembersView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
@@ -2642,6 +3101,9 @@ private struct AdminMemberDetailView: View {
         !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     private var isBusy: Bool { admin.servicingMemberID == current.id }
+    private var isSignedInAdministrator: Bool {
+        current.role == "admin" && current.id == session.user?.id
+    }
 
     var body: some View {
         List {
@@ -2687,6 +3149,15 @@ private struct AdminMemberDetailView: View {
 
             Section("Access") {
                 LabeledContent("Current role", value: current.role.capitalized)
+                if isSignedInAdministrator {
+                    Label(
+                        "This is your signed-in administrator account. Use another trusted administrator to change its access.",
+                        systemImage: "lock.shield"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.64))
+                    .fixedSize(horizontal: false, vertical: true)
+                }
                 Button {
                     pendingRole = current.role == "admin" ? "member" : "admin"
                 } label: {
@@ -2694,7 +3165,12 @@ private struct AdminMemberDetailView: View {
                           systemImage: current.role == "admin" ? "person.badge.minus" : "person.badge.key")
                 }
                 .foregroundStyle(current.role == "admin" ? Color.red : Color.xertSteel)
-                .disabled(admin.servicingMemberID != nil)
+                .disabled(admin.servicingMemberID != nil || isSignedInAdministrator)
+                .accessibilityHint(
+                    isSignedInAdministrator
+                        ? "Your signed-in administrator account cannot remove its own access"
+                        : "Opens a confirmation before changing administrator access"
+                )
             }
             .listRowBackground(Color.xertInk)
 

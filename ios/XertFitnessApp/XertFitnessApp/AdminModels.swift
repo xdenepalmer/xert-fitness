@@ -48,6 +48,43 @@ struct AdminMemberReport {
     }
 }
 
+struct AdminAccessSnapshot: Equatable {
+    static let recommendedAdministratorCount = 2
+
+    let administrators: [AdminMemberSummary]
+    let totalCount: Int
+    let currentUserID: UUID?
+
+    var administratorCount: Int { max(totalCount, administrators.count) }
+    var hasOperationalBackup: Bool {
+        administratorCount >= Self.recommendedAdministratorCount
+    }
+    var currentUserIsListed: Bool {
+        guard let currentUserID else { return false }
+        return administrators.contains { $0.id == currentUserID }
+    }
+    var currentUserListingIsComplete: Bool {
+        currentUserIsListed || administratorCount <= administrators.count
+    }
+    var statusTitle: String {
+        switch administratorCount {
+        case 0: return "No administrator evidence"
+        case 1: return "Single administrator"
+        default: return "Access coverage ready"
+        }
+    }
+    var statusDetail: String {
+        switch administratorCount {
+        case 0:
+            return "Refresh before relying on access coverage."
+        case 1:
+            return "Add one trusted backup administrator before launch."
+        default:
+            return "\(administratorCount) administrators can recover owner operations."
+        }
+    }
+}
+
 struct AdminMemberOnboardingSummary: Identifiable, Codable, Hashable {
     var id: UUID { user_id }
     let user_id: UUID

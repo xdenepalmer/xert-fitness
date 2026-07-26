@@ -43,7 +43,7 @@ final class ModelsTests: XCTestCase {
     }
 
     func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
-        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 20)
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 21)
         for workspace in XertOwnerWorkspace.allCases {
             let route = XertOwnerRoute(workspace: workspace)
             XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
@@ -628,6 +628,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(XertOwnerWorkspace.siteContent.matches("homepage hero"))
         XCTAssertTrue(XertOwnerWorkspace.classDesk.matches("roll waitlist"))
         XCTAssertTrue(XertOwnerWorkspace.members.matches("MEMBER credit"))
+        XCTAssertTrue(XertOwnerWorkspace.access.matches("staff permission"))
         XCTAssertFalse(XertOwnerWorkspace.events.matches("refund"))
         XCTAssertTrue(XertOwnerWorkspace.events.matches("   "))
     }
@@ -3035,6 +3036,66 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(csv.contains("\"2026-07-27T03:15:00Z\""))
         XCTAssertFalse(csv.contains("orders_count"))
         XCTAssertTrue(csv.hasSuffix("\n"))
+    }
+
+    func testAdminAccessSnapshotIdentifiesLaunchCoverageWithoutOverstatingPagedEvidence() {
+        let ownerID = UUID()
+        let backupID = UUID()
+        let owner = AdminMemberSummary(
+            id: ownerID,
+            full_name: "Owner",
+            email: "owner@example.com",
+            phone: nil,
+            role: "admin",
+            joined_at: Date(timeIntervalSince1970: 0),
+            credits_remaining: 0,
+            bookings_count: 0,
+            orders_count: 0,
+            total_spent_cents: 0,
+            total_count: 2
+        )
+        let backup = AdminMemberSummary(
+            id: backupID,
+            full_name: "Backup",
+            email: "backup@example.com",
+            phone: nil,
+            role: "admin",
+            joined_at: Date(timeIntervalSince1970: 1),
+            credits_remaining: 0,
+            bookings_count: 0,
+            orders_count: 0,
+            total_spent_cents: 0,
+            total_count: 2
+        )
+
+        let ready = AdminAccessSnapshot(
+            administrators: [owner, backup],
+            totalCount: 2,
+            currentUserID: ownerID
+        )
+        XCTAssertEqual(ready.administratorCount, 2)
+        XCTAssertTrue(ready.hasOperationalBackup)
+        XCTAssertTrue(ready.currentUserIsListed)
+        XCTAssertTrue(ready.currentUserListingIsComplete)
+        XCTAssertEqual(ready.statusTitle, "Access coverage ready")
+        XCTAssertTrue(ready.statusDetail.contains("2 administrators"))
+
+        let single = AdminAccessSnapshot(
+            administrators: [owner],
+            totalCount: 1,
+            currentUserID: ownerID
+        )
+        XCTAssertFalse(single.hasOperationalBackup)
+        XCTAssertEqual(single.statusTitle, "Single administrator")
+        XCTAssertEqual(single.statusDetail, "Add one trusted backup administrator before launch.")
+
+        let incompletePage = AdminAccessSnapshot(
+            administrators: [backup],
+            totalCount: 75,
+            currentUserID: ownerID
+        )
+        XCTAssertFalse(incompletePage.currentUserIsListed)
+        XCTAssertFalse(incompletePage.currentUserListingIsComplete)
     }
 
     private func booking(

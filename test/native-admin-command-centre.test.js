@@ -655,7 +655,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   }
   assert.match(ownerNavigation, /enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable/);
   for (const workspace of [
-    'overview', 'members', 'classDesk', 'bookingRequests', 'timetable', 'availability',
+    'overview', 'members', 'access', 'classDesk', 'bookingRequests', 'timetable', 'availability',
     'ptRequests', 'retention', 'leads', 'campaigns', 'siteContent', 'notices', 'events',
     'team', 'finance', 'orders', 'products', 'controls', 'health', 'audit',
   ]) assert.match(ownerNavigation, new RegExp(`case ${workspace}`));
@@ -697,6 +697,69 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   assert.match(view, /ForEach\(rows\) \{ item in\s*classRow\(item\)/);
   assert.match(view, /private func classStatusActions\(_ item: AdminClassSession\) -> some View/);
   assert.match(view, /if item\.public_visible == true/);
+});
+
+test('native owner access control governs launch-day administrator coverage', async () => {
+  const [view, models, navigation, store, sql] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../src/supabase/admin_role_safety_upgrade.sql'),
+  ]);
+  const access = view.slice(
+    view.indexOf('private enum AdminAccessDirectoryMode'),
+    view.indexOf('private struct AdminMembersView'),
+  );
+  const memberDetail = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private struct AdminMemberNoticeHistoryRow'),
+  );
+  const snapshot = models.slice(
+    models.indexOf('struct AdminAccessSnapshot'),
+    models.indexOf('struct AdminMemberOnboardingSummary'),
+  );
+
+  assert.match(navigation, /case access/);
+  assert.match(navigation, /case \.access: return "Access Control"/);
+  assert.match(navigation, /case \.access: return "Review administrators and govern owner access"/);
+  assert.match(navigation, /case \.access: return "person\.badge\.key"/);
+  assert.match(navigation, /case \.access, \.controls, \.health, \.audit: return \.platform/);
+  assert.match(view, /case \.access:\s+AdminAccessControlView\(/);
+  assert.match(view, /title: "Access control"[\s\S]*openWorkspaceWithFeedback\(\.access\)/);
+  assert.match(view, /title: "Launch health"[\s\S]*openWorkspaceWithFeedback\(\.health\)/);
+
+  assert.match(snapshot, /static let recommendedAdministratorCount = 2/);
+  assert.match(snapshot, /var hasOperationalBackup: Bool/);
+  assert.match(snapshot, /var currentUserListingIsComplete: Bool/);
+  assert.match(snapshot, /case 1: return "Single administrator"/);
+  assert.match(snapshot, /Add one trusted backup administrator before launch\./);
+
+  assert.match(access, /case administrators/);
+  assert.match(access, /case candidates/);
+  assert.match(access, /normalizedQuery\.count >= 2/);
+  assert.match(access, /role: mode\.role/);
+  assert.match(access, /admin\.memberDirectoryRole == mode\.role/);
+  assert.match(access, /AdminAccessSnapshot\(/);
+  assert.match(access, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(access, /member\.id == session\.user\?\.id \? "YOU"/);
+  assert.match(access, /Find a backup administrator/);
+  assert.match(access, /mode = \.candidates/);
+  assert.match(access, /filter \{ \$0\.category == "Access" \}/);
+  assert.match(access, /Open full Admin Audit/);
+  assert.match(access, /Every administrator role change is recorded in the protected audit ledger\./);
+  assert.match(access, /\.refreshable \{/);
+  assert.match(access, /admin\.loadAudit\(session: session, force: true\)/);
+  assert.doesNotMatch(access, /adminSetRole|admin_set_role/);
+
+  assert.match(memberDetail, /private var isSignedInAdministrator: Bool/);
+  assert.match(memberDetail, /current\.role == "admin" && current\.id == session\.user\?\.id/);
+  assert.match(memberDetail, /\.disabled\(admin\.servicingMemberID != nil \|\| isSignedInAdministrator\)/);
+  assert.match(memberDetail, /cannot remove its own access/);
+  assert.match(store, /func setMemberRole[\s\S]*api\.adminSetRole/);
+  assert.match(sql, /p_user_id = auth\.uid\(\) and p_role <> 'admin'/i);
+  assert.match(sql, /CANNOT_DEMOTE_LAST_ADMIN/);
+  assert.match(sql, /insert into public\.admin_role_changes/i);
 });
 
 test('native owner overview turns Stripe launch evidence into one exact next action', async () => {
