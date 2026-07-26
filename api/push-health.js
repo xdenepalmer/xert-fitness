@@ -1,4 +1,4 @@
-import { sendJson } from './http.js';
+import { createRequestTrace } from './http.js';
 import { inspectAPNsEnvironment } from './apns.js';
 
 export function inspectPushEnvironment(environment = {}) {
@@ -11,6 +11,8 @@ export function inspectPushEnvironment(environment = {}) {
 }
 
 export default async function handler(request, response) {
-  if (request.method !== 'GET') return sendJson(response, { error: 'Method not allowed' }, 405);
-  return sendJson(response, inspectPushEnvironment(process.env));
+  const trace = createRequestTrace(response);
+  const { json } = trace;
+  if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+  return json(inspectPushEnvironment(process.env));
 }

@@ -295,6 +295,9 @@ test('push health reveals only release readiness', () => {
     APNS_TEAM_ID: 'team',
     APNS_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----',
   }), { ready: true });
+  // Public push-health 4xx/5xx must carry a correlatable request id like the
+  // other api/ handlers (it previously answered via bare sendJson).
+  assert.match(read('../api/push-health.js'), /createRequestTrace\(response\)/);
 });
 
 test('push schema keeps device tokens service-only and exposes admin aggregate metrics', () => {

@@ -41,3 +41,10 @@ test('announcement publish and status mutations refuse double-submit before Reac
     assert.match(body, /saveLockRef\.current = true/);
   }
 });
+
+test('announcement list refresh is generation-scoped so a late response cannot repaint a newer list', () => {
+  assert.match(manager, /const loadGenerationRef = useRef\(0\)/);
+  assert.match(manager, /const generation = \+\+loadGenerationRef\.current/);
+  assert.match(manager, /if \(generation !== loadGenerationRef\.current\) return/);
+  assert.match(manager, /return \(\) => \{ loadGenerationRef\.current \+= 1; \}/);
+});

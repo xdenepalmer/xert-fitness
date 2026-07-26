@@ -5259,9 +5259,10 @@ private struct AdminPlatformView: View {
         .confirmationDialog("Open session pack checkout?", isPresented: $confirmingPaymentActivation, titleVisibility: .visible) {
             Button("Enable pack checkout") {
                 guard let draft else { return }
-                // Clear confirm before save — platformMutationAvailable freezes
-                // while the dialog is up, and Save must be able to proceed.
-                confirmingPaymentActivation = false
+                // Keep confirm mounted through persist (web Soft Launch parity).
+                // Clearing it first re-enabled Save/toggles before isSavingSettings
+                // flipped and let a second activation confirm fire on the same paint.
+                guard !admin.isSavingSettings, !isExitSaving else { return }
                 save(draft)
             }
             .disabled(admin.isSavingSettings || isExitSaving)
@@ -5321,6 +5322,9 @@ private struct AdminPlatformView: View {
         guard platformDataIsCurrent, !admin.isLoading, !admin.isSavingSettings, !isExitSaving else { return }
         Task {
             saved = await admin.saveSettings(session: session, draft: settings)
+            // Drop the activation confirm only after the store save settles so
+            // Save cannot open a second confirm while the first persist runs.
+            confirmingPaymentActivation = false
             if saved {
                 XertHaptics.play(.success)
                 draft = admin.settings

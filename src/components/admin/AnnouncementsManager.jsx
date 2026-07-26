@@ -70,6 +70,9 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
   // Disabled buttons only re-render after paint — a double-click on Publish can
   // still queue two fan-outs (and two inserts for a brand-new notice).
   const saveLockRef = useRef(false);
+  // Quiet refresh after publish/archive can race an earlier full load or a
+  // second Refresh tap; only the newest response may paint the list.
+  const loadGenerationRef = useRef(0);
 
   const editorBaseline = useMemo(() => announcementEditorForm(editing), [editing]);
   const editorDirty = Boolean(editing) && Object.keys(EMPTY_FORM).some(key => form[key] !== editorBaseline[key]);
@@ -81,19 +84,27 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
+    const generation = ++loadGenerationRef.current;
     quiet ? setRefreshing(true) : setLoading(true);
     setError('');
     try {
-      setAnnouncements(await getAllMemberAnnouncements());
+      const rows = await getAllMemberAnnouncements();
+      if (generation !== loadGenerationRef.current) return;
+      setAnnouncements(rows);
     } catch (loadError) {
+      if (generation !== loadGenerationRef.current) return;
       setError(loadError.message || 'Announcements could not be loaded.');
     } finally {
+      if (generation !== loadGenerationRef.current) return;
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { loadGenerationRef.current += 1; };
+  }, [load]);
 
   const counts = useMemo(() => announcements.reduce((result, item) => {
     const state = announcementState(item);

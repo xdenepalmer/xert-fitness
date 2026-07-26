@@ -48,6 +48,21 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func skipWaitlistHead/);
   assert.match(adminStore, /func logFollowUp/);
   assert.match(adminStore, /func searchMembers/);
+  // Member directory search is the private-notice recipient picker — a slow
+  // earlier query must not paint over a later keystroke, and newer queries
+  // must not be dropped while an older search is in flight.
+  assert.match(adminStore, /memberSearchGeneration &\+= 1/);
+  assert.match(
+    adminStore,
+    /func searchMembers\(session: AuthSession, query: String\) async \{[\s\S]*memberSearchGeneration &\+= 1[\s\S]*guard generation == memberSearchGeneration else \{ return \}/,
+  );
+  assert.doesNotMatch(
+    adminStore.slice(
+      adminStore.indexOf('func searchMembers(session: AuthSession'),
+      adminStore.indexOf('func searchOwnerMembers(session: AuthSession'),
+    ),
+    /guard !isSearchingMembers else \{ return \}/,
+  );
   assert.match(view, /AdminMembersView/);
   assert.match(view, /AdminClassesView/);
   assert.match(view, /AdminRetentionView/);
@@ -326,6 +341,10 @@ test('native platform controls and health recovery remain safe and reachable on 
   assert.match(platform, /onDraftChange\(value\)/);
   assert.match(platform, /private func save\(_ settings:[\s\S]*guard platformDataIsCurrent, !admin\.isLoading, !admin\.isSavingSettings, !isExitSaving else \{ return \}/);
   assert.match(platform, /canSavePlatformSettings[\s\S]*!confirmingPaymentActivation[\s\S]*draft != admin\.settings/);
+  assert.match(
+    platform,
+    /saved = await admin\.saveSettings\(session: session, draft: settings\)[\s\S]*?confirmingPaymentActivation = false/,
+  );
   assert.match(store, /loadedSources\.insert\("platform controls"\)/);
   assert.match(store, /refreshUnavailableSources\.removeAll \{ \$0 == "platform controls" \}/);
   assert.match(store, /guard loadedSources\.contains\("platform controls"\),[\s\S]*Refresh Platform Controls before saving/);

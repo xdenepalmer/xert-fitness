@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
-import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
+import { clearSiteContentDrafts, UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
@@ -104,6 +104,9 @@ export default function AdminCommandCentre() {
     const pending = pendingNavigation;
     setPendingNavigation(null);
     setHasUnsavedChanges(false);
+    // CMS SectionEditors recover from localStorage on remount. Sweep drafts
+    // before bumping sectionEpoch so a "permanent discard" cannot resurrect.
+    clearSiteContentDrafts(window.localStorage);
     setSectionEpoch(epoch => epoch + 1);
     if (pending?.kind === 'section') {
       setActiveSection(pending.section);

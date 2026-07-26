@@ -103,6 +103,7 @@ final class AdminStore: ObservableObject {
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
+    private var memberSearchGeneration: UInt = 0
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
@@ -406,17 +407,25 @@ final class AdminStore: ObservableObject {
     }
 
     func searchMembers(session: AuthSession, query: String) async {
-        guard !isSearchingMembers else { return }
+        // Generation-scope every keystroke so a slow "ann" response cannot paint
+        // over a later "anna" recipient list (and so newer queries are not dropped
+        // while an older search is still in flight).
+        memberSearchGeneration &+= 1
+        let generation = memberSearchGeneration
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
         isSearchingMembers = true
-        defer { isSearchingMembers = false }
         do {
-            let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            replaceMembers(
-                try await api.adminMembers(session: session, search: query),
-                updatesDirectoryTotal: normalized.isEmpty
-            )
+            let results = try await api.adminMembers(session: session, search: normalized)
+            guard generation == memberSearchGeneration else { return }
+            replaceMembers(results, updatesDirectoryTotal: normalized.isEmpty)
+            isSearchingMembers = false
+        } catch is CancellationError {
+            guard generation == memberSearchGeneration else { return }
+            isSearchingMembers = false
         } catch {
+            guard generation == memberSearchGeneration else { return }
             errorMessage = error.localizedDescription
+            isSearchingMembers = false
         }
     }
 

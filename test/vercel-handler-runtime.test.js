@@ -73,7 +73,9 @@ for (const [name, handler, method] of [
       'admin order reconciliation',
       'push subscription',
       'admin announcement publishing',
+      'push health',
       'admin push health',
+      'delete account',
     ].includes(name)) {
       assert.match(response.headers['x-request-id'], /^[0-9a-f-]{36}$/i);
       if (typeof response.body === 'object') {

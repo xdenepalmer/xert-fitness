@@ -17,9 +17,12 @@ test('owner Members metric uses a directory total that filtered loads cannot ove
   );
   assert.match(source, /private func replaceMembers\(_ rows: \[AdminMemberSummary\], updatesDirectoryTotal: Bool\)/);
   assert.match(source, /replaceMembers\(try await memberRequest, updatesDirectoryTotal: true\)/);
+  // Filtered search must not overwrite the unfiltered directory total; an empty
+  // query (full directory refresh) still may. Generation-scoped search keeps the
+  // same contract while refusing stale recipient-list paints.
   assert.match(
     source,
-    /replaceMembers\(\s*try await api\.adminMembers\(session: session, search: query\),\s*updatesDirectoryTotal: normalized\.isEmpty\s*\)/,
+    /let results = try await api\.adminMembers\(session: session, search: normalized\)[\s\S]*replaceMembers\(results, updatesDirectoryTotal: normalized\.isEmpty\)/,
   );
   assert.match(
     source,

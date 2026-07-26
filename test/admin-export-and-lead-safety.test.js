@@ -39,7 +39,14 @@ test('native platform settings freeze edits while payment-activation confirm is 
     view.indexOf('private struct AdminCommunicationsView'),
   );
   assert.match(platform, /&& !confirmingPaymentActivation/);
-  assert.match(platform, /confirmingPaymentActivation = false\s*\n\s*save\(draft\)/);
+  // Confirm stays mounted through persist — clearing it before save re-enabled
+  // Save and let a second activation dialog open on the same paint.
+  assert.doesNotMatch(platform, /confirmingPaymentActivation = false\s*\n\s*save\(draft\)/);
+  assert.match(platform, /guard !admin\.isSavingSettings, !isExitSaving else \{ return \}\s*\n\s*save\(draft\)/);
+  assert.match(
+    platform,
+    /saved = await admin\.saveSettings\(session: session, draft: settings\)[\s\S]*?confirmingPaymentActivation = false/,
+  );
   assert.match(platform, /private var canSavePlatformSettings: Bool \{[\s\S]*!confirmingPaymentActivation/);
   assert.match(platform, /guard canSavePlatformSettings else \{ return \}/);
   assert.match(platform, /guard platformDataIsCurrent, !admin\.isLoading, !admin\.isSavingSettings, !isExitSaving else \{ return \}/);

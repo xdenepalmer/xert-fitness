@@ -60,6 +60,13 @@ test('section navigation consults the unsaved-changes guard before navigating', 
   // cannot clear hasUnsavedChanges while the dirty editor stays mounted.
   assert.match(commandCentre, /setSectionEpoch\(epoch => epoch \+ 1\)/);
   assert.match(commandCentre, /<Suspense key=\{`\$\{section\}:\$\{sectionEpoch\}`\}/);
+  // CMS drafts live in localStorage — discard must sweep them before remount
+  // or SectionEditor recovers the "permanently discarded" edits.
+  assert.match(commandCentre, /clearSiteContentDrafts\(window\.localStorage\)/);
+  assert.match(
+    commandCentre,
+    /clearSiteContentDrafts\(window\.localStorage\);[\s\S]*setSectionEpoch\(epoch => epoch \+ 1\)/,
+  );
 });
 
 test('planAdminNavigation prompts on unsaved changes even for a same-section request', () => {
