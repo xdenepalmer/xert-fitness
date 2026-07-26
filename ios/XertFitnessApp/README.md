@@ -108,7 +108,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Member contact-detail viewing and editing, matching the web account workflow.
 - Product, class session, booking, credit, and event loading.
 - Searchable class discovery with Queensland-aware today/7-day windows, open-spot and beginner-friendly filters.
-- Source-level offline and partial-refresh notices, with cached public data kept usable when individual services fail.
+- Source-level offline and partial-refresh notices, with cached public data kept usable when individual services fail. Active upcoming bookings also survive a signed-in relaunch for up to seven days in an account-scoped, bounded local snapshot; saved status is timestamped and remains read-only until the server refreshes it.
 - Coalesced, generation-guarded refreshes that cannot restore private member data after sign-out or an account change.
 - Semantic, rate-limited haptics use prepared generators across navigation,
   booking, checkout, account, and owner workflows, with an Account preference

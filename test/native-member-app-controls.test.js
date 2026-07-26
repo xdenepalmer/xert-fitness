@@ -36,7 +36,7 @@ test('owner booking controls govern the native member experience and fail closed
   assert.match(booking, /!store\.memberBookingsEnabled \|\| session\.booking_mode == "interest_only"/);
   assert.match(booking, /store\.unavailableDataSources\.contains\(\.platformSettings\)[\s\S]*Booking status unavailable/);
   assert.match(booking, /private var memberBookingContextIsLoading: Bool \{[\s\S]*store\.isSignedIn[\s\S]*unavailableDataSources\.contains\(\.bookings\)[\s\S]*store\.hasBootstrapped \|\| store\.isLoading/);
-  assert.match(booking, /private var memberBookingContextUnavailable: Bool \{[\s\S]*store\.isSignedIn && store\.unavailableDataSources\.contains\(\.bookings\)/);
+  assert.match(booking, /private var memberBookingContextUnavailable: Bool \{[\s\S]*store\.isSignedIn[\s\S]*store\.isUsingStaleMemberData \|\| store\.unavailableDataSources\.contains\(\.bookings\)/);
   const sessionAction = booking.slice(
     booking.indexOf('private func sessionAction'),
     booking.indexOf('private func bookingActionLabel'),

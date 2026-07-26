@@ -133,6 +133,13 @@ final class XertStore: ObservableObject {
             isUsingCachedPublicData = true
         }
         authSession = KeychainStore.loadSession()
+        if let userID = authSession?.user?.id,
+           let cachedBookings = await MemberBookingCache.loadAsync(for: userID) {
+            guard authSession?.user?.id == userID else { return }
+            bookings = cachedBookings.bookings
+            memberDataUpdatedAt = cachedBookings.savedAt
+            isUsingStaleMemberData = true
+        }
         repeat {
             requiresBootstrapRefresh = false
             await refresh()
@@ -342,6 +349,12 @@ final class XertStore: ObservableObject {
                 let loadedBookings = try await bookingRequest
                 guard canApplyMemberState(memberVersion, session: authSession) && canApplyRefresh(refreshVersion) else { return }
                 bookings = loadedBookings
+                guard await saveBookingSnapshot(
+                    loadedBookings,
+                    memberVersion: memberVersion,
+                    session: authSession,
+                    refreshVersion: refreshVersion
+                ) else { return }
                 if classRemindersEnabled {
                     let reminderState = await ClassReminderScheduler.shared.sync(
                         bookings: loadedBookings,
@@ -629,6 +642,11 @@ final class XertStore: ObservableObject {
     }
 
     func cancel(_ booking: BookingItem) async -> MemberBookingCancellationReceipt? {
+        guard !isUsingStaleMemberData, !unavailableDataSources.contains(.bookings) else {
+            errorMessage = "Refresh your bookings before cancelling so XERT can verify the current class status."
+            XertHaptics.play(.warning)
+            return nil
+        }
         guard bookingSessionID == nil, cancellingBookingID == nil else { return nil }
         let memberVersion = memberStateVersion.snapshot
         cancellingBookingID = booking.id
@@ -700,6 +718,11 @@ final class XertStore: ObservableObject {
             let loadedBookings = try await bookingRequest
             guard canApplyMemberState(memberVersion, session: session) else { return }
             bookings = loadedBookings
+            guard await saveBookingSnapshot(
+                loadedBookings,
+                memberVersion: memberVersion,
+                session: session
+            ) else { return }
             unavailableDataSources.remove(.bookings)
             if classRemindersEnabled {
                 let reminderState = await ClassReminderScheduler.shared.sync(
@@ -742,6 +765,9 @@ final class XertStore: ObservableObject {
     }
 
     private func memberBookingControlError() -> String? {
+        guard !isUsingStaleMemberData, !unavailableDataSources.contains(.bookings) else {
+            return "Refresh your bookings before requesting a place so XERT can verify duplicates and time conflicts."
+        }
         guard bookingAvailabilityLoaded else {
             return "XERT is still checking whether online bookings are available. Try again in a moment."
         }
@@ -752,6 +778,22 @@ final class XertStore: ObservableObject {
             return "Online class bookings are currently paused. You can still register interest and XERT will follow up."
         }
         return nil
+    }
+
+    private func saveBookingSnapshot(
+        _ loadedBookings: [BookingItem],
+        memberVersion: Int,
+        session: AuthSession,
+        refreshVersion: Int? = nil
+    ) async -> Bool {
+        guard canApplyMemberState(memberVersion, session: session) else { return false }
+        guard let userID = session.user?.id else { return true }
+        let snapshot = MemberBookingSnapshot(userID: userID, bookings: loadedBookings)
+        guard let encoded = await MemberBookingCache.encodeAsync(snapshot) else { return true }
+        guard canApplyMemberState(memberVersion, session: session) else { return false }
+        if let refreshVersion, !canApplyRefresh(refreshVersion) { return false }
+        MemberBookingCache.saveEncoded(encoded, for: userID)
+        return true
     }
 
     func setClassRemindersEnabled(_ enabled: Bool) async {

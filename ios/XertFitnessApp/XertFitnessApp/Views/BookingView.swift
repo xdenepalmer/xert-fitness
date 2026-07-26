@@ -244,7 +244,8 @@ struct BookingView: View {
     }
 
     private var memberBookingContextUnavailable: Bool {
-        store.isSignedIn && store.unavailableDataSources.contains(.bookings)
+        store.isSignedIn
+            && (store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings))
     }
 
     private var bookingCreditStatus: String? {
@@ -738,6 +739,11 @@ struct BookingView: View {
                 }
                 .buttonStyle(.xertGhost)
                 .accessibilityHint("Opens this booking to add it to your calendar or cancel it")
+                if store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings) {
+                    Label("Last synced status · refresh before making changes", systemImage: "wifi.slash")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                }
             }
         } else if memberBookingContextIsLoading {
             HStack(spacing: 10) {

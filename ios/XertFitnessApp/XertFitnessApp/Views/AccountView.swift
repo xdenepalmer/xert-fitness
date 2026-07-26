@@ -1457,6 +1457,8 @@ struct AccountView: View {
                 if booking.isCancellable() {
                     let isCancelling = store.cancellingBookingID == booking.id
                     let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
+                    let bookingStateUnavailable = store.isUsingStaleMemberData
+                        || store.unavailableDataSources.contains(.bookings)
                     Button(role: .destructive) {
                         bookingToCancel = booking
                     } label: {
@@ -1478,9 +1480,13 @@ struct AccountView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
-                    .disabled(hasBookingMutation)
+                    .disabled(hasBookingMutation || bookingStateUnavailable)
                     .accessibilityValue(
-                        isCancelling ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
+                        isCancelling
+                            ? "In progress"
+                            : (bookingStateUnavailable
+                                ? "Refresh bookings before cancelling"
+                                : (hasBookingMutation ? "Another booking update is in progress" : ""))
                     )
                 }
             }

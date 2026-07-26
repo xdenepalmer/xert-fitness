@@ -2579,6 +2579,13 @@ final class ModelsTests: XCTestCase {
             ownerID: userID,
             defaults: defaults
         )
+        MemberBookingCache.save(
+            MemberBookingSnapshot(
+                userID: userID,
+                bookings: [booking(status: "confirmed", startTime: Date().addingTimeInterval(3_600))]
+            ),
+            defaults: defaults
+        )
 
         MemberLocalState.clear(for: userID, defaults: defaults)
 
@@ -2597,6 +2604,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(AppPrivacyLock.isEnabled(defaults: defaults))
         XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
         XCTAssertNil(AdminSiteContentDraftStore.load(.hero, ownerID: userID, defaults: defaults))
+        XCTAssertNil(MemberBookingCache.load(for: userID, defaults: defaults))
     }
 
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
@@ -2786,6 +2794,75 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(PublicDataCache.load(
             defaults: defaults,
             now: savedAt.addingTimeInterval(PublicDataCache.maximumAge + 1)
+        ))
+    }
+
+    func testMemberBookingCacheIsAccountScopedBoundedAndUpcomingOnly() throws {
+        let suiteName = "MemberBookingCacheTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let otherUserID = UUID()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let futureBookings = (0..<(MemberBookingCache.maximumBookings + 5)).map { offset in
+            booking(
+                status: offset.isMultiple(of: 2) ? "confirmed" : "waitlisted",
+                startTime: now.addingTimeInterval(TimeInterval((offset + 1) * 60))
+            )
+        }
+        let snapshot = MemberBookingSnapshot(
+            userID: userID,
+            bookings: futureBookings + [
+                booking(status: "cancelled", startTime: now.addingTimeInterval(60)),
+                booking(status: "confirmed", startTime: now.addingTimeInterval(-60))
+            ],
+            savedAt: now,
+            now: now
+        )
+
+        MemberBookingCache.save(snapshot, defaults: defaults)
+
+        let restored = try XCTUnwrap(MemberBookingCache.load(
+            for: userID,
+            defaults: defaults,
+            now: now.addingTimeInterval(30)
+        ))
+        XCTAssertEqual(restored.userID, userID)
+        XCTAssertEqual(restored.bookings.count, MemberBookingCache.maximumBookings)
+        XCTAssertTrue(restored.bookings.allSatisfy(\.isActiveClassPlace))
+        XCTAssertEqual(restored.bookings.map(\.start_time), restored.bookings.map(\.start_time).sorted())
+        XCTAssertNil(MemberBookingCache.load(
+            for: otherUserID,
+            defaults: defaults,
+            now: now.addingTimeInterval(30)
+        ))
+    }
+
+    func testMemberBookingCacheRejectsExpiredSnapshots() throws {
+        let suiteName = "MemberBookingCacheExpiryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        MemberBookingCache.save(
+            MemberBookingSnapshot(
+                userID: userID,
+                bookings: [
+                    booking(
+                        status: "confirmed",
+                        startTime: savedAt.addingTimeInterval(MemberBookingCache.maximumAge + 7_200)
+                    )
+                ],
+                savedAt: savedAt,
+                now: savedAt
+            ),
+            defaults: defaults
+        )
+
+        XCTAssertNil(MemberBookingCache.load(
+            for: userID,
+            defaults: defaults,
+            now: savedAt.addingTimeInterval(MemberBookingCache.maximumAge + 1)
         ))
     }
 
