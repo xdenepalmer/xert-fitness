@@ -12,9 +12,13 @@ function exactCount(result) {
 }
 
 export function summarizePushOperations(results, environment = process.env) {
-  const [production, sandbox, disabled, delivered, failed, invalid, latest] = results;
+  const [
+    production, sandbox, disabled, delivered, failed, invalid, latest,
+    ownerSmokeTest = { data: null, error: null },
+  ] = results;
   const apns = inspectAPNsEnvironment(environment);
   if (latest.error) throw latest.error;
+  if (ownerSmokeTest.error) throw ownerSmokeTest.error;
   return {
     ready: apns.ready,
     environment: { ready: apns.ready, missing: apns.missing },
@@ -33,6 +37,13 @@ export function summarizePushOperations(results, environment = process.env) {
           status: latest.data.status,
           reason: latest.data.reason || null,
           attempted_at: latest.data.attempted_at,
+        }
+      : null,
+    owner_smoke_test: ownerSmokeTest.data
+      ? {
+          status: ownerSmokeTest.data.status,
+          reason: ownerSmokeTest.data.reason || null,
+          attempted_at: ownerSmokeTest.data.attempted_at,
         }
       : null,
   };
@@ -68,6 +79,13 @@ export default async function handler(request, response) {
       admin.from('push_notification_deliveries').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('attempted_at', since),
       admin.from('push_notification_deliveries').select('id', { count: 'exact', head: true }).eq('status', 'invalid_token').gte('attempted_at', since),
       admin.from('push_notification_deliveries').select('status,reason,attempted_at').order('attempted_at', { ascending: false }).limit(1).maybeSingle(),
+      admin.from('push_notification_deliveries')
+        .select('status,reason,attempted_at')
+        .eq('user_id', user.id)
+        .like('reason', 'OWNER_LAUNCH_TEST:%')
+        .order('attempted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     return json(summarizePushOperations(results));
   } catch {

@@ -3,7 +3,12 @@ import {
   AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, Copy, Database, Loader2,
   RefreshCw, ShieldCheck,
 } from 'lucide-react';
-import { getOperationsHealth, resolveStripeOperatorReview, retryStripeWebhookEvent } from '@/lib/adminData';
+import {
+  getOperationsHealth,
+  resolveStripeOperatorReview,
+  retryStripeWebhookEvent,
+  sendOwnerPushSmokeTest,
+} from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
@@ -58,6 +63,8 @@ export default function OperationsHealth({ onNavigate }) {
   const [pendingRetry, setPendingRetry] = useState(null);
   const [resolving, setResolving] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [pendingPushTest, setPendingPushTest] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
@@ -175,6 +182,37 @@ export default function OperationsHealth({ onNavigate }) {
       setRetrying(false);
     }
   }, [load, pendingRetry]);
+
+  const runOwnerPushTest = useCallback(async () => {
+    setTestingPush(true);
+    try {
+      const result = await sendOwnerPushSmokeTest();
+      setPendingPushTest(false);
+      if (result.attempted === 0) {
+        toast({
+          title: 'No production owner device registered',
+          description: 'Install the TestFlight build, sign in as this owner, and enable Member notice notifications.',
+          variant: 'destructive',
+        });
+      } else if (result.delivered === result.attempted && result.failed === 0) {
+        toast({
+          title: 'Production push delivered',
+          description: `${result.delivered} owner device${result.delivered === 1 ? '' : 's'} accepted the launch test.`,
+        });
+      } else {
+        toast({
+          title: 'Push test needs attention',
+          description: `${result.delivered} of ${result.attempted} owner-device pushes were accepted; ${result.failed} failed.`,
+          variant: 'destructive',
+        });
+      }
+      await load();
+    } catch (error) {
+      toast({ title: 'Could not send owner push test', description: error.message, variant: 'destructive' });
+    } finally {
+      setTestingPush(false);
+    }
+  }, [load]);
 
   return (
     <div className="p-6 space-y-6">
@@ -388,6 +426,15 @@ export default function OperationsHealth({ onNavigate }) {
                   </div>
                 )}
 
+                {check.key === 'push-notifications' && check.metadata?.canTest && (
+                  <button type="button" onClick={() => setPendingPushTest(true)}
+                    disabled={testingPush}
+                    className="mt-4 inline-flex min-h-11 items-center gap-2 self-start border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10 disabled:opacity-50">
+                    {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
+                    {testingPush ? 'Sending test' : 'Send owner push test'}
+                  </button>
+                )}
+
                 {target && (
                   <button type="button" onClick={() => onNavigate?.(target)}
                     className="inline-flex min-h-11 items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
@@ -401,6 +448,17 @@ export default function OperationsHealth({ onNavigate }) {
           })}
         </div>
       )}
+      <AdminConfirmDialog
+        open={pendingPushTest}
+        onOpenChange={setPendingPushTest}
+        title="Send a production push test?"
+        description="This sends a private XERT launch test only to production devices registered to your owner account."
+        warning="It creates no member announcement and targets no other member."
+        cancelLabel="Cancel"
+        confirmLabel="Send test"
+        onConfirm={() => void runOwnerPushTest()}
+        busy={testingPush}
+      />
       <AdminConfirmDialog
         open={Boolean(pendingResolution)}
         onOpenChange={open => !open && setPendingResolution(null)}

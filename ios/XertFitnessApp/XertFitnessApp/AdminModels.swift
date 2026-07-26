@@ -2744,11 +2744,33 @@ struct AdminPushHealth: Codable, Hashable {
         let failed: Int
         let invalid_token: Int
     }
+    struct LastAttempt: Codable, Hashable {
+        let status: String
+        let reason: String?
+        let attempted_at: Date
+    }
 
     let ready: Bool
     let environment: AdminEnvironmentHealth
     let subscriptions: Subscriptions
     let deliveries_24h: Deliveries
+    let last_attempt: LastAttempt?
+    let owner_smoke_test: LastAttempt?
+
+    func isOwnerLaunchReady(at now: Date = Date()) -> Bool {
+        guard ready, subscriptions.production > 0,
+              let smokeTest = owner_smoke_test else { return false }
+        let age = now.timeIntervalSince(smokeTest.attempted_at)
+        return smokeTest.status == "delivered" && age >= -300 && age <= 24 * 60 * 60
+    }
+}
+
+struct AdminOwnerPushSmokeTestResult: Codable, Hashable {
+    let request_id: UUID
+    let configured: Bool
+    let attempted: Int
+    let delivered: Int
+    let failed: Int
 }
 
 enum AdminSchemaReadiness {

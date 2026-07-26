@@ -25,7 +25,7 @@ test('owner navigation pulse loads only bounded operational and health summaries
   assert.match(pulse, /filter\(\\\.attendance_due\)/);
   assert.match(pulse, /filter\(\\\.isPending\)/);
   assert.match(pulse, /commerceHealth\?\.ready == false/);
-  assert.match(pulse, /pushHealth\?\.ready == false/);
+  assert.match(pulse, /pushHealth\?\.isOwnerLaunchReady\(at: updatedAt\) == false/);
 });
 
 test('owner pulse store is account scoped, freshness bounded, and resistant to stale responses', () => {

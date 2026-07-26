@@ -169,7 +169,7 @@ struct XertOwnerNavigationPulse: Equatable {
         let waitingMembers = waitlist?.reduce(0) { $0 + $1.waitlist_count } ?? 0
         let pendingPT = ptRequests?.filter(\.isPending).count ?? 0
         let healthIssues = (commerceHealth?.ready == false ? 1 : 0)
-            + (pushHealth?.ready == false ? 1 : 0)
+            + (pushHealth?.isOwnerLaunchReady(at: updatedAt) == false ? 1 : 0)
         let followUpCount = followUps?.count ?? 0
         let priority = XertOwnerNavigationPriority.resolve(
             healthIssueCount: healthIssues,

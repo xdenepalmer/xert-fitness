@@ -10,7 +10,10 @@ import {
   inspectAPNsEnvironment,
   sendNotification,
 } from '../api/apns.js';
-import { normalizeAnnouncementPublish } from '../api/admin-publish-announcement.js';
+import {
+  normalizeAnnouncementPublish,
+  sendOwnerPushSmokeTest,
+} from '../api/admin-publish-announcement.js';
 import { inspectPushEnvironment } from '../api/push-health.js';
 import { normalizePushSubscription } from '../api/push-subscription.js';
 
@@ -52,6 +55,19 @@ test('announcement pushes are bounded and carry a durable announcement route', (
   assert.equal(payload.announcement_id, '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45');
   assert.equal(payload.cta_url, '/account');
   assert.throws(() => buildAnnouncementPush({ title: '', body: 'Body' }), /ANNOUNCEMENT_PUSH_INVALID/);
+});
+
+test('owner launch tests cannot masquerade as member announcement routes', () => {
+  const payload = buildAnnouncementPush({
+    id: '178ad488-2f30-4b2b-a2f1-6f9d91e68cc4',
+    title: 'XERT launch test',
+    body: 'Production notifications are reaching this owner device.',
+    push_kind: 'owner_launch_test',
+  });
+  assert.equal(payload.xert_push_test, 'owner_launch');
+  assert.equal(payload.aps.category, 'xert.owner-launch-test');
+  assert.equal('announcement_id' in payload, false);
+  assert.equal('cta_url' in payload, false);
 });
 
 test('an unresponsive APNs stream fails within a bounded request deadline', async () => {
@@ -205,6 +221,45 @@ test('push health reveals only release readiness', () => {
   }), { ready: true });
 });
 
+test('owner push smoke tests are private, production-only, bounded, and auditable', async () => {
+  const ownerId = '7fac26b4-07b8-4b2a-a288-8a574f97987c';
+  const requestId = '178ad488-2f30-4b2b-a2f1-6f9d91e68cc4';
+  let delivery;
+  const result = await sendOwnerPushSmokeTest(
+    { from() { throw new Error('sender owns persistence'); } },
+    ownerId,
+    {
+      requestId,
+      now: new Date('2026-07-27T06:00:00.000Z'),
+      async sendPushes(input) {
+        delivery = input;
+        return { configured: true, attempted: 2, delivered: 1, failed: 1 };
+      },
+    },
+  );
+
+  assert.deepEqual(result, {
+    request_id: requestId,
+    configured: true,
+    attempted: 2,
+    delivered: 1,
+    failed: 1,
+  });
+  assert.deepEqual(delivery.targetUserIds, [ownerId]);
+  assert.deepEqual(delivery.targetEnvironments, ['production']);
+  assert.equal(delivery.maximumSubscriptions, 5);
+  assert.equal(delivery.deliveryAnnouncementId, null);
+  assert.equal(delivery.deliveryReasonPrefix, 'OWNER_LAUNCH_TEST');
+  assert.equal(delivery.announcement.id, requestId);
+  assert.equal(delivery.announcement.push_kind, 'owner_launch_test');
+  assert.equal(delivery.announcement.expires_at, '2026-07-27T06:05:00.000Z');
+  assert.match(delivery.announcement.title, /XERT launch test/);
+  await assert.rejects(
+    sendOwnerPushSmokeTest({}, 'member-selected-by-client', { requestId }),
+    /PUSH_SMOKE_TEST_INVALID/,
+  );
+});
+
 test('push schema keeps device tokens service-only and exposes admin aggregate metrics', () => {
   const source = read('../src/supabase/member_push_notifications_upgrade.sql');
   const migration = read('../supabase/migrations/20260714009000_member_push_notifications.sql');
@@ -236,4 +291,28 @@ test('web and native clients route authenticated push registration and publishin
   assert.match(root, /xertPushTokenUpdated/);
   assert.match(root, /consumePendingAnnouncementID/);
   assert.match(account, /Member notice notifications/);
+});
+
+test('the shared admin endpoint derives a push smoke-test recipient from the authenticated owner', () => {
+  const endpoint = read('../api/admin-publish-announcement.js');
+  assert.match(endpoint, /body\?\.action === 'test_owner_push'/);
+  assert.match(endpoint, /sendOwnerPushSmokeTest\(admin, user\.id\)/);
+  assert.doesNotMatch(endpoint, /sendOwnerPushSmokeTest\(admin, body/);
+  assert.match(endpoint, /targetEnvironments: \['production'\]/);
+  assert.match(endpoint, /maximumSubscriptions: 5/);
+  assert.match(endpoint, /deliveryAnnouncementId: null/);
+});
+
+test('both owner command centres expose the same confirmed production smoke test', () => {
+  const adminData = read('../src/lib/adminData.js');
+  const operations = read('../src/components/admin/OperationsHealth.jsx');
+  const launchGate = read('../src/lib/launchGate.js');
+  assert.match(adminData, /export async function sendOwnerPushSmokeTest\(\)/);
+  assert.match(adminData, /body: JSON\.stringify\(\{ action: 'test_owner_push' \}\)/);
+  assert.match(adminData, /ownerSmokeTest\?\.status === 'delivered'/);
+  assert.match(adminData, /smokeTestAge <= 24 \* 60 \* 60 \* 1000/);
+  assert.match(operations, /Send owner push test/);
+  assert.match(operations, /Send a production push test\?/);
+  assert.match(operations, /targets no other member/);
+  assert.match(launchGate, /'commerce-config',[\s\S]*'push-notifications',[\s\S]*'classes'/);
 });

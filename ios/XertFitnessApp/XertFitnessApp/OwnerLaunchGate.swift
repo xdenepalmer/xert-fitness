@@ -52,7 +52,7 @@ struct XertOwnerLaunchGate: Equatable {
         let required: [(ready: Bool?, action: String)] = [
             (databaseReady, "Repair the database release contract."),
             (stripeReady, "Resolve Stripe checkout health."),
-            (pushReady, "Configure production member push delivery."),
+            (pushReady, "Complete a successful production owner push test."),
             (activeLinkedPacksReady, "Activate a Stripe-linked session pack."),
             (bookableClassesReady, "Publish a member-bookable class with valid capacity."),
         ]

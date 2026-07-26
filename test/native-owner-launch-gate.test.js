@@ -14,7 +14,7 @@ test('native owner launch gate distinguishes paused preflight from live launch',
   assert.match(model, /phase: \.bookingsOpen/);
   assert.match(model, /phase: bookingsEnabled \? \.liveReady : \.preflightReady/);
   assert.match(model, /pushReady: Bool\?/);
-  assert.match(model, /\(pushReady, "Configure production member push delivery\."\)/);
+  assert.match(model, /\(pushReady, "Complete a successful production owner push test\."\)/);
 });
 
 test('native Operations Health requires real booking and member-notification evidence', async () => {
@@ -27,6 +27,8 @@ test('native Operations Health requires real booking and member-notification evi
   assert.match(view, /admin\.launchGateUpdatedAt/);
   assert.match(view, /Refresh launch gates/);
   assert.match(view, /accessibilityIdentifier\("owner\.launchGate"\)/);
-  assert.match(view, /pushReady: pushHealthIsCurrent \? admin\.pushHealth\?\.ready : nil/);
-  assert.match(view, /guard pushHealthIsCurrent,[\s\S]*admin\.pushHealth\?\.ready == true else \{ return nil \}/);
+  assert.match(view, /private var productionPushReady: Bool\?/);
+  assert.match(view, /push\.isOwnerLaunchReady\(\)/);
+  assert.match(view, /pushReady: productionPushReady/);
+  assert.match(view, /guard productionPushReady == true else \{ return nil \}/);
 });

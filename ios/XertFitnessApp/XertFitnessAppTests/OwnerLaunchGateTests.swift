@@ -38,7 +38,7 @@ final class OwnerLaunchGateTests: XCTestCase {
         let gate = resolve(push: false)
         XCTAssertEqual(gate.phase, .blocked)
         XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks - 1)
-        XCTAssertEqual(gate.nextAction, "Configure production member push delivery.")
+        XCTAssertEqual(gate.nextAction, "Complete a successful production owner push test.")
     }
 
     func testUnavailablePushEvidenceNeverProducesReady() {

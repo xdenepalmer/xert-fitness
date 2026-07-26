@@ -4,12 +4,12 @@ export const REQUIRED_LAUNCH_CHECKS = Object.freeze([
   'schema-contract',
   'products',
   'commerce-config',
+  'push-notifications',
   'classes',
   'platform-controls',
 ]);
 
 const OPTIONAL_LAUNCH_CHECKS = Object.freeze([
-  'push-notifications',
   'coaches',
   'cms',
 ]);
@@ -19,11 +19,15 @@ export function resolveLaunchGate(checks = []) {
   const required = REQUIRED_LAUNCH_CHECKS.map(key => byKey.get(key)).filter(Boolean);
   const missingKeys = REQUIRED_LAUNCH_CHECKS.filter(key => !byKey.has(key));
   const unavailable = required.filter(check => check.status === 'error');
-  const blockers = required.filter(check => check.status !== 'ok');
-  const warnings = OPTIONAL_LAUNCH_CHECKS
+  const requiredReady = check => check.status === 'ok' || check.launchReady === true;
+  const blockers = required.filter(check => !requiredReady(check));
+  const warnings = [
+    ...required.filter(check => check.status !== 'ok' && check.launchReady === true),
+    ...OPTIONAL_LAUNCH_CHECKS
     .map(key => byKey.get(key))
-    .filter(check => check && check.status !== 'ok');
-  const completed = required.filter(check => check.status === 'ok').length;
+    .filter(check => check && check.status !== 'ok'),
+  ];
+  const completed = required.filter(requiredReady).length;
 
   if (missingKeys.length > 0 || unavailable.length > 0) {
     return {

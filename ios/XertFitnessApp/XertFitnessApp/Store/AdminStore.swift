@@ -86,6 +86,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var resolvingStripeIncidentID: String?
     @Published private(set) var retryingStripeIncidentID: String?
     @Published private(set) var pushHealth: AdminPushHealth?
+    @Published private(set) var isSendingOwnerPushTest = false
+    @Published private(set) var ownerPushTestStatusMessage: String?
+    @Published private(set) var ownerPushTestStatusIsWarning = false
     @Published private(set) var auditEntries: [AdminAuditEntry] = []
     @Published private(set) var products: [AdminProduct] = []
     @Published private(set) var events: [AdminEvent] = []
@@ -264,7 +267,7 @@ final class AdminStore: ObservableObject {
         unavailableHealthSourceCount
             + (healthSourceIsCurrent("schema health") ? missingSchemaCapabilities.count : 0)
             + (healthSourceIsCurrent("Stripe health") && commerceHealth?.ready == false ? 1 : 0)
-            + (healthSourceIsCurrent("push health") && pushHealth?.ready == false ? 1 : 0)
+            + (healthSourceIsCurrent("push health") && pushHealth?.isOwnerLaunchReady() == false ? 1 : 0)
     }
     var hasHealthSnapshot: Bool {
         unavailableHealthSourceCount == 0
@@ -2337,6 +2340,68 @@ final class AdminStore: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    func sendOwnerPushSmokeTest(session: AuthSession) async -> Bool {
+        guard !isLoading,
+              !isRefreshingHealth,
+              !isSendingOwnerPushTest,
+              healthSourceIsCurrent("push health"),
+              pushHealth?.ready == true else {
+            ownerPushTestStatusMessage = "Refresh Operations Health and resolve APNs setup before sending a production test."
+            ownerPushTestStatusIsWarning = true
+            return false
+        }
+        isSendingOwnerPushTest = true
+        ownerPushTestStatusMessage = nil
+        ownerPushTestStatusIsWarning = false
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        defer { isSendingOwnerPushTest = false }
+
+        let result: AdminOwnerPushSmokeTestResult
+        do {
+            result = try await api.adminSendOwnerPushSmokeTest(session: session)
+        } catch {
+            ownerPushTestStatusMessage = "The production owner push test could not be completed. Check APNs health and retry."
+            ownerPushTestStatusIsWarning = true
+            return false
+        }
+
+        var healthRefreshed = false
+        do {
+            pushHealth = try await api.adminPushHealth(session: session)
+            loadedSources.insert("push health")
+            refreshUnavailableSources.removeAll { $0 == "push health" }
+            healthSourceUpdatedAt["push health"] = Date()
+            lastUpdatedAt = Date()
+            healthRefreshed = true
+        } catch {
+            if !refreshUnavailableSources.contains("push health") {
+                refreshUnavailableSources.append("push health")
+            }
+        }
+
+        if !result.configured {
+            ownerPushTestStatusMessage = "Production APNs configuration changed during the test. Restore the missing Vercel values, redeploy, and refresh launch gates."
+            ownerPushTestStatusIsWarning = true
+            return false
+        }
+        if result.attempted == 0 {
+            ownerPushTestStatusMessage = "No production owner device is registered. Install the TestFlight build, sign in as this owner, and enable Member notice notifications."
+            ownerPushTestStatusIsWarning = true
+            return false
+        }
+        if result.delivered == result.attempted, result.failed == 0 {
+            ownerPushTestStatusMessage = healthRefreshed
+                ? "Production push delivered to \(result.delivered) owner device\(result.delivered == 1 ? "" : "s"). Refresh all launch gates to certify the current release."
+                : "Production push delivered, but live APNs health could not refresh. Retry launch-gate verification before certifying the release."
+            ownerPushTestStatusIsWarning = !healthRefreshed
+            return true
+        }
+        ownerPushTestStatusMessage = "\(result.delivered) of \(result.attempted) owner-device pushes reached APNs; \(result.failed) failed. Review the latest APNs attempt below."
+        ownerPushTestStatusIsWarning = true
+        return false
     }
 
     func bulkUpdatePTRequests(

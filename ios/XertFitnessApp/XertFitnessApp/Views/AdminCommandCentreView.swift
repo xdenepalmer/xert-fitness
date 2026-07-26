@@ -12105,6 +12105,7 @@ private struct AdminOperationsHealthView: View {
     @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
     @State private var pendingRetry: AdminCommerceHealth.WebhookDelivery.Incident?
     @State private var copiedStripeEventID: String?
+    @State private var confirmingOwnerPushTest = false
 
     private var unavailableHealthSources: [String] {
         admin.refreshUnavailableSources.filter { ["schema health", "Stripe health", "push health"].contains($0) }
@@ -12126,6 +12127,11 @@ private struct AdminOperationsHealthView: View {
         admin.loadedSources.contains("push health")
             && !admin.refreshUnavailableSources.contains("push health")
             && admin.pushHealth != nil
+    }
+
+    private var productionPushReady: Bool? {
+        guard pushHealthIsCurrent, let push = admin.pushHealth else { return nil }
+        return push.isOwnerLaunchReady()
     }
 
     private var databaseDetail: String {
@@ -12180,7 +12186,7 @@ private struct AdminOperationsHealthView: View {
         return XertOwnerLaunchGate.resolve(
             databaseReady: databaseReady,
             stripeReady: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
-            pushReady: pushHealthIsCurrent ? admin.pushHealth?.ready : nil,
+            pushReady: productionPushReady,
             activeLinkedPacksReady: activeLinkedPacksReady,
             bookableClassesReady: bookableClassesReady,
             bookingsEnabled: launchSwitches.bookings,
@@ -12192,8 +12198,7 @@ private struct AdminOperationsHealthView: View {
         guard databaseReady == true,
               stripeHealthIsCurrent,
               admin.commerceHealth?.ready == true else { return nil }
-        guard pushHealthIsCurrent,
-              admin.pushHealth?.ready == true else { return nil }
+        guard productionPushReady == true else { return nil }
         if activeLinkedPacksReady == false { return .products }
         guard activeLinkedPacksReady == true else { return nil }
         if bookableClassesReady == false { return .timetable }
@@ -12311,7 +12316,7 @@ private struct AdminOperationsHealthView: View {
                 )
                 HealthStatusRow(
                     title: "Member push notifications",
-                    ready: pushHealthIsCurrent ? admin.pushHealth?.ready : nil,
+                    ready: productionPushReady,
                     detail: pushDetail
                 )
             }
@@ -12499,6 +12504,67 @@ private struct AdminOperationsHealthView: View {
                     HealthCountRow(label: "Production devices", value: push.subscriptions.production)
                     HealthCountRow(label: "Delivered", value: push.deliveries_24h.delivered)
                     HealthCountRow(label: "Failed", value: push.deliveries_24h.failed + push.deliveries_24h.invalid_token)
+                    if let smokeTest = push.owner_smoke_test {
+                        HealthValueRow(
+                            label: "Owner smoke test",
+                            value: "\(smokeTest.status.uppercased()) · \(smokeTest.attempted_at.formatted(date: .abbreviated, time: .shortened))"
+                        )
+                    } else {
+                        HealthValueRow(label: "Owner smoke test", value: "Required before launch")
+                    }
+                    if let lastAttempt = push.last_attempt {
+                        HealthValueRow(
+                            label: "Latest attempt",
+                            value: "\(lastAttempt.status.uppercased()) · \(lastAttempt.attempted_at.formatted(date: .abbreviated, time: .shortened))"
+                        )
+                        if let reason = visiblePushReason(lastAttempt.reason) {
+                            HealthValueRow(label: "Latest result", value: reason)
+                        }
+                    } else {
+                        HealthValueRow(label: "Latest attempt", value: "None recorded")
+                    }
+                    if let message = admin.ownerPushTestStatusMessage {
+                        Label(
+                            message,
+                            systemImage: admin.ownerPushTestStatusIsWarning
+                                ? "exclamationmark.triangle.fill"
+                                : "checkmark.circle.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(admin.ownerPushTestStatusIsWarning ? Color.orange : Color.green)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .listRowBackground(Color.xertInk)
+                    }
+                    if push.subscriptions.production == 0 {
+                        Label(
+                            "No production owner device is registered. Install this TestFlight build, sign in, then enable Member notice notifications in Account.",
+                            systemImage: "iphone.slash"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .listRowBackground(Color.xertInk)
+                    }
+                    Button {
+                        confirmingOwnerPushTest = true
+                    } label: {
+                        Label(
+                            admin.isSendingOwnerPushTest ? "Sending production test…" : "Send owner push test",
+                            systemImage: "bell.badge"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
+                    .disabled(
+                        admin.isLoading
+                            || admin.isRefreshingHealth
+                            || admin.isSendingOwnerPushTest
+                            || !push.ready
+                            || push.subscriptions.production == 0
+                    )
+                    .accessibilityHint("Sends a private launch smoke test to up to five production devices registered to this owner")
+                    .accessibilityIdentifier("owner.pushSmokeTest")
                 }
             } else if let push = admin.pushHealth {
                 Section("APNs — last snapshot") {
@@ -12515,6 +12581,21 @@ private struct AdminOperationsHealthView: View {
         .navigationTitle("Operations Health")
         .refreshable {
             await admin.refreshHealth(session: session)
+        }
+        .confirmationDialog(
+            "Send a production push test?",
+            isPresented: $confirmingOwnerPushTest,
+            titleVisibility: .visible
+        ) {
+            Button("Send test") {
+                Task {
+                    let succeeded = await admin.sendOwnerPushSmokeTest(session: session)
+                    XertHaptics.play(succeeded ? .success : .warning)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This sends a private XERT launch test only to production devices registered to your owner account. It creates no member announcement.")
         }
         .confirmationDialog(
             "Mark Stripe incident handled?",
@@ -12614,7 +12695,20 @@ private struct AdminOperationsHealthView: View {
         if !health.environment.missing.isEmpty {
             return "Missing: \(health.environment.missing.joined(separator: ", "))."
         }
-        return "\(health.subscriptions.production) production device\(health.subscriptions.production == 1 ? "" : "s") registered."
+        let smoke = productionPushReady == true ? "owner smoke test current" : "owner smoke test required"
+        return "\(health.subscriptions.production) production device\(health.subscriptions.production == 1 ? "" : "s") registered; \(smoke)."
+    }
+
+    private func visiblePushReason(_ reason: String?) -> String? {
+        guard let reason, !reason.isEmpty else { return nil }
+        if reason == "OWNER_LAUNCH_TEST:DELIVERED" { return "Owner launch test delivered" }
+        if reason.hasPrefix("OWNER_LAUNCH_TEST:") {
+            return reason
+                .replacingOccurrences(of: "OWNER_LAUNCH_TEST:", with: "Owner launch test: ")
+                .replacingOccurrences(of: "_", with: " ")
+                .lowercased()
+        }
+        return reason
     }
 }
 

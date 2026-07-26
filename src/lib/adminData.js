@@ -1450,6 +1450,8 @@ async function healthCheck(key, label, fn) {
       count: result.count ?? null,
       incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : [],
       phase: result.phase || null,
+      metadata: result.metadata || null,
+      launchReady: result.launchReady === true,
     };
   } catch (error) {
     return {
@@ -1524,6 +1526,22 @@ async function getPushConfigurationHealth() {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Notification health check failed.');
+  return body;
+}
+
+export async function sendOwnerPushSmokeTest() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-publish-announcement', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'test_owner_push' }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Owner push test failed.'));
   return body;
 }
 
@@ -1647,13 +1665,28 @@ export async function getOperationsHealth() {
       const failed = Number(result.deliveries_24h?.failed || 0);
       const invalid = Number(result.deliveries_24h?.invalid_token || 0);
       const deliveryProblems = failed + invalid;
+      const ownerSmokeTest = result.owner_smoke_test || null;
+      const smokeTestAge = ownerSmokeTest?.attempted_at
+        ? Date.now() - new Date(ownerSmokeTest.attempted_at).getTime()
+        : Number.POSITIVE_INFINITY;
+      const ownerSmokeReady = ownerSmokeTest?.status === 'delivered'
+        && smokeTestAge >= -5 * 60 * 1000
+        && smokeTestAge <= 24 * 60 * 60 * 1000;
+      const metadata = {
+        canTest: result.ready === true && productionDevices > 0,
+        productionDevices,
+        ownerSmokeTest,
+        ownerSmokeReady,
+      };
       if (!result.ready) {
         const missing = result.environment?.missing || [];
         return {
           status: 'attention',
           count: productionDevices,
           detail: `Production push delivery is not configured${missing.length ? `: ${missing.join(', ')}` : '.'}`,
-          action: 'Set the missing APNs values in the production Vercel project, redeploy, then refresh this check.'
+          action: 'Set the missing APNs values in the production Vercel project, redeploy, then refresh this check.',
+          metadata,
+          launchReady: false,
         };
       }
       if (productionDevices === 0) {
@@ -1661,14 +1694,28 @@ export async function getOperationsHealth() {
           status: 'attention',
           count: 0,
           detail: `APNs is configured; ${sandboxDevices} sandbox device${sandboxDevices === 1 ? '' : 's'} and no production devices are registered.`,
-          action: 'Install the TestFlight build and enable Member notice notifications in Account.'
+          action: 'Install the TestFlight build and enable Member notice notifications in Account.',
+          metadata,
+          launchReady: false,
+        };
+      }
+      if (!ownerSmokeReady) {
+        return {
+          status: 'attention',
+          count: productionDevices,
+          detail: `${productionDevices} production device${productionDevices === 1 ? '' : 's'} registered; a successful owner smoke test from the last 24 hours is required.`,
+          action: 'Send the private owner push test, confirm the TestFlight device receives it, then refresh launch readiness.',
+          metadata,
+          launchReady: false,
         };
       }
       return {
         status: deliveryProblems > 0 ? 'attention' : 'ok',
         count: productionDevices,
-        detail: `${productionDevices} production device${productionDevices === 1 ? '' : 's'} registered; ${delivered} accepted and ${deliveryProblems} failed in the last 24 hours.`,
-        action: deliveryProblems > 0 ? 'Review recent delivery results in Member Notices and refresh after invalid devices are retired.' : null
+        detail: `${productionDevices} production device${productionDevices === 1 ? '' : 's'} registered; owner smoke test delivered, ${delivered} accepted and ${deliveryProblems} failed in the last 24 hours.`,
+        action: deliveryProblems > 0 ? 'Review recent delivery results in Member Notices and refresh after invalid devices are retired.' : null,
+        metadata,
+        launchReady: true,
       };
     }),
 

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { requestHeader, requestJson, sendJson } from './http.js';
 import { sendMemberAnnouncementPushes } from './apns.js';
 
@@ -120,6 +121,41 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
   return { announcement_id: announcement.id, recipients: 1, push };
 }
 
+export async function sendOwnerPushSmokeTest(
+  admin,
+  ownerId,
+  {
+    requestId = randomUUID(),
+    now = new Date(),
+    sendPushes = sendMemberAnnouncementPushes,
+  } = {},
+) {
+  if (!UUID.test(ownerId) || !UUID.test(requestId)) throw new Error('PUSH_SMOKE_TEST_INVALID');
+  const expiresAt = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+  const push = await sendPushes({
+    admin,
+    announcement: {
+      id: requestId,
+      title: 'XERT launch test',
+      body: 'Production notifications are reaching this owner device.',
+      push_kind: 'owner_launch_test',
+      expires_at: expiresAt,
+    },
+    targetUserIds: [ownerId],
+    targetEnvironments: ['production'],
+    maximumSubscriptions: 5,
+    deliveryAnnouncementId: null,
+    deliveryReasonPrefix: 'OWNER_LAUNCH_TEST',
+  });
+  return {
+    request_id: requestId,
+    configured: push.configured === true,
+    attempted: Number(push.attempted || 0),
+    delivered: Number(push.delivered || 0),
+    failed: Number(push.failed || 0),
+  };
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -137,6 +173,15 @@ export default async function handler(request, response) {
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
     if (profileError) return json({ error: 'Could not verify admin access.' }, 500);
     if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
+
+    if (body?.action === 'test_owner_push') {
+      try {
+        return json(await sendOwnerPushSmokeTest(admin, user.id));
+      } catch (error) {
+        if (error.message === 'PUSH_SMOKE_TEST_INVALID') throw error;
+        throw new Error('PUSH_SMOKE_TEST_FAILED', { cause: error });
+      }
+    }
 
     if (body?.action === 'notify_class_cancellation') {
       try {
@@ -191,9 +236,11 @@ export default async function handler(request, response) {
     if (error.message === 'TARGETED_NOTICE_ID_INVALID') return json({ error: 'A valid private notice is required.' }, 400);
     if (error.message === 'TARGETED_NOTICE_NOT_FOUND') return json({ error: 'Private member notice not found.' }, 404);
     if (error.message === 'TARGETED_NOTICE_RECIPIENT_INVALID') return json({ error: 'Private member notice recipient is invalid.' }, 409);
+    if (error.message === 'PUSH_SMOKE_TEST_INVALID') return json({ error: 'Push test identity is invalid.' }, 400);
     if (error.message?.startsWith('ANNOUNCEMENT_')) return json({ error: 'Announcement details are invalid.' }, 400);
     if (error.message?.startsWith('CLASS_NOTICE_')) return json({ error: 'The cancellation notice was saved, but push delivery could not be completed.' }, 500);
     if (error.message?.startsWith('TARGETED_NOTICE_')) return json({ error: 'The private notice was saved, but push delivery could not be completed.' }, 500);
+    if (error.message === 'PUSH_SMOKE_TEST_FAILED') return json({ error: 'The owner push test could not be completed.' }, 500);
     return json({ error: 'Announcement could not be published.' }, 500);
   }
 }

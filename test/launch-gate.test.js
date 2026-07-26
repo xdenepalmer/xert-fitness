@@ -43,14 +43,27 @@ test('missing or failed required evidence cannot produce a ready result', () => 
   assert.equal(resolveLaunchGate(failed).state, 'verifying');
 });
 
-test('push and content warnings do not block the core launch path', () => {
+test('production push is required while content remains an optional warning', () => {
+  const pushBlocked = resolveLaunchGate(readyChecks.map(check => (
+    check.key === 'push-notifications' ? { ...check, status: 'attention' } : check
+  )));
+  assert.equal(pushBlocked.state, 'blocked');
+  assert.equal(pushBlocked.next.key, 'push-notifications');
+
   const gate = resolveLaunchGate([
     ...readyChecks,
-    { key: 'push-notifications', label: 'Member notifications', status: 'attention' },
     { key: 'cms', label: 'Site CMS content', status: 'attention' },
   ]);
   assert.equal(gate.state, 'preflight-ready');
-  assert.equal(gate.warnings.length, 2);
+  assert.equal(gate.warnings.length, 1);
+
+  const deliveredWithHistoricalFailures = resolveLaunchGate(readyChecks.map(check => (
+    check.key === 'push-notifications'
+      ? { ...check, status: 'attention', launchReady: true }
+      : check
+  )));
+  assert.equal(deliveredWithHistoricalFailures.state, 'preflight-ready');
+  assert.equal(deliveredWithHistoricalFailures.warnings[0].key, 'push-notifications');
 });
 
 test('enabled switches produce a distinct live-ready state', () => {
@@ -74,4 +87,6 @@ test('operations health requires a real member-bookable class and models both sw
   assert.match(adminData, /phase: 'bookings-open'/);
   assert.match(adminData, /phase: 'live'/);
   assert.match(adminData, /Open member bookings before enabling session-pack payments/);
+  assert.match(adminData, /ownerSmokeTest\?\.status === 'delivered'/);
+  assert.match(adminData, /smokeTestAge <= 24 \* 60 \* 60 \* 1000/);
 });

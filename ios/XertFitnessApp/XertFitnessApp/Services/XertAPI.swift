@@ -1678,6 +1678,14 @@ final class XertAPI {
         try await vercelGet(path: "/api/admin-push-health", auth: auth)
     }
 
+    func adminSendOwnerPushSmokeTest(session auth: AuthSession) async throws -> AdminOwnerPushSmokeTestResult {
+        try await vercelRequest(
+            path: "/api/admin-publish-announcement",
+            body: AdminOwnerPushSmokeTestRequest(action: "test_owner_push"),
+            auth: auth
+        )
+    }
+
     func adminAudit(session auth: AuthSession) async throws -> AdminAuditSnapshot {
         async let roles: Result<[AdminRoleAuditRow], Error> = adminAuditResult(
             table: "admin_role_changes",
@@ -2996,6 +3004,9 @@ private struct AdminStripeRetryRequest: Encodable {
     let action: String
     let confirmation: String
     let event_id: String
+}
+private struct AdminOwnerPushSmokeTestRequest: Encodable {
+    let action: String
 }
 struct AdminStripeRetryResponse: Decodable, Hashable {
     let event_id: String

@@ -40,6 +40,18 @@ export function buildAnnouncementPush(announcement) {
   const title = clean(announcement?.title).slice(0, 120);
   const body = clean(announcement?.body).slice(0, 500);
   if (!title || !body) throw new Error('ANNOUNCEMENT_PUSH_INVALID');
+  const isOwnerLaunchTest = announcement?.push_kind === 'owner_launch_test';
+  if (isOwnerLaunchTest) {
+    return {
+      aps: {
+        alert: { title, body },
+        sound: 'default',
+        category: 'xert.owner-launch-test',
+        'thread-id': 'xert-owner-launch-tests',
+      },
+      xert_push_test: 'owner_launch',
+    };
+  }
   return {
     aps: {
       alert: { title, body },
@@ -151,14 +163,16 @@ export async function loadSubscriptions(admin, targetUserIds = null) {
   return rows;
 }
 
-async function saveDeliveryResults(admin, announcementId, results) {
+async function saveDeliveryResults(admin, announcementId, results, deliveryReasonPrefix = null) {
   const deliveries = results.map(result => ({
     announcement_id: announcementId,
     subscription_id: result.subscription.id,
     user_id: result.subscription.user_id,
     environment: result.subscription.environment,
     status: result.status,
-    reason: result.reason,
+    reason: deliveryReasonPrefix
+      ? `${deliveryReasonPrefix}:${result.reason || result.status.toUpperCase()}`.slice(0, 200)
+      : result.reason,
   }));
   for (let index = 0; index < deliveries.length; index += 500) {
     const { error } = await admin.from('push_notification_deliveries').insert(deliveries.slice(index, index + 500));
@@ -171,15 +185,27 @@ async function saveDeliveryResults(admin, announcementId, results) {
   }
 }
 
-export async function sendMemberAnnouncementPushes({ admin, announcement, targetUserIds = null, environment = process.env }) {
+export async function sendMemberAnnouncementPushes({
+  admin,
+  announcement,
+  targetUserIds = null,
+  environment = process.env,
+  targetEnvironments = ['production', 'sandbox'],
+  maximumSubscriptions = Number.POSITIVE_INFINITY,
+  deliveryAnnouncementId = announcement?.id ?? null,
+  deliveryReasonPrefix = null,
+}) {
   const config = inspectAPNsEnvironment(environment);
   if (!config.ready) return { configured: false, missing: config.missing, attempted: 0, delivered: 0, failed: 0 };
-  const subscriptions = await loadSubscriptions(admin, targetUserIds);
+  const allowedEnvironments = new Set(targetEnvironments);
+  const subscriptions = (await loadSubscriptions(admin, targetUserIds))
+    .filter(subscription => allowedEnvironments.has(subscription.environment))
+    .slice(0, Math.max(0, Number(maximumSubscriptions) || 0));
   if (subscriptions.length === 0) return { configured: true, attempted: 0, delivered: 0, failed: 0 };
   const providerToken = createAPNsProviderToken(config);
   const results = [];
 
-  for (const targetEnvironment of ['production', 'sandbox']) {
+  for (const targetEnvironment of targetEnvironments) {
     const targets = subscriptions.filter(subscription => subscription.environment === targetEnvironment);
     if (targets.length === 0) continue;
     const client = http2.connect(apnsHost(targetEnvironment));
@@ -196,7 +222,7 @@ export async function sendMemberAnnouncementPushes({ admin, announcement, target
     }
   }
 
-  await saveDeliveryResults(admin, announcement.id, results);
+  await saveDeliveryResults(admin, deliveryAnnouncementId, results, deliveryReasonPrefix);
   const delivered = results.filter(result => result.status === 'delivered').length;
   return {
     configured: true,

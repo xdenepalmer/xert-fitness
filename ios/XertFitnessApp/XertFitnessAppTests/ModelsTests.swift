@@ -5309,6 +5309,40 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testAdminPushHealthDecodesLatestProductionAttempt() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let health = try decoder.decode(AdminPushHealth.self, from: Data("""
+        {
+          "ready": true,
+          "environment": { "ready": true, "missing": [] },
+          "subscriptions": { "production": 1, "sandbox": 0, "disabled": 0 },
+          "deliveries_24h": { "delivered": 1, "failed": 0, "invalid_token": 0 },
+          "last_attempt": {
+            "status": "delivered",
+            "reason": null,
+            "attempted_at": "2026-07-27T06:00:00Z"
+          },
+          "owner_smoke_test": {
+            "status": "delivered",
+            "reason": "OWNER_LAUNCH_TEST:DELIVERED",
+            "attempted_at": "2026-07-27T06:00:00Z"
+          }
+        }
+        """.utf8))
+
+        XCTAssertEqual(health.last_attempt?.status, "delivered")
+        XCTAssertNil(health.last_attempt?.reason)
+        XCTAssertEqual(health.owner_smoke_test?.reason, "OWNER_LAUNCH_TEST:DELIVERED")
+        XCTAssertEqual(health.subscriptions.production, 1)
+        XCTAssertTrue(
+            health.isOwnerLaunchReady(at: ISO8601DateFormatter().date(from: "2026-07-27T07:00:00Z")!)
+        )
+        XCTAssertFalse(
+            health.isOwnerLaunchReady(at: ISO8601DateFormatter().date(from: "2026-07-28T07:00:01Z")!)
+        )
+    }
+
     private func order(
         id: UUID,
         status: String,
