@@ -10356,8 +10356,24 @@ private struct AdminAuditView: View {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return admin.auditEntries.filter { entry in
             (category == "All" || entry.category == category)
-                && (term.isEmpty || "\(entry.title) \(entry.detail) \(entry.category)".lowercased().contains(term))
+                && (
+                    term.isEmpty
+                        || [
+                            entry.title,
+                            entry.detail,
+                            entry.category,
+                            entry.operatorID?.uuidString ?? "",
+                            entry.subjectID ?? ""
+                        ]
+                        .joined(separator: " ")
+                        .lowercased()
+                        .contains(term)
+                )
         }
+    }
+
+    private var summary: AdminAuditSummary {
+        AdminAuditSummary(entries: admin.auditEntries)
     }
 
     private var reportIsCurrent: Bool {
@@ -10430,6 +10446,12 @@ private struct AdminAuditView: View {
                 .listRowBackground(Color.xertInk)
 
                 Section {
+                    auditSummary
+                }
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.xertInk)
+
+                Section {
                     Picker("Audit category", selection: $category) {
                         ForEach(categories, id: \.self) { Text($0).tag($0) }
                     }
@@ -10461,6 +10483,10 @@ private struct AdminAuditView: View {
                                 }
                             }
                             Text(entry.detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
+                            Label(operatorLabel(entry), systemImage: entry.operatorID == nil ? "gearshape.2" : "person.badge.key")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(entry.operatorID == nil ? Color.xertPale.opacity(0.45) : Color.xertSteel)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.4))
                         }
@@ -10509,6 +10535,88 @@ private struct AdminAuditView: View {
         .task { await admin.loadAudit(session: session) }
     }
 
+    private var auditSummary: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.shield")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertSteel)
+                    .frame(width: 34, height: 34)
+                    .background(Color.xertSteel.opacity(0.1))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("OPERATOR ACCOUNTABILITY")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("Protected changes across operations and commerce")
+                        .font(.caption2)
+                        .foregroundStyle(Color.xertPale.opacity(0.5))
+                }
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ],
+                spacing: 8
+            ) {
+                auditMetric(summary.total, label: "Ledger actions", icon: "clock.arrow.circlepath")
+                auditMetric(summary.last24Hours, label: "Last 24 hours", icon: "clock.badge")
+                auditMetric(summary.moneyActions, label: "Money actions", icon: "dollarsign.circle")
+                auditMetric(summary.identifiedOperators, label: "Operators seen", icon: "person.2.badge.gearshape")
+            }
+
+            if !reportIsCurrent {
+                Label("Metrics are from the last available audit snapshot.", systemImage: "clock.badge.exclamationmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("owner.audit.summary")
+    }
+
+    private func auditMetric(_ value: Int, label: String, icon: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 28, height: 28)
+                .background(Color.xertSteel.opacity(0.08))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value.formatted())
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(Color.xertOffWhite)
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .background(Color.xertNavy.opacity(0.72))
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.14), lineWidth: 1))
+    }
+
+    private func operatorLabel(_ entry: AdminAuditEntry) -> String {
+        guard let operatorID = entry.operatorID else {
+            return entry.category == "Bookings"
+                ? "Member or system initiated"
+                : "System or historical action"
+        }
+        let shortID = String(operatorID.uuidString.lowercased().prefix(8))
+        if operatorID == session.user?.id {
+            return "You · \(shortID)"
+        }
+        if let member = admin.members.first(where: { $0.id == operatorID }) {
+            return "\(member.displayName) · \(shortID)"
+        }
+        return "Admin \(shortID)"
+    }
+
     private func auditUnavailablePanel(message: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(message, systemImage: "wifi.exclamationmark")
@@ -10543,6 +10651,7 @@ private struct AdminAuditView: View {
         case "Notices": return "bell"
         case "Content": return "square.and.pencil"
         case "Schedule": return "calendar"
+        case "Commerce": return "creditcard.and.123"
         default: return "clock.arrow.circlepath"
         }
     }

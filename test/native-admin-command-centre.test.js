@@ -599,6 +599,67 @@ test('native owner incident control performs a minimal verified emergency pause'
   assert.doesNotMatch(bookingGuard, /delete from public\.session_bookings|update public\.session_bookings/i);
 });
 
+test('native Admin Audit attributes operators and includes protected commerce recovery', async () => {
+  const [view, models, api, schema] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../src/supabase/booking_schema.sql'),
+  ]);
+  const auditView = view.slice(
+    view.indexOf('private struct AdminAuditView: View'),
+    view.indexOf('private struct AdminAuditCSVDocument'),
+  );
+  const auditAPI = api.slice(
+    api.indexOf('func adminAudit(session auth: AuthSession)'),
+    api.indexOf('func adminProducts(session auth: AuthSession)'),
+  );
+  const auditRows = api.slice(
+    api.indexOf('private struct AdminRoleAuditRow'),
+    api.indexOf('private struct AdminProductPayload'),
+  );
+  const auditModels = models.slice(
+    models.indexOf('struct AdminAuditEntry'),
+    models.indexOf('struct AdminProduct'),
+  );
+
+  assert.match(auditModels, /let operatorID: UUID\?/);
+  assert.match(auditModels, /let subjectID: String\?/);
+  assert.match(auditModels, /struct AdminAuditSummary: Equatable/);
+  assert.match(auditModels, /last24Hours = entries\.lazy\.filter/);
+  assert.match(auditModels, /\$0\.category == "Commerce" \|\| \$0\.category == "Credits"/);
+  assert.match(auditModels, /Set\(entries\.compactMap\(\\\.operatorID\)\)\.count/);
+  assert.match(auditModels, /Operator ID,Subject ID/);
+
+  assert.match(auditAPI, /table: "orders"[\s\S]*reconciled_at[\s\S]*not\.is\.null/);
+  assert.match(auditAPI, /table: "stripe_refunds"/);
+  assert.match(auditAPI, /source: "Order reconciliation"/);
+  assert.match(auditAPI, /source: "Refunds"/);
+  assert.match(auditAPI, /unavailableSources\.count < 10/);
+  assert.match(auditAPI, /reconciliationRows\.map \{ \$0\.entry \}, refundRows\.map \{ \$0\.entry \}/);
+
+  assert.match(auditRows, /AdminOrderReconciliationAuditRow[\s\S]*category: "Commerce"/);
+  assert.match(auditRows, /AdminRefundAuditRow[\s\S]*category: "Commerce"/);
+  assert.match(auditRows, /credits_consumed\) already used/);
+  assert.match(auditRows, /parts\.count >= 3, parts\[0\] == "admin"/);
+  assert.match(auditRows, /operatorID: changed_by/);
+  assert.match(auditRows, /operatorID: granted_by/);
+  assert.match(auditRows, /operatorID: actor_id/);
+
+  assert.match(auditView, /owner\.audit\.summary/);
+  assert.match(auditView, /OPERATOR ACCOUNTABILITY/);
+  assert.match(auditView, /Money actions/);
+  assert.match(auditView, /Operators seen/);
+  assert.match(auditView, /entry\.operatorID\?\.uuidString/);
+  assert.match(auditView, /System or historical action/);
+  assert.match(auditView, /Member or system initiated/);
+  assert.match(auditView, /case "Commerce": return "creditcard\.and\.123"/);
+  assert.match(auditView, /\.disabled\(!reportIsCurrent \|\| rows\.isEmpty\)/);
+
+  assert.match(schema, /stripe_refunds_admin_read[\s\S]*public\.is_admin\(\)/i);
+  assert.match(schema, /orders_select_own_or_admin[\s\S]*public\.is_admin\(\)/i);
+});
+
 test('native protected order and event routes resolve records outside the initial snapshot', async () => {
   const [store, api] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
@@ -1136,7 +1197,9 @@ test('native reporting desks never present unavailable evidence as zero activity
   assert.match(api, /func adminAudit\(session auth: AuthSession\) async throws -> AdminAuditSnapshot/);
   assert.match(api, /Result<\[AdminRoleAuditRow\], Error>/);
   assert.match(api, /Result<\[AdminBookingAuditRow\], Error>/);
-  assert.match(api, /guard unavailableSources\.count < 8/);
+  assert.match(api, /Result<\[AdminOrderReconciliationAuditRow\], Error>/);
+  assert.match(api, /Result<\[AdminRefundAuditRow\], Error>/);
+  assert.match(api, /guard unavailableSources\.count < 10/);
   assert.match(models, /struct AdminAuditSnapshot[\s\S]*unavailableSources: \[String\][\s\S]*var isComplete/);
 
   assert.match(campaigns, /if !admin\.hasLoadedCampaignAttribution/);

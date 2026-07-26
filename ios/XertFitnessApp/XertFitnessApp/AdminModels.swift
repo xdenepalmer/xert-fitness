@@ -2250,6 +2250,26 @@ struct AdminAuditEntry: Identifiable, Hashable {
     let title: String
     let detail: String
     let createdAt: Date
+    let operatorID: UUID?
+    let subjectID: String?
+
+    init(
+        id: String,
+        category: String,
+        title: String,
+        detail: String,
+        createdAt: Date,
+        operatorID: UUID? = nil,
+        subjectID: String? = nil
+    ) {
+        self.id = id
+        self.category = category
+        self.title = title
+        self.detail = detail
+        self.createdAt = createdAt
+        self.operatorID = operatorID
+        self.subjectID = subjectID
+    }
 }
 
 struct AdminAuditSnapshot {
@@ -2259,11 +2279,29 @@ struct AdminAuditSnapshot {
     var isComplete: Bool { unavailableSources.isEmpty }
 }
 
+struct AdminAuditSummary: Equatable {
+    let total: Int
+    let last24Hours: Int
+    let moneyActions: Int
+    let identifiedOperators: Int
+
+    init(entries: [AdminAuditEntry], now: Date = Date()) {
+        total = entries.count
+        last24Hours = entries.lazy.filter {
+            $0.createdAt >= now.addingTimeInterval(-86_400) && $0.createdAt <= now
+        }.count
+        moneyActions = entries.lazy.filter {
+            $0.category == "Commerce" || $0.category == "Credits"
+        }.count
+        identifiedOperators = Set(entries.compactMap(\.operatorID)).count
+    }
+}
+
 struct AdminAuditExport {
     let entries: [AdminAuditEntry]
 
     var csv: String {
-        let header = "Created,Category,Action,Detail"
+        let header = "Created,Category,Action,Detail,Operator ID,Subject ID"
         let rows = entries
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(300)
@@ -2272,7 +2310,9 @@ struct AdminAuditExport {
                     ISO8601DateFormatter().string(from: entry.createdAt),
                     entry.category,
                     entry.title,
-                    entry.detail
+                    entry.detail,
+                    entry.operatorID?.uuidString.lowercased() ?? "",
+                    entry.subjectID ?? ""
                 ]
                 .map(Self.csvField)
                 .joined(separator: ",")

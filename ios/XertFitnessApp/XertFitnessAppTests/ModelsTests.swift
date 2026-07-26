@@ -3632,30 +3632,88 @@ final class ModelsTests: XCTestCase {
 
     func testAdminAuditExportIsBoundedAndEscapesCSVFields() {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let operatorID = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
         let entries = (0..<305).map { index in
             AdminAuditEntry(
                 id: "audit-\(index)",
                 category: index == 0 ? "Content, CMS" : "Bookings",
                 title: index == 0 ? "Changed \"hero\"" : "Booking updated",
                 detail: index == 0 ? "Line one\nLine two" : "Member \(index)",
-                createdAt: now.addingTimeInterval(TimeInterval(-index))
+                createdAt: now.addingTimeInterval(TimeInterval(-index)),
+                operatorID: index == 0 ? operatorID : nil,
+                subjectID: index == 0 ? "hero" : nil
             )
         }
 
         let csv = AdminAuditExport(entries: entries).csv
         let rows = csv.split(separator: "\n", omittingEmptySubsequences: false)
 
-        XCTAssertEqual(rows.first, "Created,Category,Action,Detail")
+        XCTAssertEqual(rows.first, "Created,Category,Action,Detail,Operator ID,Subject ID")
         XCTAssertEqual(rows.count, 302)
         XCTAssertTrue(csv.contains(#""Content, CMS""#))
         XCTAssertTrue(csv.contains(#""Changed ""hero""""#))
         XCTAssertTrue(csv.contains("\"Line one\nLine two\""))
+        XCTAssertTrue(csv.contains(operatorID.uuidString.lowercased()))
+        XCTAssertTrue(csv.contains(#""hero""#))
         XCTAssertFalse(csv.contains("Member 304"))
         XCTAssertFalse(AdminAuditSnapshot(
             entries: Array(entries.prefix(1)),
             unavailableSources: ["Role changes"]
         ).isComplete)
         XCTAssertTrue(AdminAuditSnapshot(entries: [], unavailableSources: []).isComplete)
+    }
+
+    func testAdminAuditSummaryCountsRecentMoneyActionsAndDistinctOperators() {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let firstOperator = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
+        let secondOperator = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
+        let entries = [
+            AdminAuditEntry(
+                id: "refund",
+                category: "Commerce",
+                title: "Stripe order refunded",
+                detail: "$100.00",
+                createdAt: now.addingTimeInterval(-60),
+                operatorID: firstOperator
+            ),
+            AdminAuditEntry(
+                id: "credit",
+                category: "Credits",
+                title: "4 credits granted",
+                detail: "Launch recovery",
+                createdAt: now.addingTimeInterval(-3_600),
+                operatorID: firstOperator
+            ),
+            AdminAuditEntry(
+                id: "access",
+                category: "Access",
+                title: "Member role changed",
+                detail: "member to admin",
+                createdAt: now.addingTimeInterval(-86_400),
+                operatorID: secondOperator
+            ),
+            AdminAuditEntry(
+                id: "historical",
+                category: "Content",
+                title: "Hero updated",
+                detail: "Homepage",
+                createdAt: now.addingTimeInterval(-86_401)
+            ),
+            AdminAuditEntry(
+                id: "future",
+                category: "Commerce",
+                title: "Future record",
+                detail: "Clock skew",
+                createdAt: now.addingTimeInterval(1)
+            )
+        ]
+
+        let summary = AdminAuditSummary(entries: entries, now: now)
+
+        XCTAssertEqual(summary.total, 5)
+        XCTAssertEqual(summary.last24Hours, 3)
+        XCTAssertEqual(summary.moneyActions, 3)
+        XCTAssertEqual(summary.identifiedOperators, 2)
     }
 
     func testSiteContentNormalizationMatchesPublicSchemaAndRejectsUnsafeValues() throws {

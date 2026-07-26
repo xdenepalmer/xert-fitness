@@ -1498,46 +1498,62 @@ final class XertAPI {
     func adminAudit(session auth: AuthSession) async throws -> AdminAuditSnapshot {
         async let roles: Result<[AdminRoleAuditRow], Error> = adminAuditResult(
             table: "admin_role_changes",
-            select: "id,target_user_id,previous_role,new_role,created_at",
+            select: "id,target_user_id,changed_by,previous_role,new_role,created_at",
             auth: auth
         )
         async let credits: Result<[AdminCreditAuditRow], Error> = adminAuditResult(
             table: "admin_credit_grants",
-            select: "id,user_id,sessions,note,created_at",
+            select: "id,user_id,granted_by,sessions,note,created_at",
             auth: auth
         )
         async let requests: Result<[AdminRequestAuditRow], Error> = adminAuditResult(
             table: "admin_request_status_changes",
-            select: "id,request_type,previous_status,new_status,subject_label,subject_email,created_at",
+            select: "id,request_id,request_type,changed_by,previous_status,new_status,subject_label,subject_email,created_at",
             auth: auth
         )
         async let notices: Result<[AdminNoticeAuditRow], Error> = adminAuditResult(
             table: "member_announcement_admin_events",
-            select: "id,announcement_title,action,created_at",
+            select: "id,announcement_id,announcement_title,action,actor_id,created_at",
             auth: auth
         )
         async let leads: Result<[AdminLeadAuditRow], Error> = adminAuditResult(
             table: "admin_lead_changes",
-            select: "id,lead_type,previous_status,new_status,subject_label,subject_email,created_at",
+            select: "id,lead_id,lead_type,changed_by,previous_status,new_status,subject_label,subject_email,created_at",
             auth: auth
         )
         async let schedules: Result<[AdminResourceAuditRow], Error> = adminAuditResult(
             table: "admin_schedule_changes",
-            select: "id,resource_type,action,subject_label,created_at",
+            select: "id,resource_id,resource_type,action,changed_by,subject_label,created_at",
             auth: auth
         )
         async let content: Result<[AdminResourceAuditRow], Error> = adminAuditResult(
             table: "admin_content_changes",
-            select: "id,resource_type,action,subject_label,created_at",
+            select: "id,resource_id,resource_type,action,changed_by,subject_label,created_at",
             auth: auth
         )
         async let bookings: Result<[AdminBookingAuditRow], Error> = adminAuditResult(
             table: "session_booking_changes",
-            select: "id,action,class_label,created_at",
+            select: "id,booking_id,member_id,changed_by,action,class_label,created_at",
+            auth: auth
+        )
+        async let reconciliations: Result<[AdminOrderReconciliationAuditRow], Error> = adminAuditResult(
+            table: "orders",
+            select: "id,status,amount_cents,currency,reconciled_at,reconciled_by",
+            order: "reconciled_at.desc,id.desc",
+            filters: [URLQueryItem(name: "reconciled_at", value: "not.is.null")],
+            auth: auth
+        )
+        async let refunds: Result<[AdminRefundAuditRow], Error> = adminAuditResult(
+            table: "stripe_refunds",
+            select: "refund_id,stripe_event_id,order_id,amount_cents,currency,credits_revoked,credits_consumed,bookings_cancelled,refunded_at",
+            order: "refunded_at.desc,refund_id.desc",
             auth: auth
         )
 
-        let results = await (roles, credits, requests, notices, leads, schedules, content, bookings)
+        let results = await (
+            roles, credits, requests, notices, leads, schedules, content, bookings,
+            reconciliations, refunds
+        )
         var unavailableSources: [String] = []
         let roleRows = resolvedAuditRows(results.0, source: "Role changes", unavailable: &unavailableSources)
         let creditRows = resolvedAuditRows(results.1, source: "Credit grants", unavailable: &unavailableSources)
@@ -1547,14 +1563,21 @@ final class XertAPI {
         let scheduleRows = resolvedAuditRows(results.5, source: "Schedule changes", unavailable: &unavailableSources)
         let contentRows = resolvedAuditRows(results.6, source: "Content changes", unavailable: &unavailableSources)
         let bookingRows = resolvedAuditRows(results.7, source: "Booking changes", unavailable: &unavailableSources)
-        guard unavailableSources.count < 8 else {
+        let reconciliationRows = resolvedAuditRows(
+            results.8,
+            source: "Order reconciliation",
+            unavailable: &unavailableSources
+        )
+        let refundRows = resolvedAuditRows(results.9, source: "Refunds", unavailable: &unavailableSources)
+        guard unavailableSources.count < 10 else {
             throw APIError(message: "Every protected Admin Audit source is unavailable.")
         }
         let all = [
             roleRows.map { $0.entry }, creditRows.map { $0.entry }, requestRows.map { $0.entry },
             noticeRows.map { $0.entry }, leadRows.map { $0.entry },
             scheduleRows.map { $0.entry(category: "Schedule") },
-            contentRows.map { $0.entry(category: "Content") }, bookingRows.map { $0.entry }
+            contentRows.map { $0.entry(category: "Content") }, bookingRows.map { $0.entry },
+            reconciliationRows.map { $0.entry }, refundRows.map { $0.entry }
         ]
         let entries = all
             .flatMap { $0 }
@@ -1929,14 +1952,20 @@ final class XertAPI {
         return link
     }
 
-    private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
+    private func adminAuditRows<T: Decodable>(
+        table: String,
+        select: String,
+        order: String = "created_at.desc,id.desc",
+        filters: [URLQueryItem] = [],
+        auth: AuthSession
+    ) async throws -> [T] {
         try await restRequest(
             path: "/rest/v1/\(table)",
             queryItems: [
                 URLQueryItem(name: "select", value: select),
-                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "order", value: order),
                 URLQueryItem(name: "limit", value: "100")
-            ],
+            ] + filters,
             auth: auth
         )
     }
@@ -1961,10 +1990,18 @@ final class XertAPI {
     private func adminAuditResult<T: Decodable>(
         table: String,
         select: String,
+        order: String = "created_at.desc,id.desc",
+        filters: [URLQueryItem] = [],
         auth: AuthSession
     ) async -> Result<[T], Error> {
         do {
-            return .success(try await adminAuditRows(table: table, select: select, auth: auth))
+            return .success(try await adminAuditRows(
+                table: table,
+                select: select,
+                order: order,
+                filters: filters,
+                auth: auth
+            ))
         } catch {
             return .failure(error)
         }
@@ -2766,32 +2803,76 @@ private struct AdminAnnouncementUnpublishPayload: Encodable {
 }
 
 private struct AdminRoleAuditRow: Decodable {
-    let id: UUID; let target_user_id: UUID; let previous_role: String; let new_role: String; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "role:\(id)", category: "Access", title: "Member role changed", detail: "\(previous_role) to \(new_role) · \(target_user_id.uuidString.prefix(8))", createdAt: created_at) }
+    let id: UUID; let target_user_id: UUID; let changed_by: UUID?; let previous_role: String; let new_role: String; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "role:\(id)", category: "Access", title: "Member role changed", detail: "\(previous_role) to \(new_role) · \(target_user_id.uuidString.prefix(8))", createdAt: created_at, operatorID: changed_by, subjectID: target_user_id.uuidString.lowercased()) }
 }
 private struct AdminCreditAuditRow: Decodable {
-    let id: UUID; let user_id: UUID; let sessions: Int; let note: String?; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "credit:\(id)", category: "Credits", title: "\(sessions) credit\(sessions == 1 ? "" : "s") granted", detail: note ?? "Member \(user_id.uuidString.prefix(8))", createdAt: created_at) }
+    let id: UUID; let user_id: UUID?; let granted_by: UUID?; let sessions: Int; let note: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "credit:\(id)", category: "Credits", title: "\(sessions) credit\(sessions == 1 ? "" : "s") granted", detail: note ?? "Member \(user_id?.uuidString.prefix(8) ?? "removed")", createdAt: created_at, operatorID: granted_by, subjectID: user_id?.uuidString.lowercased()) }
 }
 private struct AdminRequestAuditRow: Decodable {
-    let id: UUID; let request_type: String; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "request:\(id)", category: "Requests", title: "\(request_type == "class_booking" ? "Booking" : "PT") request updated", detail: "\(subject_label ?? subject_email ?? "Request") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at) }
+    let id: UUID; let request_id: String; let request_type: String; let changed_by: UUID?; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "request:\(id)", category: "Requests", title: "\(request_type == "class_booking" ? "Booking" : "PT") request updated", detail: "\(subject_label ?? subject_email ?? "Request") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at, operatorID: changed_by, subjectID: request_id) }
 }
 private struct AdminNoticeAuditRow: Decodable {
-    let id: UUID; let announcement_title: String?; let action: String; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "notice:\(id)", category: "Notices", title: "Member notice \(action)", detail: announcement_title ?? "Member announcement", createdAt: created_at) }
+    let id: UUID; let announcement_id: UUID; let announcement_title: String?; let action: String; let actor_id: UUID?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "notice:\(id)", category: "Notices", title: "Member notice \(action)", detail: announcement_title ?? "Member announcement", createdAt: created_at, operatorID: actor_id, subjectID: announcement_id.uuidString.lowercased()) }
 }
 private struct AdminLeadAuditRow: Decodable {
-    let id: UUID; let lead_type: String; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "lead:\(id)", category: "Leads", title: "\(lead_type.capitalized) lead updated", detail: "\(subject_label ?? subject_email ?? "Lead") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at) }
+    let id: UUID; let lead_id: String; let lead_type: String; let changed_by: UUID?; let previous_status: String?; let new_status: String?; let subject_label: String?; let subject_email: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "lead:\(id)", category: "Leads", title: "\(lead_type.capitalized) lead updated", detail: "\(subject_label ?? subject_email ?? "Lead") · \(previous_status ?? "new") to \(new_status ?? "updated")", createdAt: created_at, operatorID: changed_by, subjectID: lead_id) }
 }
 private struct AdminResourceAuditRow: Decodable {
-    let id: UUID; let resource_type: String; let action: String; let subject_label: String?; let created_at: Date
-    func entry(category: String) -> AdminAuditEntry { .init(id: "\(category.lowercased()):\(id)", category: category, title: "\(resource_type.replacingOccurrences(of: "_", with: " ").capitalized) \(action)", detail: subject_label ?? "Managed resource", createdAt: created_at) }
+    let id: UUID; let resource_id: String; let resource_type: String; let action: String; let changed_by: UUID?; let subject_label: String?; let created_at: Date
+    func entry(category: String) -> AdminAuditEntry { .init(id: "\(category.lowercased()):\(id)", category: category, title: "\(resource_type.replacingOccurrences(of: "_", with: " ").capitalized) \(action)", detail: subject_label ?? "Managed resource", createdAt: created_at, operatorID: changed_by, subjectID: resource_id) }
 }
 private struct AdminBookingAuditRow: Decodable {
-    let id: UUID; let action: String; let class_label: String?; let created_at: Date
-    var entry: AdminAuditEntry { .init(id: "booking:\(id)", category: "Bookings", title: action.replacingOccurrences(of: "_", with: " ").capitalized, detail: class_label ?? "Class booking", createdAt: created_at) }
+    let id: UUID; let booking_id: UUID; let member_id: UUID?; let changed_by: UUID?; let action: String; let class_label: String?; let created_at: Date
+    var entry: AdminAuditEntry { .init(id: "booking:\(id)", category: "Bookings", title: action.replacingOccurrences(of: "_", with: " ").capitalized, detail: class_label ?? "Class booking", createdAt: created_at, operatorID: changed_by, subjectID: member_id?.uuidString.lowercased() ?? booking_id.uuidString.lowercased()) }
+}
+private struct AdminOrderReconciliationAuditRow: Decodable {
+    let id: UUID; let status: String; let amount_cents: Int; let currency: String; let reconciled_at: Date; let reconciled_by: UUID?
+    var entry: AdminAuditEntry {
+        .init(
+            id: "reconciliation:\(id)",
+            category: "Commerce",
+            title: status == "failed" ? "Expired checkout closed" : "Stripe order reconciled",
+            detail: "\(Self.amount(amount_cents, currency: currency)) · order \(id.uuidString.prefix(8))",
+            createdAt: reconciled_at,
+            operatorID: reconciled_by,
+            subjectID: id.uuidString.lowercased()
+        )
+    }
+
+    private static func amount(_ cents: Int, currency: String) -> String {
+        (Double(cents) / 100).formatted(.currency(code: currency.uppercased()))
+    }
+}
+private struct AdminRefundAuditRow: Decodable {
+    let refund_id: String; let stripe_event_id: String; let order_id: UUID; let amount_cents: Int; let currency: String
+    let credits_revoked: Int; let credits_consumed: Int; let bookings_cancelled: Int; let refunded_at: Date
+
+    var entry: AdminAuditEntry {
+        .init(
+            id: "refund:\(refund_id)",
+            category: "Commerce",
+            title: "Stripe order refunded",
+            detail: "\(Self.amount(amount_cents, currency: currency)) · \(credits_revoked) credits revoked · \(credits_consumed) already used · \(bookings_cancelled) bookings cancelled",
+            createdAt: refunded_at,
+            operatorID: operatorID,
+            subjectID: order_id.uuidString.lowercased()
+        )
+    }
+
+    private var operatorID: UUID? {
+        let parts = stripe_event_id.split(separator: ":")
+        guard parts.count >= 3, parts[0] == "admin" else { return nil }
+        return UUID(uuidString: String(parts[1]))
+    }
+
+    private static func amount(_ cents: Int, currency: String) -> String {
+        (Double(cents) / 100).formatted(.currency(code: currency.uppercased()))
+    }
 }
 private struct AdminProductPayload: Encodable {
     let name: String
