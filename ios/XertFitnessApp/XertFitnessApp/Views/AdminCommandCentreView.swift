@@ -8826,6 +8826,9 @@ private struct AdminSiteContentEditor: View {
 
     private var dirty: Bool { draft != baseline }
     private var isSaving: Bool { admin.savingSiteContentSection == section }
+    private var isBusy: Bool {
+        isSaving || admin.isUploadingSiteImage || admin.isLoadingSiteContent
+    }
     private var mutationAllowed: Bool {
         admin.siteContentIsCurrent
             && !admin.isLoadingSiteContent
@@ -8857,6 +8860,18 @@ private struct AdminSiteContentEditor: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await refreshAuthoritativeSnapshot() }
+                    } label: {
+                        Label(
+                            admin.isLoadingSiteContent ? "Refreshing live section..." : "Refresh live section",
+                            systemImage: "arrow.clockwise"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(admin.isLoadingSiteContent || isSaving || admin.isUploadingSiteImage)
                 }
             }
             if let validationMessage {
@@ -8878,11 +8893,6 @@ private struct AdminSiteContentEditor: View {
             fields
 
             Section {
-                Button(action: publish) {
-                    if isSaving { ProgressView() } else { Label(dirty ? "Publish section" : "Published", systemImage: "checkmark.circle") }
-                }
-                .disabled(!canPublish)
-
                 Button {
                     draft = .defaults(for: section)
                 } label: {
@@ -8900,9 +8910,11 @@ private struct AdminSiteContentEditor: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.xertNavy)
         .navigationTitle(section.title)
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: publish) {
@@ -8933,6 +8945,45 @@ private struct AdminSiteContentEditor: View {
         }
     }
 
+    private var publishBar: some View {
+        Button(action: publish) {
+            HStack(spacing: 10) {
+                if isSaving {
+                    ProgressView().tint(Color.xertNavy)
+                } else {
+                    Image(systemName: dirty ? "square.and.arrow.up.fill" : "checkmark.circle.fill")
+                }
+                Text(publishBarTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canPublish ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canPublish)
+        .accessibilityIdentifier("owner.siteContentEditor.publish")
+        .accessibilityHint(validationMessage ?? publishBarAccessibilityHint)
+    }
+
+    private var publishBarTitle: String {
+        if isSaving { return "Publishing \(section.title)..." }
+        if !mutationAllowed { return "Refresh before publishing" }
+        if !dirty { return "\(section.title) is up to date" }
+        return "Publish \(section.title)"
+    }
+
+    private var publishBarAccessibilityHint: String {
+        if isBusy { return "Wait for the current website operation to finish" }
+        if !mutationAllowed { return "Refresh the live section before publishing this draft" }
+        if !dirty { return "This draft matches the live section" }
+        return "Publishes this section to the XERT website"
+    }
+
     private func publish() {
         guard canPublish else { return }
         editorIsFocused = false
@@ -8947,8 +8998,34 @@ private struct AdminSiteContentEditor: View {
                 baseline = authoritative
                 draft = authoritative
                 expectedUpdatedAt = saved.updated_at
+                XertHaptics.play(.success)
+            } else {
+                XertHaptics.play(.error)
             }
         }
+    }
+
+    private func refreshAuthoritativeSnapshot() async {
+        guard !isBusy else { return }
+        editorIsFocused = false
+        let draftAtRefreshStart = draft
+        let wasDirtyAtRefreshStart = dirty
+        await admin.loadSiteContent(session: session, force: true)
+        guard admin.siteContentIsCurrent else {
+            XertHaptics.play(.error)
+            return
+        }
+
+        let refreshed = admin.siteContentRow(for: section)
+        let authoritative = (refreshed?.data ?? AdminSiteContentData())
+            .merged(over: .defaults(for: section))
+        baseline = authoritative
+        expectedUpdatedAt = refreshed?.updated_at
+        let preserveDraft = wasDirtyAtRefreshStart || draft != draftAtRefreshStart
+        if !preserveDraft {
+            draft = authoritative
+        }
+        XertHaptics.play(.success)
     }
 
     @ViewBuilder

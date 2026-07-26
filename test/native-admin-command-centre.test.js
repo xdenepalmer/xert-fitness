@@ -2077,6 +2077,16 @@ test('native site CMS cannot publish defaults over an unavailable live snapshot'
   assert.match(cms, /if admin\.hasLoadedSiteContent \{[\s\S]*Section\("Public sections"\)/);
   assert.match(cms, /private var mutationAllowed: Bool/);
   assert.match(cms, /let authoritative = saved\.data\.merged\(over: \.defaults\(for: section\)\)/);
+  assert.match(cms, /Refresh live section/);
+  assert.match(cms, /private func refreshAuthoritativeSnapshot\(\) async/);
+  assert.match(cms, /let draftAtRefreshStart = draft[\s\S]*let wasDirtyAtRefreshStart = dirty[\s\S]*loadSiteContent\(session: session, force: true\)/);
+  assert.match(cms, /let preserveDraft = wasDirtyAtRefreshStart \|\| draft != draftAtRefreshStart/);
+  assert.match(cms, /baseline = authoritative[\s\S]*if !preserveDraft \{[\s\S]*draft = authoritative/);
+  assert.match(cms, /\.scrollDismissesKeyboard\(\.interactively\)/);
+  assert.match(cms, /\.safeAreaInset\(edge: \.bottom, spacing: 0\) \{ publishBar \}/);
+  assert.match(cms, /owner\.siteContentEditor\.publish/);
+  assert.match(cms, /XertHaptics\.play\(\.success\)/);
+  assert.match(cms, /XertHaptics\.play\(\.error\)/);
   assert.match(cms, /validationMessage == nil/);
   assert.match(cms, /Hero photography is limited to 12 images/);
   assert.match(cms, /kCGImageSourceThumbnailMaxPixelSize: 2_400/);
