@@ -426,6 +426,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
         onOpenChange={setConfirmDiscard}
         title="Discard class changes?"
         description="Your unsaved class changes will be lost."
+        warning=""
         cancelLabel="Keep editing"
         confirmLabel="Discard draft"
         onConfirm={onCancel}
