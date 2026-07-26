@@ -162,6 +162,12 @@ The Supabase schema is defined in:
   event and session-pack editing so concurrent administrators cannot overwrite newer catalogue work
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
+- `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
+  refund so members get their credit back when staff cancel a class (the original refund
+  filtered on the post-update status and therefore always refunded nothing)
+- `src/supabase/audit_immutability_account_deletion_fix.sql` — lets an account with audit
+  history actually be deleted, by allowing the referential `on delete set null` update
+  through the five audit-immutability triggers while still blocking any content change
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
