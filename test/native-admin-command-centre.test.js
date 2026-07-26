@@ -98,6 +98,15 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /dynamicTypeSize\.isAccessibilitySize/);
   assert.match(view, /interactiveDismissDisabled\(isDirty \|\| isProductMutationInFlight\)/);
   assert.match(view, /Discard unsaved pack changes/);
+  // Overview quick-action class/notice sheets must not swipe-dismiss dirty drafts.
+  const classEditor = view.slice(view.indexOf('private struct AdminClassEditor'), view.indexOf('private enum AdminScheduleRemoval'));
+  assert.match(classEditor, /interactiveDismissDisabled\(isDirty \|\| isSaveInFlight\)/);
+  assert.match(classEditor, /Discard unsaved class changes/);
+  assert.match(classEditor, /guard !isSaveInFlight, isDirty else \{ return \}/);
+  const noticeComposer = view.slice(view.indexOf('private struct AdminAnnouncementComposer'), view.indexOf('private enum AdminOwnerQuickAction'));
+  assert.match(noticeComposer, /interactiveDismissDisabled\(isDirty \|\| isPublishing\)/);
+  assert.match(noticeComposer, /Discard unsaved notice/);
+  assert.match(noticeComposer, /guard !isPublishing else \{ return \}/);
   assert.match(view, /ToolbarItemGroup\(placement: \.keyboard\)/);
   assert.match(view, /safeAreaInset\(edge: \.bottom/);
   assert.match(view, /owner\.productEditor\.save/);

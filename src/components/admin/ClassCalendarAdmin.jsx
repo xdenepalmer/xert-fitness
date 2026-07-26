@@ -267,6 +267,8 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Same-paint Save can create two classes before `saving` re-renders.
+  const saveLockRef = useRef(false);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
@@ -296,11 +298,13 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
   }, [requestCancel]);
 
   const handleSave = async () => {
+    if (saveLockRef.current || saving) return;
     const validationError = classSessionValidationError(form);
     if (validationError) {
       toast({ title: validationError, variant: 'destructive' });
       return;
     }
+    saveLockRef.current = true;
     setSaving(true);
     try {
       if (session?.id) {
@@ -313,6 +317,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 

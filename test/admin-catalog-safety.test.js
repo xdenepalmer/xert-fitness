@@ -70,6 +70,25 @@ test('product create/save/provision lock against same-paint double submits', () 
   assert.match(products, /createLockRef\.current = true/);
 });
 
+test('class and CMS section saves lock against same-paint double submits', () => {
+  const classCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const content = read('../src/components/admin/ContentManager.jsx');
+  const classSave = classCalendar.slice(
+    classCalendar.indexOf('const handleSave = async'),
+    classCalendar.indexOf('return (\n    <div className="fixed inset-0 z-50 bg-black/80 flex items-end'),
+  );
+  assert.match(classSave, /if \(saveLockRef\.current \|\| saving\) return/);
+  assert.match(classSave, /saveLockRef\.current = true/);
+  assert.match(classSave, /saveLockRef\.current = false/);
+  const contentSave = content.slice(
+    content.indexOf('const handleSave = async'),
+    content.indexOf('return (\n    <div style={{'),
+  );
+  assert.match(contentSave, /if \(saveLockRef\.current \|\| saving\) return/);
+  assert.match(contentSave, /saveLockRef\.current = true/);
+  assert.match(contentSave, /saveLockRef\.current = false/);
+});
+
 test('all catalog editors protect drafts locally and through admin navigation', () => {
   const classCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
   const members = read('../src/components/admin/MembersManager.jsx');

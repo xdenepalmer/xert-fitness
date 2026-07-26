@@ -37,6 +37,7 @@ test('native member readiness uses the authoritative private RPC contract', asyn
   );
   assert.match(saveOperation, /onboardingOperationVersion\.invalidate\(\)/);
   assert.match(saveOperation, /isLoadingMemberOnboarding = false/);
+  assert.match(saveOperation, /isSavingMemberOnboarding = true[\s\S]*defer \{ isSavingMemberOnboarding = false \}/);
   assert.match(saveOperation, /onboardingOperationVersion\.isCurrent\(onboardingVersion\)/);
   const readOperation = store.slice(
     store.indexOf('func refreshMemberOnboarding()'),
@@ -74,7 +75,9 @@ test('native readiness form is private, editable, complete and advisory', async 
   assert.doesNotMatch(view, /Follow its adult, under-18 and parent or guardian instructions/);
   assert.match(view, /does not diagnose a condition or block class browsing or bookings/);
   assert.match(view, /\.disabled\(isSaveInFlight\)[\s\S]*\.scrollDismissesKeyboard/);
-  assert.match(view, /isSubmitting = true[\s\S]*defer \{ isSubmitting = false \}[\s\S]*store\.saveMemberOnboarding/);
+  assert.match(view, /guard !isSaveInFlight,\s*hasUnsavedChanges,/);
+  assert.match(view, /isSubmitting = true[\s\S]*MemberOnboardingSaveRequest[\s\S]*defer \{ isSubmitting = false \}[\s\S]*store\.saveMemberOnboarding/);
+  assert.match(view, /isSubmitting = false\s*inlineError = error\.localizedDescription/);
   assert.match(view, /store\.isLoadingMemberOnboarding \|\| isSaveInFlight/);
   assert.match(view, /if next\.emergencyContact(?:Name|Phone|Relationship) != value \{ next\.contactIsAware = false \}/);
   assert.match(view, /if let draftingUserID, draftingUserID != state\.user_id/);

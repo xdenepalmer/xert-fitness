@@ -24,6 +24,16 @@ test('admin overview only clears the in-flight guard for the current request gen
   );
 });
 
+test('admin overview quick actions open create intents through the dirty-nav guard', () => {
+  const overview = read('../src/components/admin/AdminOverview.jsx');
+  // Labels promise create/add — they must pass action=create like ⌘K so the
+  // section editor opens, and so same-section dirty editors still prompt.
+  assert.match(overview, /key: 'calendar'[\s\S]*params: \{ action: 'create' \}/);
+  assert.match(overview, /key: 'coaches'[\s\S]*params: \{ action: 'create' \}/);
+  assert.match(overview, /key: 'events'[\s\S]*params: \{ action: 'create' \}/);
+  assert.match(overview, /onNavigate\?\.\(a\.key, a\.params\)/);
+});
+
 test('operations health uses the same current-generation in-flight release', () => {
   const monitor = read('../src/components/admin/OperationsHealth.jsx');
   const load = monitor.slice(

@@ -695,10 +695,14 @@ struct MemberOnboardingView: View {
     }
 
     private func submit() {
+        // Lock before validation so a second tap cannot start another Task
+        // while the first request is still building / in flight.
         guard !isSaveInFlight,
+              hasUnsavedChanges,
               let draft,
               let state = store.memberOnboarding
         else { return }
+        isSubmitting = true
         focusedField = nil
         inlineError = nil
 
@@ -708,6 +712,7 @@ struct MemberOnboardingView: View {
                 requiredDocuments: state.required_documents
             )
         } catch {
+            isSubmitting = false
             inlineError = error.localizedDescription
             focusFirstIncompleteField(in: draft)
             XertHaptics.play(.warning)
@@ -715,7 +720,6 @@ struct MemberOnboardingView: View {
             return
         }
 
-        isSubmitting = true
         Task {
             defer { isSubmitting = false }
             let saved = await store.saveMemberOnboarding(draft)

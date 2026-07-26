@@ -1279,12 +1279,9 @@ final class XertStore: ObservableObject {
         isLoadingMemberOnboarding = false
         isSavingMemberOnboarding = true
         onboardingErrorMessage = nil
-        defer {
-            if memberStateVersion.isCurrent(memberVersion),
-               onboardingOperationVersion.isCurrent(onboardingVersion) {
-                isSavingMemberOnboarding = false
-            }
-        }
+        // Always release the submit lock — version checks only gate applying
+        // the response, otherwise a mid-flight invalidation freezes Save forever.
+        defer { isSavingMemberOnboarding = false }
 
         do {
             guard let current = memberOnboarding else {

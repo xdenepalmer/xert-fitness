@@ -219,6 +219,8 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   const [savedAt, setSavedAt] = useState(null);
   const draftBaseRef = useRef(expectedUpdatedAt ?? null);
   const lateDraftUserIdRef = useRef(userId || null);
+  // Same-paint Save can publish the section twice before `saving` re-renders.
+  const saveLockRef = useRef(false);
   const set = (k, v) => { setData(p => ({ ...p, [k]: v })); setDirty(true); };
   const Icon = section.icon;
 
@@ -279,7 +281,8 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const clean = normalizeSiteContent(section.key, data);
@@ -294,6 +297,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 

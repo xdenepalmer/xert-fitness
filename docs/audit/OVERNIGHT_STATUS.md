@@ -5,10 +5,17 @@
 **Still shipping; apply through latest migration timestamp**
 `20260726115000_waitlist_skip_notice_accuracy.sql` (**26115**). This latest
 batch is **app-only** (no new SQL) — tip commit on
-`cursor/xert-audit-continuation-8c8e` after `45e2b8e` (see git log). Staff
-roles were **not** built.
+`cursor/xert-audit-continuation-8c8e` (see git log). Staff roles were **not**
+built.
 
 **What was made safer overnight (plain English)**
+- Overview quick actions open Create Class / Coach / Event (same as ⌘K) and
+  still go through the unsaved-changes guard; iPhone Overview class/notice
+  sheets refuse swipe-dismiss of dirty drafts.
+- Class Calendar and CMS Save refuse same-paint double publishes; Member
+  Readiness locks submit before validation and always releases the store save
+  flag; Owner Launch Gate “Open next gate” stays off while health/settings/
+  class/pack saves run.
 - Lead pipeline Save / bulk status / CSV refuse same-paint double submits;
   Campaign Attribution and Admin Audit CSV stay disabled while a refresh or
   range reload is in flight (stale/wrong-range export blocked).
@@ -227,6 +234,17 @@ No new migration for this batch (app-only tip after `38b5a4d`).
 | Public forms | Double-submit could insert duplicate leads/requests; honeypot `autoComplete="off"` is still autofilled by some browsers (filled honeypot silently drops the lead) | `submitLockRef` on all five forms; honeypot `autoComplete="new-password"` |
 
 No new migration for this batch (app-only tip after `45e2b8e`).
+
+### 18. This batch — overview create intents, class/CMS save locks, iOS dirty dismiss / onboarding submit
+| Area | Defect | Fix |
+|---|---|---|
+| AdminOverview quick actions | “New Class” / “Add Coach” / “Add Event” only switched section — no `action=create`, so editors never opened (⌘K already correct); create intents still use `setSection` dirty guard | `params: { action: 'create' }` + `onNavigate(key, params)` |
+| ClassCalendarAdmin / ContentManager | Save used only React `saving` — same-paint double-click could mint two classes or publish a CMS section twice | `saveLockRef` (Events/Coaches pattern) |
+| iOS Overview quick tools | Class editor + notice composer swipe-dismiss / Cancel dropped dirty drafts; notice Publish confirm could re-fire | `interactiveDismissDisabled` + discard dialogs; publish clears confirm + guards `isPublishing` |
+| Member Readiness (iOS) | Submit locked after validation; store save flag could stick if versions invalidated mid-flight | Set `isSubmitting` before validation; `defer { isSavingMemberOnboarding = false }` always |
+| Owner Launch Gate | “Open next gate” stayed tappable while health/settings/class/pack mutations ran | Disable during those in-flight flags |
+
+No new migration for this batch (app-only tip).
 
 ---
 

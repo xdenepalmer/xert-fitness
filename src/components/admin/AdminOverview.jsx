@@ -34,9 +34,9 @@ function timeAgo(iso) {
 }
 
 const QUICK_ACTIONS = [
-  { key: 'calendar', label: 'New Class', icon: CalendarDays, hint: 'Schedule & publish' },
-  { key: 'coaches', label: 'Add Coach', icon: UserSquare2, hint: 'Team profiles' },
-  { key: 'events', label: 'Add Event', icon: Trophy, hint: 'SE QLD calendar' },
+  { key: 'calendar', label: 'New Class', icon: CalendarDays, hint: 'Schedule & publish', params: { action: 'create' } },
+  { key: 'coaches', label: 'Add Coach', icon: UserSquare2, hint: 'Team profiles', params: { action: 'create' } },
+  { key: 'events', label: 'Add Event', icon: Trophy, hint: 'SE QLD calendar', params: { action: 'create' } },
   { key: 'content', label: 'Edit Site Copy', icon: PenSquare, hint: 'Hero, contact, FAQ' },
 ];
 
@@ -485,7 +485,12 @@ export default function AdminOverview({ onNavigate }) {
         {QUICK_ACTIONS.map(a => {
           const Icon = a.icon;
           return (
-            <button key={a.key} onClick={() => onNavigate?.(a.key)}
+            <button
+              key={a.key}
+              type="button"
+              // Same create intents as ⌘K — and the same unsaved-changes guard
+              // via setSection — so "New Class" cannot skip the dirty prompt.
+              onClick={() => onNavigate?.(a.key, a.params)}
               className="flex items-center gap-3 p-4 text-left transition-all group"
               style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}

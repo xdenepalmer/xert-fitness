@@ -2891,8 +2891,11 @@ private struct AdminClassEditor: View {
     let classSession: AdminClassSession?
     private let baseline: AdminClassDraft
     @State private var draft: AdminClassDraft
+    @State private var confirmingDiscard = false
 
     private var isTerminal: Bool { classSession.map { ["cancelled", "completed"].contains($0.status) } ?? false }
+    private var isDirty: Bool { draft != baseline }
+    private var isSaveInFlight: Bool { admin.savingClassID != nil }
 
     init(admin: AdminStore, session: AuthSession, classSession: AdminClassSession?) {
         let initial = AdminClassDraft(classSession: classSession)
@@ -2953,6 +2956,7 @@ private struct AdminClassEditor: View {
             if !isTerminal {
                 Section {
                     Button {
+                        guard !isSaveInFlight, isDirty else { return }
                         Task {
                             if await admin.saveClass(session: session, classSession: classSession, draft: draft) {
                                 XertHaptics.play(.success)
@@ -2964,12 +2968,12 @@ private struct AdminClassEditor: View {
                     } label: {
                         HStack {
                             Spacer()
-                            if admin.savingClassID != nil { ProgressView().tint(Color.xertNavy) }
+                            if isSaveInFlight { ProgressView().tint(Color.xertNavy) }
                             Text(classSession == nil ? "Create class" : "Save class").fontWeight(.bold)
                             Spacer()
                         }
                     }
-                    .disabled(admin.savingClassID != nil || draft == baseline)
+                    .disabled(isSaveInFlight || !isDirty)
                     .listRowBackground(Color.xertSteel)
                     .foregroundStyle(Color.xertNavy)
                 }
@@ -2982,12 +2986,32 @@ private struct AdminClassEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if classSession == nil {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: requestDismiss)
+                        .disabled(isSaveInFlight)
+                }
             }
+        }
+        .interactiveDismissDisabled(isDirty || isSaveInFlight)
+        .confirmationDialog(
+            "Discard unsaved class changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Closing now permanently discards the class edits on this screen.")
         }
         .onChange(of: draft.status) { status in
             if status != "published" { draft.publicVisible = false }
         }
+    }
+
+    private func requestDismiss() {
+        guard !isSaveInFlight else { return }
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
     }
 }
 
@@ -5567,7 +5591,7 @@ private struct AdminOperationsHealthView: View {
                             XertHaptics.play(memberLaunchGate.phase == .verifying ? .warning : .success)
                         }
                     } label: {
-                        Label(admin.isRefreshingHealth ? "Refreshing launch gatesâ€¦" : "Refresh launch gates", systemImage: "arrow.clockwise")
+                        Label(admin.isRefreshingHealth ? "Refreshing launch gates…" : "Refresh launch gates", systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
@@ -5594,6 +5618,13 @@ private struct AdminOperationsHealthView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(Color.xertSteel)
+                        .disabled(
+                            admin.isLoading
+                                || admin.isRefreshingHealth
+                                || admin.isSavingSettings
+                                || admin.savingProductID != nil
+                                || admin.savingClassID != nil
+                        )
                     }
                 }
                 .padding(.vertical, 4)
@@ -6987,6 +7018,13 @@ private struct AdminAnnouncementComposer: View {
     @State private var noticeBody = ""
     @State private var tone = "info"
     @State private var confirming = false
+    @State private var confirmingDiscard = false
+
+    private var isDirty: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !noticeBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || tone != "info"
+    }
 
     var body: some View {
         NavigationStack {
@@ -7009,19 +7047,43 @@ private struct AdminAnnouncementComposer: View {
             .navigationTitle("New Notice")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isPublishing) }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: requestDismiss).disabled(isPublishing)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isPublishing ? "Publishing..." : "Publish") { confirming = true }
                         .disabled(isPublishing || title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 || noticeBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
                 }
             }
+            .interactiveDismissDisabled(isDirty || isPublishing)
             .confirmationDialog("Publish this member notice now?", isPresented: $confirming, titleVisibility: .visible) {
-                Button("Publish to members") { onPublish(title, String(noticeBody.prefix(2_000)), tone) }
+                Button("Publish to members") {
+                    guard !isPublishing else { return }
+                    confirming = false
+                    onPublish(title, String(noticeBody.prefix(2_000)), tone)
+                }
+                .disabled(isPublishing)
                 Button("Keep editing", role: .cancel) {}
             } message: {
                 Text("The notice becomes live on the website and iOS app, and push delivery starts immediately.")
             }
+            .confirmationDialog(
+                "Discard unsaved notice?",
+                isPresented: $confirmingDiscard,
+                titleVisibility: .visible
+            ) {
+                Button("Discard draft", role: .destructive) { dismiss() }
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                Text("Closing now permanently discards this member notice draft.")
+            }
         }
+    }
+
+    private func requestDismiss() {
+        guard !isPublishing else { return }
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
     }
 }
 
