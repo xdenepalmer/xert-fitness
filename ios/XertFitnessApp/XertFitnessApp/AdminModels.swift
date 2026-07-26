@@ -2024,6 +2024,8 @@ struct AdminAnnouncement: Identifiable, Codable, Hashable {
 
 struct AdminAnnouncementDraft: Equatable {
     static let memberOperationsPausedTitle = "Bookings and checkout temporarily paused"
+    static let memberBookingsRestoredTitle = "Bookings are available again"
+    static let memberCommerceRestoredTitle = "Bookings and checkout are available again"
 
     var title = ""
     var body = ""
@@ -2052,6 +2054,28 @@ struct AdminAnnouncementDraft: Equatable {
         Existing bookings remain confirmed. We will post another update as soon as new bookings and checkout resume.
         """
         draft.tone = "urgent"
+        return draft
+    }
+
+    static func memberOperationsRestored(checkoutAvailable: Bool) -> Self {
+        var draft = Self()
+        draft.title = checkoutAvailable
+            ? memberCommerceRestoredTitle
+            : memberBookingsRestoredTitle
+        draft.body = checkoutAvailable
+            ? """
+              New bookings, waitlist joins and session-pack checkout are available again.
+
+              Existing bookings were not affected. Thank you for your patience while we completed our platform checks.
+              """
+            : """
+              New bookings and waitlist joins are available again.
+
+              Session-pack checkout remains temporarily paused while we complete our payment checks. Existing bookings were not affected.
+              """
+        draft.tone = "info"
+        draft.ctaLabel = "Book a class"
+        draft.ctaURL = "/booking"
         return draft
     }
 
@@ -2094,6 +2118,116 @@ struct AdminAnnouncementDraft: Equatable {
               url.user == nil,
               url.password == nil else { return false }
         return true
+    }
+}
+
+enum AdminIncidentCommunicationState: Equatable {
+    case unavailable
+    case normal
+    case pausedNeedsUpdate
+    case pausedUpdateLive
+    case livePauseNoticeConflict
+    case recoveryUpdateNeeded
+    case recoveryUpdateLive
+}
+
+struct AdminIncidentCommunicationPlan {
+    static let recoveryWindow: TimeInterval = 72 * 60 * 60
+
+    let operationsState: AdminMemberOperationsState
+    let announcements: [AdminAnnouncement]
+    let sourceIsCurrent: Bool
+    let now: Date
+
+    init(
+        operationsState: AdminMemberOperationsState,
+        announcements: [AdminAnnouncement],
+        sourceIsCurrent: Bool,
+        now: Date = Date()
+    ) {
+        self.operationsState = operationsState
+        self.announcements = announcements
+        self.sourceIsCurrent = sourceIsCurrent
+        self.now = now
+    }
+
+    var state: AdminIncidentCommunicationState {
+        guard sourceIsCurrent else { return .unavailable }
+        switch operationsState {
+        case .unavailable:
+            return .unavailable
+        case .paused:
+            return livePauseNotice == nil ? .pausedNeedsUpdate : .pausedUpdateLive
+        case .bookingsOpen, .liveCommerce:
+            if livePauseNotice != nil { return .livePauseNoticeConflict }
+            guard let pauseDate = latestRecentPauseDate else { return .normal }
+            return liveRecoveryNotice(after: pauseDate) == nil
+                ? .recoveryUpdateNeeded
+                : .recoveryUpdateLive
+        case .inconsistent:
+            return .normal
+        }
+    }
+
+    private var livePauseNotice: AdminAnnouncement? {
+        announcements
+            .filter { $0.stateLabel(now: now) == "Live" && matchesPauseNotice($0) }
+            .max { noticeDate($0) < noticeDate($1) }
+    }
+
+    private var latestRecentPauseDate: Date? {
+        announcements
+            .filter(matchesPauseNotice)
+            .map(noticeDate)
+            .filter { date in
+                let age = now.timeIntervalSince(date)
+                return age >= 0 && age <= Self.recoveryWindow
+            }
+            .max()
+    }
+
+    private func liveRecoveryNotice(after pauseDate: Date) -> AdminAnnouncement? {
+        announcements
+            .filter {
+                $0.stateLabel(now: now) == "Live"
+                    && matchesRecoveryNotice($0)
+                    && noticeDate($0) >= pauseDate
+            }
+            .max { noticeDate($0) < noticeDate($1) }
+    }
+
+    private func matchesPauseNotice(_ notice: AdminAnnouncement) -> Bool {
+        notice.title.caseInsensitiveCompare(
+            AdminAnnouncementDraft.memberOperationsPausedTitle
+        ) == .orderedSame
+            || notice.body.localizedCaseInsensitiveContains(
+                "temporarily paused new bookings, waitlist joins and session-pack checkout"
+            )
+    }
+
+    private func matchesRecoveryNotice(_ notice: AdminAnnouncement) -> Bool {
+        switch operationsState {
+        case .bookingsOpen:
+            return notice.title.caseInsensitiveCompare(
+                AdminAnnouncementDraft.memberBookingsRestoredTitle
+            ) == .orderedSame
+                || notice.body.localizedCaseInsensitiveContains(
+                    "new bookings and waitlist joins are available again"
+                )
+        case .liveCommerce:
+            return notice.title.caseInsensitiveCompare(
+                AdminAnnouncementDraft.memberCommerceRestoredTitle
+            ) == .orderedSame
+                || notice.body.localizedCaseInsensitiveContains(
+                    "new bookings, waitlist joins and session-pack checkout are available again"
+                )
+        case .unavailable, .paused, .inconsistent:
+            return false
+        }
+    }
+
+    private func noticeDate(_ notice: AdminAnnouncement) -> Date {
+        notice.published_at ?? notice.first_published_at ?? notice.created_at
     }
 }
 

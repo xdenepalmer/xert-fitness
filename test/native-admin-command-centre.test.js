@@ -619,10 +619,15 @@ test('native emergency pause becomes a guarded communication and recovery runboo
 
   assert.match(template, /static func memberOperationsPaused\(\) -> Self/);
   assert.match(template, /static let memberOperationsPausedTitle = "Bookings and checkout temporarily paused"/);
+  assert.match(template, /static let memberBookingsRestoredTitle = "Bookings are available again"/);
+  assert.match(template, /static let memberCommerceRestoredTitle = "Bookings and checkout are available again"/);
   assert.match(template, /Bookings and checkout temporarily paused/);
   assert.match(template, /new bookings, waitlist joins and session-pack checkout/);
   assert.match(template, /Existing bookings remain confirmed/);
   assert.match(template, /draft\.tone = "urgent"/);
+  assert.match(template, /static func memberOperationsRestored\(checkoutAvailable: Bool\) -> Self/);
+  assert.match(template, /Session-pack checkout remains temporarily paused/);
+  assert.match(template, /draft\.ctaURL = "\/booking"/);
   assert.doesNotMatch(template, /resolved|fixed|safe to book/i);
 
   assert.match(view, /@State private var quickNoticeDraft: AdminAnnouncementDraft\?/);
@@ -634,7 +639,8 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(composer, /Publish this member notice now\?/);
   assert.match(composer, /Publish to members/);
 
-  assert.match(incident, /if plan\.state == \.paused \{\s*incidentRunbook/);
+  assert.match(incident, /AdminIncidentCommunicationPlan\(/);
+  assert.match(incident, /if plan\.state == \.paused \{\s*incidentRunbook\(communication: communication\.state\)/);
   assert.match(incident, /INCIDENT RUNBOOK/);
   assert.match(incident, /Member activity protected/);
   assert.match(incident, /Tell members what changed/);
@@ -642,16 +648,43 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(incident, /Reopen deliberately/);
   assert.match(incident, /accessibilityIdentifier\("owner\.incidentRunbook"\)/);
   assert.match(incident, /presentNoticeQuickAction\(draft: \.memberOperationsPaused\(\)\)/);
-  assert.match(incident, /private var memberOperationsPauseNoticeIsLive: Bool/);
-  assert.match(incident, /notice\.stateLabel == "Live"/);
-  assert.match(incident, /age >= 0, age <= 86_400/);
   assert.match(incident, /Review live update/);
   assert.match(incident, /openWorkspaceWithFeedback\(\.notices\)/);
+  assert.match(incident, /MESSAGE CONFLICT/);
+  assert.match(incident, /ALL-CLEAR DUE/);
+  assert.match(incident, /RECOVERY SHARED/);
+  assert.match(incident, /ViewThatFits\(in: \.horizontal\) \{[\s\S]*incidentControlActions\([\s\S]*VStack\(spacing: 10\) \{[\s\S]*incidentControlActions\(/);
+  assert.match(incident, /accessibilityIdentifier\("owner\.incidentCommunicationStatus"\)/);
+  assert.match(incident, /Fix member message/);
+  assert.match(incident, /Draft all-clear/);
+  assert.match(incident, /memberOperationsRestored\(\s*checkoutAvailable: operationsState == \.liveCommerce/);
+  assert.match(incident, /Review all-clear/);
+  assert.match(incident, /Verify messages/);
   assert.match(incident, /openWorkspaceWithFeedback\(\.health\)/);
   assert.match(incident, /openWorkspaceWithFeedback\(\.controls\)/);
   assert.match(incident, /Refresh notices/);
   assert.match(incident, /Task \{ await admin\.refresh\(session: session\) \}/);
   assert.doesNotMatch(incident, /publishAnnouncement|saveAnnouncement/);
+
+  assert.match(models, /enum AdminIncidentCommunicationState: Equatable/);
+  for (const state of [
+    'unavailable',
+    'normal',
+    'pausedNeedsUpdate',
+    'pausedUpdateLive',
+    'livePauseNoticeConflict',
+    'recoveryUpdateNeeded',
+    'recoveryUpdateLive',
+  ]) {
+    assert.match(models, new RegExp(`case ${state}`));
+  }
+  assert.match(models, /static let recoveryWindow: TimeInterval = 72 \* 60 \* 60/);
+  assert.match(models, /guard sourceIsCurrent else \{ return \.unavailable \}/);
+  assert.match(models, /if livePauseNotice != nil \{ return \.livePauseNoticeConflict \}/);
+  assert.match(models, /guard let pauseDate = latestRecentPauseDate else \{ return \.normal \}/);
+  assert.match(models, /liveRecoveryNotice\(after: pauseDate\) == nil/);
+  assert.match(models, /case \.bookingsOpen:[\s\S]*memberBookingsRestoredTitle/);
+  assert.match(models, /case \.liveCommerce:[\s\S]*memberCommerceRestoredTitle/);
 });
 
 test('native Admin Audit attributes operators and includes protected commerce recovery', async () => {

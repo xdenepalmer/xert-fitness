@@ -1344,6 +1344,12 @@ final class ModelsTests: XCTestCase {
 
     func testEmergencyMemberUpdateTemplateIsPublishableAndMakesNoFalseRecoveryClaim() {
         let draft = AdminAnnouncementDraft.memberOperationsPaused()
+        let bookingsRestored = AdminAnnouncementDraft.memberOperationsRestored(
+            checkoutAvailable: false
+        )
+        let commerceRestored = AdminAnnouncementDraft.memberOperationsRestored(
+            checkoutAvailable: true
+        )
 
         XCTAssertEqual(draft.title, AdminAnnouncementDraft.memberOperationsPausedTitle)
         XCTAssertEqual(draft.tone, "urgent")
@@ -1355,6 +1361,132 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(draft.ctaURL.isEmpty)
         XCTAssertNil(draft.expiresAt)
         XCTAssertNil(draft.validationMessage(publishing: true))
+        XCTAssertEqual(bookingsRestored.title, AdminAnnouncementDraft.memberBookingsRestoredTitle)
+        XCTAssertTrue(bookingsRestored.body.contains("checkout remains temporarily paused"))
+        XCTAssertFalse(bookingsRestored.body.contains("checkout are available again"))
+        XCTAssertEqual(commerceRestored.title, AdminAnnouncementDraft.memberCommerceRestoredTitle)
+        XCTAssertTrue(commerceRestored.body.contains("session-pack checkout are available again"))
+        XCTAssertEqual(commerceRestored.ctaLabel, "Book a class")
+        XCTAssertEqual(commerceRestored.ctaURL, "/booking")
+        XCTAssertNil(bookingsRestored.validationMessage(publishing: true))
+        XCTAssertNil(commerceRestored.validationMessage(publishing: true))
+    }
+
+    func testIncidentCommunicationPlanDetectsDriftAndRequiresAnAccurateRecoveryUpdate() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let pauseAt = now.addingTimeInterval(-3_600)
+
+        func notice(
+            title: String,
+            body: String,
+            publishedAt: Date?,
+            firstPublishedAt: Date?
+        ) -> AdminAnnouncement {
+            AdminAnnouncement(
+                id: UUID(),
+                title: title,
+                body: body,
+                tone: "info",
+                audience: "all",
+                cta_label: nil,
+                cta_url: nil,
+                published_at: publishedAt,
+                first_published_at: firstPublishedAt,
+                expires_at: nil,
+                archived_at: nil,
+                created_at: firstPublishedAt ?? now.addingTimeInterval(-60),
+                updated_at: "2027-01-15T08:00:00Z"
+            )
+        }
+
+        let livePause = notice(
+            title: AdminAnnouncementDraft.memberOperationsPausedTitle,
+            body: AdminAnnouncementDraft.memberOperationsPaused().body,
+            publishedAt: pauseAt,
+            firstPublishedAt: pauseAt
+        )
+        let hiddenPause = notice(
+            title: AdminAnnouncementDraft.memberOperationsPausedTitle,
+            body: AdminAnnouncementDraft.memberOperationsPaused().body,
+            publishedAt: nil,
+            firstPublishedAt: pauseAt
+        )
+        let fullRecovery = notice(
+            title: AdminAnnouncementDraft.memberCommerceRestoredTitle,
+            body: AdminAnnouncementDraft.memberOperationsRestored(checkoutAvailable: true).body,
+            publishedAt: now.addingTimeInterval(-300),
+            firstPublishedAt: now.addingTimeInterval(-300)
+        )
+        let bookingsRecovery = notice(
+            title: AdminAnnouncementDraft.memberBookingsRestoredTitle,
+            body: AdminAnnouncementDraft.memberOperationsRestored(checkoutAvailable: false).body,
+            publishedAt: now.addingTimeInterval(-240),
+            firstPublishedAt: now.addingTimeInterval(-240)
+        )
+
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .paused,
+            announcements: [],
+            sourceIsCurrent: false,
+            now: now
+        ).state, .unavailable)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .paused,
+            announcements: [],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .pausedNeedsUpdate)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .paused,
+            announcements: [livePause],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .pausedUpdateLive)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .liveCommerce,
+            announcements: [livePause, fullRecovery],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .livePauseNoticeConflict)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .liveCommerce,
+            announcements: [hiddenPause],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .recoveryUpdateNeeded)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .liveCommerce,
+            announcements: [hiddenPause, fullRecovery],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .recoveryUpdateLive)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .bookingsOpen,
+            announcements: [hiddenPause, fullRecovery],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .recoveryUpdateNeeded)
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .bookingsOpen,
+            announcements: [hiddenPause, bookingsRecovery],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .recoveryUpdateLive)
+
+        let oldHiddenPause = notice(
+            title: AdminAnnouncementDraft.memberOperationsPausedTitle,
+            body: AdminAnnouncementDraft.memberOperationsPaused().body,
+            publishedAt: nil,
+            firstPublishedAt: now.addingTimeInterval(
+                -AdminIncidentCommunicationPlan.recoveryWindow - 1
+            )
+        )
+        XCTAssertEqual(AdminIncidentCommunicationPlan(
+            operationsState: .liveCommerce,
+            announcements: [oldHiddenPause],
+            sourceIsCurrent: true,
+            now: now
+        ).state, .normal)
     }
 
     func testOperationalRefreshPolicyReportsHonestQueueFreshness() {

@@ -1070,18 +1070,31 @@ struct AdminCommandCentreView: View {
             settings: admin.settings,
             sourceIsCurrent: sourceIsCurrent
         )
-        let color = incidentControlColor(plan.state)
+        let communication = AdminIncidentCommunicationPlan(
+            operationsState: plan.state,
+            announcements: admin.announcements,
+            sourceIsCurrent: quickMutationIsAvailable(source: "member notices")
+        )
+        let color = incidentControlColor(plan.state, communication: communication.state)
 
         return VStack(alignment: .leading, spacing: 13) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
                     incidentControlHeading
                     Spacer(minLength: 8)
-                    incidentControlStatus(plan: plan, color: color)
+                    incidentControlStatus(
+                        plan: plan,
+                        communication: communication.state,
+                        color: color
+                    )
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     incidentControlHeading
-                    incidentControlStatus(plan: plan, color: color)
+                    incidentControlStatus(
+                        plan: plan,
+                        communication: communication.state,
+                        color: color
+                    )
                 }
             }
 
@@ -1090,16 +1103,26 @@ struct AdminCommandCentreView: View {
                 .foregroundStyle(Color.xertPale.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
+            incidentCommunicationStatus(communication.state)
+
             if plan.state == .paused {
-                incidentRunbook
+                incidentRunbook(communication: communication.state)
             }
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
-                    incidentControlActions(plan: plan, session: session)
+                    incidentControlActions(
+                        plan: plan,
+                        communication: communication.state,
+                        session: session
+                    )
                 }
                 VStack(spacing: 10) {
-                    incidentControlActions(plan: plan, session: session)
+                    incidentControlActions(
+                        plan: plan,
+                        communication: communication.state,
+                        session: session
+                    )
                 }
             }
         }
@@ -1140,9 +1163,10 @@ struct AdminCommandCentreView: View {
 
     private func incidentControlStatus(
         plan: AdminEmergencyPausePlan,
+        communication: AdminIncidentCommunicationState,
         color: Color
     ) -> some View {
-        Text(incidentControlStatusLabel(plan.state))
+        Text(incidentControlStatusLabel(plan.state, communication: communication))
             .font(.caption2.weight(.black))
             .foregroundStyle(color)
             .padding(.horizontal, 9)
@@ -1155,6 +1179,7 @@ struct AdminCommandCentreView: View {
     @ViewBuilder
     private func incidentControlActions(
         plan: AdminEmergencyPausePlan,
+        communication: AdminIncidentCommunicationState,
         session: AuthSession
     ) -> some View {
         if plan.canPause {
@@ -1169,6 +1194,12 @@ struct AdminCommandCentreView: View {
             .tint(Color.red)
             .disabled(admin.isSavingSettings)
             .accessibilityHint("Opens a confirmation before pausing new member activity")
+
+            incidentLiveCommunicationAction(
+                state: communication,
+                operationsState: plan.state,
+                session: session
+            )
 
             Button {
                 openWorkspaceWithFeedback(.controls)
@@ -1193,7 +1224,7 @@ struct AdminCommandCentreView: View {
             .tint(Color.orange)
             .disabled(admin.isLoading || admin.isSavingSettings)
         } else {
-            if memberOperationsPauseNoticeIsLive {
+            if communication == .pausedUpdateLive {
                 Button {
                     openWorkspaceWithFeedback(.notices)
                 } label: {
@@ -1251,8 +1282,132 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private var incidentRunbook: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    @ViewBuilder
+    private func incidentLiveCommunicationAction(
+        state: AdminIncidentCommunicationState,
+        operationsState: AdminMemberOperationsState,
+        session: AuthSession
+    ) -> some View {
+        switch state {
+        case .livePauseNoticeConflict:
+            Button {
+                openWorkspaceWithFeedback(.notices)
+            } label: {
+                Label("Fix member message", systemImage: "exclamationmark.bubble.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.red)
+            .accessibilityHint("Opens Member Notices to remove the contradictory pause update")
+        case .recoveryUpdateNeeded:
+            Button {
+                presentNoticeQuickAction(draft: .memberOperationsRestored(
+                    checkoutAvailable: operationsState == .liveCommerce
+                ))
+            } label: {
+                Label("Draft all-clear", systemImage: "checkmark.message.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+            .accessibilityHint("Opens an editable recovery update without publishing it")
+        case .recoveryUpdateLive:
+            Button {
+                openWorkspaceWithFeedback(.notices)
+            } label: {
+                Label("Review all-clear", systemImage: "checkmark.bubble.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.green)
+        case .unavailable:
+            Button {
+                Task { await admin.refresh(session: session) }
+            } label: {
+                Label(
+                    admin.isLoading ? "Refreshing..." : "Verify messages",
+                    systemImage: "arrow.clockwise"
+                )
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.orange)
+            .disabled(admin.isLoading || admin.isSavingSettings)
+        case .normal, .pausedNeedsUpdate, .pausedUpdateLive:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func incidentCommunicationStatus(_ state: AdminIncidentCommunicationState) -> some View {
+        switch state {
+        case .livePauseNoticeConflict:
+            incidentCommunicationLabel(
+                "Member operations are live, but a member notice still says they are paused.",
+                icon: "exclamationmark.bubble.fill",
+                color: .red
+            )
+        case .recoveryUpdateNeeded:
+            incidentCommunicationLabel(
+                "Member operations are live again. Prepare an accurate all-clear update.",
+                icon: "message.badge",
+                color: .orange
+            )
+        case .recoveryUpdateLive:
+            incidentCommunicationLabel(
+                "A current recovery update is live for members.",
+                icon: "checkmark.bubble.fill",
+                color: .green
+            )
+        case .unavailable:
+            incidentCommunicationLabel(
+                "Refresh member notices before relying on communication status.",
+                icon: "wifi.exclamationmark",
+                color: .orange
+            )
+        case .normal, .pausedNeedsUpdate, .pausedUpdateLive:
+            EmptyView()
+        }
+    }
+
+    private func incidentCommunicationLabel(
+        _ text: String,
+        icon: String,
+        color: Color
+    ) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("owner.incidentCommunicationStatus")
+    }
+
+    private func incidentRunbook(
+        communication: AdminIncidentCommunicationState
+    ) -> some View {
+        let communicationIcon: String
+        let communicationColor: Color
+        let communicationTitle: String
+        let communicationDetail: String
+        if communication == .pausedUpdateLive {
+            communicationIcon = "checkmark.circle.fill"
+            communicationColor = .green
+            communicationTitle = "Member update is live"
+            communicationDetail = "Review the live notice before publishing any follow-up."
+        } else if communication == .unavailable {
+            communicationIcon = "2.circle.fill"
+            communicationColor = .orange
+            communicationTitle = "Verify member communications"
+            communicationDetail = "Refresh member notices before preparing an update."
+        } else {
+            communicationIcon = "2.circle.fill"
+            communicationColor = Color.xertSteel
+            communicationTitle = "Tell members what changed"
+            communicationDetail = "Review the prepared update, then publish when accurate."
+        }
+
+        return VStack(alignment: .leading, spacing: 10) {
             Text("INCIDENT RUNBOOK")
                 .font(.caption2.weight(.black))
                 .foregroundStyle(Color.xertPale.opacity(0.48))
@@ -1264,10 +1419,10 @@ struct AdminCommandCentreView: View {
                 detail: "New bookings, waitlists and checkout are paused."
             )
             incidentRunbookStep(
-                icon: memberOperationsPauseNoticeIsLive ? "checkmark.circle.fill" : "2.circle.fill",
-                color: incidentNoticeStepColor,
-                title: incidentNoticeStepTitle,
-                detail: incidentNoticeStepDetail
+                icon: communicationIcon,
+                color: communicationColor,
+                title: communicationTitle,
+                detail: communicationDetail
             )
             incidentRunbookStep(
                 icon: "3.circle.fill",
@@ -1285,41 +1440,6 @@ struct AdminCommandCentreView: View {
         .padding(.top, 2)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("owner.incidentRunbook")
-    }
-
-    private var incidentNoticeStepColor: Color {
-        if memberOperationsPauseNoticeIsLive { return .green }
-        return quickMutationIsAvailable(source: "member notices") ? Color.xertSteel : .orange
-    }
-
-    private var incidentNoticeStepTitle: String {
-        memberOperationsPauseNoticeIsLive ? "Member update is live" : "Tell members what changed"
-    }
-
-    private var incidentNoticeStepDetail: String {
-        if memberOperationsPauseNoticeIsLive {
-            return "Review the live notice before publishing any follow-up."
-        }
-        return quickMutationIsAvailable(source: "member notices")
-            ? "Review the prepared update, then publish when accurate."
-            : "Refresh member notices before preparing an update."
-    }
-
-    private var memberOperationsPauseNoticeIsLive: Bool {
-        guard quickMutationIsAvailable(source: "member notices") else { return false }
-        let now = Date()
-        return admin.announcements.contains { notice in
-            guard notice.stateLabel == "Live",
-                  let publishedAt = notice.published_at else { return false }
-            let age = now.timeIntervalSince(publishedAt)
-            guard age >= 0, age <= 86_400 else { return false }
-            return notice.title.caseInsensitiveCompare(
-                AdminAnnouncementDraft.memberOperationsPausedTitle
-            ) == .orderedSame
-                || notice.body.localizedCaseInsensitiveContains(
-                    "temporarily paused new bookings, waitlist joins and session-pack checkout"
-                )
-        }
     }
 
     private func incidentRunbookStep(
@@ -1360,7 +1480,12 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func incidentControlColor(_ state: AdminMemberOperationsState) -> Color {
+    private func incidentControlColor(
+        _ state: AdminMemberOperationsState,
+        communication: AdminIncidentCommunicationState
+    ) -> Color {
+        if communication == .livePauseNoticeConflict { return .red }
+        if communication == .recoveryUpdateLive { return .green }
         switch state {
         case .unavailable, .bookingsOpen, .liveCommerce: return .orange
         case .paused: return .green
@@ -1368,7 +1493,16 @@ struct AdminCommandCentreView: View {
         }
     }
 
-    private func incidentControlStatusLabel(_ state: AdminMemberOperationsState) -> String {
+    private func incidentControlStatusLabel(
+        _ state: AdminMemberOperationsState,
+        communication: AdminIncidentCommunicationState
+    ) -> String {
+        switch communication {
+        case .livePauseNoticeConflict: return "MESSAGE CONFLICT"
+        case .recoveryUpdateNeeded: return "ALL-CLEAR DUE"
+        case .recoveryUpdateLive: return "RECOVERY SHARED"
+        case .unavailable, .normal, .pausedNeedsUpdate, .pausedUpdateLive: break
+        }
         switch state {
         case .unavailable: return "REFRESH REQUIRED"
         case .paused: return "PROTECTED"
