@@ -5382,6 +5382,7 @@ private struct AdminClassRosterView: View {
     @State private var exportDocument: AdminClassRosterCSVDocument?
     @State private var isExportingRoster = false
     @State private var exportError: String?
+    @State private var recoveredDraftAt: Date?
 
     private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
     private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
@@ -5456,6 +5457,26 @@ private struct AdminClassRosterView: View {
             if operation.start_time <= Date(), !eligible.isEmpty {
                 Section("Roll call") {
                     VStack(alignment: .leading, spacing: 12) {
+                        if let recoveredDraftAt {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(
+                                    "Recovered unsaved marks from \(recoveredDraftAt.formatted(date: .omitted, time: .shortened)).",
+                                    systemImage: "arrow.counterclockwise.circle.fill"
+                                )
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                                .fixedSize(horizontal: false, vertical: true)
+                                Button("Discard recovered marks") {
+                                    attendance = attendanceBaseline
+                                    recoveredDraftAt = nil
+                                    clearPersistedAttendanceDraft()
+                                }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.orange)
+                            }
+                            .accessibilityIdentifier("owner.roster.recoveredDraft")
+                        }
+
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 14) { attendanceProgressLabels }
                             VStack(alignment: .leading, spacing: 6) { attendanceProgressLabels }
@@ -5683,6 +5704,12 @@ private struct AdminClassRosterView: View {
             attendance.reconcile(roster: roster)
             attendanceBaseline.reconcile(roster: roster)
         }
+        .onChange(of: attendance) { _ in
+            persistAttendanceDraft()
+        }
+        .onDisappear {
+            persistAttendanceDraft()
+        }
         .sheet(item: $presentedMember) { member in
             NavigationStack {
                 AdminMemberDetailView(admin: admin, session: session, member: member)
@@ -5772,6 +5799,8 @@ private struct AdminClassRosterView: View {
                         noShowIDs: noShows
                     )
                     if didRecord {
+                        clearPersistedAttendanceDraft()
+                        recoveredDraftAt = nil
                         if admin.loadedRosterSessionID == operation.id {
                             attendance = AdminAttendanceDraft(roster: admin.classRoster)
                             attendanceBaseline = attendance
@@ -5801,7 +5830,11 @@ private struct AdminClassRosterView: View {
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard marks", role: .destructive) { dismiss() }
+            Button("Discard marks", role: .destructive) {
+                clearPersistedAttendanceDraft()
+                recoveredDraftAt = nil
+                dismiss()
+            }
             Button("Keep marking attendance", role: .cancel) {}
         } message: {
             Text("\(attendanceSummary.marked) attendance mark\(attendanceSummary.marked == 1 ? "" : "s") will be lost.")
@@ -6022,6 +6055,7 @@ private struct AdminClassRosterView: View {
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearPersistedAttendanceDraft()
             dismiss()
         }
     }
@@ -6036,9 +6070,49 @@ private struct AdminClassRosterView: View {
         )
         guard didLoad, admin.loadedRosterSessionID == operation.id else { return }
         if !wasDirty {
-            attendance = AdminAttendanceDraft(roster: admin.classRoster)
-            attendanceBaseline = attendance
+            let serverDraft = AdminAttendanceDraft(roster: admin.classRoster)
+            attendanceBaseline = serverDraft
+            if let snapshot = AdminAttendanceDraftStore.load(
+                ownerID: session.user?.id,
+                sessionID: operation.id
+            ) {
+                var recovered = serverDraft
+                recovered.restore(
+                    snapshot.marks,
+                    whenCurrentMatches: snapshot.baselineMarks
+                )
+                attendance = recovered
+                if recovered != serverDraft {
+                    recoveredDraftAt = snapshot.savedAt
+                } else {
+                    recoveredDraftAt = nil
+                    clearPersistedAttendanceDraft()
+                }
+            } else {
+                recoveredDraftAt = nil
+                attendance = serverDraft
+            }
         }
+    }
+
+    private func persistAttendanceDraft() {
+        guard isDirty else {
+            clearPersistedAttendanceDraft()
+            return
+        }
+        AdminAttendanceDraftStore.save(
+            attendance,
+            baseline: attendanceBaseline,
+            ownerID: session.user?.id,
+            sessionID: operation.id
+        )
+    }
+
+    private func clearPersistedAttendanceDraft() {
+        AdminAttendanceDraftStore.clear(
+            ownerID: session.user?.id,
+            sessionID: operation.id
+        )
     }
 }
 

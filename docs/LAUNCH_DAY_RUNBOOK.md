@@ -38,6 +38,8 @@ the public website alone.
     export the class roster CSV. Store it securely for check-in continuity. The
     **Roll call draft** column may include unsaved local marks; Supabase remains
     authoritative. Reconcile after recovery, then delete every temporary roster copy.
+    If iOS restores an interrupted roll call, review the recovered marks against
+    the newly verified roster before saving. Committed server attendance always wins.
 
 ## Pre-open member smoke path
 
@@ -97,6 +99,9 @@ If checkout, fulfillment or reconciliation is uncertain:
 - Pause new bookings/payments if owner access is still available.
 - Use the last exported roster only for contact/check-in continuity; reconcile
   attendance after the authoritative service returns.
+- The iOS Class Desk retains an unfinished roll call for up to 12 hours on that
+  owner device. It stores booking IDs and marks only, never member contact or
+  readiness data. Reopen and refresh the same class before completing it.
 
 ### Stripe/webhook incident
 

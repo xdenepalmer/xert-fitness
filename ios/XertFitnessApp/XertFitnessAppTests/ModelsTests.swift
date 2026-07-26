@@ -4087,6 +4087,136 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(draft.eligibleIDs, [secondID])
     }
 
+    func testAdminAttendanceDraftLetsVerifiedServerAttendanceBeatLocalMarks() {
+        let bookingID = UUID()
+        let memberID = UUID()
+        let bookedAt = Date()
+        let confirmed = AdminRosterMember(
+            booking_id: bookingID, member_id: memberID, full_name: "Member",
+            email: nil, phone: nil, status: "confirmed", booked_at: bookedAt
+        )
+        let verifiedPresent = AdminRosterMember(
+            booking_id: bookingID, member_id: memberID, full_name: "Member",
+            email: nil, phone: nil, status: "attended", booked_at: bookedAt
+        )
+        var draft = AdminAttendanceDraft(roster: [confirmed])
+        draft.set(.noShow, for: bookingID)
+
+        draft.reconcile(roster: [verifiedPresent])
+        XCTAssertEqual(draft.mark(for: bookingID), .attended)
+
+        draft.restore(
+            [bookingID: .noShow],
+            whenCurrentMatches: [:]
+        )
+        XCTAssertEqual(draft.mark(for: bookingID), .attended)
+
+        draft.restore(
+            [bookingID: .noShow],
+            whenCurrentMatches: [bookingID: .attended]
+        )
+        XCTAssertEqual(draft.mark(for: bookingID), .noShow)
+    }
+
+    func testAdminAttendanceDraftRecoveryIsOwnerScopedBoundedAndRosterSafe() throws {
+        let suiteName = "AdminAttendanceDraftStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let otherOwnerID = UUID()
+        let sessionID = UUID()
+        let eligibleID = UUID()
+        let removedID = UUID()
+        let now = Date(timeIntervalSince1970: 1_784_500_000)
+        let member = AdminRosterMember(
+            booking_id: eligibleID, member_id: UUID(), full_name: "Member",
+            email: nil, phone: nil, status: "confirmed", booked_at: now
+        )
+        var draft = AdminAttendanceDraft(roster: [member])
+        draft.set(.attended, for: eligibleID)
+
+        AdminAttendanceDraftStore.save(
+            draft,
+            baseline: AdminAttendanceDraft(roster: [member]),
+            ownerID: ownerID,
+            sessionID: sessionID,
+            now: now,
+            defaults: defaults
+        )
+
+        let snapshot = try XCTUnwrap(AdminAttendanceDraftStore.load(
+            ownerID: ownerID,
+            sessionID: sessionID,
+            now: now.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertEqual(snapshot.marks, [eligibleID: .attended])
+        XCTAssertNil(AdminAttendanceDraftStore.load(
+            ownerID: otherOwnerID,
+            sessionID: sessionID,
+            now: now,
+            defaults: defaults
+        ))
+
+        var recovered = AdminAttendanceDraft(roster: [member])
+        recovered.restore(
+            snapshot.marks.merging([removedID: .noShow]) { _, new in new },
+            whenCurrentMatches: snapshot.baselineMarks
+        )
+        XCTAssertEqual(recovered.mark(for: eligibleID), .attended)
+        XCTAssertNil(recovered.mark(for: removedID))
+
+        XCTAssertNil(AdminAttendanceDraftStore.load(
+            ownerID: ownerID,
+            sessionID: sessionID,
+            now: now.addingTimeInterval(AdminAttendanceDraftStore.maximumAge + 1),
+            defaults: defaults
+        ))
+    }
+
+    func testAdminAttendanceDraftRecoveryClearsOnlySigningOutOwner() throws {
+        let suiteName = "AdminAttendanceDraftOwnerClearTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstOwner = UUID()
+        let secondOwner = UUID()
+        let firstSession = UUID()
+        let secondSession = UUID()
+        let bookingID = UUID()
+        let now = Date()
+        let member = AdminRosterMember(
+            booking_id: bookingID, member_id: UUID(), full_name: nil,
+            email: "owner@example.com", phone: nil, status: "confirmed", booked_at: now
+        )
+        var draft = AdminAttendanceDraft(roster: [member])
+        draft.set(.noShow, for: bookingID)
+        AdminAttendanceDraftStore.save(
+            draft,
+            baseline: AdminAttendanceDraft(roster: [member]),
+            ownerID: firstOwner,
+            sessionID: firstSession,
+            now: now,
+            defaults: defaults
+        )
+        AdminAttendanceDraftStore.save(
+            draft,
+            baseline: AdminAttendanceDraft(roster: [member]),
+            ownerID: secondOwner,
+            sessionID: secondSession,
+            now: now,
+            defaults: defaults
+        )
+
+        AdminAttendanceDraftStore.clearAll(ownerID: firstOwner, defaults: defaults)
+
+        XCTAssertNil(AdminAttendanceDraftStore.load(
+            ownerID: firstOwner, sessionID: firstSession, now: now, defaults: defaults
+        ))
+        XCTAssertNotNil(AdminAttendanceDraftStore.load(
+            ownerID: secondOwner, sessionID: secondSession, now: now, defaults: defaults
+        ))
+    }
+
     func testAdminClassRosterReportExportsVerifiedRosterAndDraftAttendanceSafely() {
         let start = Date(timeIntervalSince1970: 1_784_500_000)
         let verified = Date(timeIntervalSince1970: 1_784_499_000)

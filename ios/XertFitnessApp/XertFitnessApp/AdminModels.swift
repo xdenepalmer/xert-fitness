@@ -981,7 +981,7 @@ struct AdminRosterMember: Identifiable, Codable, Hashable {
     var attendanceEligible: Bool { ["confirmed", "attended", "no_show"].contains(status) }
 }
 
-enum AdminAttendanceMark: String, Equatable {
+enum AdminAttendanceMark: String, Codable, Equatable {
     case attended
     case noShow = "no_show"
 }
@@ -1014,6 +1014,10 @@ struct AdminAttendanceDraft: Equatable {
 
     var attendedIDs: [UUID] { eligibleIDs.filter { marks[$0] == .attended } }
     var noShowIDs: [UUID] { eligibleIDs.filter { marks[$0] == .noShow } }
+    var persistedMarks: [UUID: AdminAttendanceMark] {
+        let allowed = Set(eligibleIDs)
+        return marks.filter { allowed.contains($0.key) }
+    }
 
     func mark(for bookingID: UUID) -> AdminAttendanceMark? {
         marks[bookingID]
@@ -1032,13 +1036,24 @@ struct AdminAttendanceDraft: Equatable {
         marks = [:]
     }
 
+    mutating func restore(
+        _ restoredMarks: [UUID: AdminAttendanceMark],
+        whenCurrentMatches baselineMarks: [UUID: AdminAttendanceMark]
+    ) {
+        let allowed = Set(eligibleIDs)
+        for (bookingID, mark) in restoredMarks where allowed.contains(bookingID) {
+            guard marks[bookingID] == baselineMarks[bookingID] else { continue }
+            marks[bookingID] = mark
+        }
+    }
+
     mutating func reconcile(roster: [AdminRosterMember]) {
         var seen = Set<UUID>()
         let eligible = roster.filter { $0.attendanceEligible && seen.insert($0.id).inserted }
         let ids = eligible.map(\.id)
         let allowed = Set(ids)
         marks = marks.filter { allowed.contains($0.key) }
-        for member in eligible where marks[member.id] == nil {
+        for member in eligible {
             switch member.status {
             case AdminAttendanceMark.attended.rawValue:
                 marks[member.id] = .attended

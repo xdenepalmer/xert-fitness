@@ -64,8 +64,10 @@ The included `Info.plist` already contains these xcconfig substitutions:
   records complete attended/no-show roll calls atomically, and exports a
   timestamped launch-day CSV only from a verified roster. The export distinguishes
   saved booking state from unsaved roll-call marks and warns owners to remove the
-  member-contact file after reconciliation. Credit release, capacity checks, FIFO
-  promotion, and class completion remain server enforced.
+  member-contact file after reconciliation. Interrupted roll calls recover for up
+  to 12 hours using owner-scoped booking IDs and attendance marks only; a refreshed
+  server attendance decision always overrides the local draft. Credit release,
+  capacity checks, FIFO promotion, and class completion remain server enforced.
   A searchable full-timetable manager creates and edits class metadata, booking
   modes, capacity, visibility and delivery details; duplicates classes as future
   drafts; and uses the dedicated cancellation workflow to return credits and

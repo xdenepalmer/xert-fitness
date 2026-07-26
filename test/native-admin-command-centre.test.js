@@ -1420,6 +1420,40 @@ test('native class desk exports only a verified roster with explicit privacy and
   assert.match(roster, /private struct AdminClassRosterCSVDocument: FileDocument/);
 });
 
+test('native roll call recovers short-lived owner-scoped drafts without caching roster PII', async () => {
+  const [view, models, store, localState] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/AdminAttendanceDraftStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/MemberLocalState.swift'),
+  ]);
+  const roster = view.slice(
+    view.indexOf('private struct AdminClassRosterView'),
+    view.indexOf('private struct AdminScheduleView'),
+  );
+
+  assert.match(models, /enum AdminAttendanceMark: String, Codable, Equatable/);
+  assert.match(models, /var persistedMarks: \[UUID: AdminAttendanceMark\]/);
+  assert.match(models, /mutating func restore\([\s\S]*whenCurrentMatches baselineMarks/);
+  assert.match(models, /guard marks\[bookingID\] == baselineMarks\[bookingID\] else \{ continue \}/);
+  assert.match(models, /for member in eligible \{[\s\S]*case AdminAttendanceMark\.attended\.rawValue:[\s\S]*marks\[member\.id\] = \.attended/);
+  assert.match(store, /struct AdminAttendanceDraftSnapshot: Codable, Equatable/);
+  assert.match(store, /static let maximumAge: TimeInterval = 12 \* 60 \* 60/);
+  assert.match(store, /let ownerID: UUID[\s\S]*let sessionID: UUID[\s\S]*let marks: \[UUID: AdminAttendanceMark\][\s\S]*let baselineMarks: \[UUID: AdminAttendanceMark\]/);
+  assert.doesNotMatch(store, /full_name|email|phone|readiness/);
+  assert.match(store, /snapshot\.marks\.count <= 250/);
+  assert.match(store, /now\.timeIntervalSince\(snapshot\.savedAt\) <= maximumAge/);
+  assert.match(store, /static func clearAll\(ownerID: UUID/);
+  assert.match(localState, /AdminAttendanceDraftStore\.clearAll\(ownerID: userID/);
+  assert.match(roster, /AdminAttendanceDraftStore\.load\([\s\S]*ownerID: session\.user\?\.id/);
+  assert.match(roster, /recovered\.restore\([\s\S]*snapshot\.marks,[\s\S]*whenCurrentMatches: snapshot\.baselineMarks/);
+  assert.match(roster, /accessibilityIdentifier\("owner\.roster\.recoveredDraft"\)/);
+  assert.match(roster, /Discard recovered marks/);
+  assert.match(roster, /\.onChange\(of: attendance\)[\s\S]*persistAttendanceDraft\(\)/);
+  assert.match(roster, /if didRecord \{[\s\S]*clearPersistedAttendanceDraft\(\)/);
+  assert.match(roster, /Button\("Discard marks", role: \.destructive\)[\s\S]*clearPersistedAttendanceDraft\(\)/);
+});
+
 test('high-consequence owner drafts share command-centre exit protection', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const taskSheet = view.slice(
