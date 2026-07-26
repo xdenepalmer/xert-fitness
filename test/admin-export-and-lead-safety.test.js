@@ -26,10 +26,16 @@ test('CampaignStats and AdminAuditLog refuse CSV export while a load is in fligh
     read('../src/components/admin/CampaignStats.jsx'),
     read('../src/components/admin/AdminAuditLog.jsx'),
   ]);
-  assert.match(campaign, /disabled=\{loading \|\| data\.total === 0\}/);
+  assert.match(campaign, /const exportLockRef = useRef\(false\)/);
+  assert.match(campaign, /if \(exportLockRef\.current \|\| exporting \|\| loading \|\| data\.total === 0\) return/);
+  assert.match(campaign, /exportLockRef\.current = true/);
+  assert.match(campaign, /disabled=\{loading \|\| exporting \|\| data\.total === 0\}/);
   assert.match(campaign, /const loadVersion = useRef\(0\)/);
   assert.match(campaign, /version !== loadVersion\.current/);
-  assert.match(audit, /disabled=\{loading \|\| events\.length === 0\}/);
+  assert.match(audit, /const exportLockRef = useRef\(false\)/);
+  assert.match(audit, /if \(exportLockRef\.current \|\| exporting \|\| loading \|\| events\.length === 0\) return/);
+  assert.match(audit, /exportLockRef\.current = true/);
+  assert.match(audit, /disabled=\{loading \|\| exporting \|\| events\.length === 0\}/);
 });
 
 test('Members and PT request CSV exports lock against same-paint double downloads', async () => {

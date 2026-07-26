@@ -507,7 +507,8 @@ export default function Booking() {
         </div>
       </main>
 
-      <PublicFooter />
+      {/* Soft-launch parity: footer Book CTA fails closed while bookings are paused. */}
+      <PublicFooter showBookCta={bookingsEnabled} />
     </div>
   );
 }

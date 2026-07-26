@@ -288,11 +288,25 @@ test('soft-launch public booking gate keeps class_bookings inserts behind bookin
   const iosHome = read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift');
   assert.match(iosHome, /bookingsEnabled: store\.memberBookingsEnabled/);
   assert.match(iosHome, /Register interest/);
+  assert.match(iosHome, /private func openBookingOrInterest\(\)/);
+  assert.match(iosHome, /onBook: openBookingOrInterest/);
+  assert.match(iosHome, /memberBookingsEnabled \? "Book a class" : "Register interest"/);
+  assert.match(iosHome, /memberBookingsEnabled \? "Book another" : "Register interest"/);
+  assert.match(iosHome, /memberBookingsEnabled \? "Book A Class" : "Register interest"/);
+  assert.match(iosHome, /memberBookingsEnabled \? "Book" : "Interest"/);
+  assert.match(iosHome, /memberBookingsEnabled \? "Browse classes" : "Register interest"/);
+  assert.match(iosHome, /memberBookingsEnabled \? "View session packs" : "Register interest"/);
+  assert.match(iosHome, /case \.chooseAccess:[\s\S]*memberBookingsEnabled[\s\S]*onOpenRoute\(\.sessionPacks\)[\s\S]*onNavigate\(\.explore\)/);
+  assert.match(iosHome, /case \.bookFirstClass:[\s\S]*memberBookingsEnabled[\s\S]*onOpenRoute\(\.booking\)[\s\S]*onNavigate\(\.explore\)/);
 
   const account = read('../src/pages/Account.jsx');
   assert.match(account, /const bookingsEnabled = launchSettings\.bookings_enabled === true/);
   assert.match(account, /bookingsEnabled \? 'Book A Class' : 'Register interest'/);
   assert.match(account, /to=\{bookingsEnabled \? '\/booking' : '\/#eoi'\}/);
+  assert.match(account, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
+
+  const bookingPage = read('../src/pages/Booking.jsx');
+  assert.match(bookingPage, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
 
   const iosAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
   assert.match(iosAccount, /store\.memberBookingsEnabled/);

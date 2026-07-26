@@ -191,5 +191,6 @@ test('admin audit range changes reload safely without stale responses winning', 
   assert.match(source, /version !== loadVersion\.current/);
   assert.match(source, /void load\(days\)/);
   assert.match(source, /\}, \[days\]\)/);
-  assert.match(source, /disabled=\{loading \|\| events\.length === 0\}/);
+  assert.match(source, /disabled=\{loading \|\| exporting \|\| events\.length === 0\}/);
+  assert.match(source, /const exportLockRef = useRef\(false\)/);
 });

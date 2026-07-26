@@ -45,7 +45,11 @@ export default function CampaignStats() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const loadVersion = useRef(0);
+  // Campaign CSV includes attributed lead timing/source — refuse same-paint double download
+  // (LeadTable / Orders / AdminAuditLog parity).
+  const exportLockRef = useRef(false);
 
   const load = async () => {
     const version = loadVersion.current + 1;
@@ -78,18 +82,28 @@ export default function CampaignStats() {
   const rangeLabel = RANGE_OPTIONS.find(option => option.value === range)?.label || 'Selected range';
   const attributionRate = new Intl.NumberFormat('en-AU', { style: 'percent', maximumFractionDigits: 0 }).format(data.attributionRate);
 
-  const exportRows = () => downloadCsv(
-    `xert-campaign-attribution-${range}-${new Date().toISOString().slice(0, 10)}.csv`,
-    campaignCsvRows(data.rows),
-    [
-      { key: 'created_at', label: 'Created' },
-      { key: 'brisbane_date', label: 'Brisbane Date' },
-      { key: 'source', label: 'Attributed Source' },
-      { key: 'medium', label: 'UTM Medium' },
-      { key: 'campaign', label: 'UTM Campaign' },
-      { key: 'recorded_source', label: 'Recorded Form Source' },
-    ]
-  );
+  const exportRows = () => {
+    if (exportLockRef.current || exporting || loading || data.total === 0) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    try {
+      downloadCsv(
+        `xert-campaign-attribution-${range}-${new Date().toISOString().slice(0, 10)}.csv`,
+        campaignCsvRows(data.rows),
+        [
+          { key: 'created_at', label: 'Created' },
+          { key: 'brisbane_date', label: 'Brisbane Date' },
+          { key: 'source', label: 'Attributed Source' },
+          { key: 'medium', label: 'UTM Medium' },
+          { key: 'campaign', label: 'UTM Campaign' },
+          { key: 'recorded_source', label: 'Recorded Form Source' },
+        ]
+      );
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
 
   if (!hasLoaded && loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
   if (!hasLoaded && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
@@ -109,9 +123,9 @@ export default function CampaignStats() {
             className="min-h-11 bg-xert-ink border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite">
             {RANGE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <button type="button" onClick={exportRows} disabled={loading || data.total === 0}
+          <button type="button" onClick={exportRows} disabled={loading || exporting || data.total === 0}
             className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-xs text-xert-concrete/70 uppercase tracking-wider hover:border-xert-steel disabled:opacity-40">
-            <Download className="w-3.5 h-3.5" /> CSV
+            <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
           </button>
           <button type="button" onClick={() => void load()} disabled={loading} title="Refresh campaign attribution" aria-label="Refresh campaign attribution"
             className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-40">

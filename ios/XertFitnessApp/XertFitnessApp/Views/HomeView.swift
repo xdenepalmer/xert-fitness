@@ -24,7 +24,9 @@ struct HomeView: View {
                             bookingsEnabled: store.memberBookingsEnabled,
                             noticeCount: store.announcements.count,
                             topSafeAreaInset: viewport.safeAreaInsets.top,
-                            onBook: { onNavigate(.booking) },
+                            // Label says Register interest when paused — action must match
+                            // (Account / Explore parity), not deep-link into Book.
+                            onBook: openBookingOrInterest,
                             onEvents: { onNavigate(.events) },
                             onNotices: openNoticeCenter,
                             onRefresh: { Task { await store.refresh() } }
@@ -37,6 +39,7 @@ struct HomeView: View {
 
                         MemberLaunchGuideCard(
                             state: memberLaunchGuideState,
+                            bookingsEnabled: store.memberBookingsEnabled,
                             onAction: handleMemberLaunchGuideAction
                         )
                         .padding(.horizontal)
@@ -167,13 +170,31 @@ struct HomeView: View {
         case .completeReadiness:
             showingMemberReadiness = true
         case .chooseAccess:
-            onOpenRoute(.sessionPacks)
+            // Soft-launch pause: packs stay behind Register interest (Account parity).
+            if store.memberBookingsEnabled {
+                onOpenRoute(.sessionPacks)
+            } else {
+                onNavigate(.explore)
+            }
         case .bookFirstClass:
-            onOpenRoute(.booking)
+            if store.memberBookingsEnabled {
+                onOpenRoute(.booking)
+            } else {
+                onNavigate(.explore)
+            }
         case .enableReminder:
             Task { await store.setClassRemindersEnabled(true) }
         case .activated(let bookingID):
             onOpenRoute(.upcomingBookings(bookingID))
+        }
+    }
+
+    /// Fail closed to Explore interest while bookings are paused (Account parity).
+    private func openBookingOrInterest() {
+        if store.memberBookingsEnabled {
+            onNavigate(.booking)
+        } else {
+            onNavigate(.explore)
         }
     }
 
@@ -299,8 +320,8 @@ struct HomeView: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.xertPale)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Book a class") {
-                    onNavigate(.booking)
+                Button(store.memberBookingsEnabled ? "Book a class" : "Register interest") {
+                    openBookingOrInterest()
                 }
                 .buttonStyle(.xertPrimary)
             }
@@ -388,9 +409,9 @@ struct HomeView: View {
 
     private var dashboardBookAnotherButton: some View {
         Button {
-            onNavigate(.booking)
+            openBookingOrInterest()
         } label: {
-            Text("Book another")
+            Text(store.memberBookingsEnabled ? "Book another" : "Register interest")
                 .lineLimit(1)
                 .minimumScaleFactor(0.68)
         }
@@ -588,8 +609,8 @@ struct HomeView: View {
                     Text("Use them by \(summary.expiresAt.formatted(date: .abbreviated, time: .omitted)).")
                         .font(.caption)
                         .foregroundStyle(Color.xertPale)
-                    Button("Book A Class") {
-                        onNavigate(.booking)
+                    Button(store.memberBookingsEnabled ? "Book A Class" : "Register interest") {
+                        openBookingOrInterest()
                     }
                     .buttonStyle(.xertPrimary)
                 }
@@ -617,8 +638,11 @@ struct HomeView: View {
 
     @ViewBuilder
     private var quickActionCards: some View {
-        QuickActionCard(icon: "calendar.badge.plus", title: "Book") {
-            onNavigate(.booking)
+        QuickActionCard(
+            icon: store.memberBookingsEnabled ? "calendar.badge.plus" : "person.crop.circle.badge.plus",
+            title: store.memberBookingsEnabled ? "Book" : "Interest"
+        ) {
+            openBookingOrInterest()
         }
         QuickActionCard(icon: "trophy", title: "Events") {
             onNavigate(.events)
@@ -697,8 +721,8 @@ struct HomeView: View {
             } else if store.isSignedIn {
                 EmptyAction(
                     message: "No class booked yet.",
-                    actionTitle: "Browse classes",
-                    action: { onNavigate(.booking) }
+                    actionTitle: store.memberBookingsEnabled ? "Browse classes" : "Register interest",
+                    action: openBookingOrInterest
                 )
             } else {
                 EmptyAction(
@@ -798,8 +822,8 @@ struct HomeView: View {
                 }
                 .padding(.vertical, 6)
             }
-            Button("View session packs") {
-                onNavigate(.booking)
+            Button(store.memberBookingsEnabled ? "View session packs" : "Register interest") {
+                openBookingOrInterest()
             }
             .buttonStyle(.xertGhost)
         }
@@ -830,6 +854,7 @@ struct HomeView: View {
 private struct MemberLaunchGuideCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let state: MemberLaunchGuideState
+    let bookingsEnabled: Bool
     let onAction: (MemberLaunchGuideState) -> Void
 
     var body: some View {
@@ -948,8 +973,10 @@ private struct MemberLaunchGuideCard: View {
         case .checking: return "Checking…"
         case .retry: return "Retry Member Progress"
         case .completeReadiness: return "Complete Readiness"
-        case .chooseAccess: return "View Session Packs"
-        case .bookFirstClass: return "Browse Classes"
+        case .chooseAccess:
+            return bookingsEnabled ? "View Session Packs" : "Register interest"
+        case .bookFirstClass:
+            return bookingsEnabled ? "Browse Classes" : "Register interest"
         case .enableReminder: return "Enable Class Reminder"
         case .activated: return "View Booking"
         }
@@ -961,8 +988,14 @@ private struct MemberLaunchGuideCard: View {
         case .checking: return "Member progress is still loading"
         case .retry: return "Retries readiness, credits and bookings"
         case .completeReadiness: return "Opens your private member readiness form"
-        case .chooseAccess: return "Opens session pack options on the Book page"
-        case .bookFirstClass: return "Opens class discovery on the Book page"
+        case .chooseAccess:
+            return bookingsEnabled
+                ? "Opens session pack options on the Book page"
+                : "Opens Explore so you can register interest while bookings are paused"
+        case .bookFirstClass:
+            return bookingsEnabled
+                ? "Opens class discovery on the Book page"
+                : "Opens Explore so you can register interest while bookings are paused"
         case .enableReminder: return "Requests notification permission, then schedules eligible class reminders"
         case .activated: return "Opens your upcoming bookings"
         }

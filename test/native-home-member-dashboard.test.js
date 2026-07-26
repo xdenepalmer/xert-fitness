@@ -43,7 +43,7 @@ test('member dashboard chooses the true next active booking including today', as
   );
   assert.match(
     home,
-    /private var dashboardBookAnotherButton: some View \{[\s\S]*onNavigate\(\.booking\)[\s\S]*Text\("Book another"\)/,
+    /private var dashboardBookAnotherButton: some View \{[\s\S]*openBookingOrInterest\(\)[\s\S]*memberBookingsEnabled \? "Book another" : "Register interest"/,
   );
   assert.match(home, /if store\.isSignedIn && todayBookings\.count > 1/);
   assert.match(
@@ -58,7 +58,7 @@ test('member dashboard distinguishes loading, unavailable, stale and genuine emp
   assert.match(home, /dashboardBookingsAreInitiallyLoading[\s\S]*Loading your next class/);
   assert.match(home, /store\.unavailableDataSources\.contains\(\.bookings\)[\s\S]*Next class unavailable/);
   assert.match(home, /Task \{ await store\.refresh\(\) \}/);
-  assert.match(home, /No upcoming class booked[\s\S]*Book a class/);
+  assert.match(home, /No upcoming class booked[\s\S]*memberBookingsEnabled \? "Book a class" : "Register interest"/);
   assert.match(home, /store\.isUsingStaleMemberData \|\| store\.unavailableDataSources\.contains\(\.bookings\)/);
   assert.match(home, /Booking details may be out of date/);
   assert.match(

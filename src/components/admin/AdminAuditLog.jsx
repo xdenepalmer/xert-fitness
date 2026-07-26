@@ -63,7 +63,11 @@ export default function AdminAuditLog() {
   const [type, setType] = useState('all');
   const [days, setDays] = useState('30');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const loadVersion = useRef(0);
+  // Audit CSV includes subject labels/emails — refuse same-paint double download
+  // (LeadTable / Orders / CampaignStats parity).
+  const exportLockRef = useRef(false);
 
   const load = async (range = days) => {
     const version = loadVersion.current + 1;
@@ -103,20 +107,30 @@ export default function AdminAuditLog() {
   const firstResult = events.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
   const lastResult = Math.min(safePage * PAGE_SIZE, events.length);
 
-  const exportRows = () => downloadCsv(
-    `xert-admin-audit-${days}-${new Date().toISOString().slice(0, 10)}.csv`,
-    adminAuditCsvRows(events),
-    [
-      { key: 'timestamp', label: 'Timestamp' },
-      { key: 'action', label: 'Action' },
-      { key: 'administrator', label: 'Administrator' },
-      { key: 'administrator_id', label: 'Administrator ID' },
-      { key: 'member', label: 'Subject' },
-      { key: 'member_id', label: 'Subject ID' },
-      { key: 'summary', label: 'Summary' },
-      { key: 'detail', label: 'Detail / Reason' },
-    ]
-  );
+  const exportRows = () => {
+    if (exportLockRef.current || exporting || loading || events.length === 0) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    try {
+      downloadCsv(
+        `xert-admin-audit-${days}-${new Date().toISOString().slice(0, 10)}.csv`,
+        adminAuditCsvRows(events),
+        [
+          { key: 'timestamp', label: 'Timestamp' },
+          { key: 'action', label: 'Action' },
+          { key: 'administrator', label: 'Administrator' },
+          { key: 'administrator_id', label: 'Administrator ID' },
+          { key: 'member', label: 'Subject' },
+          { key: 'member_id', label: 'Subject ID' },
+          { key: 'summary', label: 'Summary' },
+          { key: 'detail', label: 'Detail / Reason' },
+        ]
+      );
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
 
   if (!records && loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
   if (!records && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={() => void load(days)} /></div>;
@@ -135,9 +149,9 @@ export default function AdminAuditLog() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={exportRows} disabled={loading || events.length === 0}
+          <button type="button" onClick={exportRows} disabled={loading || exporting || events.length === 0}
             className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-xs text-xert-concrete/70 uppercase tracking-wider hover:border-xert-steel disabled:opacity-40">
-            <Download className="w-3.5 h-3.5" /> CSV
+            <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
           </button>
           <button type="button" onClick={() => void load(days)} disabled={loading} title="Refresh admin audit" aria-label="Refresh admin audit"
             className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-40">

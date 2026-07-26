@@ -665,7 +665,7 @@ export default function Account() {
             </Link>
           </div>
         </main>
-        <PublicFooter />
+        <PublicFooter showBookCta={bookingsEnabled} />
       </div>
     );
   }
@@ -1497,7 +1497,8 @@ export default function Account() {
         </section>
       </main>
 
-      <PublicFooter />
+      {/* Soft-launch parity: footer Book CTA must not stay live while bookings are paused. */}
+      <PublicFooter showBookCta={bookingsEnabled} />
       {cancellationTarget && (
         <div
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"

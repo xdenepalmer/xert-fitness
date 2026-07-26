@@ -37,7 +37,11 @@ test('launch guide keeps actions typed, accessible and explicit', async () => {
 
   assert.match(root, /onOpenRoute: \{ openMemberRoute\(\$0, source: \.content\) \}/);
   assert.match(home, /onOpenRoute\(\.sessionPacks\)/);
+  assert.match(home, /onOpenRoute\(\.booking\)/);
   assert.match(home, /onOpenRoute\(\.upcomingBookings\(bookingID\)\)/);
+  assert.match(home, /bookingsEnabled: store\.memberBookingsEnabled/);
+  assert.match(home, /bookingsEnabled \? "View Session Packs" : "Register interest"/);
+  assert.match(home, /bookingsEnabled \? "Browse Classes" : "Register interest"/);
   assert.match(home, /store\.setClassRemindersEnabled\(true\)/);
   assert.match(home, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(home, /\.frame\(minHeight: 44\)/);

@@ -8,6 +8,14 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- iPhone Home Book CTAs (hero action, dashboard Book a class / Book another,
+  credit-expiry Book, quick-action Book, Browse classes, View session packs,
+  launch-guide packs/classes) fail closed to Explore Register interest while
+  bookings are paused — hero no longer labels Register interest but deep-links
+  into Book. Web Account + `/booking` footers match marketing pages:
+  `showBookCta={bookingsEnabled}`. Campaign Attribution and Admin Audit CSVs
+  match LeadTable / Orders: no same-paint double download of subject/lead PII
+  and export stays off while a refresh is in flight.
 - Orders CSV matches LeadTable / Members / booking ops: no same-paint double
   download (buyer email PII) and export stays off while the desk is loading.
   Class Calendar roster + class-request status selects share a lock so a second
@@ -386,6 +394,15 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 27. This batch — iPhone Home pause CTAs, Account/Booking footers, Campaign/Audit CSV locks
+| Area | Defect | Fix |
+|---|---|---|
+| iPhone Home Book CTAs | Hero labelled Register interest when paused but `onBook` still opened Book; dashboard Book a class / Book another, credit-expiry Book, quick-action Book, Browse classes, View session packs and launch-guide packs/classes still deep-linked into Book | `openBookingOrInterest()` → Explore when paused; launch guide keeps `.sessionPacks` / `.booking` when live |
+| Account + `/booking` footers | `PublicFooter` defaults `showBookCta={true}` — Account (just gated inline Book CTAs) and Booking still showed Book Your First Session while paused | `showBookCta={bookingsEnabled}` (marketing parity) |
+| Campaign Attribution / Admin Audit CSV | Export disabled only while loading — no same-paint lock; audit CSV carries subject name/email | `exportLockRef` + `exporting` (LeadTable / Orders parity) |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -557,3 +574,8 @@ show `installed = true` and `release_ready = true`, including
     roster / request status selects ignore a second same-paint change; with
     bookings off, Account Book/Buy CTAs (web + iPhone) say Register interest;
     Availability Remove ignore a second same-paint Confirm.
+30. **iPhone Home pause + Account/Booking footers + Campaign/Audit CSV** — With
+    bookings off: iPhone Home hero/dashboard/quick-action/launch-guide Book
+    CTAs say Register interest and open Explore (not Book); Account and
+    `/booking` footers say Register interest; Campaign Attribution / Admin
+    Audit CSV refuse double download and stay off while loading.
