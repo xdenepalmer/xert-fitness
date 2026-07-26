@@ -156,6 +156,7 @@ struct AdminCommandCentreView: View {
             }
         }
         .onChange(of: store.authSession?.user?.id) { userID in
+            admin.resetOwnerTaskResolution()
             if let userID { prepareOwnerNavigation(for: userID) }
             reloadPinnedWorkspaces()
         }
@@ -187,6 +188,7 @@ struct AdminCommandCentreView: View {
         .sheet(item: $presentedOwnerTask, onDismiss: closePresentedOwnerTask) { task in
             if let session = authorizedOwnerSession {
                 AdminOwnerTaskSheet(admin: admin, session: session, task: task)
+                    .id(task)
             }
         }
         .sheet(item: $presentedQuickAction, onDismiss: {
@@ -594,6 +596,7 @@ struct AdminCommandCentreView: View {
     }
 
     private func closePresentedOwnerTask() {
+        admin.resetOwnerTaskResolution()
         guard ownerRouteHistory.current.task != nil else { return }
         openWorkspace(currentWorkspace)
     }
@@ -2936,31 +2939,47 @@ private struct AdminOwnerTaskSheet: View {
 
     private func resolutionView(recordName: String) -> some View {
         VStack(spacing: 16) {
-            if admin.isLoading || admin.resolvingOwnerTask == task || admin.lastUpdatedAt == nil {
+            if admin.resolvingOwnerTask == task
+                || (admin.isLoading && admin.lastUpdatedAt == nil) {
                 ProgressView()
                     .tint(Color.xertSteel)
                 Text("Opening \(task.title.lowercased())...")
                     .font(.headline)
                     .foregroundStyle(Color.xertOffWhite)
             } else {
-                Image(systemName: "questionmark.folder")
+                let resolutionError = admin.ownerTaskResolutionErrorTask == task
+                    ? admin.ownerTaskResolutionErrorMessage
+                    : nil
+                Image(systemName: resolutionError == nil ? "questionmark.folder" : "wifi.exclamationmark")
                     .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(Color.xertSteel)
-                Text("\(recordName.capitalized) unavailable")
+                    .foregroundStyle(resolutionError == nil ? Color.xertSteel : Color.orange)
+                Text(
+                    resolutionError == nil
+                        ? "\(recordName.capitalized) unavailable"
+                        : "Could not open \(recordName)"
+                )
                     .xertDisplay(28)
                     .foregroundStyle(Color.xertOffWhite)
-                Text("This protected link no longer matches a \(recordName) visible to your administrator account.")
+                Text(
+                    resolutionError
+                        ?? "This protected link no longer matches a \(recordName) visible to your administrator account."
+                )
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.xertPale.opacity(0.68))
                 Button {
-                    Task { await admin.refresh(session: session) }
+                    Task { await admin.resolveOwnerTask(session: session, task: task) }
                 } label: {
-                    Label("Refresh owner data", systemImage: "arrow.clockwise")
+                    Label(
+                        resolutionError == nil ? "Check protected record again" : "Retry protected record",
+                        systemImage: "arrow.clockwise"
+                    )
+                    .frame(minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color.xertSteel)
                 .foregroundStyle(Color.xertNavy)
+                .accessibilityHint("Retries this exact protected \(recordName) instead of refreshing a bounded workspace list")
             }
         }
         .padding(28)

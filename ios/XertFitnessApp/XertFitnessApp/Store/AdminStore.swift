@@ -115,6 +115,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var isSearchingOwnerMembers = false
     @Published private(set) var ownerMemberSearchError: String?
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
+    @Published private(set) var ownerTaskResolutionErrorTask: XertOwnerTask?
+    @Published private(set) var ownerTaskResolutionErrorMessage: String?
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var promotionNoticeWarning: String?
     @Published private(set) var bookingDecisionNoticeWarning: String?
@@ -189,6 +191,7 @@ final class AdminStore: ObservableObject {
     private let api = XertAPI()
     private var memberDirectoryGeneration: UInt = 0
     private var ownerMemberSearchGeneration: UInt = 0
+    private var ownerTaskResolutionGeneration: UInt = 0
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
@@ -785,60 +788,94 @@ final class AdminStore: ObservableObject {
         isSearchingOwnerMembers = false
     }
 
+    func resetOwnerTaskResolution() {
+        ownerTaskResolutionGeneration &+= 1
+        resolvingOwnerTask = nil
+        ownerTaskResolutionErrorTask = nil
+        ownerTaskResolutionErrorMessage = nil
+    }
+
     func resolveOwnerTask(session: AuthSession, task: XertOwnerTask) async {
-        guard resolvingOwnerTask == nil else { return }
+        ownerTaskResolutionGeneration &+= 1
+        let generation = ownerTaskResolutionGeneration
+        ownerTaskResolutionErrorTask = nil
+        ownerTaskResolutionErrorMessage = nil
+
+        let requiresResolution: Bool
         switch task {
         case .member(let memberID):
-            guard !members.contains(where: { $0.id == memberID }) else { return }
+            requiresResolution = !members.contains(where: { $0.id == memberID })
         case .classSession(let sessionID):
-            guard !dailyOperations.contains(where: { $0.id == sessionID }) else { return }
+            requiresResolution = !dailyOperations.contains(where: { $0.id == sessionID })
         case .classSetup(let sessionID):
             let timetableIsCurrent = loadedSources.contains("full timetable")
                 && !refreshUnavailableSources.contains("full timetable")
-            guard !classSessions.contains(where: { $0.id == sessionID })
-                    || !timetableIsCurrent else { return }
+            requiresResolution = !classSessions.contains(where: { $0.id == sessionID })
+                || !timetableIsCurrent
         case .product(let productID):
-            guard !products.contains(where: { $0.id == productID }) else { return }
+            requiresResolution = !products.contains(where: { $0.id == productID })
         case .order(let orderID):
-            guard !orders.contains(where: { $0.id == orderID }) else { return }
+            requiresResolution = !orders.contains(where: { $0.id == orderID })
         case .event(let eventID):
-            guard !events.contains(where: { $0.id == eventID }) else { return }
+            requiresResolution = !events.contains(where: { $0.id == eventID })
         case .announcement(let announcementID):
-            guard !announcements.contains(where: { $0.id == announcementID }) else { return }
+            requiresResolution = !announcements.contains(where: { $0.id == announcementID })
         }
+        guard requiresResolution else {
+            resolvingOwnerTask = nil
+            return
+        }
+
         resolvingOwnerTask = task
-        defer { resolvingOwnerTask = nil }
+        defer {
+            if ownerTaskResolutionGeneration == generation,
+               resolvingOwnerTask == task {
+                resolvingOwnerTask = nil
+            }
+        }
         do {
             switch task {
             case .member(let memberID):
                 let member = try await api.adminMember(session: session, id: memberID)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 mergeResolvedMember(member)
             case .classSession(let sessionID):
                 let operations = try await api.adminDailyOperations(session: session)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 guard operations.contains(where: { $0.id == sessionID }) else { return }
                 dailyOperations = operations
                 loadedSources.insert("today's classes")
                 refreshUnavailableSources.removeAll { $0 == "today's classes" }
             case .classSetup(let sessionID):
                 let timetable = try await api.adminClassSessions(session: session)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 guard timetable.contains(where: { $0.id == sessionID }) else { return }
                 classSessions = timetable
                 loadedSources.insert("full timetable")
                 refreshUnavailableSources.removeAll { $0 == "full timetable" }
             case .product(let productID):
                 let refreshedProducts = try await api.adminProducts(session: session)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 guard refreshedProducts.contains(where: { $0.id == productID }) else { return }
                 products = refreshedProducts
                 loadedSources.insert("session packs")
                 refreshUnavailableSources.removeAll { $0 == "session packs" }
             case .order(let orderID):
                 let order = try await api.adminOrder(session: session, id: orderID)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 orders.removeAll(where: { $0.id == orderID })
                 orders.insert(order, at: 0)
                 loadedSources.insert("orders")
                 refreshUnavailableSources.removeAll { $0 == "orders" }
             case .event(let eventID):
                 let event = try await api.adminEvent(session: session, id: eventID)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 events.removeAll(where: { $0.id == eventID })
                 events.insert(event, at: 0)
                 loadedSources.insert("event calendar")
@@ -848,12 +885,17 @@ final class AdminStore: ObservableObject {
                     session: session,
                     id: announcementID
                 )
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
                 mergeAnnouncement(announcement)
                 loadedSources.insert("member notices")
                 refreshUnavailableSources.removeAll { $0 == "member notices" }
             }
         } catch {
-            errorMessage = error.localizedDescription
+            guard ownerTaskResolutionGeneration == generation,
+                  resolvingOwnerTask == task else { return }
+            ownerTaskResolutionErrorTask = task
+            ownerTaskResolutionErrorMessage = "XERT could not securely load this protected record. Check your connection and try again."
         }
     }
 
