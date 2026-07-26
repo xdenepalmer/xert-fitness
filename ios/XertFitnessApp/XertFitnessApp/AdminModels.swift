@@ -795,6 +795,22 @@ struct AdminBlackoutDraft: Equatable {
         reason = period?.reason ?? "facility maintenance"
         notes = period?.notes ?? ""
     }
+
+    func overlappingPublishedClasses(in sessions: [AdminClassSession]) -> [AdminClassSession] {
+        guard ["all", "group_classes", "facility_only"].contains(affects),
+              endTime > startTime else { return [] }
+        return sessions.filter { session in
+            guard ["published", "full"].contains(session.status),
+                  let sessionStart = session.start_time else { return false }
+            let duration = max(session.duration_minutes ?? 60, 1)
+            let sessionEnd = session.end_time
+                ?? sessionStart.addingTimeInterval(TimeInterval(duration * 60))
+            return sessionStart < endTime && sessionEnd > startTime
+        }
+        .sorted {
+            ($0.start_time ?? .distantFuture) < ($1.start_time ?? .distantFuture)
+        }
+    }
 }
 
 struct AdminWaitlistItem: Identifiable, Codable, Hashable {

@@ -121,6 +121,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var cancellingClassID: UUID?
     @Published private(set) var savingScheduleWindowID: UUID?
     @Published private(set) var deletingScheduleWindowID: UUID?
+    @Published private(set) var isRefreshingScheduleControls = false
+    @Published private(set) var scheduleMutationWarning: String?
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var revealingEmergencyContactMemberID: UUID?
     @Published private(set) var sendingMemberNoticeID: UUID?
@@ -1988,45 +1990,142 @@ final class AdminStore: ObservableObject {
 
     func saveAvailability(session: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async -> Bool {
         guard savingScheduleWindowID == nil else { return false }
+        guard scheduleSourceIsCurrent("availability") else {
+            errorMessage = "Refresh Schedule Controls before changing availability."
+            return false
+        }
         savingScheduleWindowID = block?.id ?? UUID()
         defer { savingScheduleWindowID = nil }
         do {
             try await api.adminSaveAvailability(session: session, block: block, draft: draft)
-            availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
+            await refreshAvailabilitySnapshot(
+                session: session,
+                completedAction: block == nil ? "Availability created" : "Availability updated"
+            )
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
     func saveBlackout(session: AuthSession, period: AdminBlackoutPeriod?, draft: AdminBlackoutDraft) async -> Bool {
         guard savingScheduleWindowID == nil else { return false }
+        guard scheduleSourceIsCurrent("blackouts"), scheduleSourceIsCurrent("full timetable") else {
+            errorMessage = "Refresh Schedule Controls before changing a blackout."
+            return false
+        }
         savingScheduleWindowID = period?.id ?? UUID()
         defer { savingScheduleWindowID = nil }
         do {
             try await api.adminSaveBlackout(session: session, period: period, draft: draft)
-            blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
+            await refreshBlackoutSnapshot(
+                session: session,
+                completedAction: period == nil ? "Blackout created" : "Blackout updated"
+            )
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
     func deleteAvailability(session: AuthSession, block: AdminAvailabilityBlock) async -> Bool {
         guard deletingScheduleWindowID == nil else { return false }
+        guard scheduleSourceIsCurrent("availability") else {
+            errorMessage = "Refresh Schedule Controls before removing availability."
+            return false
+        }
         deletingScheduleWindowID = block.id
         defer { deletingScheduleWindowID = nil }
         do {
             try await api.adminDeleteAvailability(session: session, block: block)
-            availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
+            await refreshAvailabilitySnapshot(session: session, completedAction: "Availability removed")
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
     func deleteBlackout(session: AuthSession, period: AdminBlackoutPeriod) async -> Bool {
         guard deletingScheduleWindowID == nil else { return false }
+        guard scheduleSourceIsCurrent("blackouts"), scheduleSourceIsCurrent("full timetable") else {
+            errorMessage = "Refresh Schedule Controls before removing a blackout."
+            return false
+        }
         deletingScheduleWindowID = period.id
         defer { deletingScheduleWindowID = nil }
         do {
             try await api.adminDeleteBlackout(session: session, period: period)
-            blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
+            await refreshBlackoutSnapshot(session: session, completedAction: "Blackout removed")
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func refreshScheduleControls(session: AuthSession) async {
+        guard !isRefreshingScheduleControls else { return }
+        isRefreshingScheduleControls = true
+        defer { isRefreshingScheduleControls = false }
+        scheduleMutationWarning = nil
+
+        async let availabilityRequest = api.adminAvailabilityBlocks(session: session)
+        async let blackoutRequest = api.adminBlackoutPeriods(session: session)
+        async let timetableRequest = api.adminClassSessions(session: session)
+        var failures: [String] = []
+        do {
+            availabilityBlocks = try await availabilityRequest
+            markScheduleSourceCurrent("availability")
+        } catch {
+            markScheduleSourceUnavailable("availability")
+            failures.append("availability")
+        }
+        do {
+            blackoutPeriods = try await blackoutRequest
+            markScheduleSourceCurrent("blackouts")
+        } catch {
+            markScheduleSourceUnavailable("blackouts")
+            failures.append("blackouts")
+        }
+        do {
+            classSessions = try await timetableRequest
+            markScheduleSourceCurrent("full timetable")
+        } catch {
+            markScheduleSourceUnavailable("full timetable")
+            failures.append("full timetable")
+        }
+        if failures.isEmpty {
+            lastUpdatedAt = Date()
+        } else {
+            scheduleMutationWarning = "Could not refresh \(failures.joined(separator: " and ")). Last loaded records remain read-only."
+        }
+    }
+
+    private func refreshAvailabilitySnapshot(session: AuthSession, completedAction: String) async {
+        do {
+            availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
+            markScheduleSourceCurrent("availability")
+            scheduleMutationWarning = nil
+        } catch {
+            markScheduleSourceUnavailable("availability")
+            scheduleMutationWarning = "\(completedAction), but the latest availability list could not be loaded. Refresh before making another change."
+        }
+    }
+
+    private func refreshBlackoutSnapshot(session: AuthSession, completedAction: String) async {
+        do {
+            blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
+            markScheduleSourceCurrent("blackouts")
+            scheduleMutationWarning = nil
+        } catch {
+            markScheduleSourceUnavailable("blackouts")
+            scheduleMutationWarning = "\(completedAction), but the latest blackout list could not be loaded. Refresh before making another change."
+        }
+    }
+
+    private func markScheduleSourceCurrent(_ source: String) {
+        loadedSources.insert(source)
+        refreshUnavailableSources.removeAll { $0 == source }
+    }
+
+    private func markScheduleSourceUnavailable(_ source: String) {
+        if !refreshUnavailableSources.contains(source) {
+            refreshUnavailableSources.append(source)
+        }
+    }
+
+    private func scheduleSourceIsCurrent(_ source: String) -> Bool {
+        loadedSources.contains(source) && !refreshUnavailableSources.contains(source)
     }
 }

@@ -3950,8 +3950,28 @@ private struct AdminAvailabilityView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var mode = "availability"
+    @State private var range = "upcoming"
     @State private var showingCreate = false
     @State private var pendingRemoval: AdminScheduleRemoval?
+
+    private var activeSource: String { mode == "availability" ? "availability" : "blackouts" }
+    private var activeSourceIsCurrent: Bool {
+        admin.loadedSources.contains(activeSource)
+            && !admin.refreshUnavailableSources.contains(activeSource)
+    }
+    private var timetableIsCurrent: Bool {
+        admin.loadedSources.contains("full timetable")
+            && !admin.refreshUnavailableSources.contains("full timetable")
+    }
+    private var activeMutationAllowed: Bool {
+        activeSourceIsCurrent && (mode == "availability" || timetableIsCurrent)
+    }
+    private var visibleAvailability: [AdminAvailabilityBlock] {
+        range == "all" ? admin.availabilityBlocks : admin.availabilityBlocks.filter { $0.end_time >= Date() }
+    }
+    private var visibleBlackouts: [AdminBlackoutPeriod] {
+        range == "all" ? admin.blackoutPeriods : admin.blackoutPeriods.filter { $0.end_time >= Date() }
+    }
 
     var body: some View {
         List {
@@ -3961,33 +3981,84 @@ private struct AdminAvailabilityView: View {
                     Text("Blackouts").tag("blackouts")
                 }
                 .pickerStyle(.segmented)
+                Picker("Schedule range", selection: $range) {
+                    Text("Upcoming").tag("upcoming")
+                    Text("All records").tag("all")
+                }
+                .pickerStyle(.segmented)
             }
             .listRowBackground(Color.xertNavy)
 
+            if let warning = admin.scheduleMutationWarning {
+                Label(warning, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
+
+            if admin.isRefreshingScheduleControls && !admin.loadedSources.contains(activeSource) {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading \(activeSource)...")
+                }
+                .frame(minHeight: 44)
+                .listRowBackground(Color.xertInk)
+            } else if !activeSourceIsCurrent {
+                scheduleUnavailableRow
+            } else if mode == "blackouts" && !timetableIsCurrent {
+                Label(
+                    "The timetable is not current. Blackouts are read-only until class conflicts can be checked safely.",
+                    systemImage: "calendar.badge.exclamationmark"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowBackground(Color.xertInk)
+            }
+
             if mode == "availability" {
-                if admin.availabilityBlocks.isEmpty { Text("No availability blocks set.").listRowBackground(Color.xertInk) }
-                ForEach(admin.availabilityBlocks) { block in
+                if activeSourceIsCurrent && visibleAvailability.isEmpty {
+                    Text(range == "upcoming" ? "No upcoming availability blocks." : "No availability blocks set.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(visibleAvailability) { block in
                     scheduleRow(
                         title: block.type,
                         detail: scheduleRange(block.start_time, block.end_time),
                         note: [block.coach_name, block.notes].compactMap { $0 }.joined(separator: " · "),
                         accent: block.is_bookable ? .green : Color.xertSteel,
-                        badge: block.is_bookable ? "BOOKABLE" : "PLANNING"
+                        badge: block.is_bookable ? "BOOKABLE" : "PLANNING",
+                        mutationAllowed: activeSourceIsCurrent
                     ) {
-                        AdminAvailabilityEditor(admin: admin, session: session, block: block)
+                        AdminAvailabilityEditor(
+                            admin: admin,
+                            session: session,
+                            block: block,
+                            mutationAllowed: activeSourceIsCurrent
+                        )
                     } remove: { pendingRemoval = .availability(block) }
                 }
             } else {
-                if admin.blackoutPeriods.isEmpty { Text("No blackout periods set.").listRowBackground(Color.xertInk) }
-                ForEach(admin.blackoutPeriods) { period in
+                if activeSourceIsCurrent && visibleBlackouts.isEmpty {
+                    Text(range == "upcoming" ? "No upcoming blackout periods." : "No blackout periods set.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(visibleBlackouts) { period in
                     scheduleRow(
                         title: period.reason.capitalized,
                         detail: scheduleRange(period.start_time, period.end_time),
                         note: "Affects \(period.affects.replacingOccurrences(of: "_", with: " "))" + (period.notes.map { " · \($0)" } ?? ""),
                         accent: .red,
-                        badge: "CLOSED"
+                        badge: "CLOSED",
+                        mutationAllowed: activeMutationAllowed
                     ) {
-                        AdminBlackoutEditor(admin: admin, session: session, period: period)
+                        AdminBlackoutEditor(
+                            admin: admin,
+                            session: session,
+                            period: period,
+                            mutationAllowed: activeMutationAllowed
+                        )
                     } remove: { pendingRemoval = .blackout(period) }
                 }
             }
@@ -3999,14 +4070,33 @@ private struct AdminAvailabilityView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { showingCreate = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel(mode == "availability" ? "Add availability" : "Add blackout")
+                    .disabled(!activeMutationAllowed)
+            }
+        }
+        .refreshable { await admin.refreshScheduleControls(session: session) }
+        .task {
+            if !admin.loadedSources.contains("availability")
+                || !admin.loadedSources.contains("blackouts")
+                || !admin.loadedSources.contains("full timetable") {
+                await admin.refreshScheduleControls(session: session)
             }
         }
         .sheet(isPresented: $showingCreate) {
             NavigationStack {
                 if mode == "availability" {
-                    AdminAvailabilityEditor(admin: admin, session: session, block: nil)
+                    AdminAvailabilityEditor(
+                        admin: admin,
+                        session: session,
+                        block: nil,
+                        mutationAllowed: activeSourceIsCurrent
+                    )
                 } else {
-                    AdminBlackoutEditor(admin: admin, session: session, period: nil)
+                    AdminBlackoutEditor(
+                        admin: admin,
+                        session: session,
+                        period: nil,
+                        mutationAllowed: activeMutationAllowed
+                    )
                 }
             }
         }
@@ -4024,6 +4114,7 @@ private struct AdminAvailabilityView: View {
                     pendingRemoval = nil
                 }
             }
+            .disabled(!removalMutationAllowed(removal))
             Button("Keep", role: .cancel) { pendingRemoval = nil }
         } message: { removal in
             switch removal {
@@ -4033,23 +4124,79 @@ private struct AdminAvailabilityView: View {
         }
     }
 
+    private func removalMutationAllowed(_ removal: AdminScheduleRemoval) -> Bool {
+        switch removal {
+        case .availability:
+            return admin.loadedSources.contains("availability")
+                && !admin.refreshUnavailableSources.contains("availability")
+        case .blackout:
+            return admin.loadedSources.contains("blackouts")
+                && !admin.refreshUnavailableSources.contains("blackouts")
+                && timetableIsCurrent
+        }
+    }
+
+    private var scheduleUnavailableRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                admin.loadedSources.contains(activeSource)
+                    ? "Showing the last \(activeSource) snapshot. Changes are paused until refresh succeeds."
+                    : "\(activeSource.capitalized) could not be loaded. No empty-state assumption is being made.",
+                systemImage: "wifi.exclamationmark"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Task { await admin.refreshScheduleControls(session: session) }
+            } label: {
+                Label(
+                    admin.isRefreshingScheduleControls ? "Retrying..." : "Retry schedule controls",
+                    systemImage: "arrow.clockwise"
+                )
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .disabled(admin.isRefreshingScheduleControls)
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
     private func scheduleRange(_ start: Date, _ end: Date) -> String {
         "\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func scheduleRow<Destination: View>(
         title: String, detail: String, note: String, accent: Color, badge: String,
+        mutationAllowed: Bool,
         @ViewBuilder destination: () -> Destination, remove: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             NavigationLink(destination: destination()) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack { Text(title).font(.headline); Spacer(); Text(badge).font(.caption2.weight(.bold)).foregroundStyle(accent) }
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text(title).font(.headline)
+                            Spacer()
+                            Text(badge).font(.caption2.weight(.bold)).foregroundStyle(accent)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(title).font(.headline)
+                            Text(badge).font(.caption2.weight(.bold)).foregroundStyle(accent)
+                        }
+                    }
                     Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.65))
                     if !note.isEmpty { Text(note).font(.caption2).foregroundStyle(Color.xertPale.opacity(0.45)) }
                 }
             }
-            HStack { Spacer(); Button(role: .destructive, action: remove) { Image(systemName: "trash") }.buttonStyle(.plain) }
+            HStack {
+                Spacer()
+                Button(role: .destructive, action: remove) { Image(systemName: "trash") }
+                    .buttonStyle(.plain)
+                    .disabled(!mutationAllowed || admin.deletingScheduleWindowID != nil)
+                    .accessibilityLabel("Remove \(title)")
+            }
         }
         .foregroundStyle(Color.xertOffWhite)
         .padding(.vertical, 5)
@@ -4062,17 +4209,37 @@ private struct AdminAvailabilityEditor: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let block: AdminAvailabilityBlock?
+    let mutationAllowed: Bool
     private let baseline: AdminAvailabilityDraft
     @State private var draft: AdminAvailabilityDraft
 
-    init(admin: AdminStore, session: AuthSession, block: AdminAvailabilityBlock?) {
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        block: AdminAvailabilityBlock?,
+        mutationAllowed: Bool
+    ) {
         let initial = AdminAvailabilityDraft(block: block)
-        self.admin = admin; self.session = session; self.block = block; baseline = initial
+        self.admin = admin
+        self.session = session
+        self.block = block
+        self.mutationAllowed = mutationAllowed
+        baseline = initial
         _draft = State(initialValue: initial)
     }
 
     var body: some View {
         Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "This availability snapshot is not current. Refresh Schedule Controls before making changes.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                }
+            }
             Section("Availability") {
                 Picker("Type", selection: $draft.type) { ForEach(AdminAvailabilityDraft.types, id: \.self) { Text($0.capitalized).tag($0) } }
                 DatePicker("Starts", selection: $draft.startTime)
@@ -4081,6 +4248,7 @@ private struct AdminAvailabilityEditor: View {
                 Toggle("Bookable", isOn: $draft.isBookable)
                 TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
             }
+            .disabled(!mutationAllowed)
             saveButton(label: block == nil ? "Create availability" : "Save availability") {
                 await admin.saveAvailability(session: session, block: block, draft: draft)
             }
@@ -4092,7 +4260,7 @@ private struct AdminAvailabilityEditor: View {
 
     @ViewBuilder private func saveButton(label: String, action: @escaping () async -> Bool) -> some View {
         Section { Button { Task { if await action() { dismiss() } } } label: { HStack { Spacer(); Text(label).fontWeight(.bold); Spacer() } }
-            .disabled(admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+            .disabled(!mutationAllowed || admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
     }
 }
 
@@ -4101,17 +4269,41 @@ private struct AdminBlackoutEditor: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let period: AdminBlackoutPeriod?
+    let mutationAllowed: Bool
     private let baseline: AdminBlackoutDraft
     @State private var draft: AdminBlackoutDraft
 
-    init(admin: AdminStore, session: AuthSession, period: AdminBlackoutPeriod?) {
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        period: AdminBlackoutPeriod?,
+        mutationAllowed: Bool
+    ) {
         let initial = AdminBlackoutDraft(period: period)
-        self.admin = admin; self.session = session; self.period = period; baseline = initial
+        self.admin = admin
+        self.session = session
+        self.period = period
+        self.mutationAllowed = mutationAllowed
+        baseline = initial
         _draft = State(initialValue: initial)
+    }
+
+    private var conflicts: [AdminClassSession] {
+        draft.overlappingPublishedClasses(in: admin.classSessions)
     }
 
     var body: some View {
         Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "Current blackout and timetable data are required before this closure can be changed.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                }
+            }
             Section("Blackout") {
                 Picker("Reason", selection: $draft.reason) { ForEach(AdminBlackoutDraft.reasons, id: \.self) { Text($0.capitalized).tag($0) } }
                 Picker("Affects", selection: $draft.affects) { ForEach(AdminBlackoutDraft.scopes, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) } }
@@ -4119,9 +4311,41 @@ private struct AdminBlackoutEditor: View {
                 DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
                 TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
             }
+            .disabled(!mutationAllowed)
+            if !conflicts.isEmpty {
+                Section("Classes blocking this blackout") {
+                    Label(
+                        "\(conflicts.count) published class\(conflicts.count == 1 ? "" : "es") must be rescheduled or cancelled first.",
+                        systemImage: "calendar.badge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    Text("Open a class below to reschedule it, or cancel it from Full Timetable.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                    ForEach(conflicts) { classSession in
+                        NavigationLink {
+                            AdminClassEditor(
+                                admin: admin,
+                                session: session,
+                                classSession: classSession,
+                                mutationAllowed: mutationAllowed
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(classSession.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(classSession.start_time?.formatted(date: .abbreviated, time: .shortened) ?? "Time unavailable")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.xertPale.opacity(0.6))
+                            }
+                        }
+                    }
+                }
+            }
             Section { Button { Task { if await admin.saveBlackout(session: session, period: period, draft: draft) { dismiss() } } } label: {
                 HStack { Spacer(); Text(period == nil ? "Create blackout" : "Save blackout").fontWeight(.bold); Spacer() }
-            }.disabled(admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+            }.disabled(!mutationAllowed || !conflicts.isEmpty || admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
         }
         .scrollContentBackground(.hidden).background(Color.xertNavy)
         .navigationTitle(period == nil ? "New Blackout" : "Edit Blackout").navigationBarTitleDisplayMode(.inline)

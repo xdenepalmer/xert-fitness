@@ -3935,6 +3935,57 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(followUp.mailtoURL?.absoluteString.hasPrefix("mailto:") == true)
     }
 
+    func testBlackoutDraftFindsOnlyPublishedOverlappingClasses() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminBlackoutDraft(now: base)
+        draft.startTime = base.addingTimeInterval(3_600)
+        draft.endTime = base.addingTimeInterval(7_200)
+        draft.affects = "all"
+
+        let fallbackDuration = adminClassSession(
+            title: "Fallback duration",
+            startTime: base.addingTimeInterval(3_540),
+            endTime: nil,
+            durationMinutes: 60
+        )
+        let fullClass = adminClassSession(
+            title: "Full class",
+            startTime: base.addingTimeInterval(5_400),
+            status: "full"
+        )
+        let boundary = adminClassSession(
+            title: "Starts at blackout end",
+            startTime: draft.endTime
+        )
+        let draftClass = adminClassSession(
+            title: "Unpublished draft",
+            startTime: base.addingTimeInterval(5_400),
+            status: "draft"
+        )
+
+        XCTAssertEqual(
+            draft.overlappingPublishedClasses(
+                in: [boundary, draftClass, fullClass, fallbackDuration]
+            ).map(\.title),
+            ["Fallback duration", "Full class"]
+        )
+    }
+
+    func testPTAndCoachBlackoutsDoNotBlockGroupClasses() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminBlackoutDraft(now: base)
+        draft.startTime = base
+        draft.endTime = base.addingTimeInterval(3_600)
+        let classSession = adminClassSession(title: "XERT Engine", startTime: base)
+
+        draft.affects = "pt_only"
+        XCTAssertTrue(draft.overlappingPublishedClasses(in: [classSession]).isEmpty)
+        draft.affects = "coach_only"
+        XCTAssertTrue(draft.overlappingPublishedClasses(in: [classSession]).isEmpty)
+        draft.affects = "facility_only"
+        XCTAssertEqual(draft.overlappingPublishedClasses(in: [classSession]).count, 1)
+    }
+
     func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -4113,7 +4164,10 @@ final class ModelsTests: XCTestCase {
 
     private func adminClassSession(
         title: String,
-        startTime: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        startTime: Date = Date(timeIntervalSince1970: 1_800_000_000),
+        endTime: Date? = nil,
+        durationMinutes: Int? = 60,
+        status: String = "published"
     ) -> AdminClassSession {
         AdminClassSession(
             id: UUID(),
@@ -4122,13 +4176,13 @@ final class ModelsTests: XCTestCase {
             description: nil,
             coach_name: "Coach",
             start_time: startTime,
-            end_time: startTime.addingTimeInterval(3_600),
-            duration_minutes: 60,
+            end_time: endTime,
+            duration_minutes: durationMinutes,
             capacity: 12,
             location_zone: "Main floor",
             beginner_friendly: true,
             intensity_level: "High",
-            status: "published",
+            status: status,
             public_visible: true,
             booking_mode: "instant_book",
             notes: nil

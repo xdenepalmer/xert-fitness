@@ -868,3 +868,55 @@ test('native class cancellation preserves mutation truth and provides complete m
   assert.match(view, /let mutationAllowed: Bool/);
   assert.match(view, /This timetable snapshot is not current/);
 });
+
+test('native schedule controls preserve mutation truth and preview blackout conflicts', async () => {
+  const [models, store, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  const blackoutDraft = models.slice(
+    models.indexOf('struct AdminBlackoutDraft'),
+    models.indexOf('struct AdminWaitlistItem'),
+  );
+  assert.match(blackoutDraft, /func overlappingPublishedClasses\(in sessions: \[AdminClassSession\]\)/);
+  assert.match(blackoutDraft, /\["all", "group_classes", "facility_only"\]\.contains\(affects\)/);
+  assert.match(blackoutDraft, /\["published", "full"\]\.contains\(session\.status\)/);
+  assert.match(blackoutDraft, /duration_minutes[\s\S]*session\.end_time[\s\S]*sessionStart < endTime && sessionEnd > startTime/);
+
+  const scheduleStore = store.slice(
+    store.indexOf('func saveAvailability'),
+    store.lastIndexOf('\\n}'),
+  );
+  assert.match(store, /@Published private\(set\) var isRefreshingScheduleControls/);
+  assert.match(store, /@Published private\(set\) var scheduleMutationWarning/);
+  assert.match(scheduleStore, /func refreshScheduleControls\(session: AuthSession\)/);
+  assert.match(scheduleStore, /guard scheduleSourceIsCurrent\("availability"\)/);
+  assert.match(scheduleStore, /guard scheduleSourceIsCurrent\("blackouts"\), scheduleSourceIsCurrent\("full timetable"\)/);
+  assert.match(scheduleStore, /async let availabilityRequest = api\.adminAvailabilityBlocks/);
+  assert.match(scheduleStore, /async let blackoutRequest = api\.adminBlackoutPeriods/);
+  assert.match(scheduleStore, /async let timetableRequest = api\.adminClassSessions/);
+  assert.match(scheduleStore, /Availability created[\s\S]*lastUpdatedAt = Date\(\); return true/);
+  assert.match(scheduleStore, /Blackout created[\s\S]*lastUpdatedAt = Date\(\); return true/);
+  assert.match(scheduleStore, /but the latest availability list could not be loaded/);
+  assert.match(scheduleStore, /but the latest blackout list could not be loaded/);
+
+  const scheduleView = view.slice(
+    view.indexOf('private struct AdminAvailabilityView'),
+    view.indexOf('private struct AdminRetentionView'),
+  );
+  assert.match(scheduleView, /private var activeSourceIsCurrent: Bool/);
+  assert.match(scheduleView, /private var activeMutationAllowed: Bool/);
+  assert.match(scheduleView, /private func removalMutationAllowed\(_ removal: AdminScheduleRemoval\)/);
+  assert.match(scheduleView, /No empty-state assumption is being made/);
+  assert.match(scheduleView, /\.refreshable \{ await admin\.refreshScheduleControls\(session: session\) \}/);
+  assert.match(scheduleView, /Text\("Upcoming"\)\.tag\("upcoming"\)/);
+  assert.match(scheduleView, /Classes blocking this blackout/);
+  assert.match(scheduleView, /draft\.overlappingPublishedClasses\(in: admin\.classSessions\)/);
+  assert.match(scheduleView, /Open a class below to reschedule it/);
+  assert.match(scheduleView, /AdminClassEditor\([\s\S]*classSession: classSession,[\s\S]*mutationAllowed: mutationAllowed/);
+  assert.match(scheduleView, /\.disabled\(!mutationAllowed \|\| !conflicts\.isEmpty/);
+  assert.match(scheduleView, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(scheduleView, /frame\(maxWidth: \.infinity, minHeight: 44\)/);
+});
