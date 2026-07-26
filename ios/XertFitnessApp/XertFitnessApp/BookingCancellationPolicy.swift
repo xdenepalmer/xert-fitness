@@ -3,6 +3,9 @@ import Foundation
 enum BookingCancellationPolicy {
     static let creditRefundLeadTime: TimeInterval = 12 * 60 * 60
 
+    /// Mirrors `cancel_booking`: requested always refunds; confirmed refunds when
+    /// the class is more than 12 hours away. The server restores the credit even
+    /// when the original pack has expired (and reactivates that batch).
     static func returnsCredit(status: String, startTime: Date, now: Date = Date()) -> Bool {
         status == "requested" || (status == "confirmed" && startTime.timeIntervalSince(now) > creditRefundLeadTime)
     }

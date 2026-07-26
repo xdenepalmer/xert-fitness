@@ -918,6 +918,7 @@ struct NativeInterestDraft: Equatable {
     var workshops = false
     var eventPrep = false
     var injuries = ""
+    var healthInfoConsent = false
     var joiningReason = ""
     var mailingList = false
     var qualifications = ""
@@ -955,6 +956,7 @@ struct MemberInterestSubmission: Encodable, Equatable {
     let interested_in_event_prep: Bool
     let injuries_or_limitations_optional: String?
     let biggest_reason_for_joining: String?
+    let health_info_consent: Bool
     let consent_to_contact: Bool
     let mailing_list_consent: Bool
     let source = "ios_app"
@@ -967,6 +969,10 @@ struct MemberInterestSubmission: Encodable, Equatable {
         guard !draft.trainingLevel.isEmpty else { throw APIError(message: "Choose your current training level.") }
         guard !draft.goals.isEmpty else { throw APIError(message: "Select at least one training goal.") }
         guard !draft.preferredTimes.isEmpty else { throw APIError(message: "Select at least one preferred training time.") }
+        let injuries = InterestValidation.optional(draft.injuries)
+        if injuries != nil && !draft.healthInfoConsent {
+            throw APIError(message: "Consent to collect health information is required when sharing injuries or limitations.")
+        }
         guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
         full_name = common.name; email = common.email; phone = common.phone
         age_range = draft.ageRange; suburb_town = suburb; current_training_level = draft.trainingLevel
@@ -974,8 +980,9 @@ struct MemberInterestSubmission: Encodable, Equatable {
         occupation_group = InterestValidation.optional(draft.occupationGroup)
         interested_in_group_classes = draft.groupClasses; interested_in_pt = draft.personalTraining
         interested_in_workshops = draft.workshops; interested_in_event_prep = draft.eventPrep
-        injuries_or_limitations_optional = InterestValidation.optional(draft.injuries)
+        injuries_or_limitations_optional = injuries
         biggest_reason_for_joining = InterestValidation.optional(draft.joiningReason)
+        health_info_consent = injuries == nil ? false : draft.healthInfoConsent
         consent_to_contact = true; mailing_list_consent = draft.mailingList
     }
 }

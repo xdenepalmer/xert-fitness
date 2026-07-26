@@ -60,7 +60,9 @@ with required (capability, migration) as (
     ('atomic_account_deletion', 'supabase/migrations/20260726016000_atomic_account_deletion.sql'),
     ('roll_call_releases_pending_requests', 'supabase/migrations/20260726017000_roll_call_releases_pending_requests.sql'),
     ('admin_policy_scalar_subquery', 'supabase/migrations/20260726018000_admin_policy_scalar_subquery.sql'),
-    ('member_history_index', 'supabase/migrations/20260726019000_member_history_index.sql')
+    ('member_history_index', 'supabase/migrations/20260726019000_member_history_index.sql'),
+    ('cancel_booking_expired_batch_refund', 'supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql'),
+    ('member_interest_health_consent', 'supabase/migrations/20260726103000_member_interest_health_consent.sql')
 ), readiness as (
   select
     required.capability,

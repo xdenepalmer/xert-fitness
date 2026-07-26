@@ -55,24 +55,26 @@ enum PendingCheckoutStore {
     static func resolve(
         for userID: UUID,
         callbackSessionID: String?,
-        baselineOrderIDs: Set<UUID>,
+        baselineOrderIDs: Set<UUID> = [],
         now: Date = Date(),
         defaults: UserDefaults = .standard
     ) -> PendingCheckout? {
-        if let stored = load(for: userID, now: now, defaults: defaults) {
-            return stored
-        }
-        guard let checkoutSessionID = CheckoutSessionIdentity.normalize(callbackSessionID) else {
+        // Never manufacture a pending checkout from an inbound URL. Only a
+        // locally issued /api/checkout response may create one via save().
+        guard let stored = load(for: userID, now: now, defaults: defaults) else {
             return nil
         }
-        let recovered = PendingCheckout(
-            userID: userID,
-            baselineOrderIDs: baselineOrderIDs,
-            startedAt: now,
-            checkoutSessionID: checkoutSessionID
-        )
-        save(recovered, defaults: defaults)
-        return recovered
+        guard let callbackSessionID else { return stored }
+        guard let normalizedCallback = CheckoutSessionIdentity.normalize(callbackSessionID) else {
+            return nil
+        }
+        if let storedSessionID = stored.checkoutSessionID {
+            return storedSessionID == normalizedCallback ? stored : nil
+        }
+        // Legacy pending rows without a session id still reconcile against
+        // order/credit settlement; the callback id is ignored for creation.
+        _ = baselineOrderIDs
+        return stored
     }
 
     static func clear(defaults: UserDefaults = .standard) {

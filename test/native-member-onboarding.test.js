@@ -104,6 +104,6 @@ test('native admin lead pipelines use explicit privacy-safe projections', async 
   assert.doesNotMatch(leadPipeline, /value: "\*"/);
   assert.doesNotMatch(
     leadPipeline,
-    /injuries_or_limitations_optional|consent_to_contact|mailing_list_consent/,
+    /injuries_or_limitations_optional|health_info_consent|consent_to_contact|mailing_list_consent/,
   );
 });

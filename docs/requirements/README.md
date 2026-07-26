@@ -20,7 +20,7 @@ These specs were produced from the owner's requirements note:
 | 04 | [Member personal bests & conversion tables](04-member-personal-bests.md) | L |
 | 05 | [Digital tag check-in & on-arrival booking](05-digital-checkin.md) | XL |
 | 06 | [Expanded payment options](06-payment-options.md) | XL |
-| — | **Staff accounts & least-privilege roles** | **not written — see below** |
+| 07 | [Staff accounts & least-privilege roles](07-staff-accounts-and-roles.md) | L (design; policy cutover XL) |
 
 **These are proposals, not decisions.** Each was written independently against the
 current schema. Nothing here is implemented. Read this integration plan before
@@ -43,21 +43,20 @@ sensitive information and live in their own tightly-scoped tables per spec 02.
 Both specs correctly follow the existing snapshot precedent in
 `supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql`. Keep that.
 
-### The role model is a prerequisite, and its spec is missing
+### The role model is a prerequisite — spec now written
 
 Spec 02 (who may see health data), spec 03 (a coach sees only their own clients)
-and spec 05 (a front-desk kiosk role) all assume roles finer than the current
-binary member/admin flag. **That spec did not get written** — the agent hit the
-session limit.
+and spec 05 (a front-desk role) all need roles finer than the current
+binary member/admin flag. **That design is now in
+[07 — Staff accounts & least-privilege roles](07-staff-accounts-and-roles.md).**
 
-This is the highest-priority gap. Three XL features depend on a role model that
-does not exist and has not been designed. Nothing in 02, 03 or 05 should start
-until it is. The migration is also the riskiest in the whole programme: done
-carelessly it locks the owner out of production admin, because the existing RLS
-policies throughout `supabase/migrations/` call `public.is_admin()`.
-
-Design it with a compatibility window — keep `is_admin()` working as a derived
-view over the new model until every policy has been migrated and verified.
+Nothing in 02, 03 or 05 should start until Phase A of 07 lands. The migration
+remains the riskiest in the programme: done carelessly it locks the owner out of
+production admin, because the existing RLS policies throughout
+`supabase/migrations/` call `public.is_admin()`. Spec 07 keeps `is_admin()`
+meaning owner (`profiles.role = 'admin'`) for the whole compatibility window,
+adds narrow helpers for coach / front desk, and forbids renaming or mass
+rewriting owner rows in the first ship.
 
 ### Coach rent and memberships both want Stripe recurring billing
 
@@ -89,7 +88,7 @@ credits continuously.
 
 ## 2. Shared foundations, in build order
 
-1. **Role model + staff records** — blocks 02, 03, 05. Spec still to be written.
+1. **Role model + staff records** — blocks 02, 03, 05. See [spec 07](07-staff-accounts-and-roles.md).
 2. **Agreement ledger** (documents, versions, acceptances) — serves 01 and 02.
 3. **Billing spine** on Stripe Billing — serves 06 and 03.
 4. **Movement/test catalogue** — serves 04 only; independent, can run in parallel.

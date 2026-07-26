@@ -17,8 +17,15 @@ export async function submitMemberInterest(formData) {
     // Silently succeed — bot submission
     return { success: true };
   }
+  const injuries = String(formData.injuries_or_limitations_optional || '').trim();
+  const healthInfoConsent = Boolean(formData.health_info_consent);
+  if (injuries && !healthInfoConsent) {
+    throw new Error('Consent to collect health information is required when sharing injuries or limitations.');
+  }
   const payload = {
     ...stripHoneypot(formData),
+    injuries_or_limitations_optional: injuries || null,
+    health_info_consent: injuries ? healthInfoConsent : false,
     ...captureLeadSource(),
     status: 'new',
   };

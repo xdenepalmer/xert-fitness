@@ -1,10 +1,12 @@
 # Remaining audit findings — full evidence
 
-**56 findings. None has been adversarially verified.** They are raw output from the audit swarm; the verification pass that would have culled false positives never ran.
+**56 findings.** Statuses below reflect verification against the current branch
+`cursor/xert-audit-continuation-8c8e` (merged with `main`) plus the working tree.
+**48 FIXED**, **8 still OPEN**. Auditor evidence quotes are preserved for history;
+prefer the **status** line and `docs/HANDOFF.md` for what is true now.
 
-Read `../HANDOFF.md` first — it explains how to verify these and lists the false-positive patterns already observed in this codebase.
-
-Each entry preserves the auditor's own `evidence` quote and proposed `fix`. **Do not trust either.** Two of the five defects already fixed had the right symptom but the wrong mechanism, and one "critical" was refuted outright.
+Read `../HANDOFF.md` first for environment setup, what landed on this branch, and
+the remaining open work.
 
 ---
 
@@ -16,7 +18,7 @@ Each entry preserves the auditor's own `evidence` quote and proposed `fix`. **Do
 - **id:** `session-editor-prop-desync-creates-duplicate-class`
 - **severity (claimed):** critical
 - **location:** `src/components/admin/ClassCalendarAdmin.jsx:524`
-- **status:** UNVERIFIED
+- **status:** FIXED — `SessionEditor` keyed by subject; create intent will not clobber an open editor (`ClassCalendarAdmin.jsx`, `6977063`).
 
 **What the auditor claims**
 
@@ -70,7 +72,7 @@ Make the editor's identity follow its subject so React remounts it when the subj
 - **id:** `aged-out-failed-event-permanently-blocks-checkout`
 - **severity (claimed):** high
 - **location:** `api/admin-commerce-health.js:256`
-- **status:** UNVERIFIED
+- **status:** FIXED — Webhook delivery health surfaces unresolved `failed` rows regardless of age (`api/admin-commerce-health.js`, `06f2d16`).
 
 **What the auditor claims**
 
@@ -105,7 +107,7 @@ Make the two queries agree. Either bound the checkout gate to the same window th
 - **id:** `non-aud-product-currency-strands-payment`
 - **severity (claimed):** high
 - **location:** `api/checkout.js:266`
-- **status:** UNVERIFIED
+- **status:** FIXED — AUD-only product currency in checkout assertion and SQL constraint (`api/checkout.js`, `20260726014000_product_currency_aud_only.sql`).
 
 **What the auditor claims**
 
@@ -143,7 +145,7 @@ Make the AUD-only assumption explicit at the point money is committed: change `a
 - **id:** `webhook-signature-failure-invisible-to-health`
 - **severity (claimed):** high
 - **location:** `api/stripe-webhook.js:512`
-- **status:** UNVERIFIED
+- **status:** FIXED — Signature rejections recorded in `stripe_webhook_signature_failures` and surfaced in health (`20260726015000_*`, `api/stripe-webhook.js`).
 
 **What the auditor claims**
 
@@ -178,7 +180,7 @@ Record rejected deliveries durably (a `stripe_webhook_rejections` counter table,
 - **id:** `refresh-coalescing-serves-stale-data`
 - **severity (claimed):** high
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:109`
-- **status:** UNVERIFIED
+- **status:** FIXED — `XertStore.refresh` coalesces late callers onto a follow-up generation instead of piggybacking (`XertStore.swift`, working tree).
 
 **What the auditor claims**
 
@@ -212,7 +214,7 @@ Do not coalesce a caller that arrives after the in-flight refresh started. Eithe
 - **id:** `site-content-editor-index-binding-oob`
 - **severity (claimed):** high
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift:2918`
-- **status:** UNVERIFIED
+- **status:** FIXED — Site-content editors bind photos/paragraphs/FAQ by stable identity (`IdentifiedDraftLine` in `AdminCommandCentreView.swift`, working tree).
 
 **What the auditor claims**
 
@@ -241,7 +243,7 @@ Key the ForEach by element identity and mutate by identity, not index: `ForEach(
 - **id:** `external-checkout-deeplink-forges-purchase-state`
 - **severity (claimed):** high
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift:726`
-- **status:** UNVERIFIED
+- **status:** FIXED — External `xertfitness://checkout` opens ignored; only trusted ASWebAuthenticationSession callbacks reconcile against local pending checkout (`RootView.swift`, `PendingCheckoutStore.swift`).
 
 **What the auditor claims**
 
@@ -285,7 +287,7 @@ Stop treating the external URL channel as a checkout callback. Split `handleOpen
 - **id:** `event-editor-prop-desync-creates-duplicate-event`
 - **severity (claimed):** high
 - **location:** `src/components/admin/EventsManager.jsx:333`
-- **status:** UNVERIFIED
+- **status:** FIXED — Event editor keyed by subject; same-section navigation respects unsaved changes (`EventsManager.jsx`, `6977063`).
 
 **What the auditor claims**
 
@@ -326,7 +328,7 @@ Render `<EventEditor key={editing?.id ?? 'new'} ... />` so a subject change remo
 - **id:** `member-drawer-unguarded-detail-fetch`
 - **severity (claimed):** high
 - **location:** `src/components/admin/MembersManager.jsx:47`
-- **status:** UNVERIFIED
+- **status:** FIXED — MemberDrawer detail fetch cancelled on member change (`MembersManager.jsx`).
 
 **What the auditor claims**
 
@@ -361,7 +363,7 @@ Give the drawer a subject-scoped identity and guard the fetch. Render `<MemberDr
 - **id:** `sensitive-health-info-no-app33-consent`
 - **severity (claimed):** high
 - **location:** `src/components/public/MemberInterestForm.jsx:207`
-- **status:** UNVERIFIED
+- **status:** FIXED — Separate `health_info_consent` on form + insert policy; Privacy treats injuries as sensitive (`20260726103000_*`, `MemberInterestForm.jsx`, `Privacy.jsx`, working tree).
 
 **What the auditor claims**
 
@@ -389,7 +391,7 @@ Add a separate, unticked `health_info_consent` checkbox rendered immediately adj
 - **id:** `lead-pagination-nondeterministic-order`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:28`
-- **status:** UNVERIFIED
+- **status:** FIXED — Lead paging/export order includes `id` tiebreak (`adminData.js`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -425,7 +427,7 @@ Add the unique tiebreak the rest of the file already uses: `.order('created_at',
 - **id:** `pt-requests-pagination-nondeterministic-order`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:299`
-- **status:** UNVERIFIED
+- **status:** FIXED — PT-request paging/export order includes `id` tiebreak (`adminData.js`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -454,7 +456,7 @@ Chain `.order('id', { ascending: false })` after the created_at order on line 29
 - **id:** `public-timetable-unbounded-and-past-sessions`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:116`
-- **status:** UNVERIFIED
+- **status:** FIXED — Public timetable limited to upcoming published sessions (`getClassSessions`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -487,7 +489,7 @@ Give getClassSessions a bounded window when publicOnly is true — e.g. `.gte('s
 - **id:** `account-profile-form-reset-on-token-refresh`
 - **severity (claimed):** high
 - **location:** `src/pages/Account.jsx:138`
-- **status:** UNVERIFIED
+- **status:** FIXED — Profile form sync skips while editing (`Account.jsx`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -519,7 +521,7 @@ Only seed the form from `profile` when the member is not editing, and key the sy
 - **id:** `rls-is-admin-not-wrapped-in-scalar-subquery`
 - **severity (claimed):** high
 - **location:** `src/supabase/rls_policies.sql:58`
-- **status:** UNVERIFIED
+- **status:** FIXED — Remaining admin_all_* policies use `(select public.is_admin())` (`20260726018000_admin_policy_scalar_subquery.sql`).
 
 **What the auditor claims**
 
@@ -547,7 +549,7 @@ Extend the 20260714007000 treatment with a follow-up migration that drops and re
 - **id:** `immutable-audit-pii-no-erasure-path`
 - **severity (claimed):** high
 - **location:** `supabase/migrations/20260714011000_lead_pipeline_audit.sql:41`
-- **status:** UNVERIFIED
+- **status:** OPEN — Audit immutability triggers still block correction/erasure of subject PII and staff notes in audit tables; account deletion no longer fails, but APP 12/13 path is unresolved.
 
 **What the auditor claims**
 
@@ -580,7 +582,7 @@ Keep the immutability trigger for tamper-evidence but add a narrow, audited reda
 - **id:** `announcement-push-single-shot-no-retry`
 - **severity (claimed):** medium
 - **location:** `api/admin-publish-announcement.js:180`
-- **status:** UNVERIFIED
+- **status:** FIXED — Announcement push results persisted per batch; resend targets devices without a delivery row (`api/apns.js`, `06f2d16`).
 
 **What the auditor claims**
 
@@ -614,7 +616,7 @@ Persist delivery rows per batch inside sendMemberAnnouncementPushes rather than 
 - **id:** `apns-fanout-ignores-targeted-audience`
 - **severity (claimed):** medium
 - **location:** `api/apns.js:92`
-- **status:** UNVERIFIED
+- **status:** FIXED — Fan-out fails closed without recipients; publish refuses non-`all` audience for broadcast (`api/apns.js`, `admin-publish-announcement.js`).
 
 **What the auditor claims**
 
@@ -649,7 +651,7 @@ Make sendMemberAnnouncementPushes fail closed on the announcement's own audience
 - **id:** `checkout-idempotency-key-parameter-drift`
 - **severity (claimed):** medium
 - **location:** `api/checkout.js:403`
-- **status:** UNVERIFIED
+- **status:** FIXED — Stripe Checkout session body no longer embeds wall-clock `expires_at` (`api/checkout.js`, `06f2d16`).
 
 **What the auditor claims**
 
@@ -678,7 +680,7 @@ Derive `expires_at` deterministically from the same value that scopes the idempo
 - **id:** `class-bookings-survive-account-deletion`
 - **severity (claimed):** medium
 - **location:** `api/delete-account.js:17`
-- **status:** UNVERIFIED
+- **status:** FIXED — `delete_member_account` clears email-matched `class_bookings` enquiries (`20260726016000_atomic_account_deletion.sql`).
 
 **What the auditor claims**
 
@@ -710,7 +712,7 @@ Either (a) add `user_id uuid references auth.users(id) on delete set null defaul
 - **id:** `non-atomic-account-deletion`
 - **severity (claimed):** medium
 - **location:** `api/delete-account.js:36`
-- **status:** UNVERIFIED
+- **status:** FIXED — Account deletion runs through one SECURITY DEFINER routine with piecemeal rollout fallback (`api/delete-account.js`, `20260726016000_*`).
 
 **What the auditor claims**
 
@@ -739,7 +741,7 @@ Reorder so the irreversible auth delete happens first and let the FK cascades do
 - **id:** `push-subscription-token-rebind`
 - **severity (claimed):** medium
 - **location:** `api/push-subscription.js:42`
-- **status:** UNVERIFIED
+- **status:** FIXED — Push registration refuses rebinding an enabled token owned by another user (`api/push-subscription.js`, `06f2d16`).
 
 **What the auditor claims**
 
@@ -772,7 +774,7 @@ Before upserting, select the existing row for (device_token, environment); if it
 - **id:** `charge-refunds-sublist-not-guaranteed`
 - **severity (claimed):** medium
 - **location:** `api/stripe-webhook.js:203`
-- **status:** UNVERIFIED
+- **status:** FIXED — Refund reconciliation falls back to `stripe.refunds.list` when `charge.refunds` is absent (`api/stripe-webhook.js`).
 
 **What the auditor claims**
 
@@ -805,7 +807,7 @@ When `charge.refunds?.data` is missing or yields no succeeded refund, fall back 
 - **id:** `eslint-zero-rules-for-api-and-lib`
 - **severity (claimed):** medium
 - **location:** `eslint.config.js:9`
-- **status:** UNVERIFIED
+- **status:** FIXED — `eslint.config.js` lints `api/`, `src/lib/`, scripts and entrypoints (`02810ae`).
 
 **What the auditor claims**
 
@@ -837,7 +839,7 @@ Add a second config object with no `files` key (or `files: ['**/*.{js,mjs,cjs,js
 - **id:** `eslint-recommended-rules-overwritten-by-spread`
 - **severity (claimed):** medium
 - **location:** `eslint.config.js:15`
-- **status:** UNVERIFIED
+- **status:** FIXED — Flat config spreads recommended rules; trailing rules no longer wipe them (`eslint.config.js`).
 
 **What the auditor claims**
 
@@ -865,7 +867,7 @@ Stop spreading whole configs into an object that later redefines `rules`. Compos
 - **id:** `class-roster-not-scoped-to-session`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift:616`
-- **status:** UNVERIFIED
+- **status:** FIXED — `loadClassRoster` clears and generation-scopes roster; UI only shows roster for the loaded session (`AdminStore.swift`, working tree).
 
 **What the auditor claims**
 
@@ -901,7 +903,7 @@ Clear and scope the roster: set `classRoster = []` and store `loadedRosterSessio
 - **id:** `member-count-reads-filtered-total`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift:85`
-- **status:** UNVERIFIED
+- **status:** OPEN — `resolveOwnerTask(.member:)` still inserts a filtered `adminMember` row at `members[0]`, so `memberCount` can collapse to 1.
 
 **What the auditor claims**
 
@@ -928,7 +930,7 @@ Store the directory total separately from the row array — e.g. keep `private(s
 - **id:** `signout-leaves-push-subscription-active`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:418`
-- **status:** UNVERIFIED
+- **status:** FIXED — Sign-out/delete clear local push state and persist a pending unregister retry (`XertStore.swift`, `MemberPushRegistration.swift`, working tree).
 
 **What the auditor claims**
 
@@ -967,7 +969,7 @@ Make sign-out fail closed locally even when the network call fails: call `PushDe
 - **id:** `token-rotation-treated-as-account-change`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:897`
-- **status:** UNVERIFIED
+- **status:** OPEN — `canApplyMemberState` still compares `access_token`, so a mid-flight token refresh can abort post-mutation UI updates.
 
 **What the auditor claims**
 
@@ -997,7 +999,7 @@ Identify the account rather than the credential: compare `authSession?.user?.id 
 - **id:** `typecheck-excludes-all-serverless-functions`
 - **severity (claimed):** medium
 - **location:** `jsconfig.json:19`
-- **status:** UNVERIFIED
+- **status:** FIXED — `npm run typecheck` includes serverless functions via `tsconfig.api.json` (`02810ae`).
 
 **What the auditor claims**
 
@@ -1025,7 +1027,7 @@ Widen `include` to `["src/**/*.{js,jsx}", "src/vite-env.d.ts"]` and add a second
 - **id:** `admin-badge-effect-refires-on-every-navigation`
 - **severity (claimed):** medium
 - **location:** `src/components/admin/AdminLayout.jsx:200`
-- **status:** UNVERIFIED
+- **status:** OPEN — Badge-count `useEffect` in `AdminLayout.jsx` still lists `activeSection` in its dependency array despite not reading it.
 
 **What the auditor claims**
 
@@ -1060,7 +1062,7 @@ Change the dependency array to `[]` so the poller mounts once for the lifetime o
 - **id:** `roll-call-roster-selects-unlabelled`
 - **severity (claimed):** medium
 - **location:** `src/components/admin/ClassCalendarAdmin.jsx:942`
-- **status:** UNVERIFIED
+- **status:** FIXED — Roster and booking-request status `<select>`s have per-member `aria-label`s (`ClassCalendarAdmin.jsx`).
 
 **What the auditor claims**
 
@@ -1088,7 +1090,7 @@ Give each row's name element an id (e.g. `id={`roster-name-${r.booking_id}`}`) a
 - **id:** `class-session-update-no-optimistic-lock`
 - **severity (claimed):** medium
 - **location:** `src/lib/adminData.js:139`
-- **status:** UNVERIFIED
+- **status:** OPEN — `admin_update_class_session(uuid, jsonb)` still has no `expected_updated_at` / stale check; concurrent schedule edits can overwrite.
 
 **What the auditor claims**
 
@@ -1121,7 +1123,7 @@ Add a p_expected_updated_at timestamptz parameter to admin_update_class_session 
 - **id:** `bookings-queue-loads-full-history-serially`
 - **severity (claimed):** medium
 - **location:** `src/lib/adminData.js:243`
-- **status:** UNVERIFIED
+- **status:** FIXED — Bookings queue applies status/date filters server-side and loads profile chunks in parallel (`adminData.js`, `BookingRequestsTable.jsx`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -1157,7 +1159,7 @@ Push the UI's status/date filters into the queries: have BookingRequestsTable pa
 - **id:** `dialog-layer-traps-tab-away-from-radix-confirm`
 - **severity (claimed):** medium
 - **location:** `src/lib/adminDialogLayer.js:73`
-- **status:** UNVERIFIED
+- **status:** FIXED — `shouldManageDialogTab` yields Tab to Radix portals outside the workspace (`adminDialogLayer.js`, `6977063`).
 
 **What the auditor claims**
 
@@ -1203,7 +1205,7 @@ Make the layer yield whenever a Radix dialog is on top. Either (a) widen detecti
 - **id:** `expired-batch-cancellation-silent-loss`
 - **severity (claimed):** medium
 - **location:** `src/lib/bookingCancellation.js:6`
-- **status:** UNVERIFIED
+- **status:** FIXED — `cancel_booking` restores credit even when the pack expired, reactivating the batch (`20260726080000_*`, working tree).
 
 **What the auditor claims**
 
@@ -1234,7 +1236,7 @@ Make cancel_booking report what it actually did — return the number of credits
 - **id:** `booking-overlap-60-minute-fallback`
 - **severity (claimed):** medium
 - **location:** `src/lib/bookingUi.js:16`
-- **status:** UNVERIFIED
+- **status:** FIXED — `my_bookings()` returns `duration_minutes` (`20260726013000_my_bookings_duration.sql`).
 
 **What the auditor claims**
 
@@ -1268,7 +1270,7 @@ Add `s.duration_minutes` to the my_bookings() result table and select list so Bo
 - **id:** `react-query-dead-weight-in-entry-chunk`
 - **severity (claimed):** medium
 - **location:** `src/lib/query-client.js:4`
-- **status:** UNVERIFIED
+- **status:** FIXED — `@tanstack/react-query` removed from runtime dependencies (no QueryClient usage).
 
 **What the auditor claims**
 
@@ -1302,7 +1304,7 @@ Either delete src/lib/query-client.js, the QueryClientProvider wrapper in src/Ap
 - **id:** `site-content-draft-survives-signout`
 - **severity (claimed):** medium
 - **location:** `src/lib/siteContentDraft.js:5`
-- **status:** UNVERIFIED
+- **status:** FIXED — CMS drafts are user-scoped and cleared on `SIGNED_OUT` (`siteContentDraft.js`, `SupabaseAuthContext.jsx`).
 
 **What the auditor claims**
 
@@ -1331,7 +1333,7 @@ Namespace the draft key by the authenticated user id (pass session.user.id into 
 - **id:** `adminlogin-inputs-have-no-accessible-name`
 - **severity (claimed):** medium
 - **location:** `src/pages/AdminLogin.jsx:41`
-- **status:** UNVERIFIED
+- **status:** FIXED — Admin sign-in email/password labels use `htmlFor`/`id` (`AdminLogin.jsx`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -1364,7 +1366,7 @@ Add `htmlFor="admin-login-email"` / `htmlFor="admin-login-password"` to the two 
 - **id:** `privacy-policy-omits-offshore-and-attribution`
 - **severity (claimed):** medium
 - **location:** `src/pages/Privacy.jsx:22`
-- **status:** UNVERIFIED
+- **status:** FIXED — Privacy Policy covers overseas disclosure, UTM/referrer capture, and health information (`Privacy.jsx`, working tree).
 
 **What the auditor claims**
 
@@ -1391,7 +1393,7 @@ Add to the Services And Disclosure section: an explicit statement that Supabase,
 - **id:** `public-timetable-contrast-below-aa`
 - **severity (claimed):** medium
 - **location:** `src/pages/SoftLaunchTimetable.jsx:53`
-- **status:** UNVERIFIED
+- **status:** FIXED — Public timetable captions meet WCAG AA contrast (`SoftLaunchTimetable.jsx`, `test/timetable-contrast.test.js`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -1418,7 +1420,7 @@ Raise these captions to at least `text-xert-concrete/60` (5.40:1 on #0d1720) —
 - **id:** `roll-call-strands-requested-bookings`
 - **severity (claimed):** medium
 - **location:** `src/supabase/attendance_roll_call_upgrade.sql:45`
-- **status:** UNVERIFIED
+- **status:** FIXED — Completing roll call cancels unresolved `requested` bookings and refunds credits (`20260726017000_roll_call_releases_pending_requests.sql`).
 
 **What the auditor claims**
 
@@ -1447,7 +1449,7 @@ Resolve pending requests inside the same transaction as the roll call. Before fl
 - **id:** `orders-missing-user-id-index`
 - **severity (claimed):** medium
 - **location:** `src/supabase/booking_schema.sql:185`
-- **status:** UNVERIFIED
+- **status:** FIXED — `orders(user_id)` index plus explicit `user_id` predicate on account queries (`20260726019000_*`, `bookingData.js`).
 
 **What the auditor claims**
 
@@ -1475,7 +1477,7 @@ Add `create index if not exists orders_user_created_idx on public.orders(user_id
 - **id:** `public-form-insert-allows-anon-to-write-admin-notes`
 - **severity (claimed):** medium
 - **location:** `src/supabase/rls_hardening.sql:58`
-- **status:** UNVERIFIED
+- **status:** FIXED — Public-form INSERT policies block staff-only columns via shared installer (`20260726010000_public_form_staff_column_guard.sql`).
 
 **What the auditor claims**
 
@@ -1513,7 +1515,7 @@ Add `and admin_notes is null` (and null-checks for any other staff-managed colum
 - **id:** `blackout-preflight-narrower-than-trigger`
 - **severity (claimed):** medium
 - **location:** `supabase/migrations/20260714004000_schedule_blackout_guard.sql:22`
-- **status:** UNVERIFIED
+- **status:** FIXED — Blackout/class guards ignore wholly-past conflicts; unchanged times short-circuit (`20260726011000_*`).
 
 **What the auditor claims**
 
@@ -1548,7 +1550,7 @@ Make the trigger match the preflight: in `enforce_class_blackout_conflict`, retu
 - **id:** `publish-path-missing-audience-guard`
 - **severity (claimed):** low
 - **location:** `api/admin-publish-announcement.js:159`
-- **status:** UNVERIFIED
+- **status:** FIXED — Publish path refuses broadcasting a stored non-`all` notice (`api/admin-publish-announcement.js`).
 
 **What the auditor claims**
 
@@ -1579,7 +1581,7 @@ Select audience alongside published_at/archived_at in the existing-announcement 
 - **id:** `delete-account-raw-error-leak`
 - **severity (claimed):** low
 - **location:** `api/delete-account.js:67`
-- **status:** UNVERIFIED
+- **status:** FIXED — `/api/delete-account` returns a fixed client error string; upstream detail stays behind the request trace (`api/delete-account.js`).
 
 **What the auditor claims**
 
@@ -1608,7 +1610,7 @@ Return a fixed public string ({ error: 'Could not delete account.' }, 500) and l
 - **id:** `request-text-reserialises-body-for-hmac`
 - **severity (claimed):** low
 - **location:** `api/http.js:29`
-- **status:** UNVERIFIED
+- **status:** OPEN — `requestText` still falls back to `JSON.stringify(request.body)` for non-string bodies; webhook HMAC still depends on the stream/raw path.
 
 **What the auditor claims**
 
@@ -1641,7 +1643,7 @@ Never HMAC a re-serialised body. Give the webhook its own raw-bytes reader that 
 - **id:** `eslint-lints-build-output`
 - **severity (claimed):** low
 - **location:** `eslint.config.js:7`
-- **status:** UNVERIFIED
+- **status:** FIXED — Global ESLint ignore for `dist/**` and `coverage/**` (`eslint.config.js`).
 
 **What the auditor claims**
 
@@ -1670,7 +1672,7 @@ Add `{ ignores: ["dist/**", "node_modules/**", "coverage/**"] }` as the first el
 - **id:** `eventkit-full-access-over-request`
 - **severity (claimed):** low
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Services/EventCalendarWriter.swift:124`
-- **status:** UNVERIFIED
+- **status:** OPEN — `EventCalendarWriter` still calls `requestFullAccessToEvents()` on iOS 17+; Info.plist still declares full-access usage.
 
 **What the auditor claims**
 
@@ -1707,7 +1709,7 @@ Request `requestWriteOnlyAccessToEvents()` on iOS 17+ and add `NSCalendarsWriteO
 - **id:** `account-deletion-leaves-local-member-state`
 - **severity (claimed):** low
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:433`
-- **status:** UNVERIFIED
+- **status:** OPEN — Push token/preference cleared on sign-out/delete, but `PendingCheckoutStore`, navigation pins and admin scene storage are still not purged.
 
 **What the auditor claims**
 
@@ -1746,7 +1748,7 @@ Add a single `purgeLocalMemberState(userID:)` helper and call it from both `sign
 - **id:** `unused-runtime-dependencies`
 - **severity (claimed):** low
 - **location:** `package.json:25`
-- **status:** UNVERIFIED
+- **status:** FIXED — The eleven unused packages named in the finding (including `three` and `date-fns`) are no longer in `package.json` dependencies.
 
 **What the auditor claims**
 
@@ -1774,7 +1776,7 @@ Remove the eleven unimported packages from `dependencies` and re-run `npm ci && 
 - **id:** `health-check-misdiagnoses-any-error-as-missing-migration`
 - **severity (claimed):** low
 - **location:** `src/lib/adminData.js:1528`
-- **status:** UNVERIFIED
+- **status:** FIXED — credit-audit and schema-contract health checks only treat missing-object codes as uninstalled (`adminData.js`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -1809,7 +1811,7 @@ In both checks, gate the 'not installed' verdict on the missing-object codes the
 - **id:** `canonical-url-reflects-external-origin`
 - **severity (claimed):** low
 - **location:** `src/lib/pageMetadata.js:42`
-- **status:** UNVERIFIED
+- **status:** FIXED — `metadataForPath` sanitises paths with `sameOriginPath` so `//evil…` cannot become the canonical/og URL (`pageMetadata.js`, `f0b017d`).
 
 **What the auditor claims**
 
@@ -1839,7 +1841,7 @@ Do not echo unmatched paths back. Return a fixed safe path for the fallback bran
 - **id:** `booking-schema-regrants-superseded-overloads`
 - **severity (claimed):** low
 - **location:** `src/supabase/booking_schema.sql:155`
-- **status:** UNVERIFIED
+- **status:** FIXED — `booking_schema.sql` only grants superseded overloads when the versioned forms are absent (`14e0e67` / drift repair).
 
 **What the auditor claims**
 

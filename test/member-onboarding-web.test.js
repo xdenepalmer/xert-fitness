@@ -80,7 +80,17 @@ test('privacy and account deletion copy enumerate the new member-owned data boun
   assert.match(privacy, /recorded reveal/);
   assert.match(privacy, /not included in member search, bulk member or lead CSV exports/);
   assert.match(privacy, /does not collect screening answers, diagnoses or a medical-clearance outcome/);
-  assert.match(privacy, /updated="21 July 2026"/);
+  assert.match(privacy, /updated="26 July 2026"/);
+  assert.match(privacy, /Sensitive And Health Information/);
+  assert.match(privacy, /health information is sensitive information/i);
+  assert.match(privacy, /separate health-information consent checkbox/);
+  assert.match(privacy, /referring website/);
+  assert.match(privacy, /UTM source, medium, campaign and content/);
+  assert.match(privacy, /landing path/);
+  assert.match(privacy, /outside Australia/);
+  assert.match(privacy, /United States/);
+  assert.match(privacy, /fonts\.googleapis\.com/);
+  assert.match(privacy, /OpenStreetMap/);
   assert.match(terms, /does not mean XERT has medically assessed or cleared you to exercise/);
   assert.doesNotMatch(terms, /Member Readiness[^.]*waiver/i);
   assert.match(account, /emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals will be removed/);

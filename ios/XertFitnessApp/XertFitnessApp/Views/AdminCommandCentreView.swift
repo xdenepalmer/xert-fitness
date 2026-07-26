@@ -2415,7 +2415,10 @@ private struct AdminClassRosterView: View {
     @State private var attendance = AdminAttendanceDraft()
     @State private var confirmingRollCall = false
 
-    private var eligible: [AdminRosterMember] { admin.classRoster.filter(\.attendanceEligible) }
+    private var scopedRoster: [AdminRosterMember] {
+        admin.loadedRosterSessionID == operation.id ? admin.classRoster : []
+    }
+    private var eligible: [AdminRosterMember] { scopedRoster.filter(\.attendanceEligible) }
     private var attendanceSummary: AdminAttendanceSummary { attendance.summary }
     private var canRecordAttendance: Bool {
         attendanceSummary.isComplete && operation.start_time <= Date()
@@ -2471,10 +2474,10 @@ private struct AdminClassRosterView: View {
             Section("Member roster") {
                 if admin.loadingRosterSessionID == operation.id {
                     HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
-                } else if admin.classRoster.isEmpty {
+                } else if scopedRoster.isEmpty {
                     Text("No member bookings for this class.")
                 }
-                ForEach(admin.classRoster) { member in
+                ForEach(scopedRoster) { member in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -2553,10 +2556,13 @@ private struct AdminClassRosterView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await admin.loadClassRoster(session: session, classSessionID: operation.id)
-            attendance = AdminAttendanceDraft(roster: admin.classRoster)
+            attendance = AdminAttendanceDraft(roster: scopedRoster)
         }
-        .onChange(of: admin.classRoster) { roster in
-            attendance.reconcile(roster: roster)
+        .onChange(of: admin.classRoster) { _ in
+            attendance.reconcile(roster: scopedRoster)
+        }
+        .onChange(of: admin.loadedRosterSessionID) { _ in
+            attendance.reconcile(roster: scopedRoster)
         }
         .confirmationDialog("Complete this class?", isPresented: $confirmingRollCall, titleVisibility: .visible) {
             Button("Record attendance and complete class") {
@@ -4004,6 +4010,17 @@ private struct AdminSiteContentView: View {
     }
 }
 
+/// Stable identity for string rows so TextField bindings survive delete/reorder.
+private struct IdentifiedDraftLine: Identifiable, Equatable {
+    let id: UUID
+    var value: String
+
+    init(id: UUID = UUID(), value: String) {
+        self.id = id
+        self.value = value
+    }
+}
+
 private struct AdminSiteContentEditor: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
@@ -4014,6 +4031,8 @@ private struct AdminSiteContentEditor: View {
     @State private var expectedUpdatedAt: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoURL = ""
+    @State private var photoRows: [IdentifiedDraftLine]
+    @State private var paragraphRows: [IdentifiedDraftLine]
 
     init(admin: AdminStore, session: AuthSession, section: AdminSiteContentSection, row: AdminSiteContentRow?) {
         self.admin = admin
@@ -4021,9 +4040,12 @@ private struct AdminSiteContentEditor: View {
         self.section = section
         self.row = row
         let live = (row?.data ?? AdminSiteContentData()).merged(over: .defaults(for: section))
+        let initial = AdminSiteContentDraftStore.load(section) ?? live
         _baseline = State(initialValue: live)
-        _draft = State(initialValue: AdminSiteContentDraftStore.load(section) ?? live)
+        _draft = State(initialValue: initial)
         _expectedUpdatedAt = State(initialValue: row?.updated_at)
+        _photoRows = State(initialValue: (initial.photos ?? []).map { IdentifiedDraftLine(value: $0) })
+        _paragraphRows = State(initialValue: (initial.paragraphs ?? []).map { IdentifiedDraftLine(value: $0) })
     }
 
     private var dirty: Bool { draft != baseline }
@@ -4060,13 +4082,13 @@ private struct AdminSiteContentEditor: View {
                 .disabled(!dirty || isSaving)
 
                 Button {
-                    draft = .defaults(for: section)
+                    applyDraft(.defaults(for: section))
                 } label: {
                     Label("Restore original copy", systemImage: "arrow.counterclockwise")
                 }
                 if dirty {
                     Button("Discard draft", role: .destructive) {
-                        draft = baseline
+                        applyDraft(baseline)
                         AdminSiteContentDraftStore.clear(section)
                     }
                 }
@@ -4098,8 +4120,8 @@ private struct AdminSiteContentEditor: View {
                 TextField("Supporting line", text: textBinding(\.supporting), axis: .vertical).lineLimit(3...8)
             }
             Section("Rotating photos") {
-                ForEach((draft.photos ?? []).indices, id: \.self) { index in
-                    heroPhotoRow(index: index)
+                ForEach(Array(photoRows.enumerated()), id: \.element.id) { index, row in
+                    heroPhotoRow(id: row.id, index: index)
                 }
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
                     Label(admin.isUploadingSiteImage ? "Uploading..." : "Upload photo", systemImage: "photo.badge.plus")
@@ -4111,7 +4133,8 @@ private struct AdminSiteContentEditor: View {
                         .keyboardType(.URL)
                     Button {
                         guard !photoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                        draft.photos = (draft.photos ?? []) + [photoURL]
+                        photoRows.append(IdentifiedDraftLine(value: photoURL))
+                        syncPhotosFromRows()
                         photoURL = ""
                     } label: { Image(systemName: "plus.circle.fill") }
                     .accessibilityLabel("Add photo URL")
@@ -4123,11 +4146,12 @@ private struct AdminSiteContentEditor: View {
             }
         case .about:
             Section("About paragraphs") {
-                ForEach((draft.paragraphs ?? []).indices, id: \.self) { index in
-                    editableTextListRow(index: index)
+                ForEach(Array(paragraphRows.enumerated()), id: \.element.id) { index, row in
+                    editableTextListRow(id: row.id, index: index)
                 }
                 Button {
-                    draft.paragraphs = (draft.paragraphs ?? []) + [""]
+                    paragraphRows.append(IdentifiedDraftLine(value: ""))
+                    syncParagraphsFromRows()
                 } label: {
                     Label("Add paragraph", systemImage: "plus")
                 }
@@ -4143,8 +4167,8 @@ private struct AdminSiteContentEditor: View {
             }
         case .faq:
             Section("Questions and answers") {
-                ForEach((draft.items ?? []).indices, id: \.self) { index in
-                    faqRow(index: index)
+                ForEach(draft.items ?? []) { item in
+                    faqRow(itemID: item.id)
                 }
                 Button {
                     draft.items = (draft.items ?? []) + [AdminFAQItem(q: "", a: "")]
@@ -4155,6 +4179,20 @@ private struct AdminSiteContentEditor: View {
         }
     }
 
+    private func applyDraft(_ value: AdminSiteContentData) {
+        draft = value
+        photoRows = (value.photos ?? []).map { IdentifiedDraftLine(value: $0) }
+        paragraphRows = (value.paragraphs ?? []).map { IdentifiedDraftLine(value: $0) }
+    }
+
+    private func syncPhotosFromRows() {
+        draft.photos = photoRows.map(\.value)
+    }
+
+    private func syncParagraphsFromRows() {
+        draft.paragraphs = paragraphRows.map(\.value)
+    }
+
     private func textBinding(_ keyPath: WritableKeyPath<AdminSiteContentData, String?>) -> Binding<String> {
         Binding(
             get: { draft[keyPath: keyPath] ?? "" },
@@ -4162,9 +4200,32 @@ private struct AdminSiteContentEditor: View {
         )
     }
 
+    private func paragraphBinding(id: UUID) -> Binding<String> {
+        Binding(
+            get: { paragraphRows.first(where: { $0.id == id })?.value ?? "" },
+            set: { newValue in
+                guard let index = paragraphRows.firstIndex(where: { $0.id == id }) else { return }
+                paragraphRows[index].value = newValue
+                syncParagraphsFromRows()
+            }
+        )
+    }
+
+    private func faqBinding(itemID: UUID, _ keyPath: WritableKeyPath<AdminFAQItem, String>) -> Binding<String> {
+        Binding(
+            get: {
+                draft.items?.first(where: { $0.id == itemID })?[keyPath: keyPath] ?? ""
+            },
+            set: { newValue in
+                guard let index = draft.items?.firstIndex(where: { $0.id == itemID }) else { return }
+                draft.items?[index][keyPath: keyPath] = newValue
+            }
+        )
+    }
+
     @ViewBuilder
-    private func heroPhotoRow(index: Int) -> some View {
-        let value = (draft.photos ?? [])[index]
+    private func heroPhotoRow(id: UUID, index: Int) -> some View {
+        let value = photoRows.first(where: { $0.id == id })?.value ?? ""
         HStack(spacing: 12) {
             if let url = publicImageURL(value) {
                 XertRemoteImage(url: url, maximumPointDimension: 72) {
@@ -4179,53 +4240,53 @@ private struct AdminSiteContentEditor: View {
             }
             Text(value).font(.caption).lineLimit(2)
             Spacer()
-            reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
-                draft.photos?.swapAt(from, to)
+            reorderButtons(index: index, count: photoRows.count) { from, to in
+                guard photoRows.indices.contains(from), photoRows.indices.contains(to) else { return }
+                photoRows.swapAt(from, to)
+                syncPhotosFromRows()
             } remove: {
-                draft.photos?.remove(at: index)
+                photoRows.removeAll { $0.id == id }
+                syncPhotosFromRows()
             }
         }
     }
 
     @ViewBuilder
-    private func editableTextListRow(index: Int) -> some View {
+    private func editableTextListRow(id: UUID, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Paragraph \(index + 1)").font(.caption.weight(.bold))
                 Spacer()
-                reorderButtons(index: index, count: draft.paragraphs?.count ?? 0) { from, to in
-                    draft.paragraphs?.swapAt(from, to)
+                reorderButtons(index: index, count: paragraphRows.count) { from, to in
+                    guard paragraphRows.indices.contains(from), paragraphRows.indices.contains(to) else { return }
+                    paragraphRows.swapAt(from, to)
+                    syncParagraphsFromRows()
                 } remove: {
-                    draft.paragraphs?.remove(at: index)
+                    paragraphRows.removeAll { $0.id == id }
+                    syncParagraphsFromRows()
                 }
             }
-            TextField("Paragraph", text: Binding(
-                get: { draft.paragraphs?[index] ?? "" },
-                set: { draft.paragraphs?[index] = $0 }
-            ), axis: .vertical).lineLimit(5...14)
+            TextField("Paragraph", text: paragraphBinding(id: id), axis: .vertical).lineLimit(5...14)
         }
     }
 
     @ViewBuilder
-    private func faqRow(index: Int) -> some View {
+    private func faqRow(itemID: UUID) -> some View {
+        let index = draft.items?.firstIndex(where: { $0.id == itemID }) ?? 0
+        let count = draft.items?.count ?? 0
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Question \(index + 1)").font(.caption.weight(.bold))
                 Spacer()
-                reorderButtons(index: index, count: draft.items?.count ?? 0) { from, to in
+                reorderButtons(index: index, count: count) { from, to in
+                    guard let items = draft.items, items.indices.contains(from), items.indices.contains(to) else { return }
                     draft.items?.swapAt(from, to)
                 } remove: {
-                    draft.items?.remove(at: index)
+                    draft.items?.removeAll { $0.id == itemID }
                 }
             }
-            TextField("Question", text: Binding(
-                get: { draft.items?[index].q ?? "" },
-                set: { draft.items?[index].q = $0 }
-            ))
-            TextField("Answer", text: Binding(
-                get: { draft.items?[index].a ?? "" },
-                set: { draft.items?[index].a = $0 }
-            ), axis: .vertical).lineLimit(3...10)
+            TextField("Question", text: faqBinding(itemID: itemID, \.q))
+            TextField("Answer", text: faqBinding(itemID: itemID, \.a), axis: .vertical).lineLimit(3...10)
         }
     }
 
@@ -4276,7 +4337,8 @@ private struct AdminSiteContentEditor: View {
             mimeType: upload.mimeType,
             fileExtension: upload.fileExtension
         ) {
-            draft.photos = (draft.photos ?? []) + [url]
+            photoRows.append(IdentifiedDraftLine(value: url))
+            syncPhotosFromRows()
         }
     }
 }

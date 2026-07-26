@@ -35,5 +35,8 @@ test('both booking schema paths let members leave a waitlist without double-refu
     assert.match(sql, /v_status not in \('requested', 'confirmed', 'waitlisted'\)/i);
     assert.match(sql, /v_status = 'confirmed' and v_start - now\(\) > interval '12 hours'/i);
     assert.match(sql, /status in \('requested', 'confirmed', 'waitlisted'\)/i);
+    // Timely cancel must restore credit even after the pack expires.
+    assert.doesNotMatch(sql, /where id = v_batch and \(expires_at is null or expires_at > now\(\)\)/i);
+    assert.match(sql, /greatest\(v_start, now\(\) \+ interval '12 hours'\)/i);
   }
 });

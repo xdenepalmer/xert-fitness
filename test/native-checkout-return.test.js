@@ -42,10 +42,10 @@ test('native checkout stays inside a trusted authenticated browser session', () 
   assert.match(booking, /@State private var checkoutProductID: String\?/);
   assert.match(booking, /checkoutBrowser\.start\(url: url\)/);
   assert.doesNotMatch(booking, /openURL\(url\)/);
-  assert.match(root, /publisher\(for: \.xertCheckoutCallback\)[\s\S]*handleOpenURL\(url\)/);
+  assert.match(root, /publisher\(for: \.xertCheckoutCallback\)[\s\S]*handleTrustedCheckoutCallback\(url\)/);
 });
 
-test('native app accepts only the XERT checkout callback and refreshes member data', () => {
+test('native app accepts only the trusted checkout callback and verifies settlement', () => {
   assert.match(info, /<string>xertfitness<\/string>/);
   assert.match(deepLink, /url\.scheme\?\.lowercased\(\) == "xertfitness"/);
   assert.match(deepLink, /url\.host\?\.lowercased\(\) == "checkout"/);
@@ -53,10 +53,17 @@ test('native app accepts only the XERT checkout callback and refreshes member da
   assert.match(deepLink, /enum CheckoutSessionIdentity/);
   assert.match(deepLink, /CheckoutSessionIdentity\.normalize\(suppliedSessionID\)/);
   assert.match(deepLink, /CheckoutCallback\(status: status, checkoutSessionID: suppliedSessionID\)/);
-  assert.match(root, /\.onOpenURL/);
+  assert.match(root, /\.onOpenURL\(perform: handleExternalOpenURL\)/);
+  assert.match(root, /handleExternalOpenURL[\s\S]*host\?\.lowercased\(\) == "checkout"[\s\S]*return/);
+  assert.match(root, /handleTrustedCheckoutCallback/);
   assert.match(root, /CheckoutDeepLink\.callback\(from: url\)/);
   assert.match(root, /openMemberRoute\(\.purchaseConfirmation, source: \.checkout\)/);
   assert.match(root, /callback\.status == \.success[\s\S]*store\.reconcileCheckout\([\s\S]*callbackSessionID: callback\.checkoutSessionID/);
+  assert.match(root, /settlement == \.confirmed[\s\S]*checkoutReturnStatus = \.success/);
+  assert.doesNotMatch(pendingStore, /let recovered = PendingCheckout\(/);
+  assert.match(pendingStore, /Never manufacture a pending checkout from an inbound URL/);
+  assert.match(pendingStore, /storedSessionID == normalizedCallback \? stored : nil/);
+  assert.match(swiftTests, /testPendingCheckoutRejectsForgedCallbackWithoutLocallyIssuedPending/);
 });
 
 test('native app polls bounded order and credit state while Stripe fulfilment settles', () => {
@@ -94,7 +101,7 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(swiftTests, /creditBatch\(remaining: 0, orderID: newOrderID\)/);
   assert.match(swiftTests, /testPendingCheckoutRoundTripsForTheSameUser/);
   assert.match(swiftTests, /testPendingCheckoutRejectsAnotherUserAndExpires/);
-  assert.match(swiftTests, /testPendingCheckoutRecoversFromAValidatedReturnWithoutReplacingStoredIdentity/);
+  assert.match(swiftTests, /testPendingCheckoutRejectsForgedCallbackWithoutLocallyIssuedPending/);
 });
 
 test('native order fixtures preserve the purchased credit terms', () => {

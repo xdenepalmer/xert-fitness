@@ -9,6 +9,7 @@ import {
 
 const forbidden = [
   'injuries_or_limitations_optional',
+  'health_info_consent',
   'consent_to_contact',
   'mailing_list_consent',
   'company_website',
@@ -30,6 +31,7 @@ test('lead CSVs are purpose-limited even when source rows contain sensitive fiel
     id: 'lead-a', full_name: 'Alex', email: 'alex@example.com', phone: '0400',
     status: 'new', created_at: '2026-07-21T00:00:00Z', suburb_town: 'Kingaroy',
     injuries_or_limitations_optional: 'private injury',
+    health_info_consent: true,
     consent_to_contact: true,
     mailing_list_consent: true,
     admin_notes: 'private staff note',

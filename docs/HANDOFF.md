@@ -1,12 +1,17 @@
 # Handoff — XERT audit and owner-requirements programme
 
 **Written for the next agent picking this up.** Read this file end to end before
-touching anything. It records what was done, what was proven, what is still
-unproven, and the traps that already cost time.
+touching anything. It records what was done, what the code shows is fixed, what
+is still open, and the traps that already cost time.
 
-- **Branch:** `claude/ios-operational-page-layout-pskigi` (all work is here, pushed)
-- **Baseline right now:** `584 tests pass`, lint clean, typecheck clean, build clean
-- **No pull request has been opened.** Do not open one unless the user asks.
+- **Branch:** `cursor/xert-audit-continuation-8c8e` (merged with `main`; includes
+  the SQL-drift repair PR and the audit continuation commits)
+- **Baseline expectation:** `npm ci` then `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run build` — keep these green before finishing work
+- **Working tree may contain uncommitted parallel-agent fixes** (iOS refresh /
+  checkout / roster / privacy / cancel-booking / health consent). Do not assume
+  they are committed until `git status` is clean.
+- **Do not open a pull request unless the user asks.**
 
 ---
 
@@ -16,12 +21,12 @@ The container starts with **no `node_modules`**. Every check fails misleadingly
 until you fix that. This is not a repo defect:
 
 ```bash
-cd /home/user/xert-fitness
-npm ci                 # ~20s, 544 packages
-npm test               # expect 584 pass
-npm run lint           # clean
-npm run typecheck      # clean
-npm run build          # clean
+cd /workspace   # or the checkout root
+npm ci                 # ~20s
+npm test
+npm run lint
+npm run typecheck
+npm run build
 ```
 
 ### PostgreSQL is available locally — use it
@@ -38,162 +43,130 @@ su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PGD -o '-k /var/tmp -p 543
 psql -h /var/tmp -p 5433 -U postgres -c 'select 1'
 ```
 
-Every SQL fix so far was proven this way before being written, and re-proven
-after. **Do the same.** Reasoning about `RETURNING` semantics and referential
-actions is exactly where the original code went wrong; do not repeat that by
-reasoning instead of executing. Use `text` columns instead of `uuid` in throwaway
-repros unless you want to type real UUIDs.
+SQL fixes on this programme were proven this way before being written, and
+re-proven after. **Do the same.** Reasoning about `RETURNING` semantics and
+referential actions is exactly where the original code went wrong; do not repeat
+that by reasoning instead of executing. Use `text` columns instead of `uuid` in
+throwaway repros unless you want to type real UUIDs.
 
 ### Agent orchestration limits
 
-The box has **4 cores**, so the Workflow tool caps concurrency at
-`min(16, cores-2) = 2`. A 110-agent workflow takes hours and will hit the session
-limit — that is exactly what killed the first run. Prefer **fewer, deeper agents**
-and **batch verification** (one verifier per group of findings, not per finding).
-A ~35-agent run took ~2.3 hours and still lost its last 16 agents to the limit.
+Prefer **fewer, deeper agents** and **batch verification** (one verifier per
+group of findings, not per finding). Wide fan-out hits session/concurrency caps.
 
 ---
 
-## 1. What has been fixed (all proven, all pushed)
+## 1. What has been fixed on this branch
 
-Six commits. Every defect was reproduced before being fixed, and the four SQL
-ones were re-verified against PostgreSQL 16 including that their existing guards
-still reject bad input.
+The original handoff claimed the 56-item audit queue was never verified. That is
+**stale**. Most findings have been verified against code (and many against
+PostgreSQL 16) and marked **FIXED** in `docs/audit/remaining-findings.md`.
+**48 FIXED / 8 OPEN** as of this update.
 
-| # | Commit | Defect |
+### Themes from commits on this branch (after merge with main)
+
+| Theme | Representative commits | What landed |
 |---|---|---|
-| 1 | `f6f2a30` | iOS: duplicated tab bar + Operations Health title overlap |
-| 2 | `f64fc78` | Class cancellation refunded **zero** credits; account deletion **impossible**; CSV formula injection; `npm test` ran nothing |
-| 3 | `ace22fd` | Audit report + 6 design specs |
-| 4 | `509ffa3` | One deleted member could kill **store-wide checkout** |
-| 5 | `8f91413` | Roll-call correction **double-charged** a credit |
-| 6 | `d16fba2` | Reconciled the audit report with the fixes |
+| Credit / checkout correctness | `f64fc78`, `509ffa3`, `8f91413` | Class-cancel refunds, deleted-member order no longer kills store-wide checkout, roll-call correction no longer double-charges |
+| Commerce / webhook hardening | `06f2d16` | Aged failed events visible in health; AUD-only currency; signature-failure ledger; Stripe idempotency body without wall-clock `expires_at`; refunds.list fallback; push-token ownership; announcement audience fail-closed; atomic account deletion API path; api typecheck |
+| SQL holes confirmed by audit | `2810add` | Public-form staff-column guard; blackout historic edit; public enquiry time guard; `my_bookings` duration; product currency AUD check; signature ledger; atomic `delete_member_account`; roll-call releases pending requests; admin policy scalar subquery; orders `user_id` index |
+| Admin / public data-layer UX | `6977063`, `f0b017d`, `02810ae` | Editor identity keys (no silent duplicate create); lead/PT id tiebreaks; bounded public timetable; profile-edit sync; bookings queue filters; dialog Tab vs Radix; lint/typecheck coverage; timetable contrast; canonical URL sanitisation; ops-health error codes |
+| Operator SQL drift repair | `14e0e67` … `af3de78` | `src/supabase/` no longer silently downgrades announcement audience RLS, email immutability, or superseded RPC overloads; drift tests enforce it |
+| Merge repair | `6d29b25`, `fe83697` | Main merged in; CSV export + announcement policy drift repaired after merge |
 
-### The five substantive bugs, in one line each
+### Early substantive bugs (still the pattern to watch)
 
-1. **`admin_cancel_class_session` refunded nothing.** `RETURNING status` after
-   `UPDATE ... SET status='cancelled'` yields the *post*-update value, so the
-   refund filter `status in ('requested','confirmed')` never matched. Fixed with a
-   pre-update snapshot CTE. *Proven: 5 credits before, 5 after; correct is 8.*
-2. **Account deletion always failed.** Five audit tables combine
-   `on delete set null` → `auth.users` with an unconditional
-   `before update or delete` immutability trigger. Postgres implements SET NULL as
-   an UPDATE, which the trigger aborted. Guards now allow exactly that one update
-   shape. *Proven: `ERROR: BOOKING_AUDIT_IMMUTABLE`, user row survived.*
-3. **A deleted member killed checkout for everyone.** `orders.user_id` is
-   `on delete set null`; `fulfill_stripe_checkout` rejected the NULL, the event
-   went `failed` in the ledger, and `api/checkout.js` gates all purchases on zero
-   failed fulfilment events → permanent 503, unrecoverable. Triggered by an
-   ordinary Stripe redelivery, no malice needed.
-4. **Roll-call corrections double-charged.** `attended`/`no_show` already hold an
-   unrefunded credit but weren't in the "already credited" set, so flipping back
-   to `confirmed` charged again. *Proven: 9 credits → 8.*
-5. **CSV formula injection.** Public form text reached admin exports unescaped.
-   Quoting is not a defence — CSV parsing strips quotes before the spreadsheet
-   evaluates the cell.
+1. **`admin_cancel_class_session` refunded nothing** — `RETURNING status` after
+   cancel never matched the refund filter. Fixed with a pre-update snapshot CTE.
+2. **Account deletion always failed** — immutability triggers aborted the
+   `ON DELETE SET NULL` updates into audit tables. Guards allow that one update shape.
+3. **A deleted member killed checkout for everyone** — NULL `orders.user_id` failed
+   fulfilment → permanent checkout kill-switch. NULL buyer now settles without re-grant.
+4. **Roll-call corrections double-charged** — `attended`/`no_show` were not treated
+   as already holding a credit.
+5. **CSV formula injection** — public form text reached admin exports unescaped.
 
-**Pattern worth carrying forward:** four of five were credit-accounting errors in
-SQL. `credit_batches` is the entitlement primitive the whole product rests on and
-it has been wrong in several directions. Treat credit correctness as a gate before
-anything that mints credits automatically (see §4).
+**Pattern worth carrying forward:** credit-accounting errors in SQL around
+`credit_batches` remain the highest-risk area. Treat credit correctness as a gate
+before anything that mints credits automatically (see §4).
+
+### Working-tree themes (uncommitted at handoff rewrite time)
+
+Parallel agents also changed (verify with `git status` / `git diff`):
+
+- iOS refresh coalescing after book/waitlist/cancel; checkout deep-link forgery
+  resistance; class roster scoping; site-content editor stable row identity
+- Sign-out pending push unregister + local fail-closed clear
+- `cancel_booking` refund when the credit batch has expired (+ migration mirror)
+- Member-interest health consent (form, iOS models, SQL, Privacy policy)
+- Owner Command Centre nav restored as a visible one-tap entry on iPhone/iPad
+
+These map to findings **5, 6, 7, 10, 26, 28, 36, 41** (and nav UX outside the
+numbered queue). Commit them before treating them as shipped.
 
 ---
 
 ## 2. What is still outstanding
 
-### 2a. 56 unverified findings — the main queue
+### 2a. Audit queue — 8 still open
 
-Full evidence, including each auditor's verbatim quote and proposed fix, is in
-**`docs/audit/remaining-findings.md`**. Summary shape: 1 critical, 15 high,
-30 medium, 10 low.
+Full evidence remains in **`docs/audit/remaining-findings.md`** (auditor quotes
+kept; **status** lines are authoritative). Open items:
 
-**These are NOT a defect list.** They are raw swarm output whose adversarial
-verification pass never ran. Of the findings already examined by hand:
+| # | Severity (claimed) | Why still open |
+|---|---|---|
+| 16 | high | Audit tables still store name/email/staff notes behind immutability triggers with no correction/erasure path (APP 12/13) |
+| 27 | medium | Owner `memberCount` still reads `total_count` from `members[0]`; `resolveOwnerTask` inserts a filtered member at index 0 |
+| 29 | medium | `canApplyMemberState` still compares `access_token`, so token refresh aborts post-mutation UI |
+| 31 | medium | `AdminLayout` badge refresh effect still depends on `activeSection` without reading it |
+| 33 | medium | `admin_update_class_session` still has no optimistic-lock / `expected_updated_at` |
+| 49 | low | `requestText` still `JSON.stringify`s a parsed body — risky for Stripe HMAC if a runtime pre-parses |
+| 51 | low | Calendar integration still requests full event access on iOS 17+ |
+| 52 | low | Sign-out/delete clear push state, but pending checkout / nav pins / admin scene storage are not fully purged |
 
-- two had the **right symptom but the wrong mechanism** (the account-deletion one
-  blamed an FK restriction; it was actually the immutability trigger — and it
-  affected 5 tables, not 1),
-- one rated **critical was refuted outright** (below),
-- several are **duplicates** of each other reported by different dimensions.
+Do not re-open FIXED findings without new evidence. If unsure, grep the fix
+location named in `remaining-findings.md` before changing status again.
 
-Expect a meaningful false-positive rate. Verify before acting.
+#### How to verify one properly (still the right method)
 
-#### How to verify one properly
-
-1. Open the cited file at the cited line. **Confirm the quoted evidence exists
-   verbatim.** If the quote is paraphrased or the line points elsewhere, reject it.
-2. Trace the failure path end to end and hunt for anything that already stops it.
-   **This repo puts most of its protection in SQL** — RLS policies, CHECK
-   constraints, triggers, UNIQUE indexes, SECURITY DEFINER functions — inside
-   `supabase/migrations/` (42 files). Grep there *before* concluding anything is
-   unguarded. Also grep `test/` (141 files).
-3. Ask whether it can occur in the deployed system. Requires the service-role key?
-   Not a finding. Lets an admin touch data admins may already touch? Not a finding.
-4. If real, reproduce it (in Postgres for SQL, as a unit test for JS) *before*
-   fixing, then re-verify after — including that existing guards still reject bad
-   input.
+1. Open the cited file. Confirm the quoted evidence still exists **or** that the
+   fix location named in the status line is present.
+2. Trace the failure path end to end. Grep `supabase/migrations/` and `test/`
+   before concluding anything is unguarded.
+3. Ask whether it can occur in the deployed system (service-role-only? admin-only
+   by design?).
+4. For SQL: reproduce in local Postgres before and after. For JS/iOS: add or run
+   the contract test that pins the fix.
 
 #### Known false-positive patterns in this codebase
 
 - **"The Supabase anon key is in the client bundle."** Already refuted. That key
   is *designed* to ship to browsers; RLS is the security boundary, and
   `resolvePublicSupabaseConfig` validates it is an anon rather than service key.
-- **Advisory-only dependency findings.** `npm audit --omit=dev` flags postcss
-  (high) and react-router 6.x (2 moderate). The react-router `deserializeErrors`
-  one is SSR-hydration-only and this is a client-rendered SPA. Only report these
-  with a demonstrated exploit path *in this app's code*.
+- **Advisory-only dependency findings.** Only report with a demonstrated exploit
+  path *in this app's code*.
 - **Missing security headers.** `vercel.json` already sets CSP (with
   `script-src 'self'`, no unsafe-inline for scripts), HSTS, `X-Frame-Options:
   DENY`, nosniff, Referrer-Policy and Permissions-Policy. Only report a provable
   bypass.
 
-### 2b. Verified but NOT fixed — the two SQL trees have drifted
+### 2b. Two-SQL-tree drift — largely repaired
 
-**This one is real and I confirmed it by reading both files. It is not in the
-triage queue because it is already established.**
+Previously: `src/supabase/` could silently downgrade hardened announcement RLS
+and `guard_profile_write` email immutability, and re-grant superseded RPCs.
 
-The repo maintains two parallel SQL trees by hand:
-
-- `supabase/migrations/` — 42 files, authoritative for `supabase db push`
-- `src/supabase/` — 42+ files, documented in `README.md` as the operator
-  apply path, run manually in the Supabase SQL editor
-
-They have diverged, and the standalone files are *older*:
-
-1. `src/supabase/booking_schema.sql:1120` drops and recreates
-   `member_announcements_select_live_or_admin` **without** the
-   `audience` / `member_announcement_targets` predicate that
-   `supabase/migrations/20260714015000` added. The file contains **zero**
-   occurrences of `audience`. Re-running it — and its own header says
-   *"Safe to re-run"*, and the README tells operators to run it — downgrades the
-   policy so **every member can read every other member's private targeted
-   notices**. `src/supabase/announcement_archival_upgrade.sql` carries the same
-   stale policy.
-2. `src/supabase/booking_schema.sql:59` ships a `guard_profile_write()` **without**
-   the email-immutability branch that `src/supabase/admin_cms_schema.sql:36` and
-   `src/supabase/rls_hardening.sql:95` both have. It is a `create or replace`, so
-   re-applying silently downgrades the hardened trigger and lets a member rewrite
-   `profiles.email`. (Verify the downstream claim about
-   `member_pt_request_tracking.sql` reassigning PT requests by email match — that
-   part is unverified.)
-
-**Recommended fix:** make `supabase/migrations/` authoritative and either generate
-`src/supabase/` from it or retire it. Failing that, add a test asserting the
-hardened predicate appears in **every** file that creates the policy, not only the
-newest one — the existing `test/class-cancellation-notifications.test.js:45` only
-checks `class_cancellation_notifications_upgrade.sql`.
-
-**Note:** the five fixes above were mirrored by hand into `src/supabase/` to keep
-parity. If you retire that tree, delete the mirrors too.
+**Current state:** drift repair commits + `test/supabase-operator-script-drift.test.js`
+pin the invariants (audience predicate, email immutability, no unconditional
+superseded overload grants). Keep that test green whenever you edit operator
+scripts. Prefer `supabase/migrations/` as authoritative; still mirror into
+`src/supabase/` and the README list until that tree is retired.
 
 ### 2c. Two agent jobs that never ran
 
 - **Completeness critic.** Was meant to find what the 13 auditors *missed* —
-  especially cross-cutting defects owned by no single dimension: a rule the web
-  enforces that iOS does not, a migration that fixed one path but not its parallel,
-  a guard present in the admin UI but absent in the API behind it.
-- **Design integration architect.** I wrote this synthesis by hand instead; it is
-  in `docs/requirements/README.md`. It is sound but was not independently reviewed.
+  especially cross-cutting defects owned by no single dimension.
+- **Design integration architect.** Synthesis lives in `docs/requirements/README.md`
+  but was not independently reviewed.
 
 ---
 
@@ -219,9 +192,8 @@ written against the real schema). They are **proposals, not decisions**, and
 
 ### The missing seventh spec — write this first
 
-**Staff/employee accounts and a least-privilege role model was never written**
-(its agent died on the session limit). It is the highest-priority gap because
-**specs 02, 03 and 05 all depend on it**:
+**Staff/employee accounts and a least-privilege role model was never written.**
+It is the highest-priority gap because **specs 02, 03 and 05 all depend on it**:
 
 - 02 needs "which staff role may see health data"
 - 03 needs "a coach sees only their own clients"
@@ -261,10 +233,8 @@ Do not re-litigate these without reason:
 
 ## 4. Suggested order of work
 
-1. **Cull the 56-item queue.** Highest value per hour. Batch-verify by dimension
-   (one skeptic per group, not per finding), fix what survives, reproduce first.
-2. **Fix the two-SQL-tree drift (§2b).** Real, confirmed, and a live landmine
-   every time an operator follows the README.
+1. **Commit or discard the working-tree parallel fixes**, then re-run lint/tests/build.
+2. **Close the 8 open findings** (§2a), highest severity first (16, then 27/29/31/33).
 3. **Write the staff/role model spec (§3).** Unblocks three XL features.
 4. **Run the completeness critic (§2c).**
 5. Only then start implementing any of specs 01–06, in the phase order in
@@ -272,8 +242,8 @@ Do not re-litigate these without reason:
    money → operations → engagement.
 
 **Before any work that mints credits automatically (spec 06), harden credit
-accounting.** Four of the five bugs found were in that code path, and memberships
-will exercise it continuously rather than occasionally.
+accounting further.** Several of the worst production bugs were in that path, and
+memberships will exercise it continuously rather than occasionally.
 
 ---
 
@@ -296,36 +266,31 @@ Raised but unanswered. Blocking where noted:
 6. **Do no-shows consume a credit?** *Recommended:* yes, with a staff override.
 7. **PB leaderboards on by default?** *Recommended:* off, strictly opt-in.
 
-### One live compliance gap, independent of all the above
+### Compliance note (partially addressed)
 
-`src/components/public/MemberInterestForm.jsx` collects **free-text health
-information** from the public behind only a "consent to contact" tick, and
-`src/pages/Privacy.jsx` does not treat it as sensitive information. Under the
-Australian Privacy Act health information is *sensitive* information with stricter
-consent and handling duties. This is a **present-day** exposure, not a future one,
-and it exists before any of the waiver work ships. Two related unverified findings
-sit in the queue (`src/pages/Privacy.jsx:22` on overseas disclosure and silent
-UTM/referrer capture; `supabase/migrations/20260714011000:41` on audit-stored PII
-being permanently uncorrectable) — verify and address together.
+Public member-interest health free-text now requires a separate
+`health_info_consent` and Privacy Policy language for sensitive health
+information and overseas processing (finding 10/41). Finding **16** (immutable
+audit PII with no erasure/correction path) remains a live compliance gap.
 
 ---
 
 ## 6. Repo conventions to follow
 
 - **Never edit an applied migration.** Add a new one, `YYYYMMDDHHMMSS_name.sql`.
-  Today's convention in use: `20260726000000`, `...001000`, `...002000`,
-  `...003000`.
+  Recent audit fixes use `2026072600xxxx` / `2026072608xxxx` / `2026072610xxxx`.
 - **Mirror each migration into `src/supabase/`** and add it to the README list —
-  unless/until §2b retires that tree.
+  unless/until the operator-script tree is retired. Keep
+  `test/supabase-operator-script-drift.test.js` green.
 - Migrations carry a **prose header explaining the defect and why the fix is
   shaped that way.** Match that; the existing ones are the reference.
 - Tests are **ESM** (`import`, not `require`) in `test/*.test.js`, run by
   `node --test "test/**/*.test.js"`.
-- Many existing tests assert on **source text** rather than behaviour. That is a
-  known weakness (it is in the triage queue). When you assert on SQL text, strip
-  comment lines first — a migration header that quotes the old code will otherwise
-  match your "this must be gone" assertion. There is a `body()` helper doing
-  exactly this in `test/roll-call-correction-credits.test.js`.
+- Many existing tests assert on **source text** rather than behaviour. When you
+  assert on SQL text, strip comment lines first — a migration header that quotes
+  the old code will otherwise match your "this must be gone" assertion. There is
+  a `body()` helper doing exactly this in
+  `test/roll-call-correction-credits.test.js`.
 - Commit messages: explain the defect, the mechanism, and the evidence. No model
   identifiers in commits or code.
 
@@ -334,8 +299,9 @@ being permanently uncorrectable) — verify and address together.
 ```
 docs/HANDOFF.md                     <- this file
 docs/AUDIT_2026-07.md               <- audit report, status-labelled
-docs/audit/remaining-findings.md    <- the 56 open findings, full evidence
+docs/audit/remaining-findings.md    <- 56 findings with FIXED/OPEN status
 docs/requirements/README.md         <- integration plan + owner decisions
 docs/requirements/0*.md             <- the six feature specs
-supabase/migrations/2026072600*.sql <- the four fixes landed this pass
+supabase/migrations/202607260*.sql  <- audit-era SQL fixes
+test/supabase-operator-script-drift.test.js  <- keeps src/supabase/ from regressing
 ```

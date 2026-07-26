@@ -37,6 +37,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var classRoster: [AdminRosterMember] = []
+    @Published private(set) var loadedRosterSessionID: UUID?
     @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
@@ -99,6 +100,7 @@ final class AdminStore: ObservableObject {
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
+    private var rosterLoadGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -924,12 +926,25 @@ final class AdminStore: ObservableObject {
     }
 
     func loadClassRoster(session: AuthSession, classSessionID: UUID) async {
-        guard loadingRosterSessionID == nil else { return }
+        rosterLoadGeneration &+= 1
+        let requestID = rosterLoadGeneration
+        classRoster = []
+        loadedRosterSessionID = nil
         loadingRosterSessionID = classSessionID
-        defer { loadingRosterSessionID = nil }
+        defer {
+            if rosterLoadGeneration == requestID {
+                loadingRosterSessionID = nil
+            }
+        }
         do {
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            guard rosterLoadGeneration == requestID else { return }
+            classRoster = roster
+            loadedRosterSessionID = classSessionID
         } catch {
+            guard rosterLoadGeneration == requestID else { return }
+            classRoster = []
+            loadedRosterSessionID = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -948,6 +963,7 @@ final class AdminStore: ObservableObject {
             let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
             bookingDecisionNoticeWarning = outcome.warning
             classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            loadedRosterSessionID = classSessionID
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)
             lastUpdatedAt = Date()
@@ -975,6 +991,7 @@ final class AdminStore: ObservableObject {
                 noShowIDs: noShowIDs
             )
             classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            loadedRosterSessionID = classSessionID
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true

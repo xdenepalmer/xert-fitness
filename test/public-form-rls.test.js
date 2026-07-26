@@ -35,3 +35,21 @@ test('the production integrity upgrade registers a release capability', async ()
   assert.match(sql, /values \('public_form_integrity'\)/i);
   assert.match(sql, /xert_public_capabilities/i);
 });
+
+test('member interest health consent is enforced by the public form installer and migration', async () => {
+  const paths = [
+    '../src/supabase/member_interest_health_consent.sql',
+    '../src/supabase/public_enquiry_time_guard.sql',
+    '../src/supabase/public_form_staff_column_guard.sql',
+    '../supabase/migrations/20260726103000_member_interest_health_consent.sql',
+  ];
+  for (const path of paths) {
+    const sql = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(sql, /create or replace function public\.install_public_form_insert_policies/i);
+    assert.match(sql, /health_info_consent is true/i);
+    assert.match(sql, /injuries_or_limitations_optional/i);
+  }
+  const migration = await readFile(new URL('../supabase/migrations/20260726103000_member_interest_health_consent.sql', import.meta.url), 'utf8');
+  assert.match(migration, /add column if not exists health_info_consent boolean not null default false/i);
+  assert.match(migration, /values \('member_interest_health_consent'\)/i);
+});

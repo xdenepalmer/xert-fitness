@@ -19,8 +19,11 @@ test('native refreshes coalesce and reject results from an earlier account gener
   assert.match(version, /func isCurrent\(_ snapshot: Int\)/);
   assert.match(swiftTests, /testMemberStateVersionsRejectWorkFromAnEarlierAccountGeneration/);
 
+  assert.match(refresh, /pendingRefreshRequested = true/);
   assert.match(refresh, /if let dataRefreshTask/);
   assert.match(refresh, /await dataRefreshTask\.value/);
+  assert.match(refresh, /while let dataRefreshTask/);
+  assert.match(refresh, /repeat \{[\s\S]*pendingRefreshRequested = false[\s\S]*\} while pendingRefreshRequested/);
   assert.match(refresh, /dataRefreshVersion\.snapshot/);
   assert.match(store, /guard canApplyMemberState\(memberVersion, session: authSession\) && canApplyRefresh\(refreshVersion\)/);
 

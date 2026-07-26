@@ -60,6 +60,7 @@ final class XertStore: ObservableObject {
     private var bootstrapTask: Task<Void, Never>?
     private var sessionRefreshTask: Task<AuthSession, Error>?
     private var dataRefreshTask: Task<Void, Never>?
+    private var pendingRefreshRequested = false
     private var lastRefreshCompletedAt: Date?
     private var requiresBootstrapRefresh = false
     private var dataRefreshVersion = MemberStateVersion()
@@ -140,28 +141,43 @@ final class XertStore: ObservableObject {
     }
 
     func refresh() async {
+        // Callers that arrive after an in-flight refresh started must not piggyback
+        // on that fan-out: its requests were issued before their mutation or pull.
+        // Coalesce late callers onto one follow-up generation instead.
         if let dataRefreshTask {
+            pendingRefreshRequested = true
             await dataRefreshTask.value
+            while let dataRefreshTask {
+                await dataRefreshTask.value
+            }
             return
         }
 
-        dataRefreshVersion.invalidate()
-        let refreshVersion = dataRefreshVersion.snapshot
-        let memberVersion = memberStateVersion.snapshot
-        let announcementVersion = announcementStateVersion.snapshot
-        let task = Task {
-            await performRefresh(
-                refreshVersion: refreshVersion,
-                memberVersion: memberVersion,
-                announcementVersion: announcementVersion
-            )
-        }
-        dataRefreshTask = task
-        await task.value
-        if dataRefreshVersion.isCurrent(refreshVersion) {
-            dataRefreshTask = nil
-            lastRefreshCompletedAt = Date()
-        }
+        repeat {
+            pendingRefreshRequested = false
+            dataRefreshVersion.invalidate()
+            let refreshVersion = dataRefreshVersion.snapshot
+            let memberVersion = memberStateVersion.snapshot
+            let announcementVersion = announcementStateVersion.snapshot
+            let task = Task {
+                await performRefresh(
+                    refreshVersion: refreshVersion,
+                    memberVersion: memberVersion,
+                    announcementVersion: announcementVersion
+                )
+            }
+            dataRefreshTask = task
+            await task.value
+            if dataRefreshVersion.isCurrent(refreshVersion) {
+                dataRefreshTask = nil
+                lastRefreshCompletedAt = Date()
+            } else if dataRefreshTask == nil, pendingRefreshRequested {
+                // In-flight work was cancelled; still honour a queued follow-up.
+                continue
+            } else {
+                break
+            }
+        } while pendingRefreshRequested
     }
 
     /// Lifecycle activation can fire several times around system sheets,
@@ -508,13 +524,28 @@ final class XertStore: ObservableObject {
     func signOut() {
         let currentSession = authSession
         let pushToken = PushDeviceTokenStore.load()
+        // Fail closed locally even when the network unregister cannot complete.
+        clearLocalPushRegistration()
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         XertHaptics.play(.softImpact)
         Task {
             await ClassReminderScheduler.shared.clearAll()
             if let currentSession {
-                if let pushToken { try? await api.updatePushSubscription(session: currentSession, token: pushToken, enabled: false) }
+                if let pushToken {
+                    do {
+                        try await api.updatePushSubscription(
+                            session: currentSession,
+                            token: pushToken,
+                            enabled: false
+                        )
+                        PendingPushUnregisterStore.clear()
+                    } catch {
+                        PendingPushUnregisterStore.save(
+                            PendingPushUnregister(session: currentSession, token: pushToken)
+                        )
+                    }
+                }
                 try? await api.signOut(session: currentSession)
             }
         }
@@ -527,7 +558,25 @@ final class XertStore: ObservableObject {
         defer { isDeletingAccount = false }
         do {
             let authSession = try await validAuthSession()
+            let pushToken = PushDeviceTokenStore.load()
+            if let pushToken {
+                do {
+                    try await api.updatePushSubscription(
+                        session: authSession,
+                        token: pushToken,
+                        enabled: false
+                    )
+                    PendingPushUnregisterStore.clear()
+                } catch {
+                    PendingPushUnregisterStore.save(
+                        PendingPushUnregister(session: authSession, token: pushToken)
+                    )
+                }
+            }
             try await api.deleteAccount(session: authSession)
+            // Account deletion cascades push_subscriptions; no retry needed.
+            PendingPushUnregisterStore.clear()
+            clearLocalPushRegistration()
             replaceAuthSession(with: nil)
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
@@ -832,7 +881,29 @@ final class XertStore: ObservableObject {
         XertHaptics.play(.error)
     }
 
+    private func clearLocalPushRegistration() {
+        MemberPushPreference.setEnabled(false)
+        memberPushEnabled = false
+        PushDeviceTokenStore.clear()
+        UIApplication.shared.unregisterForRemoteNotifications()
+    }
+
+    private func flushPendingPushUnregister() async {
+        guard let pending = PendingPushUnregisterStore.load() else { return }
+        do {
+            try await api.updatePushSubscription(
+                session: pending.session,
+                token: pending.token,
+                enabled: false
+            )
+            PendingPushUnregisterStore.clear()
+        } catch {
+            // Keep the pending record for the next launch.
+        }
+    }
+
     private func restoreMemberPushRegistration() async {
+        await flushPendingPushUnregister()
         guard memberPushEnabled, isSignedIn else { return }
         guard await MemberPushRegistration.requestAndRegister() else {
             MemberPushPreference.setEnabled(false)
@@ -958,11 +1029,12 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func reconcileCheckout(callbackSessionID: String? = nil) async {
+    @discardableResult
+    func reconcileCheckout(callbackSessionID: String? = nil) async -> CheckoutReconciliation.Settlement? {
         guard
             let userID = authSession?.user?.id,
             !isReconcilingCheckout
-        else { return }
+        else { return nil }
         let memberVersion = memberStateVersion.snapshot
         let pendingCheckout = PendingCheckoutStore.resolve(
             for: userID,
@@ -970,6 +1042,7 @@ final class XertStore: ObservableObject {
             baselineOrderIDs: Set(orders.map(\.id))
         )
         isCheckoutConfirmationPending = pendingCheckout != nil
+        guard pendingCheckout != nil else { return nil }
         isReconcilingCheckout = true
         defer {
             if memberStateVersion.isCurrent(memberVersion) {
@@ -982,24 +1055,24 @@ final class XertStore: ObservableObject {
                 do {
                     try await Task.sleep(nanoseconds: delay)
                 } catch {
-                    return
+                    return nil
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
 
             do {
                 let memberSession = try await validAuthSession()
                 async let creditRequest = api.credits(session: memberSession)
                 async let orderRequest = api.orders(session: memberSession)
                 let (loadedCredits, loadedOrders) = try await (creditRequest, orderRequest)
-                guard canApplyMemberState(memberVersion, session: memberSession) else { return }
+                guard canApplyMemberState(memberVersion, session: memberSession) else { return nil }
                 credits = loadedCredits
                 creditBalanceLoaded = true
                 orders = loadedOrders
                 unavailableDataSources.subtract([.credits, .orders])
                 memberDataUpdatedAt = Date()
 
-                guard let pendingCheckout else { return }
+                guard let pendingCheckout else { return nil }
                 let settlement = CheckoutReconciliation.settlement(
                     pendingCheckout: pendingCheckout,
                     credits: loadedCredits,
@@ -1018,14 +1091,15 @@ final class XertStore: ObservableObject {
                         checkoutActivatedSessionID = pendingCheckout.activationSessionID
                         XertHaptics.play(.success)
                     }
-                    return
+                    return settlement
                 }
             } catch {
-                guard memberStateVersion.isCurrent(memberVersion) else { return }
+                guard memberStateVersion.isCurrent(memberVersion) else { return nil }
                 unavailableDataSources.formUnion([.credits, .orders])
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
         }
+        return .pending
     }
 
     func reconcilePendingCheckout() async {

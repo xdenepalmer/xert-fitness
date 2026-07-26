@@ -1742,7 +1742,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
     }
 
-    func testPendingCheckoutRecoversFromAValidatedReturnWithoutReplacingStoredIdentity() throws {
+    func testPendingCheckoutRejectsForgedCallbackWithoutLocallyIssuedPending() throws {
         let suiteName = "PendingCheckoutReturnTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1750,24 +1750,40 @@ final class ModelsTests: XCTestCase {
         let baselineOrderIDs: Set<UUID> = [UUID()]
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-        let recovered = try XCTUnwrap(PendingCheckoutStore.resolve(
+        // A forged deep link must never manufacture pending purchase state.
+        XCTAssertNil(PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: "cs_test_ReturnRecovery123",
             baselineOrderIDs: baselineOrderIDs,
             now: now,
             defaults: defaults
         ))
-        XCTAssertEqual(recovered.checkoutSessionID, "cs_test_ReturnRecovery123")
-        XCTAssertEqual(recovered.baselineOrderIDs, baselineOrderIDs)
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
 
-        let stored = try XCTUnwrap(PendingCheckoutStore.resolve(
+        let issued = PendingCheckout(
+            userID: userID,
+            baselineOrderIDs: baselineOrderIDs,
+            startedAt: now,
+            checkoutSessionID: "cs_test_LocallyIssued789"
+        )
+        PendingCheckoutStore.save(issued, defaults: defaults)
+
+        let matched = try XCTUnwrap(PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: "cs_test_LocallyIssued789",
+            baselineOrderIDs: [],
+            now: now.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertEqual(matched, issued)
+
+        XCTAssertNil(PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: "cs_test_DifferentReturn456",
             baselineOrderIDs: [],
             now: now.addingTimeInterval(60),
             defaults: defaults
         ))
-        XCTAssertEqual(stored, recovered)
 
         PendingCheckoutStore.clear(defaults: defaults)
         XCTAssertNil(PendingCheckoutStore.resolve(
@@ -2551,6 +2567,20 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(PushDeviceTokenStore.load(defaults: defaults), token)
         PushDeviceTokenStore.clear(defaults: defaults)
         XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
+
+        let session = AuthSession(
+            access_token: "access-token",
+            refresh_token: "refresh-token",
+            expires_in: nil,
+            expires_at: nil,
+            token_type: "bearer",
+            user: nil
+        )
+        let pending = PendingPushUnregister(session: session, token: token)
+        PendingPushUnregisterStore.save(pending, defaults: defaults)
+        XCTAssertEqual(PendingPushUnregisterStore.load(defaults: defaults), pending)
+        PendingPushUnregisterStore.clear(defaults: defaults)
+        XCTAssertNil(PendingPushUnregisterStore.load(defaults: defaults))
     }
 
     func testAnnouncementPushRoutingSurvivesColdLaunchAndConsumesOnce() throws {
@@ -3319,6 +3349,12 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(memberPayload.email, "alex@example.com")
         XCTAssertEqual(memberPayload.source, "ios_app")
         XCTAssertEqual(memberPayload.status, "new")
+        XCTAssertEqual(memberPayload.health_info_consent, false)
+
+        member.injuries = "Recovering from a sprained ankle"
+        XCTAssertThrowsError(try MemberInterestSubmission(member))
+        member.healthInfoConsent = true
+        XCTAssertEqual(try MemberInterestSubmission(member).health_info_consent, true)
 
         var trainer = member
         trainer.qualifications = "Cert IV"; trainer.yearsExperience = "3–5 years"

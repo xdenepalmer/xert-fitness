@@ -221,6 +221,9 @@ The Supabase schema is defined in:
   once per admin query instead of once per scanned row
 - `src/supabase/member_history_index.sql` — indexes a member's own orders so the
   account page stops scanning the whole table
+- `src/supabase/member_interest_health_consent.sql` — requires an explicit health
+  information consent before free-text injuries can be stored on a public member
+  interest lead
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -254,8 +257,10 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
-`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`
-and `member_history_index.sql`. This sequence produces the
+`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
+`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql` and
+`member_interest_health_consent.sql`. This
+sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -296,8 +301,10 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
-`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`
-and `member_history_index.sql`. The scripts are idempotent;
+`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
+`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql` and
+`member_interest_health_consent.sql`. The
+scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

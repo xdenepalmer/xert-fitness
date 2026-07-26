@@ -202,6 +202,8 @@ begin
 end; $$;
 
 
+-- A timely cancel always restores the credit; if the pack has already expired,
+-- reactivate the batch so the returned credit stays bookable.
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -225,10 +227,16 @@ begin
   set status = 'cancelled', cancelled_at = now()
   where id = p_booking_id;
 
-  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours')) and v_batch is not null then
+  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours'))
+     and v_batch is not null then
     update public.credit_batches
-    set remaining = remaining + 1
-    where id = v_batch and (expires_at is null or expires_at > now());
+    set remaining = remaining + 1,
+        expires_at = case
+          when expires_at is not null and expires_at <= now()
+            then greatest(v_start, now() + interval '12 hours')
+          else expires_at
+        end
+    where id = v_batch;
   end if;
 end; $$;
 

@@ -1,5 +1,8 @@
 export const CREDIT_REFUND_LEAD_TIME_MS = 12 * 60 * 60 * 1000;
 
+// Mirrors cancel_booking: requested always refunds; confirmed refunds when the
+// class is more than 12 hours away. The server restores the credit even when
+// the original pack has expired (and reactivates that batch so it stays usable).
 export function cancellationReturnsCredit(booking, now = Date.now()) {
   if (booking.status === 'requested') return true;
   if (booking.status !== 'confirmed') return false;

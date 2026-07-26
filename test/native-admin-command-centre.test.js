@@ -495,13 +495,18 @@ test('native owner class work opens exact protected rosters from overview and se
 });
 
 test('native roll call requires explicit complete attendance and provides compact batch controls', async () => {
-  const [view, models] = await Promise.all([
+  const [view, models, store] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
   ]);
   const roster = view.slice(
     view.indexOf('private struct AdminClassRosterView'),
     view.indexOf('private struct AdminScheduleView'),
+  );
+  const loadRoster = store.slice(
+    store.indexOf('func loadClassRoster'),
+    store.indexOf('func setBookingStatus'),
   );
 
   assert.match(models, /enum AdminAttendanceMark[\s\S]*case attended[\s\S]*case noShow = "no_show"/);
@@ -517,6 +522,33 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.match(roster, /title: "No show"[\s\S]*mark: \.noShow/);
   assert.match(roster, /\.disabled\(!canRecordAttendance\)/);
   assert.match(roster, /attendedIDs: attended[\s\S]*noShowIDs: noShows/);
+  assert.match(store, /@Published private\(set\) var loadedRosterSessionID: UUID\?/);
+  assert.match(loadRoster, /classRoster = \[\]/);
+  assert.match(loadRoster, /loadedRosterSessionID = nil/);
+  assert.match(loadRoster, /rosterLoadGeneration/);
+  assert.match(loadRoster, /loadedRosterSessionID = classSessionID/);
+  assert.match(roster, /admin\.loadedRosterSessionID == operation\.id \? admin\.classRoster : \[\]/);
+  assert.match(roster, /ForEach\(scopedRoster\)/);
+});
+
+test('native site content editors bind FAQ and text rows by stable identity', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const editor = view.slice(
+    view.indexOf('private struct IdentifiedDraftLine'),
+    view.indexOf('private struct AdminCampaignAttributionView'),
+  );
+
+  assert.match(editor, /struct IdentifiedDraftLine: Identifiable, Equatable/);
+  assert.match(editor, /ForEach\(draft\.items \?\? \[\]\) \{ item in[\s\S]*faqRow\(itemID: item\.id\)/);
+  assert.match(editor, /draft\.items\?\.removeAll \{ \$0\.id == itemID \}/);
+  assert.match(editor, /faqBinding\(itemID:[\s\S]*firstIndex\(where: \{ \$0\.id == itemID \}\)/);
+  assert.match(editor, /ForEach\(Array\(photoRows\.enumerated\(\)\), id: \\\.element\.id\)/);
+  assert.match(editor, /ForEach\(Array\(paragraphRows\.enumerated\(\)\), id: \\\.element\.id\)/);
+  assert.match(editor, /photoRows\.removeAll \{ \$0\.id == id \}/);
+  assert.match(editor, /paragraphRows\.removeAll \{ \$0\.id == id \}/);
+  assert.doesNotMatch(editor, /ForEach\(\(draft\.items \?\? \[\]\)\.indices, id: \\\.self\)/);
+  assert.doesNotMatch(editor, /ForEach\(\(draft\.photos \?\? \[\]\)\.indices, id: \\\.self\)/);
+  assert.doesNotMatch(editor, /ForEach\(\(draft\.paragraphs \?\? \[\]\)\.indices, id: \\\.self\)/);
 });
 
 test('native class desk never presents unavailable operational data as an empty queue', async () => {

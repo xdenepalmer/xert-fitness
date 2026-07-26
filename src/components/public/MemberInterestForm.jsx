@@ -59,11 +59,13 @@ export default function MemberInterestForm() {
     occupation_group: '', interested_in_group_classes: false, interested_in_pt: false,
     interested_in_workshops: false, interested_in_event_prep: false,
     injuries_or_limitations_optional: '', biggest_reason_for_joining: '',
+    health_info_consent: false,
     consent_to_contact: false, mailing_list_consent: false,
     company_website: '', // honeypot
   });
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
+  const hasHealthDetails = Boolean(form.injuries_or_limitations_optional.trim());
 
   const validateStep = () => {
     if (step === 0) {
@@ -78,7 +80,15 @@ export default function MemberInterestForm() {
       if (form.main_training_goals.length === 0) return 'Select at least one training goal.';
       if (form.preferred_training_times.length === 0) return 'Select at least one preferred time.';
     }
+    if (step === 2) {
+      if (hasHealthDetails && !form.health_info_consent) {
+        return 'Consent to collect health information is required when you share injuries or limitations.';
+      }
+    }
     if (step === 3) {
+      if (hasHealthDetails && !form.health_info_consent) {
+        return 'Consent to collect health information is required when you share injuries or limitations.';
+      }
       if (!form.consent_to_contact) return 'Consent to contact is required.';
     }
     return null;
@@ -206,10 +216,25 @@ export default function MemberInterestForm() {
           <div>
             <FieldLabel htmlFor="member-limitations">Any injuries or physical limitations</FieldLabel>
             <textarea id="member-limitations" name="injuries_or_limitations_optional" value={form.injuries_or_limitations_optional}
-              onChange={e => set('injuries_or_limitations_optional', e.target.value)}
+              onChange={e => {
+                const value = e.target.value;
+                setForm(f => ({
+                  ...f,
+                  injuries_or_limitations_optional: value,
+                  health_info_consent: value.trim() ? f.health_info_consent : false,
+                }));
+              }}
               rows={2} placeholder="Optional — helps us coach you appropriately"
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
           </div>
+          <FormCheckbox
+            name="health_info_consent"
+            checked={form.health_info_consent}
+            onChange={checked => set('health_info_consent', checked)}
+            required={hasHealthDetails}
+          >
+            I consent to XERT collecting health information about injuries or medical limitations so coaches can train me safely. I understand I can leave this blank.
+          </FormCheckbox>
           <div>
             <FieldLabel htmlFor="member-reason">What's the biggest reason you're joining?</FieldLabel>
             <textarea id="member-reason" name="biggest_reason_for_joining" value={form.biggest_reason_for_joining}

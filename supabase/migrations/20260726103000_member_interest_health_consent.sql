@@ -1,25 +1,17 @@
--- Refuses a public "Request spot" enquiry against a class that has already run.
+-- Records explicit consent before free-text health details can land in
+-- member_interest, and refuses an insert that carries injuries text without it.
 --
--- The signed-in booking path is bounded server side: sessions_with_availability
--- filters `s.start_time > now()` and join_session_waitlist raises
--- SESSION_IN_PAST. The public timetable writes somewhere else.
--- requestClassBooking inserts into class_bookings, whose policy checked only
--- the workflow state and consent, and enforce_booking_time_conflict is attached
--- to session_bookings rather than this table. getClassSessions also had no time
--- filter, so /timetable rendered every class ever published, oldest first, each
--- with a live Request spot button. An enquiry against a finished class landed
--- as a live `requested` row in the staff queue.
+-- The public member-interest form already collected
+-- injuries_or_limitations_optional under only consent_to_contact (consent to be
+-- contacted). Health information is sensitive information under the Privacy Act
+-- 1988; APP 3.3 requires a separate, informed consent to collect it.
 --
--- The client no longer offers the button for a class that has started; this is
--- the guard behind it, so a stale tab or a direct PostgREST call cannot do it
--- either. The class must exist, be published, be publicly visible and still be
--- ahead of now().
---
--- This extends the shared installer from 20260726010000 rather than writing the
--- policy out again, so the four other scripts that recreate the public form
--- policies pick the guard up too. It also keeps the member-interest health
--- consent clause when that column exists, so re-running this file cannot strip
--- member_interest_health_consent.
+-- Extends install_public_form_insert_policies() so every operator script that
+-- reinstalls the public form policies keeps the health guard. The clause is
+-- added only when both columns exist, so earlier apply paths stay safe.
+
+alter table public.member_interest
+  add column if not exists health_info_consent boolean not null default false;
 
 create or replace function public.install_public_form_insert_policies()
 returns void
@@ -124,4 +116,4 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 select public.install_public_form_insert_policies();
 
 insert into public.xert_schema_capabilities (capability)
-values ('public_enquiry_time_guard') on conflict (capability) do nothing;
+values ('member_interest_health_consent') on conflict (capability) do nothing;

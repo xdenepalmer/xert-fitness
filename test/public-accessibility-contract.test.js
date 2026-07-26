@@ -35,6 +35,14 @@ test('member contact fields use associated labels, stable names, and required se
   assert.match(memberForm, /id="member-phone" name="phone" required autoComplete="tel"/);
 });
 
+test('member interest requires explicit health consent before injuries free-text can submit', () => {
+  assert.match(memberForm, /name="injuries_or_limitations_optional"/);
+  assert.match(memberForm, /name="health_info_consent"/);
+  assert.match(memberForm, /I consent to XERT collecting health information about injuries or medical limitations/);
+  assert.match(memberForm, /hasHealthDetails && !form\.health_info_consent/);
+  assert.match(memberForm, /required=\{hasHealthDetails\}/);
+});
+
 test('event filters and actions provide full-size mobile targets', () => {
   assert.ok((events.match(/min-h-11/g) || []).length >= 5);
   assert.match(events, /Add to calendar/);

@@ -28,7 +28,9 @@
 --
 -- The staff-column clause is added per table only where the column exists,
 -- because the five lead and request tables predate this repo's SQL and were
--- created through the Supabase dashboard.
+-- created through the Supabase dashboard. Later guards (finished-class enquiry
+-- time, member-interest health consent) are emitted conditionally for the same
+-- reason, so re-running this file cannot strip them.
 
 create table if not exists public.xert_schema_capabilities (
   capability text primary key,
@@ -46,6 +48,8 @@ declare
   v_status text;
   v_extra text;
   v_owner text;
+  v_session text;
+  v_health text;
 begin
   foreach v_table in array array[
     'member_interest', 'trainer_interest', 'partner_interest',
@@ -77,6 +81,20 @@ begin
     $owner$;
     end if;
 
+    v_session := '';
+    if v_table = 'class_bookings' and to_regclass('public.class_sessions') is not null then
+      v_session := $session$
+      and exists (
+        select 1
+        from public.class_sessions session
+        where session.id = class_bookings.class_session_id
+          and session.status = 'published'
+          and session.public_visible is true
+          and session.start_time > now()
+      )
+    $session$;
+    end if;
+
     v_extra := '';
     if exists (
       select 1 from information_schema.columns
@@ -85,12 +103,33 @@ begin
       v_extra := $notes$ and coalesce(btrim(admin_notes), '') = '' $notes$;
     end if;
 
+    v_health := '';
+    if v_table = 'member_interest'
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'injuries_or_limitations_optional'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+    then
+      v_health := $health$
+      and (
+        coalesce(btrim(injuries_or_limitations_optional), '') = ''
+        or health_info_consent is true
+      )
+      $health$;
+    end if;
+
     execute format('alter table public.%I enable row level security', v_table);
     execute format('drop policy if exists %I on public.%I', 'public_insert_' || v_table, v_table);
     execute format(
       'create policy %I on public.%I for insert to anon, authenticated '
-      || 'with check (status = %L and consent_to_contact is true%s%s)',
-      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner
+      || 'with check (status = %L and consent_to_contact is true%s%s%s%s)',
+      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner, v_session, v_health
     );
   end loop;
 end;

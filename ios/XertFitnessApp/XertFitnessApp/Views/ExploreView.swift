@@ -222,6 +222,7 @@ private struct NativeInterestFormView: View {
                 Toggle("Workshops", isOn: $draft.workshops)
                 Toggle("Event preparation", isOn: $draft.eventPrep)
                 TextField("Injuries or limitations (optional)", text: $draft.injuries, axis: .vertical).lineLimit(3...8)
+                Toggle("I consent to XERT collecting health information about injuries or medical limitations so coaches can train me safely. I understand I can leave this blank.", isOn: $draft.healthInfoConsent)
                 TextField("Biggest reason for joining", text: $draft.joiningReason, axis: .vertical).lineLimit(3...8)
             }
         }

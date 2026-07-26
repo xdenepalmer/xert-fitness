@@ -6,21 +6,31 @@ const sections = [
     title: 'Information We Collect',
     content: [
       'We collect information you provide when creating an account, registering interest, contacting XERT, purchasing a session pack, booking a class, choosing a training goal or completing Member Readiness. This may include your name, email, phone number, suburb, training preferences, goals, booking history and information you voluntarily provide about injuries or limitations.',
+      'When you submit a public interest, coaching or partnership form, we also record limited attribution details from that visit so we can understand how people find XERT: the referring website (if your browser sends one), campaign parameters such as UTM source, medium, campaign and content when present in the link, and the landing path you used to open the form.',
       'Member Readiness stores the name, phone number and relationship of the emergency contact you nominate, your confirmation that the contact knows they are listed, and versioned receipts showing which required documents you acknowledged, when XERT confirmed the acknowledgement and whether it came from the website or iOS app. The readiness form does not collect screening answers, diagnoses or a medical-clearance outcome.',
       'Our services also receive limited technical information needed for security and operation, such as authentication records, request timestamps and payment status. XERT does not store your complete card details.'
+    ]
+  },
+  {
+    title: 'Sensitive And Health Information',
+    content: [
+      'Under Australian privacy law, health information is sensitive information. Optional free-text answers about injuries or physical limitations on the member interest form are treated as health information.',
+      'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox. Contact-only consent is not enough. You can leave the injuries field blank and still register interest.',
+      'When collected, this information is used to help coaches plan safe training and follow up appropriately. It is available to authorised XERT administrators for that purpose and is not included in bulk lead CSV exports or campaign analytics.'
     ]
   },
   {
     title: 'How We Use Information',
     content: [
       'We use your information to operate memberships, respond to enquiries, manage bookings and credits, tailor coaching, plan classes and events, process purchases, support emergency preparation, confirm current readiness acknowledgements, provide support, maintain security and meet legal or accounting obligations.',
-      'Marketing messages are sent only where you have opted in or where otherwise permitted. You can ask us to stop at any time.'
+      'Attribution details from form submissions are used to understand campaign and referral performance. Marketing messages are sent only where you have opted in or where otherwise permitted. You can ask us to stop at any time.'
     ]
   },
   {
     title: 'Services And Disclosure',
     content: [
-      'XERT uses service providers including Supabase for authentication and application data, Vercel for website and API hosting, Stripe for payments, and Apple services when you choose native calendar or notification features. These providers process information under their own security and privacy commitments.',
+      'XERT uses service providers including Supabase for authentication and application data, Vercel for website and API hosting, Stripe for payments, and Apple services when you choose native calendar or notification features. These providers are headquartered in the United States and store or process personal information outside Australia (commonly in the United States and other regions they operate). They process information under their own security and privacy commitments.',
+      'The website also loads fonts from Google (fonts.googleapis.com / fonts.gstatic.com) and may embed an OpenStreetMap map on the contact page. Those services can receive your IP address and basic browser information when a page is viewed.',
       'Other members cannot access your Member Readiness information. Authorized XERT administrators can see completion status. Emergency-contact details are available only from your individual member record through a recorded reveal; they are not included in member search, bulk member or lead CSV exports, campaign analytics, notifications or public profiles.',
       'We do not sell personal information. We may disclose information where required by law, to protect people or the service, or as part of a business transfer subject to appropriate safeguards.'
     ]
@@ -46,5 +56,5 @@ const sections = [
 ];
 
 export default function Privacy() {
-  return <LegalPage eyebrow="Member Privacy" title="Privacy Policy" updated="21 July 2026" intro="This policy explains how XERT Fitness collects, uses, protects and manages personal information across its website, member services and iOS app." sections={sections} />;
+  return <LegalPage eyebrow="Member Privacy" title="Privacy Policy" updated="26 July 2026" intro="This policy explains how XERT Fitness collects, uses, protects and manages personal information across its website, member services and iOS app." sections={sections} />;
 }

@@ -40,6 +40,34 @@ enum PushDeviceTokenStore {
     }
 }
 
+/// Retries a failed push unregister after sign-out / account deletion so a
+/// departed member's private notices cannot keep targeting this device.
+struct PendingPushUnregister: Codable, Equatable {
+    let session: AuthSession
+    let token: DevicePushToken
+}
+
+enum PendingPushUnregisterStore {
+    static let storageKey = "xert.memberPush.pendingUnregister"
+
+    static func load(defaults: UserDefaults = .standard) -> PendingPushUnregister? {
+        guard
+            let data = defaults.data(forKey: storageKey),
+            let pending = try? JSONDecoder().decode(PendingPushUnregister.self, from: data)
+        else { return nil }
+        return pending
+    }
+
+    static func save(_ pending: PendingPushUnregister, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(pending) else { return }
+        defaults.set(data, forKey: storageKey)
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey)
+    }
+}
+
 enum MemberPushRegistration {
     static var environment: String {
         #if DEBUG

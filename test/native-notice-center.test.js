@@ -37,3 +37,21 @@ test('shared native sections preserve existing calls while allowing a header com
   assert.match(root, /action: \(\(\) -> Void\)\? = nil/);
   assert.match(root, /if let actionTitle, let action[\s\S]*Button\(actionTitle, action: action\)/);
 });
+
+test('native sign-out clears local push registration and retries failed unregister', () => {
+  const store = read('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift');
+  const registration = read('../ios/XertFitnessApp/XertFitnessApp/Services/MemberPushRegistration.swift');
+  const swiftTests = read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift');
+  const signOut = store.slice(store.indexOf('func signOut()'), store.indexOf('func deleteAccount'));
+
+  assert.match(registration, /struct PendingPushUnregister: Codable, Equatable/);
+  assert.match(registration, /enum PendingPushUnregisterStore/);
+  assert.match(signOut, /clearLocalPushRegistration\(\)/);
+  assert.match(store, /PushDeviceTokenStore\.clear\(\)/);
+  assert.match(store, /unregisterForRemoteNotifications\(\)/);
+  assert.match(signOut, /PendingPushUnregisterStore\.save\(/);
+  assert.match(store, /func deleteAccount[\s\S]*clearLocalPushRegistration\(\)/);
+  assert.match(store, /flushPendingPushUnregister\(\)/);
+  assert.match(store, /restoreMemberPushRegistration[\s\S]*await flushPendingPushUnregister\(\)/);
+  assert.match(swiftTests, /PendingPushUnregisterStore\.save\(pending, defaults: defaults\)/);
+});

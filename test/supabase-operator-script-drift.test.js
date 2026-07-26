@@ -120,6 +120,21 @@ test('no operator script writes its own public form insert policy', () => {
   assert.ok(checked >= 5, 'the public form insert policies are still bootstrapped somewhere');
 });
 
+test('every install_public_form_insert_policies definition keeps the health-consent guard', () => {
+  const definers = scripts().filter(({ sql }) => sql.includes('create or replace function public.install_public_form_insert_policies()'));
+  assert.ok(definers.length >= 3, 'the public form installer is defined by more than one operator script');
+
+  for (const { name, sql } of definers) {
+    assert.match(
+      sql,
+      /health_info_consent is true/,
+      `${name} replaces install_public_form_insert_policies without the member-interest `
+        + 'health-consent guard, so re-running it would accept injuries text without APP 3.3 consent',
+    );
+    assert.match(sql, /injuries_or_limitations_optional/);
+  }
+});
+
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {
   const superseded = [
     {
