@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
-import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponses } from './supabaseResults';
+import { assertAdminMutationVersion, assertSupabaseResponses } from './supabaseResults';
 import { adminLeadSelect, leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
@@ -149,11 +149,13 @@ export async function createClassSessions(sessionData) {
   return data || [];
 }
 
-export async function updateClassSession(id, updates) {
+export async function updateClassSession(id, updates, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Class version is missing. Refresh the admin view and try again.');
   const payload = normalizeClassSession(updates);
   const guarded = await supabase.rpc('admin_update_class_session', {
     p_session_id: id,
     p_session: payload,
+    p_expected_updated_at: expectedUpdatedAt,
   });
   if (!guarded.error) return guarded.data;
 
@@ -161,9 +163,9 @@ export async function updateClassSession(id, updates) {
     || /admin_update_class_session.*(?:not found|schema cache|does not exist)/i.test(guarded.error.message || '');
   if (!guardUnavailable) throw new Error(classSessionUpdateRpcError(guarded.error.message));
 
-  // Compatibility path for projects awaiting the class session guard migration.
-  // The migration makes this check transactional; the preflight still blocks
-  // unsafe edits immediately on older installations.
+  // Compatibility path for projects awaiting the class session guard / optimistic
+  // locking migrations. The migration makes these checks transactional; the
+  // preflight still blocks unsafe edits immediately on older installations.
   const [current, active] = await Promise.all([
     supabase.from('class_sessions').select('status').eq('id', id).single(),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true })
@@ -183,8 +185,9 @@ export async function updateClassSession(id, updates) {
     .from('class_sessions')
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('updated_at', expectedUpdatedAt)
     .select('id');
-  assertAdminMutation(result, 'Class session update');
+  assertAdminMutationVersion(result, 'Class session update');
 }
 
 export async function cancelClassSession(id) {

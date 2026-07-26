@@ -112,7 +112,7 @@ export default function MemberInterestForm() {
     try {
       await submitMemberInterest(form);
       navigate('/thank-you');
-    } catch (e) {
+    } catch {
       setError('Submission failed. Please try again or contact us directly.');
     } finally {
       setLoading(false);

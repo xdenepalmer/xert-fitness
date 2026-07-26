@@ -140,6 +140,8 @@ The Supabase schema is defined in:
   attendance audit metadata, and automatic class completion
 - `supabase/migrations/20260713000000_class_session_update_guard.sql` — prevents class edits from
   bypassing credit-safe cancellation, roll-call completion, or roster capacity
+- `src/supabase/class_session_optimistic_locking_upgrade.sql` — rejects stale class-session edits
+  when another administrator has already changed the same schedule row
 - `src/supabase/member_waitlist_upgrade.sql` — lets signed-in members join a
   full class waitlist without consuming a credit
 - `src/supabase/waitlist_fifo_promotion_upgrade.sql` — displays member queue
@@ -258,8 +260,9 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
-`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql` and
-`member_interest_health_consent.sql`. This
+`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
+`member_interest_health_consent.sql` and
+`class_session_optimistic_locking_upgrade.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -302,8 +305,9 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
-`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql` and
-`member_interest_health_consent.sql`. The
+`member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
+`member_interest_health_consent.sql` and
+`class_session_optimistic_locking_upgrade.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

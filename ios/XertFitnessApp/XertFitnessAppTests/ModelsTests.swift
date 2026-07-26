@@ -3164,7 +3164,7 @@ final class ModelsTests: XCTestCase {
             coach_name: nil, start_time: start, end_time: nil, duration_minutes: nil,
             capacity: nil, location_zone: nil, beginner_friendly: nil,
             intensity_level: nil, status: "draft", public_visible: nil,
-            booking_mode: nil, notes: nil
+            booking_mode: nil, notes: nil, updated_at: "2026-07-14T00:00:00Z"
         )
 
         let draft = AdminClassDraft(classSession: session)

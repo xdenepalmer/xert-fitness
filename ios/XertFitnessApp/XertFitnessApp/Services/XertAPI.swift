@@ -348,7 +348,7 @@ final class XertAPI {
         return try await restRequest(
             path: "/rest/v1/class_sessions",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,class_type,title,description,coach_name,start_time,end_time,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,status,public_visible,booking_mode,notes"),
+                URLQueryItem(name: "select", value: "id,class_type,title,description,coach_name,start_time,end_time,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,status,public_visible,booking_mode,notes,updated_at"),
                 URLQueryItem(name: "order", value: "start_time.asc.nullslast"),
                 URLQueryItem(name: "limit", value: "1000")
             ],
@@ -375,14 +375,26 @@ final class XertAPI {
         guard !["cancelled", "completed"].contains(draft.status) else {
             throw APIError(message: "Use cancellation or attendance to close this class safely.")
         }
-        let _: UUID = try await rpc(
-            path: "admin_update_class_session",
-            body: AdminClassUpdateRequest(
-                p_session_id: classSession.id,
-                p_session: try adminClassPayload(draft)
-            ),
-            auth: auth
-        )
+        guard let expectedUpdatedAt = classSession.updated_at, !expectedUpdatedAt.isEmpty else {
+            throw APIError(message: "Class version is missing. Refresh the admin view and try again.")
+        }
+        do {
+            let _: UUID = try await rpc(
+                path: "admin_update_class_session",
+                body: AdminClassUpdateRequest(
+                    p_session_id: classSession.id,
+                    p_session: try adminClassPayload(draft),
+                    p_expected_updated_at: expectedUpdatedAt
+                ),
+                auth: auth
+            )
+        } catch let error as APIError {
+            if error.message.localizedCaseInsensitiveContains("SESSION_STALE")
+                || error.message.localizedCaseInsensitiveContains("SESSION_VERSION_REQUIRED") {
+                throw APIError(message: "Class update was not applied because this class changed since you opened it. Refresh the calendar and review the latest version.")
+            }
+            throw APIError(message: error.message, statusCode: error.statusCode)
+        }
     }
 
     @discardableResult
@@ -2136,6 +2148,7 @@ private struct AdminClassPayload: Encodable {
 private struct AdminClassUpdateRequest: Encodable {
     let p_session_id: UUID
     let p_session: AdminClassPayload
+    let p_expected_updated_at: String
 }
 private struct AdminCancellationNoticeRequest: Encodable {
     let action: String

@@ -652,17 +652,21 @@ begin
   order by g.created_at asc;
 end; $$;
 
--- Edit class metadata without bypassing lifecycle or capacity invariants.
-create or replace function public.admin_update_class_session(
-  p_session_id uuid, p_session jsonb
+-- Edit class metadata without bypassing lifecycle, capacity, or version invariants.
+-- class_session_optimistic_locking_upgrade.sql is the canonical upgrade path;
+-- keep this fresh-install definition aligned with the three-argument overload.
+drop function if exists public.admin_update_class_session(uuid, jsonb, timestamptz);
+create function public.admin_update_class_session(
+  p_session_id uuid, p_session jsonb, p_expected_updated_at timestamptz
 )
-returns uuid language plpgsql security definer set search_path = public as $$
+returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
 declare
-  v_current_status text; v_active_bookings integer; v_update record;
+  v_current public.class_sessions%rowtype; v_active_bookings integer; v_update record;
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_session_id is null then raise exception 'SESSION_REQUIRED'; end if;
   if p_session is null then raise exception 'SESSION_PAYLOAD_REQUIRED'; end if;
+  if p_expected_updated_at is null then raise exception 'SESSION_VERSION_REQUIRED'; end if;
   select * into v_update from jsonb_to_record(p_session) as session_data(
     class_type text, title text, description text, coach_name text,
     start_time timestamptz, end_time timestamptz, duration_minutes integer,
@@ -674,16 +678,19 @@ begin
      or v_update.status is null or v_update.capacity is null then
     raise exception 'INVALID_SESSION_PAYLOAD';
   end if;
-  select status into v_current_status from public.class_sessions
+  select * into v_current from public.class_sessions
     where id = p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
-  if v_current_status in ('cancelled', 'completed') and v_update.status <> v_current_status then
+  if v_current.updated_at is distinct from p_expected_updated_at then
+    raise exception 'SESSION_STALE';
+  end if;
+  if v_current.status in ('cancelled', 'completed') and v_update.status <> v_current.status then
     raise exception 'TERMINAL_SESSION_IMMUTABLE';
   end if;
-  if v_update.status = 'cancelled' and v_current_status <> 'cancelled' then
+  if v_update.status = 'cancelled' and v_current.status <> 'cancelled' then
     raise exception 'USE_CANCELLATION_WORKFLOW';
   end if;
-  if v_update.status = 'completed' and v_current_status <> 'completed' then
+  if v_update.status = 'completed' and v_current.status <> 'completed' then
     raise exception 'USE_ATTENDANCE_WORKFLOW';
   end if;
   perform 1 from public.session_bookings where class_session_id = p_session_id
@@ -702,7 +709,9 @@ begin
     intensity_level = v_update.intensity_level, status = v_update.status,
     public_visible = v_update.public_visible, booking_mode = v_update.booking_mode,
     notes = v_update.notes, updated_at = now()
-  where id = p_session_id;
+  where id = p_session_id
+    and updated_at = p_expected_updated_at;
+  if not found then raise exception 'SESSION_STALE'; end if;
   return p_session_id;
 end; $$;
 
@@ -834,7 +843,7 @@ revoke execute on function public.admin_set_booking_status(uuid, text) from publ
 revoke execute on function public.admin_promote_next_waitlisted(uuid) from public, anon;
 revoke execute on function public.admin_waitlist_overview(integer) from public, anon;
 revoke execute on function public.admin_daily_operations() from public, anon;
-revoke execute on function public.admin_update_class_session(uuid, jsonb) from public, anon;
+revoke execute on function public.admin_update_class_session(uuid, jsonb, timestamptz) from public, anon;
 revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
 revoke execute on function public.admin_event_goal_members(uuid) from public, anon;
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
@@ -851,7 +860,22 @@ grant execute on function public.admin_set_booking_status(uuid, text)    to auth
 grant execute on function public.admin_promote_next_waitlisted(uuid)     to authenticated;
 grant execute on function public.admin_waitlist_overview(integer)        to authenticated;
 grant execute on function public.admin_daily_operations()                to authenticated;
-grant execute on function public.admin_update_class_session(uuid, jsonb) to authenticated;
+grant execute on function public.admin_update_class_session(uuid, jsonb, timestamptz) to authenticated;
+-- The historical two-argument overload (no version check) must stay revoked
+-- once the three-argument form exists; re-running this file must not re-arm it.
+do $$
+begin
+  if to_regprocedure('public.admin_update_class_session(uuid, jsonb)') is null then
+    return;
+  end if;
+  revoke execute on function public.admin_update_class_session(uuid, jsonb) from public, anon;
+  if to_regprocedure('public.admin_update_class_session(uuid, jsonb, timestamptz)') is null then
+    grant execute on function public.admin_update_class_session(uuid, jsonb) to authenticated;
+  else
+    revoke execute on function public.admin_update_class_session(uuid, jsonb) from authenticated;
+  end if;
+end;
+$$;
 grant execute on function public.admin_cancel_class_session(uuid)         to authenticated;
 grant execute on function public.admin_event_goal_members(uuid)            to authenticated;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
@@ -873,6 +897,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('waitlist_fifo_promotion') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('class_session_update_guard') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('class_session_optimistic_locking') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('product_update_guard') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)

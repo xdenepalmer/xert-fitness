@@ -61,7 +61,7 @@ group of findings, not per finding). Wide fan-out hits session/concurrency caps.
 The original handoff claimed the 56-item audit queue was never verified. That is
 **stale**. Most findings have been verified against code (and many against
 PostgreSQL 16) and marked **FIXED** in `docs/audit/remaining-findings.md`.
-**48 FIXED / 8 OPEN** as of this update.
+**49 FIXED / 7 OPEN** as of this update.
 
 ### Themes from commits on this branch (after merge with main)
 
@@ -108,7 +108,7 @@ numbered queue). Commit them before treating them as shipped.
 
 ## 2. What is still outstanding
 
-### 2a. Audit queue — 8 still open
+### 2a. Audit queue — 7 still open
 
 Full evidence remains in **`docs/audit/remaining-findings.md`** (auditor quotes
 kept; **status** lines are authoritative). Open items:
@@ -119,7 +119,6 @@ kept; **status** lines are authoritative). Open items:
 | 27 | medium | Owner `memberCount` still reads `total_count` from `members[0]`; `resolveOwnerTask` inserts a filtered member at index 0 |
 | 29 | medium | `canApplyMemberState` still compares `access_token`, so token refresh aborts post-mutation UI |
 | 31 | medium | `AdminLayout` badge refresh effect still depends on `activeSection` without reading it |
-| 33 | medium | `admin_update_class_session` still has no optimistic-lock / `expected_updated_at` |
 | 49 | low | `requestText` still `JSON.stringify`s a parsed body — risky for Stripe HMAC if a runtime pre-parses |
 | 51 | low | Calendar integration still requests full event access on iOS 17+ |
 | 52 | low | Sign-out/delete clear push state, but pending checkout / nav pins / admin scene storage are not fully purged |

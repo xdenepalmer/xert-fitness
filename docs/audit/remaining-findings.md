@@ -2,7 +2,7 @@
 
 **56 findings.** Statuses below reflect verification against the current branch
 `cursor/xert-audit-continuation-8c8e` (merged with `main`) plus the working tree.
-**48 FIXED**, **8 still OPEN**. Auditor evidence quotes are preserved for history;
+**49 FIXED**, **7 still OPEN**. Auditor evidence quotes are preserved for history;
 prefer the **status** line and `docs/HANDOFF.md` for what is true now.
 
 Read `../HANDOFF.md` first for environment setup, what landed on this branch, and
@@ -1090,7 +1090,7 @@ Give each row's name element an id (e.g. `id={`roster-name-${r.booking_id}`}`) a
 - **id:** `class-session-update-no-optimistic-lock`
 - **severity (claimed):** medium
 - **location:** `src/lib/adminData.js:139`
-- **status:** OPEN — `admin_update_class_session(uuid, jsonb)` still has no `expected_updated_at` / stale check; concurrent schedule edits can overwrite.
+- **status:** FIXED — `admin_update_class_session(uuid, jsonb, timestamptz)` raises `SESSION_STALE`; web + iOS pass `updated_at` (`20260726104000_*`, `adminData.js`, `ClassCalendarAdmin.jsx`, working tree).
 
 **What the auditor claims**
 

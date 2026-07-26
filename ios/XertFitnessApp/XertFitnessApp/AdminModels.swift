@@ -240,6 +240,7 @@ struct AdminClassSession: Identifiable, Codable, Hashable {
     let public_visible: Bool?
     let booking_mode: String?
     let notes: String?
+    let updated_at: String?
 }
 
 struct AdminClassDraft: Equatable {

@@ -26,7 +26,7 @@ test('signed-in members reach their operational dashboard before promotional con
 test('member dashboard chooses the true next active booking including today', async () => {
   const home = await readFile(homeURL, 'utf8');
   const nextBooking = home.match(
-    /private var dashboardNextBooking: BookingItem\? \{([\s\S]*?)\n    \}/,
+    /private var dashboardNextBooking: BookingItem\? \{([\s\S]*?)\n {4}\}/,
   )?.[1];
 
   assert.ok(nextBooking, 'dashboardNextBooking should remain a focused computed property');

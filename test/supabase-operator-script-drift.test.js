@@ -148,6 +148,12 @@ test('no operator script re-grants an overload a later script revoked for optimi
       guard: "to_regprocedure('public.admin_archive_member_announcement(uuid, boolean, timestamptz)') is null",
       why: 'an archive action that omits the expected version would resolve to the unguarded overload',
     },
+    {
+      grant: 'grant execute on function public.admin_update_class_session(uuid, jsonb) to authenticated',
+      guard: "to_regprocedure('public.admin_update_class_session(uuid, jsonb, timestamptz)') is null",
+      why: 'a class edit that omits p_expected_updated_at would resolve to the overload that '
+        + 'never raises SESSION_STALE',
+    },
   ];
 
   for (const { grant, guard, why } of superseded) {

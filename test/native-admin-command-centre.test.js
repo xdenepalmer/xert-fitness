@@ -147,6 +147,8 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminClassEditor/);
   assert.match(api, /func adminCreateClass/);
   assert.match(api, /path: "admin_update_class_session"/);
+  assert.match(api, /p_expected_updated_at: expectedUpdatedAt/);
+  assert.match(api, /SESSION_STALE/);
   assert.match(api, /path: "admin_cancel_class_session"/);
   assert.match(api, /notify_class_cancellation/);
   assert.match(adminStore, /func duplicateClass/);

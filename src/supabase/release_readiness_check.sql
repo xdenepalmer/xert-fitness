@@ -13,6 +13,7 @@ with required (capability, migration) as (
     ('waitlist_fifo_promotion', 'supabase/migrations/20260714004100_waitlist_fifo_promotion.sql'),
     ('attendance_roll_call', 'src/supabase/attendance_roll_call_upgrade.sql'),
     ('class_session_update_guard', 'supabase/migrations/20260713000000_class_session_update_guard.sql'),
+    ('class_session_optimistic_locking', 'supabase/migrations/20260726104000_class_session_optimistic_locking.sql'),
     ('product_update_guard', 'supabase/migrations/20260713010000_product_update_guard.sql'),
     ('stripe_refund_reconciliation', 'supabase/migrations/20260713020000_stripe_refund_reconciliation.sql'),
     ('checkout_reconciliation', 'supabase/migrations/20260713030000_checkout_reconciliation.sql'),

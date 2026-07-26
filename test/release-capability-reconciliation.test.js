@@ -45,6 +45,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/booking_lifecycle_audit_upgrade.sql', '../supabase/migrations/20260714014000_booking_lifecycle_audit.sql'],
     ['../src/supabase/class_cancellation_notifications_upgrade.sql', '../supabase/migrations/20260714015000_class_cancellation_notifications.sql'],
     ['../src/supabase/catalog_optimistic_locking_upgrade.sql', '../supabase/migrations/20260714020000_catalog_optimistic_locking.sql'],
+    ['../src/supabase/class_session_optimistic_locking_upgrade.sql', '../supabase/migrations/20260726104000_class_session_optimistic_locking.sql'],
     ['../src/supabase/product_commercial_terms_guard_upgrade.sql', '../supabase/migrations/20260720000000_product_commercial_terms_guard.sql'],
     ['../src/supabase/member_onboarding_upgrade.sql', '../supabase/migrations/20260721010000_member_onboarding_foundation.sql'],
     ['../src/supabase/member_activation_cockpit_upgrade.sql', '../supabase/migrations/20260721020000_member_activation_cockpit.sql'],

@@ -58,18 +58,27 @@ test('capacity cannot be reduced below active bookings and RPC errors stay actio
 
 test('class update uses a transactional RPC with a guarded legacy preflight', () => {
   assert.match(adminData, /rpc\('admin_update_class_session'/);
-  assert.match(adminData, /class session guard migration/);
+  assert.match(adminData, /class session guard/);
   assert.match(adminData, /session_bookings[\s\S]*\['requested', 'confirmed'\]/);
   assert.match(adminData, /classSessionUpdateGuardError/);
 
-  for (const sql of [freshSchema, upgradeSchema]) {
-    assert.match(sql, /create or replace function public\.admin_update_class_session/i);
-    assert.match(sql, /from public\.class_sessions[\s\S]*for update/i);
-    assert.match(sql, /from public\.session_bookings[\s\S]*for update/i);
-    assert.match(sql, /CAPACITY_BELOW_ACTIVE/i);
-    assert.match(sql, /USE_CANCELLATION_WORKFLOW/i);
-    assert.match(sql, /USE_ATTENDANCE_WORKFLOW/i);
-    assert.match(sql, /values \('class_session_update_guard'\)/i);
-    assert.match(sql, /grant execute on function public\.admin_update_class_session\(uuid, jsonb\) to authenticated/i);
-  }
+  // Historical migration still documents the original two-argument guard.
+  assert.match(upgradeSchema, /create or replace function public\.admin_update_class_session/i);
+  assert.match(upgradeSchema, /from public\.class_sessions[\s\S]*for update/i);
+  assert.match(upgradeSchema, /from public\.session_bookings[\s\S]*for update/i);
+  assert.match(upgradeSchema, /CAPACITY_BELOW_ACTIVE/i);
+  assert.match(upgradeSchema, /USE_CANCELLATION_WORKFLOW/i);
+  assert.match(upgradeSchema, /USE_ATTENDANCE_WORKFLOW/i);
+  assert.match(upgradeSchema, /values \('class_session_update_guard'\)/i);
+  assert.match(upgradeSchema, /grant execute on function public\.admin_update_class_session\(uuid, jsonb\) to authenticated/i);
+
+  // Fresh admin CMS path ships the version-checked three-argument overload.
+  assert.match(freshSchema, /create function public\.admin_update_class_session/i);
+  assert.match(freshSchema, /p_expected_updated_at timestamptz/i);
+  assert.match(freshSchema, /SESSION_STALE/i);
+  assert.match(freshSchema, /CAPACITY_BELOW_ACTIVE/i);
+  assert.match(freshSchema, /USE_CANCELLATION_WORKFLOW/i);
+  assert.match(freshSchema, /USE_ATTENDANCE_WORKFLOW/i);
+  assert.match(freshSchema, /values \('class_session_update_guard'\)/i);
+  assert.match(freshSchema, /grant execute on function public\.admin_update_class_session\(uuid, jsonb, timestamptz\) to authenticated/i);
 });

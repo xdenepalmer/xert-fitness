@@ -182,6 +182,9 @@ export function classSessionUpdateRpcError(message) {
     return 'Cancelled and completed classes cannot be reopened. Create a new class instead.';
   }
   if (/SESSION_NOT_FOUND/i.test(value)) return 'This class no longer exists. Refresh the calendar.';
+  if (/SESSION_STALE|SESSION_VERSION_REQUIRED/i.test(value)) {
+    return 'Class update was not applied because this class changed since you opened it. Refresh the calendar and review the latest version.';
+  }
   return value;
 }
 
@@ -233,7 +236,7 @@ export function repeatedClassSessionCopies(session, { intervalDays, count, keepP
   const endMs = timestamp(session.end_time);
   if (session.end_time && endMs === null) throw new Error('This class has an invalid end time.');
 
-  const { id, created_at, updated_at, ...base } = session;
+  const { id: _id, created_at: _createdAt, updated_at: _updatedAt, ...base } = session;
   const intervalMs = interval * 24 * 60 * 60 * 1000;
   return Array.from({ length: copyCount }, (_, index) => {
     const offsetMs = (index + 1) * intervalMs;

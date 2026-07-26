@@ -243,7 +243,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
     setSaving(true);
     try {
       if (session?.id) {
-        await updateClassSession(session.id, form);
+        await updateClassSession(session.id, form, session.updated_at);
       } else {
         await createClassSession(form);
       }
