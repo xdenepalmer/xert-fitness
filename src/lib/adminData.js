@@ -1225,6 +1225,33 @@ export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, r
   throw new Error(message);
 }
 
+export async function adminSkipWaitlistedHead(sessionId, expectedBookingId, requestId = globalThis.crypto?.randomUUID?.()) {
+  const mutation = normalizeSessionPromotion(sessionId, expectedBookingId, requestId);
+  const { data, error } = await supabase.rpc('admin_skip_waitlisted_head_with_notice', {
+    p_session_id: mutation.sessionId,
+    p_expected_booking_id: mutation.expectedBookingId,
+    p_request_id: mutation.requestId,
+  });
+  if (!error) {
+    const decision = Array.isArray(data) ? data[0] : data;
+    if (!decision || decision.booking_id !== mutation.expectedBookingId || decision.new_status !== 'cancelled') {
+      throw new Error('The waitlist skip completed without a verifiable receipt. Refresh the waitlist before continuing.');
+    }
+    if (!decision.announcement_id) return { ...decision, push: null, warning: null };
+    const delivery = await notifyTargetedAnnouncementPush(decision.announcement_id);
+    return { ...decision, push: delivery.push, warning: delivery.warning || null };
+  }
+  const message = error.message || '';
+  if (error.code === 'PGRST202' || /admin_skip_waitlisted_head_with_notice.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    throw new Error('Apply the waitlist skip concurrency migration before removing waitlisted members.');
+  }
+  if (/WAITLIST_EMPTY/i.test(message)) throw new Error('No members are waiting for this class. Refresh the waitlist.');
+  if (/BOOKING_NOT_WAITLISTED|WAITLIST_CHANGED|BOOKING_DECISION_REQUEST_CONFLICT/i.test(message)) {
+    throw new Error('The queue changed before this skip. Refresh and review the waitlist.');
+  }
+  throw new Error(message);
+}
+
 export async function adminRecordSessionAttendance(sessionId, attendance) {
   const mutation = normalizeSessionAttendanceMutation(sessionId, attendance);
   const { data, error } = await supabase.rpc('admin_record_session_attendance', {

@@ -1732,6 +1732,55 @@ final class XertAPI {
         )
     }
 
+    func adminSkipWaitlistedHead(
+        session auth: AuthSession,
+        classSessionID: UUID,
+        expectedBookingID: UUID,
+        requestID: UUID
+    ) async throws -> AdminBookingDecisionOutcome {
+        let rows: [AdminBookingDecision] = try await rpc(
+            path: "admin_skip_waitlisted_head_with_notice",
+            body: AdminWaitlistSkipRequest(
+                p_session_id: classSessionID,
+                p_expected_booking_id: expectedBookingID,
+                p_request_id: requestID
+            ),
+            auth: auth
+        )
+        guard rows.count == 1, let decision = rows.first,
+              decision.booking_id == expectedBookingID,
+              decision.session_id == classSessionID,
+              decision.new_status == "cancelled" else {
+            throw APIError(message: "The waitlist skip completed without a verifiable receipt. Refresh the waitlist before continuing.")
+        }
+        guard let announcementID = decision.announcement_id else {
+            return AdminBookingDecisionOutcome(decision: decision, pushDelivered: false, warning: nil)
+        }
+        do {
+            let response: AdminTargetedNoticeResponse = try await vercelRequest(
+                path: "/api/admin-publish-announcement",
+                body: AdminTargetedNoticeRequest(
+                    action: "notify_targeted_announcement",
+                    announcement_id: announcementID
+                ),
+                auth: auth
+            )
+            return AdminBookingDecisionOutcome(
+                decision: decision,
+                pushDelivered: (response.push?.delivered ?? 0) > 0,
+                warning: response.push?.configured == false
+                    ? "They were removed from the waitlist and their private notice is live, but Apple push is not configured."
+                    : nil
+            )
+        } catch {
+            return AdminBookingDecisionOutcome(
+                decision: decision,
+                pushDelivered: false,
+                warning: "They were removed from the waitlist and their private notice is live, but Apple push delivery needs attention."
+            )
+        }
+    }
+
     func adminPromoteNextWaitlisted(
         session auth: AuthSession,
         classSessionID: UUID,
@@ -2108,6 +2157,11 @@ private struct AdminLimitRequest: Encodable { let p_limit: Int }
 private struct AdminCohortDaysRequest: Encodable { let p_cohort_days: Int }
 private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
 private struct AdminWaitlistPromotionRequest: Encodable {
+    let p_session_id: UUID
+    let p_expected_booking_id: UUID
+    let p_request_id: UUID
+}
+private struct AdminWaitlistSkipRequest: Encodable {
     let p_session_id: UUID
     let p_expected_booking_id: UUID
     let p_request_id: UUID

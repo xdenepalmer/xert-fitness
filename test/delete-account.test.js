@@ -3,12 +3,14 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  deleteByNormalizedEmail,
   deleteMemberAccount,
   deleteMemberAccountLegacy,
   hasDeleteAccountConfirmation,
   isMissingAccountDeletionRoutine,
   isMissingClassBookingsTable,
   isMissingPTTrackingColumn,
+  normalizeAccountEmail,
 } from '../api/delete-account.js';
 
 test('requires an explicit destructive account deletion confirmation', () => {
@@ -86,7 +88,7 @@ test('falls back to ordered piecemeal deletion including legacy class bookings d
         delete() {
           return {
             async eq(column, value) { calls.push(['eq', column, value]); return { error: null }; },
-            async ilike(column, value) { calls.push(['ilike', column, value]); return { error: null }; },
+            async ilike() { throw new Error('ilike must not be used for account email deletes'); },
           };
         },
       };
@@ -102,17 +104,70 @@ test('falls back to ordered piecemeal deletion including legacy class bookings d
     ['from', 'private_session_requests'],
     ['eq', 'user_id', 'member-123'],
     ['from', 'class_bookings'],
-    ['ilike', 'email', 'member@example.com'],
+    ['eq', 'email', 'member@example.com'],
     ['from', 'private_session_requests'],
-    ['ilike', 'email', 'member@example.com'],
+    ['eq', 'email', 'member@example.com'],
     ['from', 'member_interest'],
-    ['ilike', 'email', 'member@example.com'],
+    ['eq', 'email', 'member@example.com'],
     ['from', 'trainer_interest'],
-    ['ilike', 'email', 'member@example.com'],
+    ['eq', 'email', 'member@example.com'],
     ['from', 'partner_interest'],
-    ['ilike', 'email', 'member@example.com'],
+    ['eq', 'email', 'member@example.com'],
     ['deleteUser', 'member-123'],
   ]);
+});
+
+test('legacy email deletes use exact equality so LIKE wildcards cannot match strangers', async () => {
+  assert.equal(normalizeAccountEmail(' A_b%C@Example.com '), 'a_b%c@example.com');
+
+  const filters = [];
+  const query = {
+    eq(column, value) {
+      filters.push(['eq', column, value]);
+      return Promise.resolve({ error: null });
+    },
+    ilike() {
+      throw new Error('ilike would treat _ and % as wildcards and match strangers');
+    },
+  };
+  assert.deepEqual(await deleteByNormalizedEmail(query, 'a_b%c@example.com'), { error: null });
+  assert.deepEqual(filters, [['eq', 'email', 'a_b%c@example.com']]);
+
+  const emailDeletes = [];
+  const admin = {
+    from(table) {
+      return {
+        delete() {
+          return {
+            async eq(column, value) {
+              if (column === 'email') emailDeletes.push([table, value]);
+              return { error: null };
+            },
+            async ilike() {
+              throw new Error(`ilike on ${table} would match strangers via _/%`);
+            },
+          };
+        },
+        update() {
+          return { async eq() { return { error: null }; } };
+        },
+      };
+    },
+    auth: { admin: { async deleteUser() { return { error: null }; } } },
+  };
+
+  await deleteMemberAccountLegacy(admin, 'member-123', 'a_b%c@Example.com');
+  assert.deepEqual(emailDeletes, [
+    ['class_bookings', 'a_b%c@example.com'],
+    ['private_session_requests', 'a_b%c@example.com'],
+    ['member_interest', 'a_b%c@example.com'],
+    ['trainer_interest', 'a_b%c@example.com'],
+    ['partner_interest', 'a_b%c@example.com'],
+  ]);
+
+  const source = await readFile(new URL('../api/delete-account.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\.ilike\(/);
+  assert.match(source, /deleteByNormalizedEmail\(/);
 });
 
 test('identifies only missing PT ownership columns and class booking tables as rollout-compatible', () => {
@@ -134,12 +189,13 @@ test('rollout fallback proceeds through PT rollout gaps but rejects unrelated fa
         || table === 'member_interest'
         || table === 'trainer_interest'
         || table === 'partner_interest') {
-        return { delete: () => ({ ilike: async () => ({ error: null }) }) };
+        return { delete: () => ({ eq: async () => ({ error: null }) }) };
       }
       return {
         delete: () => ({
-          eq: async () => ({ error: ptError }),
-          ilike: async () => ({ error: null }),
+          eq: async (column, value) => (
+            column === 'user_id' ? { error: ptError } : { error: null }
+          ),
         }),
       };
     },

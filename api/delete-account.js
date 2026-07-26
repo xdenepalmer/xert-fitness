@@ -24,6 +24,20 @@ export function isMissingAccountDeletionRoutine(error) {
     || /delete_member_account.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
 }
 
+/** Matches SQL `lower(btrim(email))` used by delete_member_account. */
+export function normalizeAccountEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+/**
+ * PostgREST cannot express lower(btrim(email)) = $1. Equality on the
+ * normalised address is the exact-match substitute. Never use ilike: `_` and
+ * `%` are LIKE wildcards and would match unrelated rows.
+ */
+export function deleteByNormalizedEmail(query, normalizedEmail) {
+  return query.eq('email', normalizedEmail);
+}
+
 /**
  * Rollout-only fallback used until the atomic routine ships. These are separate
  * round trips with no transaction, so it is reached only when the durable
@@ -51,21 +65,21 @@ export async function deleteMemberAccountLegacy(admin, userId, email) {
 
   // Legacy public enquiry table with no user_id column: match on the member's
   // normalised email. Absent installs are tolerated so deletion still proceeds.
-  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedEmail = normalizeAccountEmail(email);
   if (normalizedEmail) {
-    const { error: bookingError } = await admin
-      .from('class_bookings')
-      .delete()
-      .ilike('email', normalizedEmail);
+    const { error: bookingError } = await deleteByNormalizedEmail(
+      admin.from('class_bookings').delete(),
+      normalizedEmail,
+    );
     if (bookingError && !isMissingClassBookingsTable(bookingError)) {
       throw bookingError;
     }
 
     // Anonymous PT rows and any leftover address match after the user_id delete.
-    const { error: anonPtError } = await admin
-      .from('private_session_requests')
-      .delete()
-      .ilike('email', normalizedEmail);
+    const { error: anonPtError } = await deleteByNormalizedEmail(
+      admin.from('private_session_requests').delete(),
+      normalizedEmail,
+    );
     if (
       anonPtError
       && !isMissingPTTrackingColumn(anonPtError)
@@ -75,10 +89,10 @@ export async function deleteMemberAccountLegacy(admin, userId, email) {
     }
 
     for (const table of ['member_interest', 'trainer_interest', 'partner_interest']) {
-      const { error: leadError } = await admin
-        .from(table)
-        .delete()
-        .ilike('email', normalizedEmail);
+      const { error: leadError } = await deleteByNormalizedEmail(
+        admin.from(table).delete(),
+        normalizedEmail,
+      );
       if (leadError && !['42P01', 'PGRST205'].includes(leadError.code)) {
         throw leadError;
       }

@@ -2414,11 +2414,11 @@ private struct AdminClassesView: View {
         ) { item in
             Button("Skip — no credits", role: .destructive) {
                 Task {
-                    _ = await admin.setBookingStatus(
+                    _ = await admin.skipWaitlistHead(
                         session: session,
                         classSessionID: item.session_id,
-                        bookingID: item.next_booking_id,
-                        status: "cancelled"
+                        expectedBookingID: item.next_booking_id,
+                        requestID: UUID()
                     )
                     skipCandidate = nil
                 }

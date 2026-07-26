@@ -38,11 +38,13 @@ test('native owner workspace uses protected operational RPCs and real actions', 
     'admin_member_follow_up_queue',
     'admin_list_members_page',
     'admin_promote_next_waitlisted_with_notice',
+    'admin_skip_waitlisted_head_with_notice',
     'admin_add_member_note',
     'admin_update_request',
   ]) assert.match(api, new RegExp(`path: "${rpc}"`));
 
   assert.match(adminStore, /func promoteNext/);
+  assert.match(adminStore, /func skipWaitlistHead/);
   assert.match(adminStore, /func logFollowUp/);
   assert.match(adminStore, /func searchMembers/);
   assert.match(view, /AdminMembersView/);
@@ -638,7 +640,14 @@ test('native class desk never presents unavailable operational data as an empty 
   assert.match(desk, /Showing the last waitlist snapshot\. Refresh before promoting a member/);
   assert.match(desk, /!waitlistIsCurrent \|\| !item\.can_promote/);
   assert.match(desk, /Skip — no credits/);
-  assert.match(desk, /status: "cancelled"/);
+  assert.match(desk, /admin\.skipWaitlistHead\(/);
+  assert.match(desk, /expectedBookingID: item\.next_booking_id/);
+  const skipDialog = desk.slice(
+    desk.indexOf('Remove \\(skipCandidate'),
+    desk.indexOf('private func operationalLoadingRow')
+  );
+  assert.match(skipDialog, /skipWaitlistHead\(/);
+  assert.doesNotMatch(skipDialog, /setBookingStatus\(/);
   assert.match(desk, /Waitlisted members do not hold a credit/);
   assert.match(desk, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
 });

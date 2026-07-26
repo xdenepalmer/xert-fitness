@@ -52,7 +52,8 @@ test('class calendar exposes waitlist blockers, roster access, promotion, and ze
   assert.match(source, /onClick=\{\(\) => onOpen\(item\.session_id\)\}/);
   assert.match(source, /onClick=\{\(\) => onPromote\(item\)\}/);
   assert.match(source, /onClick=\{\(\) => onSkip\(item\)\}/);
-  assert.match(source, /adminSetBookingStatus\(candidate\.next_booking_id, 'cancelled'\)/);
+  assert.match(source, /adminSkipWaitlistedHead\(candidate\.session_id, candidate\.next_booking_id\)/);
+  assert.doesNotMatch(source, /adminSetBookingStatus\(candidate\.next_booking_id, 'cancelled'\)/);
   assert.match(source, /adminWaitlistOverview\(20\)/);
   assert.match(source, /expandedBookings === candidate\.session_id \? \[refreshBookings\(candidate\.session_id\)\] : \[\]/);
 });

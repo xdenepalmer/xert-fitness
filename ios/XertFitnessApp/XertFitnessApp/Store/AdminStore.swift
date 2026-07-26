@@ -58,6 +58,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var ownerMemberSearchError: String?
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
+    @Published private(set) var skippingSessionID: UUID?
     @Published private(set) var promotionNoticeWarning: String?
     @Published private(set) var bookingDecisionNoticeWarning: String?
     @Published private(set) var loggingFollowUpMemberID: UUID?
@@ -926,7 +927,7 @@ final class AdminStore: ObservableObject {
         expectedBookingID: UUID,
         requestID: UUID
     ) async -> Bool {
-        guard promotingSessionID == nil else { return false }
+        guard promotingSessionID == nil, skippingSessionID == nil else { return false }
         promotingSessionID = classSessionID
         promotionNoticeWarning = nil
         defer { promotingSessionID = nil }
@@ -955,6 +956,45 @@ final class AdminStore: ObservableObject {
             } else {
                 errorMessage = message
             }
+            return false
+        }
+    }
+
+    func skipWaitlistHead(
+        session: AuthSession,
+        classSessionID: UUID,
+        expectedBookingID: UUID,
+        requestID: UUID
+    ) async -> Bool {
+        guard promotingSessionID == nil, skippingSessionID == nil else { return false }
+        skippingSessionID = classSessionID
+        bookingDecisionNoticeWarning = nil
+        defer { skippingSessionID = nil }
+        do {
+            let outcome = try await api.adminSkipWaitlistedHead(
+                session: session,
+                classSessionID: classSessionID,
+                expectedBookingID: expectedBookingID,
+                requestID: requestID
+            )
+            bookingDecisionNoticeWarning = outcome.warning
+            waitlist = try await api.adminWaitlist(session: session)
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            let message = error.localizedDescription
+            if message.localizedCaseInsensitiveContains("BOOKING_NOT_WAITLISTED")
+                || message.localizedCaseInsensitiveContains("WAITLIST_CHANGED")
+                || message.localizedCaseInsensitiveContains("BOOKING_DECISION_REQUEST_CONFLICT")
+                || message.localizedCaseInsensitiveContains("WAITLIST_EMPTY") {
+                errorMessage = "The queue changed before this skip. Refresh and review the waitlist."
+            } else if message.localizedCaseInsensitiveContains("admin_skip_waitlisted_head_with_notice") {
+                errorMessage = "Apply the waitlist skip concurrency migration before removing waitlisted members."
+            } else {
+                errorMessage = message
+            }
+            do { waitlist = try await api.adminWaitlist(session: session) } catch { /* keep skip error primary */ }
             return false
         }
     }

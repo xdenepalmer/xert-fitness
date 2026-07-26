@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, UserMinus, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminSkipWaitlistedHead, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
@@ -759,8 +759,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     if (promotingSessionId || skippingSessionId || !candidate?.next_booking_id) return;
     setSkippingSessionId(candidate.session_id);
     try {
-      // Waitlisted rows hold no credit; cancelled does not refund (admin_set_booking_status).
-      const result = await adminSetBookingStatus(candidate.next_booking_id, 'cancelled');
+      // Same concurrency contract as Promote: expected id must still be waitlisted FIFO head.
+      const result = await adminSkipWaitlistedHead(candidate.session_id, candidate.next_booking_id);
       await Promise.all([
         refreshWaitlistOverview(),
         ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
@@ -775,6 +775,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           : 'No credit was charged or refunded. Promote the next credited member when ready.',
       });
     } catch (error) {
+      try {
+        await refreshWaitlistOverview();
+      } catch {
+        // Keep the skip error primary; desk refresh is best-effort after a race.
+      }
       toast({ title: 'Could not remove waitlisted member', description: error.message, variant: 'destructive' });
     } finally {
       setSkippingSessionId(null);
