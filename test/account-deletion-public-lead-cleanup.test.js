@@ -32,4 +32,5 @@ test('Account dialog and Privacy retention copy mention public leads and anonymo
   assert.match(account, /anonymous PT requests/);
   assert.match(privacy, /public interest or enquiry records matched to your account email/);
   assert.match(privacy, /anonymous PT requests/);
+  assert.match(privacy, /notification device tokens/);
 });

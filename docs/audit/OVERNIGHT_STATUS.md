@@ -8,11 +8,15 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
-- Operator re-runs of `request_notes_health_consent.sql` no longer strip the
-  audited member-interest health reveal (26116). Re-runs of
-  `booking_decision_notifications_upgrade.sql` no longer restore the false
-  “credit returned” Skip notice. iPhone Lead detail matches Privacy/web:
-  deliberate Reveal consented health notes with audit clear on background.
+- Operator re-runs of `waitlist_fifo_promotion_upgrade.sql` no longer restore
+  an inline credit refund that could top up a Stripe-refunded pack. Re-runs of
+  `request_notes_health_consent.sql` cannot install the unaudited health-reveal
+  RPC when the reveal audit table is present (keeps/restores the audited body).
+  Privacy now discloses recorded/logged injury reveals and iOS push device
+  tokens (collection + deletion).
+- Operator re-runs of `booking_decision_notifications_upgrade.sql` no longer
+  restore the false “credit returned” Skip notice. iPhone Lead detail matches
+  Privacy/web: recorded Reveal consented health notes with clear on background.
 - iPhone Home Book CTAs (hero action, dashboard Book a class / Book another,
   credit-expiry Book, quick-action Book, Browse classes, View session packs,
   launch-guide packs/classes) fail closed to Explore Register interest while
@@ -417,6 +421,15 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (operator + iOS tip). Apply through **26116** remains current.
 
+### 29. This batch — waitlist FIFO refund drift, reveal-authz bootstrap, Privacy honesty
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (money) | Re-running `waitlist_fifo_promotion_upgrade.sql` replaced helper-backed `admin_set_booking_status` with an inline `remaining + 1` refund that ignored Stripe-refunded packs | Skip-if-newer (`keeping newer…` when `refund_credits_to_batch` is present); bootstrap body uses the helper |
+| Operator SQL / authz (privacy) | `request_notes_health_consent.sql` treated “reveal table exists” as keep-even-when-unaudited, and a missing RPC still installed the unaudited bootstrap over an authz’d DB | Keep only when the live body is audited; if the audit table exists otherwise, install the audited reveal body (never the ledger-skipping bootstrap) |
+| Privacy disclosure | Injury reveal still said “deliberate” (emergency contact already “recorded”); iOS push device tokens were not listed as collected / deleted with the account | Privacy: recorded + logged health reveal; collect/retain device notification tokens |
+
+No new migration for this batch (operator + Privacy tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -598,3 +611,10 @@ show `installed = true` and `release_ready = true`, including
     re-run `booking_decision_notifications_upgrade.sql` keeps waitlist Skip
     notice accuracy; iPhone member-interest Lead detail can Reveal consented
     health notes (web / Privacy parity) and clears the reveal off-screen.
+32. **Waitlist FIFO refund drift + reveal bootstrap + Privacy** — Re-run
+    `waitlist_fifo_promotion_upgrade.sql` keeps helper-backed
+    `admin_set_booking_status` (no inline refund onto Stripe-refunded packs);
+    re-run `request_notes_health_consent.sql` with the reveal audit table
+    present restores/keeps the audited reveal RPC (never the unaudited
+    bootstrap); Privacy lists iOS device notification tokens and says
+    member-interest injury reveals are recorded/logged.

@@ -92,7 +92,7 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.match(authz, /values \('member_interest_health_reveal_authz'\)/i);
   assert.match(authz, /if v_admin_id is null or not public\.is_admin\(\)/i);
 
-  // Privacy promises a deliberate reveal for member-interest injuries — iOS
+  // Privacy promises a recorded reveal for member-interest injuries — iOS
   // Command Centre must match the web Lead drawer, not leave owners without a path.
   assert.match(iosModels, /struct AdminMemberInterestHealthReveal/);
   assert.match(iosApi, /adminRevealMemberInterestHealth[\s\S]*admin_reveal_member_interest_health/);

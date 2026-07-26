@@ -35,7 +35,9 @@ test('legacy capability reconciliation certifies database objects before markers
 test('linked migrations install the canonical manually-authored upgrades', () => {
   const pairs = [
     ['../src/supabase/credit_grant_audit_upgrade.sql', '../supabase/migrations/20260714005500_credit_grant_audit.sql'],
-    ['../src/supabase/waitlist_fifo_promotion_upgrade.sql', '../supabase/migrations/20260714004100_waitlist_fifo_promotion.sql'],
+    // waitlist_fifo operator script intentionally diverges: re-runs must not
+    // restore an inline remaining+1 refund over refund_credits_to_batch.
+    // Covered by supabase-operator-script-drift.test.js.
     ['../src/supabase/member_pt_request_tracking.sql', '../supabase/migrations/20260714004200_member_pt_request_tracking.sql'],
     ['../src/supabase/public_form_integrity_upgrade.sql', '../supabase/migrations/20260714004300_public_form_integrity.sql'],
     ['../src/supabase/member_push_notifications_upgrade.sql', '../supabase/migrations/20260714009000_member_push_notifications.sql'],

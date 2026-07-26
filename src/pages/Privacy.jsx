@@ -8,6 +8,7 @@ const sections = [
       'We collect information you provide when creating an account, registering interest, contacting XERT, purchasing a session pack, booking a class, choosing a training goal or completing Member Readiness. This may include your name, email, phone number, suburb, training preferences, goals, booking history and information you voluntarily provide about injuries or limitations.',
       'When you submit a public interest, coaching or partnership form, we also record limited attribution details from that visit so we can understand how people find XERT: the referring website (if your browser sends one), campaign parameters such as UTM source, medium, campaign and content when present in the link, and the landing path you used to open the form.',
       'Member Readiness stores the name, phone number and relationship of the emergency contact you nominate, your confirmation that the contact knows they are listed, and versioned receipts showing which required documents you acknowledged, when XERT confirmed the acknowledgement and whether it came from the website or iOS app. The readiness form does not collect screening answers, diagnoses or a medical-clearance outcome.',
+      'If you enable notifications in the iOS app, we store a device notification token for that install so XERT can deliver class, booking and account notices through Apple Push Notification service. Tokens are tied to your account, can be disabled on sign-out, and are removed when the account is deleted.',
       'Our services also receive limited technical information needed for security and operation, such as authentication records, request timestamps and payment status. XERT does not store your complete card details.'
     ]
   },
@@ -16,7 +17,7 @@ const sections = [
     content: [
       'Under Australian privacy law, health information is sensitive information. Optional free-text about injuries or physical limitations on the member interest form, optional notes on PT or class booking requests that may describe injuries or medical limitations, and choosing the PT training goal "Rehab / return to fitness" are treated as health information.',
       'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox on that form. Contact-only consent is not enough. You can leave injuries or notes blank, and choose a non-rehab training goal, and still submit.',
-      'Member-interest injury details are not shown in admin lead lists, bulk lead CSV exports or campaign analytics. Authorised XERT administrators can open a deliberate reveal on an individual lead when consent was given, so they can follow up safely. PT and class booking notes you consent to share, and a consented rehab training goal, are available to authorised administrators in those request queues for the same purpose.'
+      'Member-interest injury details are not shown in admin lead lists, bulk lead CSV exports or campaign analytics. Authorised XERT administrators can open a recorded reveal on an individual lead when consent was given, so they can follow up safely; each reveal is logged. PT and class booking notes you consent to share, and a consented rehab training goal, are available to authorised administrators in those request queues for the same purpose.'
     ]
   },
   {
@@ -38,7 +39,7 @@ const sections = [
   {
     title: 'Retention And Security',
     content: [
-      'We retain information only for as long as it is reasonably needed for the purposes above. Account deletion removes your member profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests, training goals and public interest or enquiry records matched to your account email (including member, trainer and partner interest leads and anonymous PT requests) through the linked account-deletion process. Paid order records may be retained in anonymized form for financial integrity, and payment providers may retain records required by law.',
+      'We retain information only for as long as it is reasonably needed for the purposes above. Account deletion removes your member profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests, training goals, iOS notification device tokens and public interest or enquiry records matched to your account email (including member, trainer and partner interest leads and anonymous PT requests) through the linked account-deletion process. Paid order records may be retained in anonymized form for financial integrity, and payment providers may retain records required by law.',
       'We use access controls, row-level database policies, encrypted connections and restricted server credentials. No online system can guarantee absolute security, so please use a unique password and contact us if you suspect unauthorized access.'
     ]
   },

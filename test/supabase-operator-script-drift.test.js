@@ -301,6 +301,16 @@ test('older operator scripts cannot downgrade audited health reveal or waitlist 
   );
   assert.match(requestNotes.sql, /member_interest_health_reveals/);
   assert.match(requestNotes.sql, /audit_event_id/);
+  // Authz table present + missing/weak RPC must reinstall the audited body, not
+  // the unaudited bootstrap (and must not treat table-exists as keep-unaudited).
+  assert.match(
+    requestNotes.sql,
+    /elsif to_regclass\('public\.member_interest_health_reveals'\) is not null then[\s\S]*insert into public\.member_interest_health_reveals/i,
+  );
+  assert.doesNotMatch(
+    requestNotes.sql,
+    /v_def is not null\s+and\s*\([\s\S]*to_regclass\('public\.member_interest_health_reveals'\) is not null\s*\)/i,
+  );
 
   const bookingDecision = scripts().find(entry => entry.name === 'booking_decision_notifications_upgrade.sql');
   assert.ok(bookingDecision, 'missing booking_decision_notifications_upgrade.sql');
@@ -326,6 +336,46 @@ test('older operator scripts cannot downgrade audited health reveal or waitlist 
   assert.ok(authz, 'missing member_interest_health_reveal_authz.sql');
   assert.match(authz.sql, /insert into public\.member_interest_health_reveals/);
   assert.match(authz.sql, /'audit_event_id'/);
+});
+
+test('waitlist_fifo operator script cannot recreate admin_set_booking_status with an inline refund', () => {
+  // credit_batch_refund_reactivation / fulfillment_erasure put refunds through
+  // refund_credits_to_batch (skips Stripe-refunded packs). Re-running the older
+  // waitlist FIFO upgrade used to restore an inline remaining+1 path.
+  const fifo = scripts().find(entry => entry.name === 'waitlist_fifo_promotion_upgrade.sql');
+  assert.ok(fifo, 'missing waitlist_fifo_promotion_upgrade.sql');
+  assert.match(
+    fifo.sql,
+    /keeping newer admin_set_booking_status/,
+    'waitlist_fifo_promotion_upgrade.sql must skip replacing a helper-backed status RPC',
+  );
+  assert.match(fifo.sql, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
+  assert.doesNotMatch(
+    fifo.sql,
+    /update public\.credit_batches\s+set remaining = remaining \+ 1/,
+    'waitlist_fifo_promotion_upgrade.sql must not inline credit refunds',
+  );
+
+  const statusDefiners = scripts().filter(({ sql }) => (
+    /create or replace function public\.admin_set_booking_status\s*\(/.test(sql)
+  ));
+  assert.ok(statusDefiners.length >= 3, 'admin_set_booking_status is defined by more than one operator script');
+  for (const { name, sql } of statusDefiners) {
+    // Skip-guarded weak bodies are allowed only when they cannot install.
+    if (/keeping newer admin_set_booking_status/.test(sql) && !/perform public\.refund_credits_to_batch/.test(sql)) {
+      continue;
+    }
+    assert.match(
+      sql,
+      /perform public\.refund_credits_to_batch/,
+      `${name} recreates admin_set_booking_status without refund_credits_to_batch`,
+    );
+    assert.doesNotMatch(
+      sql,
+      /update public\.credit_batches\s+set remaining = remaining \+ 1/,
+      `${name} still inlines credit refunds inside admin_set_booking_status`,
+    );
+  }
 });
 
 test('README operator apply order includes the newest Ops Health migrations', () => {

@@ -25,7 +25,9 @@ test('PT and booking forms require health consent before notes can be submitted'
   assert.match(submit, /Rehab \/ return to fitness/);
   assert.match(privacy, /PT or class booking requests/);
   assert.match(privacy, /Rehab \/ return to fitness/);
-  assert.match(privacy, /deliberate reveal/);
+  assert.match(privacy, /recorded reveal/);
+  assert.match(privacy, /each reveal is logged/);
+  assert.match(privacy, /device notification token/);
 });
 
 test('native PT and class-interest requests require health consent for notes and rehab', async () => {
@@ -60,6 +62,16 @@ test('migration and operator mirror install notes health consent and admin revea
   assert.match(upgrade, /keeping audited admin_reveal_member_interest_health/);
   assert.match(upgrade, /member_interest_health_reveals/);
   assert.match(upgrade, /audit_event_id/);
+  // Table-exists alone must not keep an unaudited body, and must not install the
+  // bootstrap that skips the reveal ledger when the authz table is present.
+  assert.match(
+    upgrade,
+    /elsif to_regclass\('public\.member_interest_health_reveals'\) is not null then[\s\S]*insert into public\.member_interest_health_reveals/i,
+  );
+  assert.doesNotMatch(
+    upgrade,
+    /v_def is not null\s+and\s*\([\s\S]*to_regclass\('public\.member_interest_health_reveals'\) is not null\s*\)/i,
+  );
   assert.match(
     upgrade,
     /revoke all on function public\.admin_reveal_member_interest_health\(uuid\)\s+from public, anon, authenticated/i,

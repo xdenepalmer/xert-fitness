@@ -121,6 +121,24 @@ revoke execute on function public.sessions_with_availability() from public;
 grant execute on function public.join_session_waitlist(uuid) to authenticated;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
 
+-- Re-run safe: an older copy of this script inlined remaining+1 and skipped the
+-- shared refund helper, so Ops Health re-runs restored credits onto packs Stripe
+-- had already fully refunded. Keep a newer helper-backed body; otherwise install
+-- the helper path (refund_credits_to_batch refuses orders.status = 'refunded').
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -193,16 +211,13 @@ begin
     if v_start is null then
       select start_time into v_start from public.class_sessions where id = v_session;
     end if;
-    update public.credit_batches
-       set remaining = remaining + 1,
-           expires_at = case
-             when expires_at is not null and expires_at <= now()
-               then greatest(coalesce(v_start, now()), now() + interval '12 hours')
-             else expires_at
-           end
-     where id = v_batch;
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 create or replace function public.admin_promote_next_waitlisted(p_session_id uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
