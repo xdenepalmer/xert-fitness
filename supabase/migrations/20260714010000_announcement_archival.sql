@@ -220,19 +220,61 @@ begin
 end;
 $$;
 
+-- Targeted notices are private to their recipients. The audience predicate and
+-- member_announcement_targets arrive with the class-cancellation notification
+-- work, which runs after this script on a fresh install but before it whenever
+-- an operator re-applies this file on its own. Recreating the read policy
+-- unconditionally therefore downgraded a hardened database and exposed every
+-- member's targeted notices, so emit whichever form the installed schema can
+-- express and never the weaker one.
 drop policy if exists "member_announcements_select_live_or_admin" on public.member_announcements;
-create policy "member_announcements_select_live_or_admin"
-  on public.member_announcements for select
-  to authenticated
-  using (
-    (select public.is_admin())
-    or (
-      archived_at is null
-      and published_at is not null
-      and published_at <= now()
-      and (expires_at is null or expires_at > now())
-    )
-  );
+do $$
+begin
+  if to_regclass('public.member_announcement_targets') is null then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin"
+        on public.member_announcements for select
+        to authenticated
+        using (
+          (select public.is_admin())
+          or (
+            archived_at is null
+            and published_at is not null
+            and published_at <= now()
+            and (expires_at is null or expires_at > now())
+          )
+        )
+    $policy$;
+  else
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin"
+        on public.member_announcements for select
+        to authenticated
+        using (
+          (select public.is_admin())
+          or (
+            archived_at is null
+            and published_at is not null
+            and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and (
+              audience = 'all'
+              or (
+                audience = 'targeted'
+                and exists (
+                  select 1
+                  from public.member_announcement_targets target
+                  where target.announcement_id = member_announcements.id
+                    and target.user_id = (select auth.uid())
+                )
+              )
+            )
+          )
+        )
+    $policy$;
+  end if;
+end;
+$$;
 
 alter table public.member_announcement_admin_events enable row level security;
 drop policy if exists "member_announcement_admin_events_admin_read" on public.member_announcement_admin_events;
@@ -326,7 +368,19 @@ revoke execute on function public.audit_member_announcement_lifecycle() from pub
 revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from public, anon;
 revoke execute on function public.my_member_announcements() from public, anon;
 revoke execute on function public.dismiss_member_announcement(uuid) from public, anon;
-grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
+-- The shared admin optimistic-locking work supersedes this overload with a
+-- version-checked three-argument form and revokes execute on this one. Only
+-- grant it back while that guarded overload is absent, so re-applying this
+-- file cannot re-arm the unguarded archive path.
+do $$
+begin
+  if to_regprocedure('public.admin_archive_member_announcement(uuid, boolean, timestamptz)') is null then
+    grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
+  else
+    revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from authenticated;
+  end if;
+end;
+$$;
 grant execute on function public.my_member_announcements() to authenticated;
 grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 

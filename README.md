@@ -79,6 +79,13 @@ substitute for the primary secret.
 
 ## Database
 
+Every script below is idempotent and safe to re-run in any order. That is only
+true because no script recreates a policy, function or grant in a weaker form
+than a later script installs: where the hardened form needs schema a later
+script adds, the earlier script emits it conditionally. `npm test` enforces this
+(`test/supabase-operator-script-drift.test.js`), so add a case there whenever a
+new script hardens something an existing one also defines.
+
 The Supabase schema is defined in:
 
 - `src/supabase/rls_policies.sql` — Row Level Security for the lead/booking

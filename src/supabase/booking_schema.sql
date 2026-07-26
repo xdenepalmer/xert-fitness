@@ -17,20 +17,30 @@ create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   full_name   text,
   phone       text,
+  email       text,
   role        text not null default 'member',
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 
+-- This file used to create profiles without an email column and leave
+-- admin_cms_schema.sql to add it. That made the two files disagree about what
+-- handle_new_user and guard_profile_write should look like, and because both
+-- are `create or replace`, re-running this file silently reverted the hardened
+-- definitions. The column is created here so every file can define the same,
+-- fully hardened, trigger pair.
+alter table public.profiles add column if not exists email text;
+
 -- Auto-create a profile row whenever a new auth user signs up.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, full_name, phone)
+  insert into public.profiles (id, full_name, phone, email)
   values (new.id,
           new.raw_user_meta_data->>'full_name',
-          new.raw_user_meta_data->>'phone')
-  on conflict (id) do nothing;
+          new.raw_user_meta_data->>'phone',
+          new.email)
+  on conflict (id) do update set email = excluded.email;
   return new;
 end; $$;
 
@@ -62,6 +72,9 @@ begin
       end if;
       if new.role is distinct from old.role then
         raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+      end if;
+      if new.email is distinct from old.email then
+        raise exception 'PROFILE_EMAIL_MANAGED_BY_AUTH';
       end if;
       if new.created_at is distinct from old.created_at then
         raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
@@ -151,8 +164,22 @@ begin
   return p_product_id;
 end;
 $$;
+-- catalog_optimistic_locking_upgrade.sql supersedes this overload with a
+-- three-argument form that raises PRODUCT_STALE, and revokes execute on this
+-- one so a request that omits p_expected_updated_at cannot resolve to the
+-- unguarded overload. Re-running this file used to hand that grant straight
+-- back, silently disarming the optimistic lock. Only grant while the guarded
+-- overload is absent.
 revoke execute on function public.admin_update_product(uuid, jsonb) from public, anon;
-grant execute on function public.admin_update_product(uuid, jsonb) to authenticated;
+do $$
+begin
+  if to_regprocedure('public.admin_update_product(uuid, jsonb, timestamptz)') is null then
+    grant execute on function public.admin_update_product(uuid, jsonb) to authenticated;
+  else
+    revoke execute on function public.admin_update_product(uuid, jsonb) from authenticated;
+  end if;
+end;
+$$;
 
 insert into public.products (slug, name, description, price_cents, currency, sessions_count, validity_days, featured, sort_order) values
   ('single',         '1 Class Pass',                'Perfect for a drop-in session, casual training or trying your first XERT session.', 1500,  'aud', 1,  14, false, 1),
@@ -1117,14 +1144,51 @@ drop policy if exists "member_announcements_select_live_or_admin" on public.memb
 drop policy if exists "member_announcements_admin_insert" on public.member_announcements;
 drop policy if exists "member_announcements_admin_update" on public.member_announcements;
 drop policy if exists "member_announcements_admin_delete" on public.member_announcements;
-create policy "member_announcements_select_live_or_admin" on public.member_announcements
-  for select to authenticated using (
-    public.is_admin() or (
-      archived_at is null
-      and published_at is not null and published_at <= now()
-      and (expires_at is null or expires_at > now())
-    )
-  );
+-- Targeted notices are private to their recipients. That predicate is added by
+-- class_cancellation_notifications_upgrade.sql, which also creates
+-- member_announcement_targets. This file used to recreate the read policy
+-- without it, so re-running an "idempotent" script on a hardened database let
+-- every member read every other member's targeted notice. Emit whichever form
+-- the installed schema can express, never the weaker one.
+do $$
+begin
+  if to_regclass('public.member_announcement_targets') is null then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+          )
+        )
+    $policy$;
+  else
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and (
+              audience = 'all'
+              or (
+                audience = 'targeted'
+                and exists (
+                  select 1
+                  from public.member_announcement_targets target
+                  where target.announcement_id = member_announcements.id
+                    and target.user_id = (select auth.uid())
+                )
+              )
+            )
+          )
+        )
+    $policy$;
+  end if;
+end;
+$$;
 create policy "member_announcements_admin_insert" on public.member_announcements
   for insert to authenticated with check (public.is_admin());
 create policy "member_announcements_admin_update" on public.member_announcements
@@ -1225,7 +1289,20 @@ grant execute on function public.is_admin()                  to authenticated;
 grant execute on function public.my_member_announcements() to authenticated;
 grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 grant execute on function public.admin_announcement_metrics() to authenticated;
-grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
+
+-- shared_admin_optimistic_locking_upgrade.sql supersedes this overload with a
+-- version-checked three-argument form and revokes execute on this one. Only
+-- grant it back while that guarded overload is absent, so re-running this file
+-- cannot re-arm the unguarded archive path.
+do $$
+begin
+  if to_regprocedure('public.admin_archive_member_announcement(uuid, boolean, timestamptz)') is null then
+    grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
+  else
+    revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from authenticated;
+  end if;
+end;
+$$;
 
 -- Runtime capability marker for admin health and release CI.
 create table if not exists public.xert_schema_capabilities (
