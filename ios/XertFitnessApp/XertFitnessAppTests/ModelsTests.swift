@@ -3096,6 +3096,37 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(draft.published)
     }
 
+    func testAdminEventRosterReportExportsContactableTrainingGroup() {
+        let event = AdminEvent(
+            id: UUID(),
+            name: "XERT \"Team\" Competition",
+            category: "xert",
+            event_date: "2026-12-05",
+            end_date: nil,
+            location: "Gold Coast",
+            region: "South East Queensland",
+            url: nil,
+            published: true,
+            sort_order: 20,
+            updated_at: "2026-07-14T00:00:00Z"
+        )
+        let member = AdminEventGoalMember(
+            user_id: UUID(),
+            full_name: "Alex Example",
+            email: "alex@example.com",
+            phone: "0400000000",
+            selected_at: Date(timeIntervalSince1970: 1_783_987_200)
+        )
+
+        let csv = AdminEventRosterReport(event: event, members: [member]).csv
+
+        XCTAssertTrue(csv.contains("\"XERT \"\"Team\"\" Competition\""))
+        XCTAssertTrue(csv.contains("\"Alex Example\""))
+        XCTAssertTrue(csv.contains("\"alex@example.com\""))
+        XCTAssertTrue(csv.contains("\"0400000000\""))
+        XCTAssertFalse(csv.contains(member.user_id.uuidString))
+    }
+
     func testAdminCoachDraftPreservesPublicProfileValues() {
         let coach = AdminCoach(
             id: UUID(),

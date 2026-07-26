@@ -1714,19 +1714,23 @@ final class XertAPI {
         )
     }
 
-    func adminCreateEvent(session auth: AuthSession, draft: AdminEventDraft) async throws {
+    func adminCreateEvent(session auth: AuthSession, draft: AdminEventDraft) async throws -> AdminEvent {
         let payload = try adminEventPayload(draft)
         var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/events")
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        try await perform(request)
+        let rows: [AdminEvent] = try await decode(request)
+        guard let event = rows.first, rows.count == 1 else {
+            throw APIError(message: "The event was not returned after creation. Refresh the calendar before trying again.")
+        }
+        return event
     }
 
-    func adminUpdateEvent(session auth: AuthSession, event: AdminEvent, draft: AdminEventDraft) async throws {
+    func adminUpdateEvent(session auth: AuthSession, event: AdminEvent, draft: AdminEventDraft) async throws -> AdminEvent {
         let payload = try adminEventPayload(draft)
         var request = try request(
             baseURL: AppConfig.supabaseURL,
@@ -1742,10 +1746,11 @@ final class XertAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        let rows: [AdminMutationID] = try await decode(request)
-        guard !rows.isEmpty else {
+        let rows: [AdminEvent] = try await decode(request)
+        guard let updated = rows.first, rows.count == 1 else {
             throw APIError(message: "This event changed elsewhere. Refresh the calendar and review the latest version.")
         }
+        return updated
     }
 
     func adminDeleteEvent(session auth: AuthSession, event: AdminEvent) async throws {
@@ -1808,19 +1813,23 @@ final class XertAPI {
         )
     }
 
-    func adminCreateCoach(session auth: AuthSession, draft: AdminCoachDraft) async throws {
+    func adminCreateCoach(session auth: AuthSession, draft: AdminCoachDraft) async throws -> AdminCoach {
         let payload = try adminCoachPayload(draft)
         var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/coaches")
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        try await perform(request)
+        let rows: [AdminCoach] = try await decode(request)
+        guard let coach = rows.first, rows.count == 1 else {
+            throw APIError(message: "The team profile was not returned after creation. Refresh the directory before trying again.")
+        }
+        return coach
     }
 
-    func adminUpdateCoach(session auth: AuthSession, coach: AdminCoach, draft: AdminCoachDraft) async throws {
+    func adminUpdateCoach(session auth: AuthSession, coach: AdminCoach, draft: AdminCoachDraft) async throws -> AdminCoach {
         let payload = try adminCoachPayload(draft)
         var request = try request(
             baseURL: AppConfig.supabaseURL,
@@ -1836,10 +1845,11 @@ final class XertAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        let rows: [AdminMutationID] = try await decode(request)
-        guard !rows.isEmpty else {
+        let rows: [AdminCoach] = try await decode(request)
+        guard let updated = rows.first, rows.count == 1 else {
             throw APIError(message: "This team profile changed elsewhere. Refresh and review the latest version.")
         }
+        return updated
     }
 
     func adminDeleteCoach(session auth: AuthSession, coach: AdminCoach) async throws {

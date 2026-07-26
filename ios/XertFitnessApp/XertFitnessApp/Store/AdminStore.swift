@@ -80,7 +80,11 @@ final class AdminStore: ObservableObject {
     @Published private(set) var events: [AdminEvent] = []
     @Published private(set) var eventGoalCounts: [UUID: Int] = [:]
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
+    @Published private(set) var eventCatalogueStatusMessage: String?
+    @Published private(set) var eventRosterLoadedEventID: UUID?
+    @Published private(set) var eventRosterUnavailableEventID: UUID?
     @Published private(set) var coaches: [AdminCoach] = []
+    @Published private(set) var teamDirectoryStatusMessage: String?
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var classCancellationFollowUp: AdminClassCancellationFollowUp?
@@ -113,6 +117,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var savingEventID: UUID?
     @Published private(set) var deletingEventID: UUID?
     @Published private(set) var loadingEventRosterID: UUID?
+    @Published private(set) var isRefreshingEventCatalogue = false
+    @Published private(set) var isRefreshingTeamDirectory = false
     @Published private(set) var savingCoachID: UUID?
     @Published private(set) var deletingCoachID: UUID?
     @Published private(set) var loadingRosterSessionID: UUID?
@@ -161,6 +167,7 @@ final class AdminStore: ObservableObject {
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
     private var operationalRefreshGeneration: UInt = 0
+    private var eventRosterGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -327,14 +334,24 @@ final class AdminStore: ObservableObject {
         catch { failures.append("admin audit") }
         do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
         catch { failures.append("session packs") }
-        do { events = try await eventRequest; successfulSources.insert("event calendar"); loadedSource = true }
+        do {
+            events = try await eventRequest
+            successfulSources.insert("event calendar")
+            eventCatalogueStatusMessage = nil
+            loadedSource = true
+        }
         catch { failures.append("event calendar") }
         do {
             eventGoalCounts = Dictionary(grouping: try await eventGoalsRequest, by: \.event_id).mapValues(\.count)
             successfulSources.insert("event training groups")
             loadedSource = true
         } catch { failures.append("event training groups") }
-        do { coaches = try await coachRequest; successfulSources.insert("team directory"); loadedSource = true }
+        do {
+            coaches = try await coachRequest
+            successfulSources.insert("team directory")
+            teamDirectoryStatusMessage = nil
+            loadedSource = true
+        }
         catch { failures.append("team directory") }
         do { classSessions = try await classSessionRequest; successfulSources.insert("full timetable"); loadedSource = true }
         catch { failures.append("full timetable") }
@@ -1976,17 +1993,74 @@ final class AdminStore: ObservableObject {
         }
     }
 
+    var eventCalendarIsCurrent: Bool {
+        loadedSources.contains("event calendar")
+            && !refreshUnavailableSources.contains("event calendar")
+    }
+
+    var eventTrainingGroupsAreCurrent: Bool {
+        loadedSources.contains("event training groups")
+            && !refreshUnavailableSources.contains("event training groups")
+    }
+
+    var teamDirectoryIsCurrent: Bool {
+        loadedSources.contains("team directory")
+            && !refreshUnavailableSources.contains("team directory")
+    }
+
+    func refreshEventCatalogue(session: AuthSession) async {
+        guard !isLoading,
+              !isRefreshingEventCatalogue,
+              savingEventID == nil,
+              deletingEventID == nil else { return }
+        isRefreshingEventCatalogue = true
+        defer { isRefreshingEventCatalogue = false }
+        async let eventRequest = api.adminEvents(session: session)
+        async let goalsRequest = api.adminEventGoalReferences(session: session)
+        var failures: [String] = []
+        do {
+            events = try await eventRequest
+            markCatalogueSourceCurrent("event calendar")
+        } catch {
+            markCatalogueSourceUnavailable("event calendar")
+            failures.append("calendar")
+        }
+        do {
+            eventGoalCounts = Dictionary(grouping: try await goalsRequest, by: \.event_id).mapValues(\.count)
+            markCatalogueSourceCurrent("event training groups")
+        } catch {
+            markCatalogueSourceUnavailable("event training groups")
+            failures.append("training groups")
+        }
+        eventCatalogueStatusMessage = failures.isEmpty
+            ? nil
+            : "Could not refresh \(failures.joined(separator: " and ")). Last loaded records remain read-only where required."
+        if failures.isEmpty { lastUpdatedAt = Date() }
+    }
+
     func saveEvent(session: AuthSession, event: AdminEvent?, draft: AdminEventDraft) async -> Bool {
-        guard savingEventID == nil else { return false }
+        guard savingEventID == nil,
+              deletingEventID == nil,
+              !isLoading,
+              !isRefreshingEventCatalogue else { return false }
+        guard eventCalendarIsCurrent else {
+            errorMessage = "Refresh Event Calendar before saving catalogue changes."
+            return false
+        }
         savingEventID = event?.id ?? UUID()
         defer { savingEventID = nil }
         do {
+            let saved: AdminEvent
             if let event {
-                try await api.adminUpdateEvent(session: session, event: event, draft: draft)
+                saved = try await api.adminUpdateEvent(session: session, event: event, draft: draft)
             } else {
-                try await api.adminCreateEvent(session: session, draft: draft)
+                saved = try await api.adminCreateEvent(session: session, draft: draft)
             }
-            try await reloadEvents(session: session)
+            mergeEvent(saved)
+            await refreshEventsAfterMutation(
+                session: session,
+                completedAction: "\(saved.name) was saved"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1996,12 +2070,24 @@ final class AdminStore: ObservableObject {
     }
 
     func deleteEvent(session: AuthSession, event: AdminEvent) async -> Bool {
-        guard deletingEventID == nil else { return false }
+        guard deletingEventID == nil,
+              savingEventID == nil,
+              !isLoading,
+              !isRefreshingEventCatalogue else { return false }
+        guard eventCalendarIsCurrent, eventTrainingGroupsAreCurrent else {
+            errorMessage = "Refresh Event Calendar and training groups before deleting an event."
+            return false
+        }
         deletingEventID = event.id
         defer { deletingEventID = nil }
         do {
             try await api.adminDeleteEvent(session: session, event: event)
-            try await reloadEvents(session: session)
+            events.removeAll { $0.id == event.id }
+            eventGoalCounts[event.id] = nil
+            await refreshEventsAfterMutation(
+                session: session,
+                completedAction: "\(event.name) was deleted"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -2011,35 +2097,95 @@ final class AdminStore: ObservableObject {
     }
 
     func loadEventRoster(session: AuthSession, eventID: UUID) async {
-        guard loadingEventRosterID == nil else { return }
+        eventRosterGeneration &+= 1
+        let generation = eventRosterGeneration
         eventRoster = []
+        eventRosterLoadedEventID = nil
+        eventRosterUnavailableEventID = nil
         loadingEventRosterID = eventID
-        defer { loadingEventRosterID = nil }
+        defer {
+            if generation == eventRosterGeneration {
+                loadingEventRosterID = nil
+            }
+        }
         do {
-            eventRoster = try await api.adminEventGoalMembers(session: session, eventID: eventID)
+            let roster = try await api.adminEventGoalMembers(session: session, eventID: eventID)
+            guard generation == eventRosterGeneration else { return }
+            eventRoster = roster
+            eventRosterLoadedEventID = eventID
         } catch {
-            errorMessage = error.localizedDescription
+            guard generation == eventRosterGeneration else { return }
+            eventRosterUnavailableEventID = eventID
         }
     }
 
-    private func reloadEvents(session: AuthSession) async throws {
+    private func refreshEventsAfterMutation(
+        session: AuthSession,
+        completedAction: String
+    ) async {
         async let eventRequest = api.adminEvents(session: session)
         async let goalsRequest = api.adminEventGoalReferences(session: session)
-        events = try await eventRequest
-        eventGoalCounts = Dictionary(grouping: try await goalsRequest, by: \.event_id).mapValues(\.count)
+        var failures: [String] = []
+        do {
+            events = try await eventRequest
+            markCatalogueSourceCurrent("event calendar")
+        } catch {
+            markCatalogueSourceUnavailable("event calendar")
+            failures.append("calendar")
+        }
+        do {
+            eventGoalCounts = Dictionary(grouping: try await goalsRequest, by: \.event_id).mapValues(\.count)
+            markCatalogueSourceCurrent("event training groups")
+        } catch {
+            markCatalogueSourceUnavailable("event training groups")
+            failures.append("training groups")
+        }
+        eventCatalogueStatusMessage = failures.isEmpty
+            ? nil
+            : "\(completedAction), but the latest \(failures.joined(separator: " and ")) could not be loaded. Refresh before making another change."
+    }
+
+    func refreshTeamDirectory(session: AuthSession) async {
+        guard !isLoading,
+              !isRefreshingTeamDirectory,
+              savingCoachID == nil,
+              deletingCoachID == nil else { return }
+        isRefreshingTeamDirectory = true
+        defer { isRefreshingTeamDirectory = false }
+        do {
+            coaches = try await api.adminCoaches(session: session)
+            markCatalogueSourceCurrent("team directory")
+            teamDirectoryStatusMessage = nil
+            lastUpdatedAt = Date()
+        } catch {
+            markCatalogueSourceUnavailable("team directory")
+            teamDirectoryStatusMessage = "Team Directory could not refresh. Last loaded profiles remain read-only."
+        }
     }
 
     func saveCoach(session: AuthSession, coach: AdminCoach?, draft: AdminCoachDraft) async -> Bool {
-        guard savingCoachID == nil else { return false }
+        guard savingCoachID == nil,
+              deletingCoachID == nil,
+              !isLoading,
+              !isRefreshingTeamDirectory else { return false }
+        guard teamDirectoryIsCurrent else {
+            errorMessage = "Refresh Team Directory before saving profile changes."
+            return false
+        }
         savingCoachID = coach?.id ?? UUID()
         defer { savingCoachID = nil }
         do {
+            let saved: AdminCoach
             if let coach {
-                try await api.adminUpdateCoach(session: session, coach: coach, draft: draft)
+                saved = try await api.adminUpdateCoach(session: session, coach: coach, draft: draft)
             } else {
-                try await api.adminCreateCoach(session: session, draft: draft)
+                saved = try await api.adminCreateCoach(session: session, draft: draft)
             }
-            coaches = try await api.adminCoaches(session: session)
+            mergeCoach(saved)
+            await refreshTeamAfterMutation(
+                session: session,
+                completedAction: "\(saved.name) was saved"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -2049,17 +2195,73 @@ final class AdminStore: ObservableObject {
     }
 
     func deleteCoach(session: AuthSession, coach: AdminCoach) async -> Bool {
-        guard deletingCoachID == nil else { return false }
+        guard deletingCoachID == nil,
+              savingCoachID == nil,
+              !isLoading,
+              !isRefreshingTeamDirectory else { return false }
+        guard teamDirectoryIsCurrent else {
+            errorMessage = "Refresh Team Directory before deleting a profile."
+            return false
+        }
         deletingCoachID = coach.id
         defer { deletingCoachID = nil }
         do {
             try await api.adminDeleteCoach(session: session, coach: coach)
-            coaches = try await api.adminCoaches(session: session)
+            coaches.removeAll { $0.id == coach.id }
+            await refreshTeamAfterMutation(
+                session: session,
+                completedAction: "\(coach.name) was deleted"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    private func refreshTeamAfterMutation(
+        session: AuthSession,
+        completedAction: String
+    ) async {
+        do {
+            coaches = try await api.adminCoaches(session: session)
+            markCatalogueSourceCurrent("team directory")
+            teamDirectoryStatusMessage = nil
+        } catch {
+            markCatalogueSourceUnavailable("team directory")
+            teamDirectoryStatusMessage = "\(completedAction), but the latest directory could not be loaded. Refresh before making another change."
+        }
+    }
+
+    private func mergeEvent(_ event: AdminEvent) {
+        events.removeAll { $0.id == event.id }
+        events.append(event)
+        events.sort {
+            let left = $0.event_date ?? "9999-12-31"
+            let right = $1.event_date ?? "9999-12-31"
+            if left != right { return left < right }
+            return $0.sort_order < $1.sort_order
+        }
+    }
+
+    private func mergeCoach(_ coach: AdminCoach) {
+        coaches.removeAll { $0.id == coach.id }
+        coaches.append(coach)
+        coaches.sort {
+            if $0.sort_order != $1.sort_order { return $0.sort_order < $1.sort_order }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private func markCatalogueSourceCurrent(_ source: String) {
+        loadedSources.insert(source)
+        refreshUnavailableSources.removeAll { $0 == source }
+    }
+
+    private func markCatalogueSourceUnavailable(_ source: String) {
+        if !refreshUnavailableSources.contains(source) {
+            refreshUnavailableSources.append(source)
         }
     }
 

@@ -1996,6 +1996,32 @@ struct AdminEventGoalMember: Identifiable, Codable, Hashable {
     var displayName: String { full_name?.nilIfEmpty ?? email?.nilIfEmpty ?? "XERT member" }
 }
 
+struct AdminEventRosterReport {
+    let event: AdminEvent
+    let members: [AdminEventGoalMember]
+
+    var csv: String {
+        let header = "Event,Member,Email,Phone,Joined"
+        let formatter = ISO8601DateFormatter()
+        let body = members.map { member in
+            [
+                event.name,
+                member.displayName,
+                member.email ?? "",
+                member.phone ?? "",
+                formatter.string(from: member.selected_at)
+            ]
+            .map(Self.escape)
+            .joined(separator: ",")
+        }
+        return ([header] + body).joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
 struct AdminCoach: Identifiable, Codable, Hashable {
     let id: UUID
     let name: String

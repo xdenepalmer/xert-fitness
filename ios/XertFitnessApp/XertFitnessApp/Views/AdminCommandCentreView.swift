@@ -7678,7 +7678,7 @@ private struct AdminOperationsHealthView: View {
                             XertHaptics.play(memberLaunchGate.phase == .verifying ? .warning : .success)
                         }
                     } label: {
-                        Label(admin.isRefreshingHealth ? "Refreshing launch gatesâ€¦" : "Refresh launch gates", systemImage: "arrow.clockwise")
+                        Label(admin.isRefreshingHealth ? "Refreshing launch gates..." : "Refresh launch gates", systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
@@ -8703,34 +8703,94 @@ private struct AdminEventsView: View {
     let session: AuthSession
     let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
+    @State private var categoryFilter = "all"
     @State private var showingCreate = false
     @State private var rosterEvent: AdminEvent?
     @State private var pendingDelete: AdminEvent?
 
     private var rows: [AdminEvent] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !term.isEmpty else { return admin.events }
         return admin.events.filter {
-            "\($0.name) \($0.category ?? "") \($0.location ?? "")".lowercased().contains(term)
+            (categoryFilter == "all" || $0.category == categoryFilter)
+                && (term.isEmpty
+                    || "\($0.name) \($0.category ?? "") \($0.location ?? "") \($0.region ?? "")"
+                        .lowercased().contains(term))
         }
     }
 
+    private var categories: [String] {
+        Array(Set(admin.events.compactMap(\.category))).sorted()
+    }
+    private var calendarIsCurrent: Bool { admin.eventCalendarIsCurrent }
+    private var groupsAreCurrent: Bool { admin.eventTrainingGroupsAreCurrent }
+    private var isRefreshing: Bool { admin.isLoading || admin.isRefreshingEventCatalogue }
+
     var body: some View {
         List {
-            if rows.isEmpty { Text("No matching calendar events.").listRowBackground(Color.xertInk) }
+            if let message = admin.eventCatalogueStatusMessage {
+                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
+            if !calendarIsCurrent || !groupsAreCurrent {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        admin.loadedSources.contains("event calendar")
+                            ? "Showing the last event snapshot. Catalogue changes are paused until required sources refresh."
+                            : "The Event Calendar could not be loaded. No empty calendar assumption is being made.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await admin.refreshEventCatalogue(session: session) }
+                    } label: {
+                        Label(isRefreshing ? "Retrying..." : "Retry event catalogue", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(isRefreshing)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+            Section("Filter") {
+                Picker("Category", selection: $categoryFilter) {
+                    Text("All categories").tag("all")
+                    ForEach(categories, id: \.self) { Text($0.capitalized).tag($0) }
+                }
+            }
+            .listRowBackground(Color.xertNavy)
+
+            if calendarIsCurrent && rows.isEmpty {
+                Text("No matching calendar events.").listRowBackground(Color.xertInk)
+            }
             ForEach(rows) { event in
                 VStack(alignment: .leading, spacing: 10) {
                     Button { onOpenTask(.event(event.id)) } label: {
                         VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text(event.name).font(.headline)
-                                Spacer()
-                                Text(event.published ? "LIVE" : "HIDDEN")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(event.published ? Color.green : Color.xertPale.opacity(0.45))
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(Color.xertSteel)
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    Text(event.name).font(.headline)
+                                    Spacer()
+                                    eventPublicationState(event)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(Color.xertSteel)
+                                }
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(event.name).font(.headline)
+                                    HStack {
+                                        eventPublicationState(event)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(Color.xertSteel)
+                                    }
+                                }
                             }
                             Text([event.event_date ?? "Date TBC", event.location].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
@@ -8741,9 +8801,14 @@ private struct AdminEventsView: View {
                     HStack(spacing: 18) {
                         Button {
                             rosterEvent = event
-                            Task { await admin.loadEventRoster(session: session, eventID: event.id) }
                         } label: {
-                            Label("\(admin.eventGoalCounts[event.id, default: 0]) training", systemImage: "person.3")
+                            Label(
+                                groupsAreCurrent
+                                    ? "\(admin.eventGoalCounts[event.id, default: 0]) training"
+                                    : "Training group",
+                                systemImage: "person.3"
+                            )
+                            .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.xertSteel)
@@ -8753,7 +8818,14 @@ private struct AdminEventsView: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.plain)
-                        .disabled(admin.deletingEventID != nil)
+                        .frame(width: 44, height: 44)
+                        .disabled(
+                            !calendarIsCurrent
+                                || !groupsAreCurrent
+                                || isRefreshing
+                                || admin.deletingEventID != nil
+                                || admin.savingEventID != nil
+                        )
                         .accessibilityLabel("Delete \(event.name)")
                     }
                     .font(.caption.weight(.semibold))
@@ -8766,9 +8838,16 @@ private struct AdminEventsView: View {
         .background(Color.xertNavy)
         .navigationTitle("Event Calendar")
         .searchable(text: $query, prompt: "Search events")
+        .refreshable { await admin.refreshEventCatalogue(session: session) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .disabled(
+                        !calendarIsCurrent
+                            || isRefreshing
+                            || admin.savingEventID != nil
+                            || admin.deletingEventID != nil
+                    )
                     .accessibilityLabel("Add event")
             }
         }
@@ -8778,7 +8857,7 @@ private struct AdminEventsView: View {
             }
         }
         .sheet(item: $rosterEvent) { event in
-            AdminEventRosterView(admin: admin, event: event)
+            AdminEventRosterView(admin: admin, session: session, event: event)
         }
         .confirmationDialog(
             "Delete calendar event?",
@@ -8799,6 +8878,13 @@ private struct AdminEventsView: View {
                  : "This removes the event from the shared web and iOS calendar. This cannot be undone.")
         }
     }
+
+    private func eventPublicationState(_ event: AdminEvent) -> some View {
+        Text(event.published ? "LIVE" : "HIDDEN")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(event.published ? Color.green : Color.xertPale.opacity(0.45))
+            .fixedSize(horizontal: true, vertical: false)
+    }
 }
 
 private struct AdminEventEditor: View {
@@ -8808,6 +8894,20 @@ private struct AdminEventEditor: View {
     let event: AdminEvent?
     private let baseline: AdminEventDraft
     @State private var draft: AdminEventDraft
+    @State private var confirmingDiscard = false
+
+    private var mutationAllowed: Bool {
+        admin.eventCalendarIsCurrent
+            && !admin.isLoading
+            && !admin.isRefreshingEventCatalogue
+    }
+    private var isDirty: Bool { draft != baseline }
+    private var canSave: Bool {
+        mutationAllowed
+            && isDirty
+            && admin.savingEventID == nil
+            && !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     init(admin: AdminStore, session: AuthSession, event: AdminEvent?) {
         let initialDraft = AdminEventDraft(event: event)
@@ -8820,6 +8920,16 @@ private struct AdminEventEditor: View {
 
     var body: some View {
         Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "This calendar snapshot is not current. Review is available, but publishing changes is paused until refresh succeeds.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                }
+            }
             Section("Event") {
                 TextField("Event name", text: $draft.name)
                 Picker("Category", selection: $draft.category) {
@@ -8858,7 +8968,7 @@ private struct AdminEventEditor: View {
                         Spacer()
                     }
                 }
-                .disabled(admin.savingEventID != nil || draft == baseline)
+                .disabled(!canSave)
                 .listRowBackground(Color.xertSteel)
                 .foregroundStyle(Color.xertNavy)
             }
@@ -8868,39 +8978,95 @@ private struct AdminEventEditor: View {
         .navigationTitle(event == nil ? "New Event" : "Edit Event")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if event == nil {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            if event == nil || isDirty {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(event == nil ? "Cancel" : "Close") { requestDismiss() }
+                        .disabled(admin.savingEventID != nil)
+                }
             }
+        }
+        .navigationBarBackButtonHidden(event != nil && isDirty)
+        .interactiveDismissDisabled(isDirty || admin.savingEventID != nil)
+        .confirmationDialog("Discard event changes?", isPresented: $confirmingDiscard) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your unsaved calendar changes will be permanently discarded.")
         }
         .onChange(of: draft.hasStartDate) { enabled in
             if !enabled { draft.hasEndDate = false }
         }
+    }
+
+    private func requestDismiss() {
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
     }
 }
 
 private struct AdminEventRosterView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
     let event: AdminEvent
+    @State private var exportDocument: AdminEventRosterCSVDocument?
+    @State private var isExporting = false
+    @State private var exportError: String?
+
+    private var rosterIsLoaded: Bool { admin.eventRosterLoadedEventID == event.id }
+    private var rosterIsUnavailable: Bool { admin.eventRosterUnavailableEventID == event.id }
+    private var report: AdminEventRosterReport {
+        AdminEventRosterReport(event: event, members: admin.eventRoster)
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                if admin.loadingEventRosterID == event.id {
-                    HStack { Spacer(); ProgressView(); Spacer() }
-                } else if admin.eventRoster.isEmpty {
+                if admin.loadingEventRosterID == event.id || (!rosterIsLoaded && !rosterIsUnavailable) {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Text("Loading training group...")
+                        Spacer()
+                    }
+                    .frame(minHeight: 44)
+                } else if rosterIsUnavailable {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(
+                            "This training group could not be loaded. No empty-group assumption is being made.",
+                            systemImage: "wifi.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            Task { await admin.loadEventRoster(session: session, eventID: event.id) }
+                        } label: {
+                            Label("Retry training group", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.orange)
+                    }
+                } else if rosterIsLoaded && admin.eventRoster.isEmpty {
                     Text("No members are training toward this event yet.")
-                } else {
+                } else if rosterIsLoaded {
                     ForEach(admin.eventRoster) { member in
                         VStack(alignment: .leading, spacing: 7) {
                             Text(member.displayName).font(.headline)
                             if let email = nonempty(member.email) {
-                                Link(email, destination: URL(string: "mailto:\(email)")!)
+                                Link(destination: URL(string: "mailto:\(email)")!) {
+                                    Label(email, systemImage: "envelope")
+                                        .frame(minHeight: 44)
+                                }
                             }
                             if let phone = nonempty(member.phone),
                                let number = phone.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
                                let url = URL(string: "tel:\(number)") {
-                                Link(phone, destination: url)
+                                Link(destination: url) {
+                                    Label(phone, systemImage: "phone")
+                                        .frame(minHeight: 44)
+                                }
                             }
                             Text("Joined \(member.selected_at.formatted(date: .abbreviated, time: .omitted))")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -8911,8 +9077,42 @@ private struct AdminEventRosterView: View {
             }
             .navigationTitle(event.name)
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                if !rosterIsLoaded && !rosterIsUnavailable {
+                    await admin.loadEventRoster(session: session, eventID: event.id)
+                }
+            }
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        exportDocument = AdminEventRosterCSVDocument(csv: report.csv)
+                        isExporting = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .disabled(!rosterIsLoaded || admin.eventRoster.isEmpty)
+                    .accessibilityLabel("Export \(event.name) training group")
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .fileExporter(
+                isPresented: $isExporting,
+                document: exportDocument,
+                contentType: .commaSeparatedText,
+                defaultFilename: "xert-\(safeFilename(event.name))-training-group"
+            ) { result in
+                if case .failure(let error) = result {
+                    exportError = error.localizedDescription
+                }
+                exportDocument = nil
+            }
+            .alert("Export failed", isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { exportError = nil }
+            } message: {
+                Text(exportError ?? "The training group could not be exported.")
             }
         }
     }
@@ -8921,18 +9121,112 @@ private struct AdminEventRosterView: View {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    private func safeFilename(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        return value.lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .unicodeScalars
+            .filter { allowed.contains($0) }
+            .map(String.init)
+            .joined()
+            .prefix(60)
+            .description
+    }
+}
+
+private struct AdminEventRosterCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
+    }
 }
 
 private struct AdminCoachesView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
+    @State private var query = ""
+    @State private var categoryFilter = "all"
     @State private var showingCreate = false
     @State private var pendingDelete: AdminCoach?
 
+    private var directoryIsCurrent: Bool { admin.teamDirectoryIsCurrent }
+    private var isRefreshing: Bool { admin.isLoading || admin.isRefreshingTeamDirectory }
+    private var categories: [String] {
+        Array(Set(admin.coaches.map(\.category))).sorted()
+    }
+    private var rows: [AdminCoach] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return admin.coaches.filter { coach in
+            let fields: [String?] = [
+                coach.name, coach.role, coach.experience,
+                coach.currently_training_for, coach.category
+            ]
+            return (categoryFilter == "all" || coach.category == categoryFilter)
+                && (term.isEmpty
+                    || fields
+                    .compactMap { $0?.lowercased() }
+                    .joined(separator: " ")
+                    .contains(term))
+        }
+    }
+
     var body: some View {
         List {
-            if admin.coaches.isEmpty { Text("No team profiles configured.").listRowBackground(Color.xertInk) }
-            ForEach(admin.coaches) { coach in
+            if let message = admin.teamDirectoryStatusMessage {
+                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
+            if !directoryIsCurrent {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        admin.loadedSources.contains("team directory")
+                            ? "Showing the last team snapshot. Profile changes are paused until refresh succeeds."
+                            : "The Team Directory could not be loaded. No empty-directory assumption is being made.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await admin.refreshTeamDirectory(session: session) }
+                    } label: {
+                        Label(isRefreshing ? "Retrying..." : "Retry team directory", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(isRefreshing)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+            Section("Filter") {
+                Picker("Category", selection: $categoryFilter) {
+                    Text("All categories").tag("all")
+                    ForEach(categories, id: \.self) { Text($0.capitalized).tag($0) }
+                }
+            }
+            .listRowBackground(Color.xertNavy)
+
+            if directoryIsCurrent && rows.isEmpty {
+                Text("No matching team profiles.").listRowBackground(Color.xertInk)
+            }
+            ForEach(rows) { coach in
                 HStack(alignment: .top, spacing: 12) {
                     if let photoURL = URL(string: coach.photo_url ?? ""), !(coach.photo_url ?? "").isEmpty {
                         XertRemoteImage(url: photoURL, maximumPointDimension: 64) {
@@ -8967,7 +9261,13 @@ private struct AdminCoachesView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.plain)
-                            .disabled(admin.deletingCoachID != nil)
+                            .frame(width: 44, height: 44)
+                            .disabled(
+                                !directoryIsCurrent
+                                    || admin.deletingCoachID != nil
+                                    || isRefreshing
+                                    || admin.savingCoachID != nil
+                            )
                             .accessibilityLabel("Delete \(coach.name)")
                         }
                         .font(.caption2.weight(.bold))
@@ -8981,9 +9281,17 @@ private struct AdminCoachesView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("XERT Team")
+        .searchable(text: $query, prompt: "Name, role or experience")
+        .refreshable { await admin.refreshTeamDirectory(session: session) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showingCreate = true } label: { Image(systemName: "plus") }
+                    .disabled(
+                        !directoryIsCurrent
+                            || isRefreshing
+                            || admin.savingCoachID != nil
+                            || admin.deletingCoachID != nil
+                    )
                     .accessibilityLabel("Add team member")
             }
         }
@@ -9015,6 +9323,20 @@ private struct AdminCoachEditor: View {
     let coach: AdminCoach?
     private let baseline: AdminCoachDraft
     @State private var draft: AdminCoachDraft
+    @State private var confirmingDiscard = false
+
+    private var mutationAllowed: Bool {
+        admin.teamDirectoryIsCurrent
+            && !admin.isLoading
+            && !admin.isRefreshingTeamDirectory
+    }
+    private var isDirty: Bool { draft != baseline }
+    private var canSave: Bool {
+        mutationAllowed
+            && isDirty
+            && admin.savingCoachID == nil
+            && !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     init(admin: AdminStore, session: AuthSession, coach: AdminCoach?) {
         let initialDraft = AdminCoachDraft(coach: coach)
@@ -9027,6 +9349,16 @@ private struct AdminCoachEditor: View {
 
     var body: some View {
         Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "This team snapshot is not current. Profile details remain visible, but publishing changes is paused until refresh succeeds.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                }
+            }
             Section("Profile") {
                 TextField("Name", text: $draft.name)
                 Picker("Category", selection: $draft.category) {
@@ -9071,7 +9403,7 @@ private struct AdminCoachEditor: View {
                         Spacer()
                     }
                 }
-                .disabled(admin.savingCoachID != nil || draft == baseline)
+                .disabled(!canSave)
                 .listRowBackground(Color.xertSteel)
                 .foregroundStyle(Color.xertNavy)
             }
@@ -9081,10 +9413,26 @@ private struct AdminCoachEditor: View {
         .navigationTitle(coach == nil ? "New Team Member" : "Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if coach == nil {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            if coach == nil || isDirty {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(coach == nil ? "Cancel" : "Close") { requestDismiss() }
+                        .disabled(admin.savingCoachID != nil)
+                }
             }
         }
+        .navigationBarBackButtonHidden(coach != nil && isDirty)
+        .interactiveDismissDisabled(isDirty || admin.savingCoachID != nil)
+        .confirmationDialog("Discard team profile changes?", isPresented: $confirmingDiscard) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your unsaved team profile changes will be permanently discarded.")
+        }
+    }
+
+    private func requestDismiss() {
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
     }
 }
 

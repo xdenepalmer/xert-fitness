@@ -983,3 +983,51 @@ test('native intake desks never hide failed loads or lose confirmed mutation out
   assert.match(intakeViews, /defaultFilename: "xert-pt-requests-/);
   assert.match(intakeViews, /PT Requests must refresh before owner notes can be changed/);
 });
+
+test('native event and team catalogues preserve mutation truth and never fake empty records', async () => {
+  const [models, store, api, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(api, /func adminCreateEvent[\s\S]*async throws -> AdminEvent/);
+  assert.match(api, /func adminUpdateEvent[\s\S]*async throws -> AdminEvent/);
+  assert.match(api, /func adminCreateCoach[\s\S]*async throws -> AdminCoach/);
+  assert.match(api, /func adminUpdateCoach[\s\S]*async throws -> AdminCoach/);
+  assert.match(api, /return=representation/);
+
+  assert.match(store, /var eventCalendarIsCurrent: Bool/);
+  assert.match(store, /var eventTrainingGroupsAreCurrent: Bool/);
+  assert.match(store, /var teamDirectoryIsCurrent: Bool/);
+  assert.match(store, /func refreshEventCatalogue/);
+  assert.match(store, /func refreshTeamDirectory/);
+  assert.match(store, /mergeEvent\(saved\)[\s\S]*refreshEventsAfterMutation/);
+  assert.match(store, /events\.removeAll \{ \$0\.id == event\.id \}[\s\S]*refreshEventsAfterMutation/);
+  assert.match(store, /mergeCoach\(saved\)[\s\S]*refreshTeamAfterMutation/);
+  assert.match(store, /coaches\.removeAll \{ \$0\.id == coach\.id \}[\s\S]*refreshTeamAfterMutation/);
+  assert.match(store, /eventRosterLoadedEventID = eventID/);
+  assert.match(store, /eventRosterUnavailableEventID = eventID/);
+  assert.match(store, /eventRosterGeneration &\+= 1[\s\S]*guard generation == eventRosterGeneration/);
+  assert.match(store, /but the latest directory could not be loaded/);
+
+  const catalogueViews = view.slice(
+    view.indexOf('private struct AdminEventsView'),
+    view.indexOf('private struct AdminAnnouncementComposer'),
+  );
+  assert.match(catalogueViews, /No empty calendar assumption is being made/);
+  assert.match(catalogueViews, /\.refreshable \{ await admin\.refreshEventCatalogue\(session: session\) \}/);
+  assert.match(catalogueViews, /Picker\("Category", selection: \$categoryFilter\)/);
+  assert.match(catalogueViews, /This training group could not be loaded/);
+  assert.match(catalogueViews, /AdminEventRosterCSVDocument\(csv: report\.csv\)/);
+  assert.match(catalogueViews, /No empty-directory assumption is being made/);
+  assert.match(catalogueViews, /\.refreshable \{ await admin\.refreshTeamDirectory\(session: session\) \}/);
+  assert.match(catalogueViews, /This calendar snapshot is not current/);
+  assert.match(catalogueViews, /This team snapshot is not current/);
+  assert.match(catalogueViews, /interactiveDismissDisabled\(isDirty \|\| admin\.savingEventID != nil\)/);
+  assert.match(catalogueViews, /interactiveDismissDisabled\(isDirty \|\| admin\.savingCoachID != nil\)/);
+
+  assert.match(models, /struct AdminEventRosterReport/);
+  assert.match(models, /Event,Member,Email,Phone,Joined/);
+});
