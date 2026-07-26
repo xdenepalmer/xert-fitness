@@ -13,17 +13,23 @@ export function neutralizeFormula(str) {
   return /^[=+\-@\t\r\n]/.test(str) ? `'${str}` : str;
 }
 
-function escapeCell(value) {
+// Plain numbers are left alone in escapeCell so genuinely numeric columns
+// (a -50.00 refund, for instance) stay usable as numbers in the exported sheet.
+// neutralizeFormula itself stays strict — callers that want every leading
+// [=+\-@] defused (including phone numbers) should call it directly.
+const PLAIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
+
+export function escapeCell(value) {
   if (value === null || value === undefined) return '';
   const raw = Array.isArray(value) ? value.join('; ') : String(value);
-  const str = neutralizeFormula(raw);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  const str = PLAIN_NUMBER.test(raw) ? raw : neutralizeFormula(raw);
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
 /**
- * Serializes rows (array of objects) to a CSV string with a UTF-8 BOM.
+ * Serializes rows (array of objects) to a CSV string.
  * columns: [{ key, label }] — controls order and headers. Pure (no DOM), so it
- * is unit-testable; downloadCsv wraps it with the browser download.
+ * is unit-testable; downloadCsv wraps it with the browser download + BOM.
  */
 export function toCsv(rows, columns) {
   if (!rows || rows.length === 0) return '';
@@ -31,9 +37,11 @@ export function toCsv(rows, columns) {
   return [
     cols.map(c => escapeCell(c.label)).join(','),
     ...rows.map(row => cols.map(c => escapeCell(row[c.key])).join(',')),
-  ];
-  return '﻿' + lines.join('\n');
+  ].join('\n');
 }
+
+/** @deprecated Prefer toCsv — kept so older tests and call sites keep working. */
+export const buildCsv = toCsv;
 
 /**
  * Downloads rows (array of objects) as a CSV file.
@@ -41,7 +49,7 @@ export function toCsv(rows, columns) {
  */
 export function downloadCsv(filename, rows, columns) {
   if (!rows || rows.length === 0) return;
-  const blob = new Blob([toCsv(rows, columns)], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + toCsv(rows, columns)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

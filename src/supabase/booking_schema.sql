@@ -1227,7 +1227,8 @@ begin
           )
         );
     $policy$;
-  else
+  elsif to_regclass('public.member_announcement_targets') is null then
+    -- Fresh install before targeting exists: broadcast-era read policy only.
     execute $policy$
       create policy "member_announcements_select_live_or_admin" on public.member_announcements
         for select to authenticated using (
@@ -1238,6 +1239,10 @@ begin
           )
         );
     $policy$;
+  else
+    -- Audience column missing but targets already present: never emit a
+    -- broadcast-era policy that would expose targeted rows.
+    raise exception 'ANNOUNCEMENT_POLICY_SCHEMA_DRIFT';
   end if;
 end;
 $announcement_policy$;

@@ -49,6 +49,13 @@ test('no operator script recreates the announcement read policy without the audi
       checked += 1;
       if (statement.text.includes('member_announcement_targets')) continue;
 
+      // Fail-closed broadcast-only (audience = 'all', no targeted branch) is
+      // safe when the targets table is missing — it cannot expose private
+      // notices. Accept that shape without requiring the bootstrap guard.
+      const failClosedBroadcast = /\baudience\s*=\s*'all'/.test(statement.text)
+        && !/\baudience\s*=\s*'targeted'/.test(statement.text);
+      if (failClosedBroadcast) continue;
+
       // An audience-blind policy is only ever correct while the targeting
       // schema does not exist yet, so it must sit in that bootstrap branch.
       assert.ok(
