@@ -72,7 +72,8 @@ with required (capability, migration) as (
     ('waitlist_skip_concurrency', 'supabase/migrations/20260726110000_waitlist_skip_concurrency.sql'),
     ('pt_rehab_goal_health_consent', 'supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql'),
     ('stripe_fulfillment_deleted_email_erasure', 'supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql'),
-    ('refund_skips_stripe_refunded_batches', 'supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql')
+    ('refund_skips_stripe_refunded_batches', 'supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql'),
+    ('public_booking_switch_gate', 'supabase/migrations/20260726113000_public_booking_switch_gate.sql')
 ), readiness as (
   select
     required.capability,

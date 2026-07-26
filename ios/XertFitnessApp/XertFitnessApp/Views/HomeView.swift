@@ -559,7 +559,9 @@ struct HomeView: View {
 
     private func handleAnnouncementAction(_ announcement: MemberAnnouncement) {
         guard let action = announcement.action else { return }
-        if let tab = action.nativeTab {
+        if let route = action.memberRoute {
+            onOpenRoute(route)
+        } else if let tab = action.nativeTab {
             onNavigate(tab)
         } else {
             openURL(action.url)

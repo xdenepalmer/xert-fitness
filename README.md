@@ -248,6 +248,9 @@ The Supabase schema is defined in:
 - `src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql` — keeps deleted
   buyers de-identified on late Stripe settlement and refuses to restore credits
   onto packs that Stripe has already refunded
+- `src/supabase/public_booking_switch_gate.sql` — refuses public timetable
+  `class_bookings` inserts while soft-launch `bookings_enabled` is off (same
+  switch already gates signed-in `session_bookings`)
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -294,8 +297,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `account_deletion_public_lead_cleanup.sql`,
 `request_notes_health_consent.sql`,
 `waitlist_skip_concurrency_upgrade.sql`,
-`pt_rehab_goal_health_consent.sql` and
-`fulfillment_erasure_and_refunded_pack_guard.sql`. This
+`pt_rehab_goal_health_consent.sql`,
+`fulfillment_erasure_and_refunded_pack_guard.sql` and
+`public_booking_switch_gate.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -350,8 +354,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `account_deletion_public_lead_cleanup.sql`,
 `request_notes_health_consent.sql`,
 `waitlist_skip_concurrency_upgrade.sql`,
-`pt_rehab_goal_health_consent.sql` and
-`fulfillment_erasure_and_refunded_pack_guard.sql`. The
+`pt_rehab_goal_health_consent.sql`,
+`fulfillment_erasure_and_refunded_pack_guard.sql` and
+`public_booking_switch_gate.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

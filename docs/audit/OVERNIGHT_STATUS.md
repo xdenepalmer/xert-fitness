@@ -58,7 +58,7 @@ owner/legal gates and `INTEGRATION_REVIEW.md` §5 still block 01–07 feature bu
   Privacy aligned (`pt_rehab_goal_health_consent`).
 - Class roster refresh skipped after the operator switches session.
 
-### 9. This batch — adversarial credit / erasure pass
+### 9. Adversarial credit / erasure pass (`038f6c2`)
 | Area | Defect | Fix |
 |---|---|---|
 | Privacy / fulfillment | After `delete_member_account` nulled `orders.email`, a late `fulfill_stripe_checkout` (webhook or reconcile) wrote Stripe’s `p_email` back onto the orphaned order | `email = null` when `orders.user_id is null` |
@@ -70,18 +70,30 @@ Migration / operator mirror:
 `supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql`
 ↔ `src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql`.
 
+### 10. This batch — soft-launch booking gate + notice deep links
+| Area | Defect | Fix |
+|---|---|---|
+| Soft launch / public booking | `bookings_enabled = false` hid Request spot and blocked signed-in `session_bookings`, but anon/authenticated could still insert into `class_bookings` (PostgREST / stale tab) | `install_public_form_insert_policies` requires `admin_settings.bookings_enabled is true` for `class_bookings`; capability `public_booking_switch_gate` |
+| Soft launch UI | Sticky “Book Your First Session” CTA stayed on `/timetable` while bookings were paused | Render `StickyMobileCTA` only when `bookings_enabled === true` |
+| iOS deep links (notices) | Notice CTAs like `/booking#packs` / `/account#notices` collapsed to the primary tab via path-only `nativeTab` | Resolve `XertMemberRoute` from the absolute URL; `HomeView` opens `memberRoute` via `onOpenRoute` |
+
+Migration / operator mirror:
+`supabase/migrations/20260726113000_public_booking_switch_gate.sql`
+↔ `src/supabase/public_booking_switch_gate.sql`.
+
+Postgres proof: with `bookings_enabled = false`, anon `INSERT` into `class_bookings` is denied by RLS; flipping the switch allows the insert.
+
 ---
 
 ## Morning next steps
 
-1. Apply `20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql` (and any
-   earlier overnight migrations not yet in production). Confirm
-   `release_readiness_check.sql` shows both new capabilities installed.
-2. Smoke: delete account → delayed `checkout.session.completed` settles paid with
-   **null** order email and no credit grant.
-3. Smoke: Stripe-refunded pack + admin cancel of an attended booking does **not**
-   increase `credit_batches.remaining`.
-4. Smoke: failed checkout recording retries with the same attempt; stale-attempt
-   clears and recovers on the next tap (from batch 8).
+1. Apply `20260726113000_public_booking_switch_gate.sql` (and
+   `20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql` if not yet
+   in production). Confirm `release_readiness_check.sql` shows
+   `public_booking_switch_gate` installed.
+2. Smoke: pause Bookings in Soft Launch → direct PostgREST insert into
+   `class_bookings` fails; re-enable → Request spot works.
+3. Smoke: iOS notice CTA `/booking#packs` opens Session Packs (not bare Book tab).
+4. Smoke: delete account → delayed fulfillment keeps null order email (batch 9).
 5. Do **not** implement staff roles yet — owner/legal gates in
    `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

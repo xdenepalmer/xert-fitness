@@ -166,7 +166,7 @@ export default function SoftLaunchTimetable() {
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-display text-2xl text-xert-offwhite uppercase">Published Classes</h2>
-              {!settings.bookings_enabled && (
+              {settings.bookings_enabled !== true && (
                 <span className="font-body text-xs text-xert-concrete/70 border border-xert-steel/30 px-3 py-1 uppercase">
                   Bookings not yet open
                 </span>
@@ -191,7 +191,7 @@ export default function SoftLaunchTimetable() {
             ) : (
               <div className="space-y-3">
                 {sessions.map(s => (
-                  <ClassCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} />
+                  <ClassCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled === true} onBook={setSelectedSession} />
                 ))}
               </div>
             )}
@@ -267,7 +267,8 @@ export default function SoftLaunchTimetable() {
       </Dialog>
 
       <PublicFooter />
-      <StickyMobileCTA />
+      {/* Sticky "Book" CTA contradicts the soft-launch pause when bookings are off. */}
+      {settings.bookings_enabled === true && <StickyMobileCTA />}
     </div>
   );
 }

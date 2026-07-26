@@ -96,7 +96,7 @@ test('announcement schema and clients enforce member visibility and privacy life
   assert.match(api, /func dismissAnnouncement[\s\S]*?dismiss_member_announcement/);
   assert.match(home, /Member notices[\s\S]*?MemberAnnouncementRow/);
   assert.match(home, /accessibilityLabel\("Dismiss/);
-  assert.match(home, /handleAnnouncementAction[\s\S]*?action\.nativeTab/);
+  assert.match(home, /handleAnnouncementAction[\s\S]*?action\.memberRoute[\s\S]*?action\.nativeTab/);
   assert.match(admin, /announcement-cta-label/);
   assert.match(admin, /announcement-cta-url/);
 });

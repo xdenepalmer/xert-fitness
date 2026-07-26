@@ -1,20 +1,9 @@
--- PT and booking request free-text notes can carry health information
--- (injuries, rehab constraints) with only consent_to_contact. APP 3.3 needs a
--- separate, informed consent — the same shape already used for member_interest
--- injuries. Adds health_info_consent on both request tables, extends the public
--- form installer so notes without consent are refused, and exposes a narrow
--- admin reveal for member-interest injuries (kept out of list/CSV selects).
-
-alter table public.class_bookings
-  add column if not exists health_info_consent boolean not null default false;
-
-alter table public.private_session_requests
-  add column if not exists health_info_consent boolean not null default false;
-
--- Keep the member-interest injuries guard when this installer re-runs after
--- member_interest_health_consent (column may already exist).
-alter table public.member_interest
-  add column if not exists health_info_consent boolean not null default false;
+-- Soft-launch bookings_enabled already blocks signed-in session_bookings via
+-- enforce_member_booking_switch. Public timetable "Request spot" inserts into
+-- class_bookings instead, and that path had no switch check — so pausing
+-- bookings only hid the button. Extend install_public_form_insert_policies so
+-- anon/authenticated inserts fail closed while bookings_enabled is not true.
+-- Keeps session, staff-column, and health-consent guards intact.
 
 create or replace function public.install_public_form_insert_policies()
 returns void
@@ -175,56 +164,6 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 
 select public.install_public_form_insert_policies();
 
--- Narrow reveal: injuries stay out of admin list/CSV selects; staff fetch them
--- only for a single lead when consent was recorded.
-create or replace function public.admin_reveal_member_interest_health(p_lead_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_consent boolean;
-  v_injuries text;
-begin
-  if auth.uid() is null or not public.is_admin() then
-    raise exception 'ADMIN_ONLY';
-  end if;
-  if p_lead_id is null then
-    raise exception 'LEAD_REQUIRED';
-  end if;
-
-  select health_info_consent,
-         nullif(btrim(injuries_or_limitations_optional), '')
-    into v_consent, v_injuries
-  from public.member_interest
-  where id = p_lead_id;
-
-  if not found then
-    raise exception 'LEAD_NOT_FOUND';
-  end if;
-
-  if v_consent is not true or v_injuries is null then
-    return jsonb_build_object(
-      'lead_id', p_lead_id,
-      'available', false,
-      'injuries_or_limitations_optional', null
-    );
-  end if;
-
-  return jsonb_build_object(
-    'lead_id', p_lead_id,
-    'available', true,
-    'injuries_or_limitations_optional', v_injuries
-  );
-end;
-$$;
-
-revoke all on function public.admin_reveal_member_interest_health(uuid)
-  from public, anon;
-grant execute on function public.admin_reveal_member_interest_health(uuid)
-  to authenticated;
-
 insert into public.xert_schema_capabilities (capability)
-values ('request_notes_health_consent')
+values ('public_booking_switch_gate')
 on conflict (capability) do nothing;

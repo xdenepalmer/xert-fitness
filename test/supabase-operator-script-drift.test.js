@@ -225,6 +225,13 @@ test('every install_public_form_insert_policies definition gates PT/booking note
       `${name} replaces install_public_form_insert_policies without the PT rehab-goal health-consent guard, `
         + 'so re-running it would accept that goal without APP 3.3 consent',
     );
+    assert.match(
+      sql,
+      /bookings_enabled is true/,
+      `${name} replaces install_public_form_insert_policies without the soft-launch `
+        + 'bookings_enabled gate on class_bookings, so re-running it would accept '
+        + 'public Request spot inserts while bookings are paused',
+    );
   }
 });
 
@@ -293,6 +300,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     'waitlist_skip_concurrency_upgrade.sql',
     'pt_rehab_goal_health_consent.sql',
     'fulfillment_erasure_and_refunded_pack_guard.sql',
+    'public_booking_switch_gate.sql',
   ]) {
     assert.match(
       readme,
@@ -300,14 +308,14 @@ test('README operator apply order includes the newest Ops Health migrations', ()
       `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
     );
   }
-  // Fresh + already-deployed apply sequences both end with the fulfillment/erasure guard.
+  // Fresh + already-deployed apply sequences both end with the public booking switch gate.
   assert.match(
     readme,
-    /pt_rehab_goal_health_consent\.sql` and\n`fulfillment_erasure_and_refunded_pack_guard\.sql`\. This/,
+    /fulfillment_erasure_and_refunded_pack_guard\.sql` and\n`public_booking_switch_gate\.sql`\. This/,
   );
   assert.match(
     readme,
-    /pt_rehab_goal_health_consent\.sql` and\n`fulfillment_erasure_and_refunded_pack_guard\.sql`\. The/,
+    /fulfillment_erasure_and_refunded_pack_guard\.sql` and\n`public_booking_switch_gate\.sql`\. The/,
   );
 });
 

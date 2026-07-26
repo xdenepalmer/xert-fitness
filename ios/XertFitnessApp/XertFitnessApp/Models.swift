@@ -54,12 +54,20 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
             return nil
         }
         if destination.hasPrefix("/"), !destination.hasPrefix("//") {
-            let path = URLComponents(string: destination)?.path ?? destination
-            let nativeTab = XertPrimaryDestination.destination(for: path)
             guard let url = URL(string: destination, relativeTo: AppConfig.vercelBaseURL)?.absoluteURL else {
                 return nil
             }
-            return MemberAnnouncementAction(label: label, url: url, nativeTab: nativeTab)
+            // Prefer full member routes (including #packs / #goals / #notices)
+            // over bare primary tabs so notice CTAs land on the intended task.
+            let memberRoute = XertMemberRoute.route(for: url)
+            let nativeTab = memberRoute?.destination
+                ?? XertPrimaryDestination.destination(for: url.path)
+            return MemberAnnouncementAction(
+                label: label,
+                url: url,
+                nativeTab: nativeTab,
+                memberRoute: memberRoute
+            )
         }
         guard let components = URLComponents(string: destination),
               components.scheme?.lowercased() == "https",
@@ -67,7 +75,7 @@ struct MemberAnnouncement: Identifiable, Codable, Hashable {
               components.user == nil,
               components.password == nil,
               let url = components.url else { return nil }
-        return MemberAnnouncementAction(label: label, url: url, nativeTab: nil)
+        return MemberAnnouncementAction(label: label, url: url, nativeTab: nil, memberRoute: nil)
     }
 }
 
@@ -75,6 +83,7 @@ struct MemberAnnouncementAction: Equatable {
     let label: String
     let url: URL
     let nativeTab: XertPrimaryDestination?
+    let memberRoute: XertMemberRoute?
 }
 
 struct Product: Identifiable, Codable, Hashable {

@@ -1907,7 +1907,12 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertEqual(try announcement(url: "/events").action?.nativeTab, .events)
         XCTAssertEqual(try announcement(url: "/account").action?.nativeTab, .account)
+        XCTAssertEqual(try announcement(url: "/booking#packs").action?.memberRoute, .sessionPacks)
+        XCTAssertEqual(try announcement(url: "/events#goals").action?.memberRoute, .eventGoals)
+        XCTAssertEqual(try announcement(url: "/account#notices").action?.memberRoute, .notices(nil))
+        XCTAssertEqual(try announcement(url: "/account#bookings").action?.memberRoute, .upcomingBookings(nil))
         XCTAssertEqual(try announcement(url: "https://events.example.com/register").action?.url.host, "events.example.com")
+        XCTAssertNil(try announcement(url: "https://events.example.com/register").action?.memberRoute)
         XCTAssertNil(try announcement(url: "http://events.example.com").action)
         XCTAssertNil(try announcement(url: "//events.example.com").action)
         XCTAssertNil(try announcement(url: "https://user:pass@events.example.com").action)

@@ -33,6 +33,7 @@ declare
   v_extra text;
   v_owner text;
   v_session text;
+  v_bookings text;
   v_health text;
 begin
   foreach v_table in array array[
@@ -74,6 +75,21 @@ begin
           and session.start_time > now()
       )
       $session$;
+    end if;
+
+    -- Soft-launch bookings_enabled already gates signed-in session_bookings via
+    -- enforce_member_booking_switch. Public "Request spot" writes class_bookings
+    -- instead, so the same switch must refuse those inserts or the timetable UI
+    -- is only cosmetic.
+    v_bookings := '';
+    if v_table = 'class_bookings' and to_regclass('public.admin_settings') is not null then
+      v_bookings := $bookings$
+      and exists (
+        select 1
+        from public.admin_settings settings
+        where settings.bookings_enabled is true
+      )
+      $bookings$;
     end if;
 
     v_extra := '';
@@ -153,8 +169,8 @@ begin
     execute format('drop policy if exists %I on public.%I', 'public_insert_' || v_table, v_table);
     execute format(
       'create policy %I on public.%I for insert to anon, authenticated '
-      || 'with check (status = %L and consent_to_contact is true%s%s%s%s)',
-      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner, v_session, v_health
+      || 'with check (status = %L and consent_to_contact is true%s%s%s%s%s)',
+      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner, v_session, v_bookings, v_health
     );
   end loop;
 end;

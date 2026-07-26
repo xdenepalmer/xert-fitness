@@ -31,6 +31,16 @@ test('notice centre supports push highlighting, actions and dismissal', () => {
   assert.match(home, /presentationDetents\(\[\.medium, \.large\]\)/);
 });
 
+test('notice CTAs open hash and deep member routes instead of collapsing to a primary tab', () => {
+  const models = read('../ios/XertFitnessApp/XertFitnessApp/Models.swift');
+  const modelsTests = read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift');
+  assert.match(models, /let memberRoute = XertMemberRoute\.route\(for: url\)/);
+  assert.match(models, /let memberRoute: XertMemberRoute\?/);
+  assert.match(home, /if let route = action\.memberRoute \{\s*onOpenRoute\(route\)/);
+  assert.match(modelsTests, /booking#packs[\s\S]*\.sessionPacks/);
+  assert.match(modelsTests, /account#notices[\s\S]*\.notices\(nil\)/);
+});
+
 test('shared native sections preserve existing calls while allowing a header command', () => {
   assert.match(root, /struct XertSection<Content: View>/);
   assert.match(root, /actionTitle: String\? = nil/);
