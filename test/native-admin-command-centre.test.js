@@ -637,7 +637,20 @@ test('native class desk never presents unavailable operational data as an empty 
   assert.match(desk, /Waitlists are unavailable\. Refresh before assuming every queue is clear/);
   assert.match(desk, /Showing the last waitlist snapshot\. Refresh before promoting a member/);
   assert.match(desk, /!waitlistIsCurrent \|\| !item\.can_promote/);
+  assert.match(desk, /Skip — no credits/);
+  assert.match(desk, /status: "cancelled"/);
+  assert.match(desk, /Waitlisted members do not hold a credit/);
   assert.match(desk, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
+});
+
+test('native promote-next no-credit errors point staff at waitlist skip', async () => {
+  const adminStore = await read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
+  const promote = adminStore.slice(
+    adminStore.indexOf('func promoteNext('),
+    adminStore.indexOf('func loadClassRoster('),
+  );
+  assert.match(promote, /WAITLIST_MEMBER_NO_CREDITS/);
+  assert.match(promote, /Skip — no credits on the waitlist desk/);
 });
 
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {

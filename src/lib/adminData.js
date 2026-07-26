@@ -1216,7 +1216,7 @@ export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, r
     throw new Error('The queue changed before confirmation. Refresh and review the next member.');
   }
   if (/WAITLIST_MEMBER_NO_CREDITS|NO_CREDITS/i.test(message)) {
-    throw new Error('The next member has no available class credit. Contact them before changing the queue.');
+    throw new Error('The next member has no available class credit. Use Skip — no credits on the waitlist desk to remove them, then promote the next credited member.');
   }
   if (/SESSION_FULL/i.test(message)) throw new Error('This class is still full. Refresh the roster before promoting anyone.');
   if (/BOOKING_TIME_CONFLICT/i.test(message)) {

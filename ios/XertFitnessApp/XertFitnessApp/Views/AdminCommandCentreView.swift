@@ -2270,6 +2270,7 @@ private struct AdminClassesView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var promotion: AdminWaitlistItem?
+    @State private var skipCandidate: AdminWaitlistItem?
 
     private var operationsAreCurrent: Bool {
         admin.loadedSources.contains("today's classes")
@@ -2284,6 +2285,9 @@ private struct AdminClassesView: View {
     }
     private var waitlistIsLoading: Bool {
         admin.isLoading && !admin.loadedSources.contains("waitlists")
+    }
+    private var waitlistDeskBusy: Bool {
+        admin.promotingSessionID != nil || admin.updatingBookingID != nil
     }
 
     var body: some View {
@@ -2343,6 +2347,11 @@ private struct AdminClassesView: View {
                             Text(item.title).font(.headline)
                             Text("Next: \(item.nextMemberName) · \(item.next_available_credits) credits")
                                 .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                            if item.can_promote && item.next_available_credits < 1 {
+                                Text("Next member needs a credit")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.orange)
+                            }
                             Button {
                                 promotion = item
                             } label: {
@@ -2352,8 +2361,16 @@ private struct AdminClassesView: View {
                             .tint(Color.xertSteel)
                             .disabled(
                                 !waitlistIsCurrent || !item.can_promote
-                                    || item.next_available_credits < 1 || admin.promotingSessionID != nil
+                                    || item.next_available_credits < 1 || waitlistDeskBusy
                             )
+                            if item.can_promote && item.next_available_credits < 1 {
+                                Button(role: .destructive) {
+                                    skipCandidate = item
+                                } label: {
+                                    Label("Skip — no credits", systemImage: "person.crop.circle.badge.minus")
+                                }
+                                .disabled(!waitlistIsCurrent || waitlistDeskBusy)
+                            }
                         }
                         .foregroundStyle(Color.xertOffWhite)
                         .listRowBackground(Color.xertInk)
@@ -2386,6 +2403,29 @@ private struct AdminClassesView: View {
             Button("Cancel", role: .cancel) {}
         } message: { item in
             Text("This confirms the next FIFO waitlisted member into \(item.title), reserves one available credit, and creates a private member notice. Apple push is requested for enabled devices.")
+        }
+        .confirmationDialog(
+            "Remove \(skipCandidate?.nextMemberName ?? "this member") from the waitlist?",
+            isPresented: Binding(
+                get: { skipCandidate != nil },
+                set: { if !$0 { skipCandidate = nil } }
+            ),
+            presenting: skipCandidate
+        ) { item in
+            Button("Skip — no credits", role: .destructive) {
+                Task {
+                    _ = await admin.setBookingStatus(
+                        session: session,
+                        classSessionID: item.session_id,
+                        bookingID: item.next_booking_id,
+                        status: "cancelled"
+                    )
+                    skipCandidate = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { skipCandidate = nil }
+        } message: { item in
+            Text("\(item.nextMemberName) is first for \(item.title) but has no available credit. Waitlisted members do not hold a credit, so removing them charges or refunds nothing. The next credited member can then be promoted.")
         }
     }
 

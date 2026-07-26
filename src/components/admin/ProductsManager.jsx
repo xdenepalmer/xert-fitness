@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { createProduct, getAllProducts, provisionProductPrice, updateProduct } from '@/lib/adminData';
@@ -26,26 +26,44 @@ function productEditorForm(product) {
 }
 
 function ProductCard({ product, onSaved, onDirtyChange }) {
-  const baseline = useMemo(() => productEditorForm(product), [product]);
+  // Pin the server row the form was seeded from. Catalogue refreshes after
+  // another pack is saved must not remount or re-seed a dirty card (same
+  // mid-edit guard as Account profile / member readiness).
+  const [baselineProduct, setBaselineProduct] = useState(product);
+  const baseline = useMemo(() => productEditorForm(baselineProduct), [baselineProduct]);
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [confirmProvision, setConfirmProvision] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const dirty = Object.keys(baseline).some(key => form[key] !== baseline[key]);
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
 
   useEffect(() => {
     onDirtyChange(product.id, dirty);
   }, [dirty, onDirtyChange, product.id]);
 
   useEffect(() => () => onDirtyChange(product.id, false), [onDirtyChange, product.id]);
+
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setBaselineProduct(product);
+    setForm(productEditorForm(product));
+  }, [product]);
+
+  const applyServerProduct = saved => {
+    setBaselineProduct(saved);
+    setForm(productEditorForm(saved));
+  };
+
   let transitionError = '';
   const hasStripePrice = /^price_[A-Za-z0-9]+$/.test(form.stripe_price_id.trim());
   const activationError = form.active && !hasStripePrice
     ? 'Enter a valid Stripe Price ID before making this pack active and purchasable.'
     : '';
   try {
-    transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
+    transitionError = productStripeTransitionError(baselineProduct, normalizeProductAdminInput(form));
   } catch {
     // Field-level validation is reported when Save is pressed.
   }
@@ -64,7 +82,8 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
     }
     setSaving(true);
     try {
-      const saved = await updateProduct(product.id, updates, product.updated_at);
+      const saved = await updateProduct(product.id, updates, baselineProduct.updated_at);
+      applyServerProduct(saved);
       onSaved(saved);
       toast({
         title: updates.active ? 'Session pack verified and saved' : 'Session pack saved',
@@ -82,7 +101,8 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   const provisionPrice = async () => {
     setProvisioning(true);
     try {
-      const saved = await provisionProductPrice(product.id, product.updated_at, 'CREATE STRIPE PRICE');
+      const saved = await provisionProductPrice(product.id, baselineProduct.updated_at, 'CREATE STRIPE PRICE');
+      applyServerProduct(saved);
       onSaved(saved);
       setConfirmProvision(false);
       toast({
@@ -100,7 +120,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
     <div className="bg-xert-ink border border-xert-steel/20 p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg text-xert-offwhite uppercase">{product.name}</h3>
+          <h3 className="font-display text-lg text-xert-offwhite uppercase">{baselineProduct.name}</h3>
           {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
         </div>
         <div className="flex items-center gap-2">
@@ -155,7 +175,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
         {transitionError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{transitionError}</p>}
         {activationError && <p role="alert" className="mt-2 font-body text-xs text-xert-orange">{activationError}</p>}
         {hasStripePrice && <p className="mt-2 font-body text-xs text-xert-concrete/45">Saving an active pack verifies amount, currency, credits, validity, identity and Stripe mode. Checkout verifies them again before every charge.</p>}
-        {!product.active && !product.stripe_price_id && !dirty && (
+        {!baselineProduct.active && !baselineProduct.stripe_price_id && !dirty && (
           <button type="button" onClick={() => setConfirmProvision(true)} disabled={provisioning || saving}
             className="mt-3 min-h-11 w-full border border-xert-steel/40 px-4 font-display text-sm uppercase text-xert-steel disabled:opacity-40">
             {provisioning ? 'Preparing Stripe Price...' : 'Create & link exact Stripe Price'}
@@ -405,7 +425,7 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
         <div className="space-y-4">
           {products.length === 0
             ? <p className="font-body text-sm text-xert-concrete/60">No session packs have been configured.</p>
-            : products.map(p => <ProductCard key={`${p.id}:${p.updated_at || ''}`} product={p} onSaved={acceptSavedProduct} onDirtyChange={handleDirtyChange} />)}
+            : products.map(p => <ProductCard key={p.id} product={p} onSaved={acceptSavedProduct} onDirtyChange={handleDirtyChange} />)}
         </div>
       )}
       {showCreate && <NewProductDialog onClose={() => setShowCreate(false)} onCreated={acceptSavedProduct} onDirtyChange={handleDirtyChange} />}

@@ -92,13 +92,17 @@ test('admin, member web, and SwiftUI expose the FIFO workflow', () => {
   const webAccount = read('../src/pages/Account.jsx');
   const swiftModel = read('../ios/XertFitnessApp/XertFitnessApp/Models.swift');
   const swiftAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
+  const swiftAdmin = read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
 
   assert.match(adminData, /rpc\('admin_promote_next_waitlisted_with_notice'/);
   assert.match(adminView, /Promote next/);
+  assert.match(adminView, /Skip — no credits/);
   assert.match(adminView, /Waitlist position/);
   assert.match(adminView, /status === 'waitlisted'\) return \['waitlisted', 'cancelled'\]/);
   assert.match(webAccount, /waitlist_position/);
   assert.match(swiftModel, /waitlist_position: Int\?/);
   assert.match(swiftModel, /Waitlisted · #/);
   assert.match(swiftAccount, /booking\.stateLabel/);
+  assert.match(swiftAdmin, /Remove from waitlist/);
+  assert.match(swiftAdmin, /Skip — no credits/);
 });

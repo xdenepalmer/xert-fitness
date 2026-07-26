@@ -41,7 +41,7 @@ test('coach, event and pack mutations carry the version originally loaded', () =
   assert.match(coaches, /deleteCoach\(coach\.id, coach\.updated_at\)/);
   assert.match(events, /updateEvent\(event\.id, payload, event\.updated_at\)/);
   assert.match(events, /deleteEvent\(event\.id, event\.updated_at\)/);
-  assert.match(products, /updateProduct\(product\.id, updates, product\.updated_at\)/);
+  assert.match(products, /updateProduct\(product\.id, updates, baselineProduct\.updated_at\)/);
 });
 
 test('all catalog editors protect drafts locally and through admin navigation', () => {
@@ -60,7 +60,15 @@ test('all catalog editors protect drafts locally and through admin navigation', 
     assert.match(source, /Keep editing/);
   }
   assert.match(products, /dirtyEditors\.size > 0/);
-  assert.match(products, /key=\{`\$\{p\.id\}:\$\{p\.updated_at \|\| ''\}`\}/);
+  // Pack cards keep a stable identity; catalogue refresh after saving another
+  // pack must merge the server row only when the card is not dirty (profile
+  // mid-edit guard), never remount via updated_at and drop unsaved edits.
+  assert.match(products, /key=\{p\.id\}/);
+  assert.doesNotMatch(products, /key=\{`\$\{p\.id\}:\$\{p\.updated_at/);
+  assert.match(products, /dirtyRef\.current = dirty/);
+  assert.match(products, /if \(dirtyRef\.current\) return;/);
+  assert.match(products, /setBaselineProduct\(product\)/);
+  assert.match(products, /updateProduct\(product\.id, updates, baselineProduct\.updated_at\)/);
   assert.match(members, /onDirtyChange/);
   assert.match(members, /noticeDirty/);
   for (const component of ['CoachesManager', 'EventsManager', 'ProductsManager', 'ClassCalendarAdmin', 'MembersManager']) {

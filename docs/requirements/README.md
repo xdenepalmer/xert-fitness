@@ -26,6 +26,12 @@ These specs were produced from the owner's requirements note:
 current schema. Nothing here is implemented. Read this integration plan before
 building any of it, because several specs want the same mechanism.
 
+**Design integration review (2026-07-26):** see
+[INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) — whether these decisions still
+hold after the audit/completeness work, cross-spec conflicts, whether spec 07
+unblocks 02/03/05, build-order adjustments, owner gates, and risks from recent
+credit/deletion/privacy fixes.
+
 ---
 
 ## 1. Conflicts and overlaps to resolve first

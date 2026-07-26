@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, UserMinus, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
@@ -60,7 +60,10 @@ function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
   return ['confirmed', 'attended', 'no_show', 'cancelled'];
 }
 
-function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onRetry, onOpen, onPromote }) {
+function WaitlistDesk({
+  rows, available, error, loading, promotingSessionId, skippingSessionId, onRetry, onOpen, onPromote, onSkip,
+}) {
+  const deskBusy = Boolean(promotingSessionId || skippingSessionId);
   return (
     <section aria-labelledby="waitlist-desk-title" className="mb-6 border-y border-xert-steel/20 py-4">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -113,12 +116,25 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
                     Open roster
                   </button>
                   {item.can_promote && credits > 0 && (
-                    <button type="button" onClick={() => onPromote(item)} disabled={Boolean(promotingSessionId)} className="inline-flex min-h-11 items-center gap-1.5 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel hover:border-xert-steel disabled:opacity-40">
+                    <button type="button" onClick={() => onPromote(item)} disabled={deskBusy} className="inline-flex min-h-11 items-center gap-1.5 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel hover:border-xert-steel disabled:opacity-40">
                       <UserCheck className="w-3.5 h-3.5" />
                       {promotingSessionId === item.session_id ? 'Promoting...' : 'Promote next'}
                     </button>
                   )}
-                  {item.can_promote && credits === 0 && <span className="font-body text-xs" style={{ color: '#e0b36a' }}>Next member needs a credit</span>}
+                  {item.can_promote && credits === 0 && (
+                    <>
+                      <span className="font-body text-xs" style={{ color: '#e0b36a' }}>Next member needs a credit</span>
+                      <button
+                        type="button"
+                        onClick={() => onSkip(item)}
+                        disabled={deskBusy || !item.next_booking_id}
+                        className="inline-flex min-h-11 items-center gap-1.5 px-3 border border-xert-orange/40 font-body text-xs text-xert-orange hover:border-xert-orange disabled:opacity-40"
+                      >
+                        <UserMinus className="w-3.5 h-3.5" />
+                        {skippingSessionId === item.session_id ? 'Removing...' : 'Skip — no credits'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </article>
             );
@@ -538,6 +554,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
   const [promotingSessionId, setPromotingSessionId] = useState(null);
   const [promotionCandidate, setPromotionCandidate] = useState(null);
+  const [skippingSessionId, setSkippingSessionId] = useState(null);
+  const [skipCandidate, setSkipCandidate] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
   const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
@@ -716,7 +734,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const handlePromoteNext = async candidate => {
-    if (promotingSessionId) return;
+    if (promotingSessionId || skippingSessionId) return;
     setPromotingSessionId(candidate.session_id);
     try {
       const result = await adminPromoteNextWaitlisted(candidate.session_id, candidate.next_booking_id);
@@ -734,6 +752,33 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     } finally {
       setPromotingSessionId(null);
       setPromotionCandidate(null);
+    }
+  };
+
+  const handleSkipWaitlistHead = async candidate => {
+    if (promotingSessionId || skippingSessionId || !candidate?.next_booking_id) return;
+    setSkippingSessionId(candidate.session_id);
+    try {
+      // Waitlisted rows hold no credit; cancelled does not refund (admin_set_booking_status).
+      const result = await adminSetBookingStatus(candidate.next_booking_id, 'cancelled');
+      await Promise.all([
+        refreshWaitlistOverview(),
+        ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
+      ]);
+      toast({
+        title: 'Removed from waitlist',
+        description: result?.notice_created
+          ? (result.warning
+            || (Number(result.push?.delivered || 0) > 0
+              ? 'They were notified, and the next credited member can be promoted.'
+              : 'Their private notice is live. Promote the next credited member when ready.'))
+          : 'No credit was charged or refunded. Promote the next credited member when ready.',
+      });
+    } catch (error) {
+      toast({ title: 'Could not remove waitlisted member', description: error.message, variant: 'destructive' });
+    } finally {
+      setSkippingSessionId(null);
+      setSkipCandidate(null);
     }
   };
 
@@ -935,9 +980,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         error={waitlistOverviewError}
         loading={waitlistOverviewLoading}
         promotingSessionId={promotingSessionId}
+        skippingSessionId={skippingSessionId}
         onRetry={refreshWaitlistOverview}
         onOpen={openWaitlistRoster}
         onPromote={setPromotionCandidate}
+        onSkip={setSkipCandidate}
       />
 
       {loading ? (
@@ -1242,6 +1289,19 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         busy={Boolean(promotingSessionId)}
         onOpenChange={open => { if (!open) setPromotionCandidate(null); }}
         onConfirm={() => promotionCandidate && void handlePromoteNext(promotionCandidate)}
+      />
+
+      <AdminConfirmDialog
+        open={Boolean(skipCandidate)}
+        title="Remove from waitlist?"
+        description={skipCandidate
+          ? `${skipCandidate.next_full_name || skipCandidate.next_email || 'This member'} is first in the queue for ${skipCandidate.title} but has no available credit. Removing them frees the open place for the next waitlisted member.`
+          : ''}
+        warning="Waitlisted members do not hold a credit. This cancels their waitlist place only — nothing is charged or refunded."
+        confirmLabel={skippingSessionId ? 'Removing…' : 'Skip — no credits'}
+        busy={Boolean(skippingSessionId)}
+        onOpenChange={open => { if (!open) setSkipCandidate(null); }}
+        onConfirm={() => skipCandidate && void handleSkipWaitlistHead(skipCandidate)}
       />
     </div>
   );

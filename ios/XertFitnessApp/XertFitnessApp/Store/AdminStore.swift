@@ -947,6 +947,9 @@ final class AdminStore: ObservableObject {
             if message.localizedCaseInsensitiveContains("WAITLIST_CHANGED")
                 || message.localizedCaseInsensitiveContains("WAITLIST_PROMOTION_REQUEST_CONFLICT") {
                 errorMessage = "The queue changed before confirmation. Refresh and review the next member."
+            } else if message.localizedCaseInsensitiveContains("WAITLIST_MEMBER_NO_CREDITS")
+                || message.localizedCaseInsensitiveContains("NO_CREDITS") {
+                errorMessage = "The next member has no available class credit. Use Skip — no credits on the waitlist desk to remove them, then promote the next credited member."
             } else if message.localizedCaseInsensitiveContains("admin_promote_next_waitlisted_with_notice") {
                 errorMessage = "Apply the waitlist promotion notifications migration before promoting members."
             } else {

@@ -155,8 +155,13 @@ Cross-cutting gaps the original 56-item queue did not fully pin. Status:
 | Health consent incomplete on PT + booking free-text | **CLOSED** — `health_info_consent` on `class_bookings` / `private_session_requests`, form + installer guards (`20260726109000_*`) |
 | Privacy purpose vs write-only injuries | **CLOSED** — honest Privacy + `admin_reveal_member_interest_health` behind consent; list/CSV boundary tests kept |
 
-- **Design integration architect.** Synthesis lives in `docs/requirements/README.md`
-  but was not independently reviewed.
+- **Design integration architect.** **DONE** —
+  [`docs/requirements/INTEGRATION_REVIEW.md`](requirements/INTEGRATION_REVIEW.md)
+  (2026-07-26). README integration decisions still hold as intent; specs 01–06
+  need alignment patches (shared agreement ledger vs live
+  `member_onboarding_*`, 07 roles vs embedded role DDL, 03 Stripe Invoicing vs
+  06 billing spine) before any feature build. Spec 07 Phase A unblocks 02/03/05
+  once those patches land. Owner/legal gates are listed in the review §5.
 
 ---
 
@@ -167,9 +172,10 @@ waivers, coach gym rent by client volume after 6 months, member accounts,
 employee contacts, client PBs + conversion table, digital tag check-in +
 pre-registration + book-on-arrival, payment options).
 
-**Six design specs exist in `docs/requirements/`** (~550KB, full Postgres DDL
-written against the real schema). They are **proposals, not decisions**, and
-**nothing is implemented**:
+**Seven design specs exist in `docs/requirements/`** (full Postgres DDL written
+against the real schema). They are **proposals, not decisions**, and **nothing
+from 01–07 is implemented**. Integration review:
+[`docs/requirements/INTEGRATION_REVIEW.md`](requirements/INTEGRATION_REVIEW.md).
 
 | # | Spec | Effort |
 |---|---|---|
@@ -179,30 +185,16 @@ written against the real schema). They are **proposals, not decisions**, and
 | 04 | Member personal bests & conversion tables | L |
 | 05 | Digital tag check-in & on-arrival booking | XL |
 | 06 | Expanded payment options | XL |
+| 07 | Staff accounts & least-privilege roles | L (design; policy cutover XL) |
 
-### The missing seventh spec — write this first
+### Spec 07 — written; Phase A still gates 02 / 03 / 05
 
-**Staff/employee accounts and a least-privilege role model was never written.**
-It is the highest-priority gap because **specs 02, 03 and 05 all depend on it**:
-
-- 02 needs "which staff role may see health data"
-- 03 needs "a coach sees only their own clients"
-- 05 needs a front-desk/kiosk role
-
-It is also **the riskiest migration in the whole programme.** Every existing RLS
-policy across `supabase/migrations/` calls `public.is_admin()`. A careless cutover
-locks the owner out of production admin.
-
-When writing it, cover: staff records distinct from the member profile (a staff
-member is usually also a member); emergency/next-of-kin contacts; certifications
-with expiry (first aid, CPR, fitness qual, insurance, WWCC) and alerting; concrete
-roles (owner, manager, coach, front-desk, contractor-PT) with an explicit
-permission matrix against the real workspace list in
-`ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift` and
-`src/lib/adminNavigation.js`; enforcement in **RLS, not just the UI**; audit of
-permission changes. Most importantly specify the **migration order**, the
-compatibility window where `is_admin()` is derived from the new model so old
-policies keep working, how you verify before cutover, and the rollback.
+**Staff/employee accounts and least-privilege roles are designed in
+`docs/requirements/07-staff-accounts-and-roles.md`.** Do not re-invent the role
+enum inside 02/03/05. Implementation still starts with 07 Phase A (helpers dark,
+`is_admin()` truth set unchanged for owners). Careless cutover remains the
+riskiest migration in the programme — every existing RLS policy calls
+`public.is_admin()`.
 
 ### Integration decisions already made (see `docs/requirements/README.md`)
 
@@ -223,13 +215,15 @@ Do not re-litigate these without reason:
 
 ## 4. Suggested order of work
 
-1. **Commit or discard the working-tree parallel fixes**, then re-run lint/tests/build.
-2. **Close the 4 open findings** (§2a), highest severity first (16, then 27/31/49).
-3. **Write the staff/role model spec (§3).** Unblocks three XL features.
-4. **Completeness critic privacy/deletion/operator-drift items are closed (§2c).**
-5. Only then start implementing any of specs 01–06, in the phase order in
-   `docs/requirements/README.md`: correctness → roles+agreements → health →
-   money → operations → engagement.
+1. Keep lint/tests/build green on this branch; do not open a PR unless asked.
+2. **Audit queue and §2c completeness items are closed.** Design integration
+   review is done (`docs/requirements/INTEGRATION_REVIEW.md`).
+3. **Before any 01–07 feature build:** close owner/legal gates in the review §5
+   (and README §5), and apply the alignment patches the review names (ledger,
+   roles, coach-rent spine).
+4. **Implement 07 Phase A first**, then agreements, then the README phase order:
+   roles+agreements → health → money → operations → engagement.
+5. Only then start implementing specs 01–06 against the aligned designs.
 
 **Before any work that mints credits automatically (spec 06), harden credit
 accounting further.** Several of the worst production bugs were in that path, and
@@ -291,7 +285,8 @@ docs/HANDOFF.md                     <- this file
 docs/AUDIT_2026-07.md               <- audit report, status-labelled
 docs/audit/remaining-findings.md    <- 56 findings with FIXED/OPEN status
 docs/requirements/README.md         <- integration plan + owner decisions
-docs/requirements/0*.md             <- the six feature specs
+docs/requirements/INTEGRATION_REVIEW.md <- design integration architect review
+docs/requirements/0*.md             <- feature specs 01–07
 supabase/migrations/202607260*.sql  <- audit-era SQL fixes
 test/supabase-operator-script-drift.test.js  <- keeps src/supabase/ from regressing
 ```
