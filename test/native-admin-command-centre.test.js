@@ -379,6 +379,8 @@ test('native owner overview counts fresh lead work without downloading lead hist
   assert.match(store, /case \.ready:[\s\S]*operationalQueueState = \.partial\(unavailableSources: \["lead actions"\]\)/);
   assert.match(view, /Log contacted and save[\s\S]*private func logContacted\(\)[\s\S]*status: "contacted"/);
   assert.match(view, /mailto:[\s\S]*minHeight: 44[\s\S]*tel:[\s\S]*minHeight: 44/);
+  assert.match(view, /Text\(leadAgeLabel\(lead\)\)[\s\S]*private func leadAgeLabel[\s\S]*Waiting <1h[\s\S]*Waiting \\\(hours\)h[\s\S]*Waiting \\\(max\(hours \/ 24, 1\)\)d/);
+  assert.match(view, /private func leadAgeColour[\s\S]*>= 86_400 \? Color\.red : Color\.orange/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {

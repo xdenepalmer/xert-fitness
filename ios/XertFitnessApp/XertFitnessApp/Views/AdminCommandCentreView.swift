@@ -9193,8 +9193,9 @@ private struct AdminLeadsView: View {
                                 VStack(alignment: .trailing, spacing: 5) {
                                     Text(statusLabel(lead.effectiveStatus).uppercased())
                                         .font(.caption2.weight(.bold)).foregroundStyle(leadStatusColour(lead.effectiveStatus))
-                                    Text(lead.created_at.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.42))
+                                    Text(leadAgeLabel(lead))
+                                        .font(.caption2.weight(lead.effectiveStatus == "new" ? .semibold : .regular))
+                                        .foregroundStyle(leadAgeColour(lead))
                                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.xertSteel)
                                 }
                             }
@@ -9932,6 +9933,23 @@ private struct AdminPTRequestsView: View {
         Button(title) {
             Task { _ = await admin.updatePTRequest(session: session, request: request, status: status) }
         }
+    }
+
+    private func leadAgeLabel(_ lead: AdminLead, now: Date = Date()) -> String {
+        guard lead.effectiveStatus == "new" else {
+            return lead.created_at.formatted(date: .abbreviated, time: .omitted)
+        }
+        let hours = max(Int(now.timeIntervalSince(lead.created_at) / 3_600), 0)
+        if hours < 1 { return "Waiting <1h" }
+        if hours < 24 { return "Waiting \(hours)h" }
+        return "Waiting \(max(hours / 24, 1))d"
+    }
+
+    private func leadAgeColour(_ lead: AdminLead, now: Date = Date()) -> Color {
+        guard lead.effectiveStatus == "new" else {
+            return Color.xertPale.opacity(0.42)
+        }
+        return now.timeIntervalSince(lead.created_at) >= 86_400 ? Color.red : Color.orange
     }
 }
 
