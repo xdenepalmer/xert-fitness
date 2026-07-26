@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   clearSiteContentDraft,
   clearSiteContentDrafts,
+  isSiteContentDraftCurrent,
   readSiteContentDraft,
   SITE_CONTENT_DRAFT_PREFIX,
   writeSiteContentDraft,
@@ -27,14 +28,24 @@ test('persists and restores a versioned CMS section draft', () => {
   const storage = memoryStorage();
   const data = { headline: 'Train together', photos: ['https://example.com/hero.jpg'] };
 
-  assert.equal(writeSiteContentDraft(storage, 'admin-a', 'hero', data, 1234), true);
-  assert.deepEqual(readSiteContentDraft(storage, 'admin-a', 'hero'), { data, updatedAt: 1234 });
+  assert.equal(writeSiteContentDraft(storage, 'admin-a', 'hero', data, {
+    updatedAt: 1234,
+    baseUpdatedAt: '2026-07-26T01:00:00.000Z',
+  }), true);
+  assert.deepEqual(readSiteContentDraft(storage, 'admin-a', 'hero'), {
+    data,
+    updatedAt: 1234,
+    baseUpdatedAt: '2026-07-26T01:00:00.000Z',
+  });
   assert.ok(storage.values.has(`${SITE_CONTENT_DRAFT_PREFIX}admin-a:hero`));
 });
 
 test('clears drafts after save or explicit discard', () => {
   const storage = memoryStorage();
-  writeSiteContentDraft(storage, 'admin-a', 'contact', { email: 'team@xert.com.au' }, 4567);
+  writeSiteContentDraft(storage, 'admin-a', 'contact', { email: 'team@xert.com.au' }, {
+    updatedAt: 4567,
+    baseUpdatedAt: null,
+  });
 
   assert.equal(clearSiteContentDraft(storage, 'admin-a', 'contact'), true);
   assert.equal(readSiteContentDraft(storage, 'admin-a', 'contact'), null);
@@ -56,11 +67,15 @@ test('scopes the draft key to the signed-in admin so drafts never leak between u
   const storage = memoryStorage();
   const draft = { headline: 'Only admin A typed this' };
 
-  writeSiteContentDraft(storage, 'admin-a', 'hero', draft, 111);
+  writeSiteContentDraft(storage, 'admin-a', 'hero', draft, { updatedAt: 111, baseUpdatedAt: 'rev-a' });
 
   // Admin B on the same shared browser must not recover admin A's draft.
   assert.equal(readSiteContentDraft(storage, 'admin-b', 'hero'), null);
-  assert.deepEqual(readSiteContentDraft(storage, 'admin-a', 'hero'), { data: draft, updatedAt: 111 });
+  assert.deepEqual(readSiteContentDraft(storage, 'admin-a', 'hero'), {
+    data: draft,
+    updatedAt: 111,
+    baseUpdatedAt: 'rev-a',
+  });
 });
 
 test('a missing user id neither persists nor recovers a draft', () => {
@@ -72,8 +87,8 @@ test('a missing user id neither persists nor recovers a draft', () => {
 
 test('sweeps every admin CMS draft on sign-out but leaves unrelated keys', () => {
   const storage = memoryStorage();
-  writeSiteContentDraft(storage, 'admin-a', 'hero', { headline: 'a' }, 1);
-  writeSiteContentDraft(storage, 'admin-b', 'contact', { email: 'b@xert.com.au' }, 2);
+  writeSiteContentDraft(storage, 'admin-a', 'hero', { headline: 'a' }, { updatedAt: 1 });
+  writeSiteContentDraft(storage, 'admin-b', 'contact', { email: 'b@xert.com.au' }, { updatedAt: 2 });
   storage.setItem('unrelated-key', 'keep-me');
 
   assert.equal(clearSiteContentDrafts(storage), true);
@@ -81,4 +96,28 @@ test('sweeps every admin CMS draft on sign-out but leaves unrelated keys', () =>
   assert.equal(readSiteContentDraft(storage, 'admin-b', 'contact'), null);
   assert.equal(storage.getItem('unrelated-key'), 'keep-me');
   assert.equal(clearSiteContentDrafts(null), false);
+});
+
+test('draft restore refuses to overlay a newer live section revision', () => {
+  const storage = memoryStorage();
+  writeSiteContentDraft(storage, 'admin-a', 'hero', { headline: 'Stale draft' }, {
+    updatedAt: 10,
+    baseUpdatedAt: '2026-07-26T01:00:00.000Z',
+  });
+  const draft = readSiteContentDraft(storage, 'admin-a', 'hero');
+
+  assert.equal(isSiteContentDraftCurrent(draft, '2026-07-26T01:00:00.000Z'), true);
+  assert.equal(isSiteContentDraftCurrent(draft, '2026-07-26T02:00:00.000Z'), false);
+  assert.equal(isSiteContentDraftCurrent(draft, null), false);
+
+  // Legacy drafts without baseUpdatedAt are unknown and must not restore.
+  storage.setItem(`${SITE_CONTENT_DRAFT_PREFIX}admin-a:about`, JSON.stringify({
+    version: 1,
+    data: { paragraphs: ['old'] },
+    updatedAt: 11,
+  }));
+  const legacy = readSiteContentDraft(storage, 'admin-a', 'about');
+  assert.equal(legacy.baseUpdatedAt, undefined);
+  assert.equal(isSiteContentDraftCurrent(legacy, '2026-07-26T01:00:00.000Z'), false);
+  assert.equal(isSiteContentDraftCurrent(legacy, null), false);
 });

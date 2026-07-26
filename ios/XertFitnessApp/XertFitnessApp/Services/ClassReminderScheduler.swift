@@ -78,6 +78,15 @@ enum ClassReminderPlanner {
     /// limit while keeping the member's nearest confirmed classes actionable.
     static let maximumScheduledReminders = 32
 
+    /// Class times are authored in Australia/Brisbane. Pin calendar triggers to
+    /// that zone so a travelling member's local timezone change cannot shift the
+    /// absolute fire instant encoded in year/month/day/hour components.
+    static var brisbaneCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
+        return calendar
+    }
+
     static func reminderDate(
         for startTime: Date,
         leadTime: ClassReminderLeadTime = .twoHours,
@@ -85,6 +94,24 @@ enum ClassReminderPlanner {
     ) -> Date? {
         let reminderDate = startTime.addingTimeInterval(-leadTime.timeInterval)
         return reminderDate > now ? reminderDate : nil
+    }
+
+    static func reminderFireDateComponents(
+        for startTime: Date,
+        leadTime: ClassReminderLeadTime = .twoHours,
+        now: Date = Date()
+    ) -> DateComponents? {
+        guard let reminderDate = reminderDate(for: startTime, leadTime: leadTime, now: now) else {
+            return nil
+        }
+        let calendar = brisbaneCalendar
+        var fireComponents = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: reminderDate
+        )
+        fireComponents.calendar = calendar
+        fireComponents.timeZone = calendar.timeZone
+        return fireComponents
     }
 
     static func reminderBookings(
@@ -126,7 +153,9 @@ actor ClassReminderScheduler {
         var failedCount = 0
 
         for booking in reminderBookings {
-            guard let reminderDate = ClassReminderPlanner.reminderDate(
+            // Absolute Brisbane calendar fire time survives resync, clock-relative
+            // drift, and device timezone changes while travelling.
+            guard let fireComponents = ClassReminderPlanner.reminderFireDateComponents(
                 for: booking.start_time,
                 leadTime: leadTime,
                 now: now
@@ -141,14 +170,6 @@ actor ClassReminderScheduler {
             content.categoryIdentifier = XertNotificationCategories.classReminder
             content.threadIdentifier = "xert-class-reminders"
             content.userInfo = [ClassReminderNotification.bookingIDKey: booking.booking_id.uuidString]
-
-            // Absolute calendar fire time survives resync and clock-relative drift
-            // better than an interval trigger counted from "now".
-            var fireComponents = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: reminderDate
-            )
-            fireComponents.calendar = Calendar.current
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: fireComponents,
                 repeats: false

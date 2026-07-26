@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, BellRing, CalendarClock, Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -67,6 +67,9 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingArchive, setPendingArchive] = useState(null);
   const [confirmDiscardEditor, setConfirmDiscardEditor] = useState(false);
+  // Disabled buttons only re-render after paint — a double-click on Publish can
+  // still queue two fan-outs (and two inserts for a brand-new notice).
+  const saveLockRef = useRef(false);
 
   const editorBaseline = useMemo(() => announcementEditorForm(editing), [editing]);
   const editorDirty = Boolean(editing) && Object.keys(EMPTY_FORM).some(key => form[key] !== editorBaseline[key]);
@@ -132,6 +135,8 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
   };
 
   const persist = async ({ publish = false } = {}) => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = normalizeAnnouncementInput(form);
@@ -161,10 +166,13 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       toast({ title: 'Announcement not saved', description: saveError.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
   const setPublished = async (item, publish) => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       if (publish && item.expires_at && new Date(item.expires_at) <= new Date()) {
@@ -183,10 +191,13 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       toast({ title: 'Status not changed', description: publishError.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
   const remove = async item => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       await deleteMemberAnnouncement(item.id, item.updated_at);
@@ -197,10 +208,13 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       toast({ title: 'Announcement not deleted', description: deleteError.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
   const setArchived = async (item, archived) => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       await setMemberAnnouncementArchived(item.id, archived, item.updated_at);
@@ -216,6 +230,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       toast({ title: 'Archive status not changed', description: archiveError.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 

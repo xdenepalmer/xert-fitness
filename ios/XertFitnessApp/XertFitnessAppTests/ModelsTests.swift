@@ -2553,6 +2553,28 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testClassReminderFireComponentsStayPinnedToBrisbane() throws {
+        var brisbane = Calendar(identifier: .gregorian)
+        brisbane.timeZone = try XCTUnwrap(TimeZone(identifier: "Australia/Brisbane"))
+        // 10:00 Brisbane on a fixed civil day → reminder 2 hours earlier.
+        let start = try XCTUnwrap(brisbane.date(from: DateComponents(
+            year: 2026, month: 7, day: 26, hour: 10, minute: 0, second: 0
+        )))
+        let now = start.addingTimeInterval(-24 * 60 * 60)
+        let components = try XCTUnwrap(
+            ClassReminderPlanner.reminderFireDateComponents(for: start, now: now)
+        )
+
+        XCTAssertEqual(components.timeZone?.identifier, "Australia/Brisbane")
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 7)
+        XCTAssertEqual(components.day, 26)
+        XCTAssertEqual(components.hour, 8)
+        XCTAssertEqual(components.minute, 0)
+        XCTAssertEqual(components.second, 0)
+        XCTAssertEqual(components.calendar?.timeZone.identifier, "Australia/Brisbane")
+    }
+
     func testClassReminderPreferenceIsExplicitAndPersistent() throws {
         let suiteName = "ClassReminderPreferenceTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

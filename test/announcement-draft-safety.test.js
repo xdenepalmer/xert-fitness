@@ -30,3 +30,14 @@ test('announcement delete and archive use the shared accessible confirmation dia
   assert.doesNotMatch(manager, /role="alertdialog"/);
   assert.doesNotMatch(manager, /(?:window\.)?confirm\s*\(/);
 });
+
+test('announcement publish and status mutations refuse double-submit before React re-renders', () => {
+  assert.match(manager, /const saveLockRef = useRef\(false\)/);
+  for (const name of ['persist', 'setPublished', 'remove', 'setArchived']) {
+    const start = manager.indexOf(name === 'persist' ? 'const persist = async' : `const ${name} = async`);
+    assert.ok(start >= 0, `${name} handler must exist`);
+    const body = manager.slice(start, start + 220);
+    assert.match(body, /if \(saveLockRef\.current \|\| saving\) return/);
+    assert.match(body, /saveLockRef\.current = true/);
+  }
+});

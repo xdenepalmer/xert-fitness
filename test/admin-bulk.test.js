@@ -45,9 +45,14 @@ test('destructive admin bulk updates use the accessible confirmation surface', (
   assert.match(dialog, /AlertDialogContent/);
   assert.match(dialog, /AlertDialogDescription/);
   assert.match(dialog, /Keep unchanged/);
+  assert.match(dialog, /confirmLockRef/);
+  assert.match(dialog, /if \(busy \|\| confirmLockRef\.current\)/);
   for (const source of [bookings, ptRequests]) {
     assert.match(source, /<AdminConfirmDialog/);
     assert.match(source, /adminBulkConfirmation/);
     assert.doesNotMatch(source, /window\.confirm/);
   }
+  assert.match(bookings, /const bulkLockRef = useRef\(false\)/);
+  assert.match(bookings, /if \(bulkLockRef\.current \|\| bulkSaving\) return/);
+  assert.match(bookings, /setBulkConfirmationOpen\(false\)/);
 });

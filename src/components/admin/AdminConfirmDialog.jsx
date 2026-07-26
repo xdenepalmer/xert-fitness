@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,14 @@ export default function AdminConfirmDialog({
   onConfirm,
   busy = false,
 }) {
+  // `disabled={busy}` only helps after React re-renders. A double-click on
+  // Confirm can still invoke onConfirm twice in the same paint cycle.
+  const confirmLockRef = useRef(false);
+
+  useEffect(() => {
+    if (!open || !busy) confirmLockRef.current = false;
+  }, [open, busy]);
+
   return (
     <AlertDialog open={open} onOpenChange={nextOpen => !busy && onOpenChange(nextOpen)}>
       <AlertDialogContent className="w-[calc(100%-2rem)] max-w-md rounded-none border-xert-steel/30 bg-xert-ink text-xert-offwhite shadow-2xl">
@@ -47,7 +55,14 @@ export default function AdminConfirmDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             disabled={busy}
-            onClick={onConfirm}
+            onClick={event => {
+              if (busy || confirmLockRef.current) {
+                event.preventDefault();
+                return;
+              }
+              confirmLockRef.current = true;
+              onConfirm?.(event);
+            }}
             className="min-h-11 rounded-none bg-xert-steel font-display text-sm uppercase text-xert-navy hover:bg-xert-pale"
           >
             {busy ? 'Updating...' : confirmLabel}

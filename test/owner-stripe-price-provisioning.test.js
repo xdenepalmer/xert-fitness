@@ -129,6 +129,8 @@ test('stale draft fails before any Stripe mutation and SQL commit stays CAS-priv
   }), /PRODUCT_STALE/);
   assert.equal(stripeCalls, 0);
   const sql = readFileSync(new URL('../supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql', import.meta.url), 'utf8');
+  const mirror = readFileSync(new URL('../src/supabase/owner_stripe_price_provisioning.sql', import.meta.url), 'utf8');
+  assert.equal(mirror.replace(/\r\n/g, '\n'), sql.replace(/\r\n/g, '\n'));
   assert.match(sql, /auth\.role\(\) is distinct from 'service_role'/i);
   assert.match(sql, /v_product\.updated_at is distinct from p_expected_updated_at/i);
   assert.match(sql, /v_product\.active or v_product\.stripe_price_id is not null/i);

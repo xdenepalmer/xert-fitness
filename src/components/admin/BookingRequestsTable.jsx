@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
@@ -39,6 +39,7 @@ export default function BookingRequestsTable() {
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
+  const bulkLockRef = useRef(false);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -166,31 +167,41 @@ export default function BookingRequestsTable() {
   };
 
   const handleBulkUpdate = async () => {
+    if (bulkLockRef.current || bulkSaving) return;
     if (!bulkStatus || selectedKeys.size === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
     const selected = selectedBookings;
+    const nextStatus = bulkStatus;
+    // Lock before the first await so a double confirm cannot apply the same
+    // bulk status transition twice (credits / waitlist side effects included).
+    bulkLockRef.current = true;
     setBulkSaving(true);
-    const results = await settleAdminMutations(selected, booking => (
-      booking.source === 'member'
-        ? updateMemberBookingStatus(booking.id, bulkStatus)
-        : updateBookingStatus(booking.id, bulkStatus)
-    ));
-    const failedKeys = new Set();
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') failedKeys.add(bookingSelectionKey(selected[index]));
-    });
-    const updatedCount = selected.length - failedKeys.size;
-    if (updatedCount > 0) {
-      toast({ title: 'Bookings updated', description: `${updatedCount} booking${updatedCount === 1 ? '' : 's'} moved to ${bulkStatus.replace(/_/g, ' ')}.` });
-      await load();
-      setPage(1);
+    setBulkConfirmationOpen(false);
+    try {
+      const results = await settleAdminMutations(selected, booking => (
+        booking.source === 'member'
+          ? updateMemberBookingStatus(booking.id, nextStatus)
+          : updateBookingStatus(booking.id, nextStatus)
+      ));
+      const failedKeys = new Set();
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') failedKeys.add(bookingSelectionKey(selected[index]));
+      });
+      const updatedCount = selected.length - failedKeys.size;
+      if (updatedCount > 0) {
+        toast({ title: 'Bookings updated', description: `${updatedCount} booking${updatedCount === 1 ? '' : 's'} moved to ${nextStatus.replace(/_/g, ' ')}.` });
+        await load();
+        setPage(1);
+      }
+      setSelectedKeys(failedKeys);
+      if (failedKeys.size > 0) {
+        toast({ title: 'Some updates failed', description: `${failedKeys.size} booking${failedKeys.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
+      } else {
+        setBulkStatus('');
+      }
+    } finally {
+      setBulkSaving(false);
+      bulkLockRef.current = false;
     }
-    setSelectedKeys(failedKeys);
-    if (failedKeys.size > 0) {
-      toast({ title: 'Some updates failed', description: `${failedKeys.size} booking${failedKeys.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
-    } else {
-      setBulkStatus('');
-    }
-    setBulkSaving(false);
   };
 
   return (

@@ -139,8 +139,11 @@ test('the dialog layer yields the Tab cycle when focus leaves the workspace', ()
 });
 
 test('CMS drafts are scoped to the signed-in admin and swept on sign-out', () => {
-  assert.match(contentManager, /readSiteContentDraft\(window\.localStorage, userId, section\.key\)/);
-  assert.match(contentManager, /writeSiteContentDraft\(window\.localStorage, userId, section\.key, data\)/);
+  assert.match(contentManager, /readSiteContentDraft\(window\.localStorage, userId, sectionKey\)/);
+  assert.match(contentManager, /writeSiteContentDraft\(window\.localStorage, userId, section\.key, data, \{/);
+  assert.match(contentManager, /baseUpdatedAt: draftBaseRef\.current/);
+  assert.match(contentManager, /isSiteContentDraftCurrent/);
+  assert.match(contentManager, /recoverCurrentDraft/);
   assert.match(contentManager, /userId=\{user\?\.id\}/);
 
   assert.match(authContext, /import \{ clearSiteContentDrafts \} from '@\/lib\/siteContentDraft'/);

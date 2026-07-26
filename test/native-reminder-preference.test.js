@@ -35,6 +35,12 @@ test('native class reminders reconcile timing changes and successful cancellatio
   assert.match(scheduler, /UNCalendarNotificationTrigger/);
   assert.match(scheduler, /dateMatching: fireComponents/);
   assert.doesNotMatch(scheduler, /UNTimeIntervalNotificationTrigger/);
+  // Wall-clock components must stay pinned to Brisbane — Calendar.current would
+  // re-interpret hour/minute after the member travels into another timezone.
+  assert.match(scheduler, /Australia\/Brisbane/);
+  assert.match(scheduler, /static func reminderFireDateComponents/);
+  assert.match(scheduler, /fireComponents\.timeZone = calendar\.timeZone/);
+  assert.doesNotMatch(scheduler, /Calendar\.current\.dateComponents/);
   assert.match(store, /func setClassReminderLeadTime\(_ leadTime: ClassReminderLeadTime\) async/);
   assert.match(store, /ClassReminderPreference\.setLeadTime\(leadTime\)/);
   assert.match(store, /sync\(bookings: bookings, leadTime: leadTime\)/);

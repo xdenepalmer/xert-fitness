@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
 import { getAllSiteContent, saveSiteContent } from '@/lib/adminData';
@@ -8,7 +8,12 @@ import { toast } from '@/components/ui/use-toast';
 import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { normalizeSiteContent } from '@/lib/siteContentAdmin';
-import { clearSiteContentDraft, readSiteContentDraft, writeSiteContentDraft } from '@/lib/siteContentDraft';
+import {
+  clearSiteContentDraft,
+  isSiteContentDraftCurrent,
+  readSiteContentDraft,
+  writeSiteContentDraft,
+} from '@/lib/siteContentDraft';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
@@ -190,16 +195,30 @@ function ImageListEditor({ value, onChange, folder }) {
   );
 }
 
+function recoverCurrentDraft(userId, sectionKey, expectedUpdatedAt) {
+  const draft = readSiteContentDraft(window.localStorage, userId, sectionKey);
+  if (!draft) return null;
+  // Drafts written before baseUpdatedAt existed, or against an older live
+  // revision, must not overlay newer published copy after a reload/remount.
+  if (!isSiteContentDraftCurrent(draft, expectedUpdatedAt)) {
+    clearSiteContentDraft(window.localStorage, userId, sectionKey);
+    return null;
+  }
+  return draft;
+}
+
 function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyChange, userId }) {
   // Prefill with the live defaults so the editor always shows what the site
   // is currently displaying — saved CMS values overlay the defaults.
   const defaults = CONTENT_DEFAULTS[section.key] || {};
   const baseline = { ...defaults, ...(initial || {}) };
-  const [recoveredDraft] = useState(() => readSiteContentDraft(window.localStorage, userId, section.key));
+  const [recoveredDraft] = useState(() => recoverCurrentDraft(userId, section.key, expectedUpdatedAt));
   const [data, setData] = useState(() => ({ ...baseline, ...(recoveredDraft?.data || {}) }));
   const [dirty, setDirty] = useState(Boolean(recoveredDraft));
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  const draftBaseRef = useRef(expectedUpdatedAt ?? null);
+  const lateDraftUserIdRef = useRef(userId || null);
   const set = (k, v) => { setData(p => ({ ...p, [k]: v })); setDirty(true); };
   const Icon = section.icon;
 
@@ -210,8 +229,43 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   useEffect(() => () => onDirtyChange(section.key, false), [onDirtyChange, section.key]);
 
   useEffect(() => {
-    if (dirty) writeSiteContentDraft(window.localStorage, userId, section.key, data);
+    if (dirty) {
+      writeSiteContentDraft(window.localStorage, userId, section.key, data, {
+        baseUpdatedAt: draftBaseRef.current,
+      });
+    }
   }, [data, dirty, section.key, userId]);
+
+  // Auth can resolve after the first CMS paint. Retry draft recovery once the
+  // signed-in admin id is known so a mid-session refresh still restores work.
+  useEffect(() => {
+    const previousUserId = lateDraftUserIdRef.current;
+    lateDraftUserIdRef.current = userId || null;
+    if (!userId || previousUserId || dirty) return;
+    const recovered = recoverCurrentDraft(userId, section.key, expectedUpdatedAt);
+    if (!recovered) return;
+    setData({ ...CONTENT_DEFAULTS[section.key], ...(initial || {}), ...recovered.data });
+    setDirty(true);
+  }, [userId, dirty, section.key, expectedUpdatedAt, initial]);
+
+  // Another tab/admin published a newer revision while this editor held a
+  // draft: drop the stale local overlay instead of letting Save CAS-blindly
+  // overwrite the live section with older copy.
+  useEffect(() => {
+    const serverBase = expectedUpdatedAt ?? null;
+    if (serverBase === (draftBaseRef.current ?? null)) return;
+    clearSiteContentDraft(window.localStorage, userId, section.key);
+    if (dirty) {
+      setData({ ...CONTENT_DEFAULTS[section.key], ...(initial || {}) });
+      setDirty(false);
+      toast({
+        title: `${section.title} updated elsewhere`,
+        description: 'The live section changed. Local draft changes were cleared so you can review the latest copy.',
+        variant: 'destructive',
+      });
+    }
+    draftBaseRef.current = serverBase;
+  }, [expectedUpdatedAt, userId, section.key, section.title, dirty, initial]);
 
   const handleRestore = () => {
     setData({ ...defaults });
@@ -225,6 +279,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   };
 
   const handleSave = async () => {
+    if (saving) return;
     setSaving(true);
     try {
       const clean = normalizeSiteContent(section.key, data);

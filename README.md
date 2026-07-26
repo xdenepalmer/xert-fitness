@@ -186,7 +186,7 @@ The Supabase schema is defined in:
   admin-only, derived 30-day activation journey and bounded follow-up queue for
   current readiness, training access, first booking and recorded attendance;
   it exposes no emergency-contact values or document contents
-- `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
+- `src/supabase/owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it (mirrors `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql`)
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
