@@ -3037,6 +3037,23 @@ struct AdminEventDraft: Equatable {
         sortOrder = event?.sort_order ?? 0
     }
 
+    init(seed event: EventItem, now: Date = Date()) {
+        let fallback = Self.calendar.startOfDay(for: now)
+        let parsedStart = event.event_date.flatMap { Self.dateFormatter.date(from: $0) }
+        let parsedEnd = event.end_date.flatMap { Self.dateFormatter.date(from: $0) }
+        name = event.name
+        category = event.category ?? "other"
+        hasStartDate = parsedStart != nil
+        startDate = parsedStart ?? fallback
+        hasEndDate = parsedEnd != nil
+        endDate = parsedEnd ?? parsedStart ?? fallback
+        location = event.location ?? ""
+        region = event.region ?? "South East Queensland"
+        url = event.url ?? ""
+        published = event.published ?? true
+        sortOrder = event.sort_order ?? 0
+    }
+
     var startDateValue: String? { hasStartDate ? Self.dateFormatter.string(from: startDate) : nil }
     var endDateValue: String? { hasEndDate ? Self.dateFormatter.string(from: endDate) : nil }
 

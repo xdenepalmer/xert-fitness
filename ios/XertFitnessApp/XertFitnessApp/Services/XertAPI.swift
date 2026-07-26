@@ -1954,6 +1954,28 @@ final class XertAPI {
         return event
     }
 
+    func adminSeedEventCalendar(session auth: AuthSession) async throws -> [AdminEvent] {
+        let payload = try XertEventCalendar.fallback
+            .map { AdminEventDraft(seed: $0) }
+            .map { try adminEventPayload($0) }
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/events",
+            queryItems: [URLQueryItem(name: "on_conflict", value: "name,event_date")]
+        )
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("resolution=ignore-duplicates,return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let inserted: [AdminEvent] = try await decode(request)
+        guard inserted.count <= payload.count else {
+            throw APIError(message: "The event calendar returned an invalid insertion receipt. Refresh before continuing.")
+        }
+        return inserted
+    }
+
     func adminUpdateEvent(session auth: AuthSession, event: AdminEvent, draft: AdminEventDraft) async throws -> AdminEvent {
         let payload = try adminEventPayload(draft)
         var request = try request(

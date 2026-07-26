@@ -2052,6 +2052,41 @@ test('native event and team catalogues preserve mutation truth and never fake em
   assert.match(models, /Event,Member,Email,Phone,Joined/);
 });
 
+test('native owner can idempotently install missing XERT calendar rows', async () => {
+  const [api, store, view, models, migration, freshSchema] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../supabase/migrations/20260714017000_reconcile_2026_event_calendar.sql'),
+    read('../src/supabase/booking_schema.sql'),
+  ]);
+
+  assert.match(migration, /unique index if not exists events_name_date_uidx[\s\S]*\(name, event_date\)/);
+  assert.match(freshSchema, /unique index if not exists events_name_date_uidx[\s\S]*\(name, event_date\)/);
+  assert.match(models, /init\(seed event: EventItem/);
+  assert.match(api, /func adminSeedEventCalendar\(session auth: AuthSession\)/);
+  assert.match(api, /on_conflict", value: "name,event_date"/);
+  assert.match(api, /resolution=ignore-duplicates,return=representation/);
+  assert.match(api, /XertEventCalendar\.fallback[\s\S]*AdminEventDraft\(seed: \$0\)/);
+  assert.match(store, /@Published private\(set\) var isSeedingEventCalendar = false/);
+  assert.match(store, /var missingXertEventCalendarCount: Int/);
+  assert.match(store, /func seedXertEventCalendar\(session: AuthSession\) async -> Int\?/);
+  assert.match(store, /guard eventCalendarIsCurrent else/);
+  assert.match(store, /refreshEventsAfterMutation/);
+  assert.ok((store.match(/!isSeedingEventCalendar/g) || []).length >= 4);
+
+  const eventsView = view.slice(
+    view.indexOf('private struct AdminEventsView'),
+    view.indexOf('private struct AdminEventEditor'),
+  );
+  assert.match(eventsView, /XERT Annual Calendar 2026/);
+  assert.match(eventsView, /Add missing 2026 events/);
+  assert.match(eventsView, /Add missing XERT 2026 events\?/);
+  assert.match(eventsView, /Existing events and member training goals are left unchanged/);
+  assert.match(eventsView, /Calendar updated/);
+});
+
 test('native site CMS cannot publish defaults over an unavailable live snapshot', async () => {
   const [models, store, api, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),

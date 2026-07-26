@@ -13465,6 +13465,8 @@ private struct AdminEventsView: View {
     @State private var showingCreate = false
     @State private var rosterEvent: AdminEvent?
     @State private var pendingDelete: AdminEvent?
+    @State private var confirmingSeed = false
+    @State private var seedReceipt: String?
 
     private var rows: [AdminEvent] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -13481,7 +13483,9 @@ private struct AdminEventsView: View {
     }
     private var calendarIsCurrent: Bool { admin.eventCalendarIsCurrent }
     private var groupsAreCurrent: Bool { admin.eventTrainingGroupsAreCurrent }
-    private var isRefreshing: Bool { admin.isLoading || admin.isRefreshingEventCatalogue }
+    private var isRefreshing: Bool {
+        admin.isLoading || admin.isRefreshingEventCatalogue || admin.isSeedingEventCalendar
+    }
 
     var body: some View {
         List {
@@ -13522,6 +13526,36 @@ private struct AdminEventsView: View {
                 }
             }
             .listRowBackground(Color.xertNavy)
+
+            if calendarIsCurrent && admin.missingXertEventCalendarCount > 0 {
+                Section("XERT Annual Calendar 2026") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(
+                            "\(admin.missingXertEventCalendarCount) published event\(admin.missingXertEventCalendarCount == 1 ? "" : "s") missing",
+                            systemImage: "calendar.badge.plus"
+                        )
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                        Text("Add the missing XERT calendar rows so members can select training goals instead of seeing read-only fallback events.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.7))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            confirmingSeed = true
+                        } label: {
+                            Label(
+                                admin.isSeedingEventCalendar ? "Adding events..." : "Add missing 2026 events",
+                                systemImage: "calendar.badge.plus"
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.xertSteel)
+                        .disabled(isRefreshing || admin.savingEventID != nil || admin.deletingEventID != nil)
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+            }
 
             if calendarIsCurrent && rows.isEmpty {
                 Text("No matching calendar events.").listRowBackground(Color.xertInk)
@@ -13634,6 +13668,35 @@ private struct AdminEventsView: View {
             Text(count > 0
                  ? "This also removes \(count) member training goal\(count == 1 ? "" : "s"). This cannot be undone."
                  : "This removes the event from the shared web and iOS calendar. This cannot be undone.")
+        }
+        .confirmationDialog(
+            "Add missing XERT 2026 events?",
+            isPresented: $confirmingSeed,
+            titleVisibility: .visible
+        ) {
+            Button("Add published events") {
+                Task {
+                    if let inserted = await admin.seedXertEventCalendar(session: session) {
+                        seedReceipt = inserted == 0
+                            ? "The XERT 2026 calendar was already complete."
+                            : "\(inserted) published event\(inserted == 1 ? " was" : "s were") added to the shared web and iOS calendar."
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This safely inserts only missing calendar rows. Existing events and member training goals are left unchanged.")
+        }
+        .alert(
+            "Calendar updated",
+            isPresented: Binding(
+                get: { seedReceipt != nil },
+                set: { if !$0 { seedReceipt = nil } }
+            )
+        ) {
+            Button("OK") { seedReceipt = nil }
+        } message: {
+            Text(seedReceipt ?? "")
         }
     }
 

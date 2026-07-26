@@ -142,6 +142,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingEventID: UUID?
     @Published private(set) var loadingEventRosterID: UUID?
     @Published private(set) var isRefreshingEventCatalogue = false
+    @Published private(set) var isSeedingEventCalendar = false
     @Published private(set) var isRefreshingTeamDirectory = false
     @Published private(set) var savingCoachID: UUID?
     @Published private(set) var deletingCoachID: UUID?
@@ -2695,6 +2696,13 @@ final class AdminStore: ObservableObject {
             && !refreshUnavailableSources.contains("event training groups")
     }
 
+    var missingXertEventCalendarCount: Int {
+        let existingKeys = Set(events.map { "\($0.name)|\($0.event_date ?? "")" })
+        return XertEventCalendar.fallback.filter {
+            !existingKeys.contains("\($0.name)|\($0.event_date ?? "")")
+        }.count
+    }
+
     var teamDirectoryIsCurrent: Bool {
         loadedSources.contains("team directory")
             && !refreshUnavailableSources.contains("team directory")
@@ -2703,6 +2711,7 @@ final class AdminStore: ObservableObject {
     func refreshEventCatalogue(session: AuthSession) async {
         guard !isLoading,
               !isRefreshingEventCatalogue,
+              !isSeedingEventCalendar,
               savingEventID == nil,
               deletingEventID == nil else { return }
         isRefreshingEventCatalogue = true
@@ -2734,7 +2743,8 @@ final class AdminStore: ObservableObject {
         guard savingEventID == nil,
               deletingEventID == nil,
               !isLoading,
-              !isRefreshingEventCatalogue else { return false }
+              !isRefreshingEventCatalogue,
+              !isSeedingEventCalendar else { return false }
         guard eventCalendarIsCurrent else {
             errorMessage = "Refresh Event Calendar before saving catalogue changes."
             return false
@@ -2765,7 +2775,8 @@ final class AdminStore: ObservableObject {
         guard deletingEventID == nil,
               savingEventID == nil,
               !isLoading,
-              !isRefreshingEventCatalogue else { return false }
+              !isRefreshingEventCatalogue,
+              !isSeedingEventCalendar else { return false }
         guard eventCalendarIsCurrent, eventTrainingGroupsAreCurrent else {
             errorMessage = "Refresh Event Calendar and training groups before deleting an event."
             return false
@@ -2808,6 +2819,37 @@ final class AdminStore: ObservableObject {
         } catch {
             guard generation == eventRosterGeneration else { return }
             eventRosterUnavailableEventID = eventID
+        }
+    }
+
+    func seedXertEventCalendar(session: AuthSession) async -> Int? {
+        guard !isSeedingEventCalendar,
+              savingEventID == nil,
+              deletingEventID == nil,
+              !isLoading,
+              !isRefreshingEventCatalogue else { return nil }
+        guard eventCalendarIsCurrent else {
+            errorMessage = "Refresh Event Calendar before adding the XERT 2026 calendar."
+            return nil
+        }
+
+        isSeedingEventCalendar = true
+        defer { isSeedingEventCalendar = false }
+        do {
+            let inserted = try await api.adminSeedEventCalendar(session: session)
+            await refreshEventsAfterMutation(
+                session: session,
+                completedAction: inserted.isEmpty
+                    ? "The XERT 2026 calendar was already complete"
+                    : "\(inserted.count) XERT 2026 event\(inserted.count == 1 ? "" : "s") were added"
+            )
+            lastUpdatedAt = Date()
+            XertHaptics.play(.success)
+            return inserted.count
+        } catch {
+            errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
+            return nil
         }
     }
 

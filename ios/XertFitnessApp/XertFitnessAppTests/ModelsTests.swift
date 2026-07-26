@@ -3160,6 +3160,20 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(XertEventCalendar.fallback.last?.name, "XERT Team Competition")
     }
 
+    func testFallbackEventConvertsToPublishedAdminSeedDraft() throws {
+        let event = try XCTUnwrap(XertEventCalendar.fallback.first)
+        let draft = AdminEventDraft(seed: event)
+
+        XCTAssertEqual(draft.name, "Gold Coast Marathon")
+        XCTAssertEqual(draft.category, "run")
+        XCTAssertEqual(draft.startDateValue, "2026-07-04")
+        XCTAssertEqual(draft.endDateValue, "2026-07-05")
+        XCTAssertEqual(draft.location, "Gold Coast")
+        XCTAssertEqual(draft.region, "South East Queensland")
+        XCTAssertTrue(draft.published)
+        XCTAssertEqual(draft.sortOrder, 1)
+    }
+
     func testEventStatesUseQueenslandDatesAndSafeLinks() throws {
         let data = """
         {

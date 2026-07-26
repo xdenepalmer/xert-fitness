@@ -784,6 +784,8 @@ create table if not exists public.events (
   sort_order  integer default 0,
   created_at  timestamptz not null default now()
 );
+create unique index if not exists events_name_date_uidx
+  on public.events (name, event_date);
 
 -- ── member_event_goals (events members train toward together) ───────────────
 create table if not exists public.member_event_goals (
