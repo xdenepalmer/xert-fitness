@@ -7006,23 +7006,6 @@ private struct AdminClassEditor: View {
                     .lineLimit(2...6)
                     .focused($textInputFocused)
             }
-            if !isTerminal {
-                Section {
-                    Button {
-                        Task { await saveDraft() }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if admin.savingClassID != nil { ProgressView().tint(Color.xertNavy) }
-                            Text(classSession == nil ? "Create class" : "Save class").fontWeight(.bold)
-                            Spacer()
-                        }
-                    }
-                    .disabled(!mutationAllowed || isBusy || !isDirty)
-                    .listRowBackground(Color.xertSteel)
-                    .foregroundStyle(Color.xertNavy)
-                }
-            }
         }
         .disabled(isTerminal || !mutationAllowed)
         .scrollContentBackground(.hidden)
@@ -7031,6 +7014,11 @@ private struct AdminClassEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !isTerminal {
+                classSaveBar
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: requestDismiss) {
@@ -7074,6 +7062,31 @@ private struct AdminClassEditor: View {
         } message: {
             Text("This class draft has not been saved.")
         }
+    }
+
+    private var classSaveBar: some View {
+        Button {
+            textInputFocused = false
+            Task { await saveDraft() }
+        } label: {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Text(classSession == nil ? "Create class" : "Save class")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.classEditor.save")
+        .accessibilityHint(isDirty ? "Saves this class to the timetable" : "Make a change before saving")
+    }
+
+    private var canSave: Bool {
+        mutationAllowed && !isTerminal && !isBusy && isDirty
     }
 
     private func requestDismiss() {
@@ -7415,7 +7428,11 @@ private struct AdminAvailabilityEditor: View {
     let block: AdminAvailabilityBlock?
     let mutationAllowed: Bool
     private let baseline: AdminAvailabilityDraft
+    private let baselineToken: String?
     @State private var draft: AdminAvailabilityDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var textInputFocused: Bool
@@ -7430,17 +7447,33 @@ private struct AdminAvailabilityEditor: View {
         block: AdminAvailabilityBlock?,
         mutationAllowed: Bool
     ) {
-        let initial = AdminAvailabilityDraft(block: block)
+        let baseline = AdminAvailabilityDraft(block: block)
+        let baselineToken = AdminCatalogueDraftStore.baselineToken(for: block)
+        let recovered: AdminCatalogueDraftSnapshot<AdminAvailabilityDraft>? = AdminCatalogueDraftStore.load(
+            kind: .availability,
+            ownerID: session.user?.id,
+            recordID: block?.id,
+            baselineToken: baselineToken
+        )
+        let initial = recovered?.draft ?? baseline
         self.admin = admin
         self.session = session
         self.block = block
         self.mutationAllowed = mutationAllowed
-        baseline = initial
+        self.baseline = baseline
+        self.baselineToken = baselineToken
         _draft = State(initialValue: initial)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -7463,9 +7496,6 @@ private struct AdminAvailabilityEditor: View {
                     .focused($textInputFocused)
             }
             .disabled(!mutationAllowed)
-            saveButton(label: block == nil ? "Create availability" : "Save availability") {
-                await admin.saveAvailability(session: session, block: block, draft: draft)
-            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
@@ -7473,6 +7503,9 @@ private struct AdminAvailabilityEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            availabilitySaveBar
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: requestDismiss) {
@@ -7495,12 +7528,19 @@ private struct AdminAvailabilityEditor: View {
             isBusy: isBusy
         )
         .interactiveDismissDisabled(isDirty || isBusy)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog(
             "Discard unsaved availability changes?",
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
             Button("Discard changes", role: .destructive) {
+                clearRecoveryDraft()
                 editorExitCoordinator?.clear(id: exitStateID)
                 dismiss()
             }
@@ -7510,22 +7550,36 @@ private struct AdminAvailabilityEditor: View {
         }
     }
 
-    @ViewBuilder private func saveButton(label: String, action: @escaping () async -> Bool) -> some View {
-        Section {
-            Button {
-                Task {
-                    if await action() {
-                        editorExitCoordinator?.clear(id: exitStateID)
-                        dismiss()
-                    }
+    private var availabilitySaveBar: some View {
+        Button {
+            textInputFocused = false
+            Task {
+                if await admin.saveAvailability(session: session, block: block, draft: draft) {
+                    hasCommitted = true
+                    clearRecoveryDraft()
+                    editorExitCoordinator?.clear(id: exitStateID)
+                    dismiss()
                 }
-            } label: {
-                HStack { Spacer(); Text(label).fontWeight(.bold); Spacer() }
             }
-            .disabled(!mutationAllowed || isBusy || !isDirty)
-            .listRowBackground(Color.xertSteel)
-            .foregroundStyle(Color.xertNavy)
+        } label: {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Text(block == nil ? "Create availability" : "Save availability")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.availabilityEditor.save")
+        .accessibilityHint(isDirty ? "Saves this availability window" : "Make a change before saving")
+    }
+
+    private var canSave: Bool {
+        mutationAllowed && !isBusy && isDirty
     }
 
     private func requestDismiss() {
@@ -7534,9 +7588,41 @@ private struct AdminAvailabilityEditor: View {
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearRecoveryDraft()
             editorExitCoordinator?.clear(id: exitStateID)
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .availability,
+            ownerID: session.user?.id,
+            recordID: block?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .availability,
+            ownerID: session.user?.id,
+            recordID: block?.id
+        )
     }
 }
 
@@ -7548,7 +7634,11 @@ private struct AdminBlackoutEditor: View {
     let period: AdminBlackoutPeriod?
     let mutationAllowed: Bool
     private let baseline: AdminBlackoutDraft
+    private let baselineToken: String?
     @State private var draft: AdminBlackoutDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var textInputFocused: Bool
@@ -7563,13 +7653,23 @@ private struct AdminBlackoutEditor: View {
         period: AdminBlackoutPeriod?,
         mutationAllowed: Bool
     ) {
-        let initial = AdminBlackoutDraft(period: period)
+        let baseline = AdminBlackoutDraft(period: period)
+        let baselineToken = AdminCatalogueDraftStore.baselineToken(for: period)
+        let recovered: AdminCatalogueDraftSnapshot<AdminBlackoutDraft>? = AdminCatalogueDraftStore.load(
+            kind: .blackout,
+            ownerID: session.user?.id,
+            recordID: period?.id,
+            baselineToken: baselineToken
+        )
+        let initial = recovered?.draft ?? baseline
         self.admin = admin
         self.session = session
         self.period = period
         self.mutationAllowed = mutationAllowed
-        baseline = initial
+        self.baseline = baseline
+        self.baselineToken = baselineToken
         _draft = State(initialValue: initial)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     private var conflicts: [AdminClassSession] {
@@ -7578,6 +7678,12 @@ private struct AdminBlackoutEditor: View {
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -7629,25 +7735,6 @@ private struct AdminBlackoutEditor: View {
                     }
                 }
             }
-            Section {
-                Button {
-                    Task {
-                        if await admin.saveBlackout(session: session, period: period, draft: draft) {
-                            editorExitCoordinator?.clear(id: exitStateID)
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        Text(period == nil ? "Create blackout" : "Save blackout").fontWeight(.bold)
-                        Spacer()
-                    }
-                }
-                .disabled(!mutationAllowed || !conflicts.isEmpty || isBusy || !isDirty)
-                .listRowBackground(Color.xertSteel)
-                .foregroundStyle(Color.xertNavy)
-            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
@@ -7655,6 +7742,9 @@ private struct AdminBlackoutEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            blackoutSaveBar
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: requestDismiss) {
@@ -7677,12 +7767,19 @@ private struct AdminBlackoutEditor: View {
             isBusy: isBusy
         )
         .interactiveDismissDisabled(isDirty || isBusy)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog(
             "Discard unsaved blackout changes?",
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
             Button("Discard changes", role: .destructive) {
+                clearRecoveryDraft()
                 editorExitCoordinator?.clear(id: exitStateID)
                 dismiss()
             }
@@ -7692,15 +7789,83 @@ private struct AdminBlackoutEditor: View {
         }
     }
 
+    private var blackoutSaveBar: some View {
+        Button {
+            textInputFocused = false
+            Task {
+                if await admin.saveBlackout(session: session, period: period, draft: draft) {
+                    hasCommitted = true
+                    clearRecoveryDraft()
+                    editorExitCoordinator?.clear(id: exitStateID)
+                    dismiss()
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Text(period == nil ? "Create blackout" : "Save blackout")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.blackoutEditor.save")
+        .accessibilityHint(
+            !conflicts.isEmpty
+                ? "Resolve published class conflicts before saving"
+                : isDirty ? "Saves this blackout period" : "Make a change before saving"
+        )
+    }
+
+    private var canSave: Bool {
+        mutationAllowed && conflicts.isEmpty && !isBusy && isDirty
+    }
+
     private func requestDismiss() {
         textInputFocused = false
         guard !isBusy else { return }
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearRecoveryDraft()
             editorExitCoordinator?.clear(id: exitStateID)
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .blackout,
+            ownerID: session.user?.id,
+            recordID: period?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .blackout,
+            ownerID: session.user?.id,
+            recordID: period?.id
+        )
     }
 }
 

@@ -1974,7 +1974,8 @@ test('native schedule controls preserve mutation truth and preview blackout conf
   assert.match(scheduleView, /draft\.overlappingPublishedClasses\(in: admin\.classSessions\)/);
   assert.match(scheduleView, /Open a class below to reschedule it/);
   assert.match(scheduleView, /AdminClassEditor\([\s\S]*classSession: classSession,[\s\S]*mutationAllowed: mutationAllowed/);
-  assert.match(scheduleView, /\.disabled\(!mutationAllowed \|\| !conflicts\.isEmpty/);
+  assert.match(scheduleView, /mutationAllowed && conflicts\.isEmpty && !isBusy && isDirty/);
+  assert.match(scheduleView, /\.disabled\(!canSave\)/);
   assert.match(scheduleView, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(scheduleView, /frame\(maxWidth: \.infinity, minHeight: 44\)/);
 });

@@ -2,6 +2,8 @@ import Foundation
 
 enum AdminCatalogueDraftKind: String, Codable, CaseIterable {
     case classSession = "class"
+    case availability
+    case blackout
     case product
     case event
     case coach

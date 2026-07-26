@@ -62,3 +62,62 @@ test('bottom booking and retention actions adapt and scroll fully above native c
   assert.match(admin, /ViewThatFits\(in: \.horizontal\)[\s\S]*retentionActions\(for: member, expands: true\)/);
   assert.match(admin, /Label\("Log follow-up", systemImage: "checkmark\.circle"\)/);
 });
+
+test('owner scheduling editors keep primary actions above the keyboard and home indicator', async () => {
+  const admin = await read(
+    '../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift',
+  );
+
+  const editorContracts = [
+    {
+      name: 'class',
+      start: 'private struct AdminClassEditor: View',
+      end: 'private struct AdminAvailabilityView: View',
+      bar: 'classSaveBar',
+      identifier: 'owner.classEditor.save',
+    },
+    {
+      name: 'availability',
+      start: 'private struct AdminAvailabilityEditor: View',
+      end: 'private struct AdminBlackoutEditor: View',
+      bar: 'availabilitySaveBar',
+      identifier: 'owner.availabilityEditor.save',
+    },
+    {
+      name: 'blackout',
+      start: 'private struct AdminBlackoutEditor: View',
+      end: 'private struct AdminRetentionView: View',
+      bar: 'blackoutSaveBar',
+      identifier: 'owner.blackoutEditor.save',
+    },
+  ];
+
+  for (const contract of editorContracts) {
+    const start = admin.indexOf(contract.start);
+    const end = admin.indexOf(contract.end, start);
+    assert.notEqual(start, -1, `${contract.name} editor should exist`);
+    assert.notEqual(end, -1, `${contract.name} editor boundary should exist`);
+
+    const source = admin.slice(start, end);
+    assert.match(
+      source,
+      new RegExp(`safeAreaInset\\(edge: \\.bottom, spacing: 0\\)[\\s\\S]*${contract.bar}`),
+      `${contract.name} save action should reserve the bottom safe area`,
+    );
+    assert.match(
+      source,
+      new RegExp(`accessibilityIdentifier\\("${contract.identifier.replaceAll('.', '\\.')}"\\)`),
+      `${contract.name} save action should remain addressable by UI tests`,
+    );
+    assert.match(
+      source,
+      /textInputFocused = false[\s\S]*Task \{/,
+      `${contract.name} save action should dismiss the keyboard before mutation`,
+    );
+    assert.doesNotMatch(
+      source,
+      /\.listRowBackground\(Color\.xertSteel\)/,
+      `${contract.name} save action should not be buried in the form`,
+    );
+  }
+});

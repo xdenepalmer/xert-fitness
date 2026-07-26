@@ -5724,6 +5724,69 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(rejected)
     }
 
+    func testAdminScheduleWindowDraftsRoundTripWithoutColliding() throws {
+        let suiteName = "AdminScheduleDraftStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = savedAt.addingTimeInterval(3_600)
+
+        var availability = AdminAvailabilityDraft(now: start)
+        availability.type = "private session available"
+        availability.coachName = "Launch coach"
+        availability.notes = "Recovery check"
+        availability.isBookable = true
+
+        var blackout = AdminBlackoutDraft(now: start)
+        blackout.affects = "facility_only"
+        blackout.reason = "equipment install"
+        blackout.notes = "Keep the floor closed"
+
+        AdminCatalogueDraftStore.save(
+            availability,
+            kind: .availability,
+            ownerID: ownerID,
+            recordID: nil,
+            baselineToken: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+        AdminCatalogueDraftStore.save(
+            blackout,
+            kind: .blackout,
+            ownerID: ownerID,
+            recordID: nil,
+            baselineToken: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restoredAvailability: AdminCatalogueDraftSnapshot<AdminAvailabilityDraft> =
+            try XCTUnwrap(AdminCatalogueDraftStore.load(
+                kind: .availability,
+                ownerID: ownerID,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            ))
+        let restoredBlackout: AdminCatalogueDraftSnapshot<AdminBlackoutDraft> =
+            try XCTUnwrap(AdminCatalogueDraftStore.load(
+                kind: .blackout,
+                ownerID: ownerID,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            ))
+
+        XCTAssertEqual(restoredAvailability.draft, availability)
+        XCTAssertEqual(restoredBlackout.draft, blackout)
+        XCTAssertEqual(restoredAvailability.kind, .availability)
+        XCTAssertEqual(restoredBlackout.kind, .blackout)
+    }
+
     private func adminAnnouncement(
         publishedAt: Date?,
         expiresAt: Date? = nil,

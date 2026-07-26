@@ -1339,7 +1339,7 @@ struct AdminAvailabilityBlock: Identifiable, Codable, Hashable {
     let updated_at: String
 }
 
-struct AdminAvailabilityDraft: Equatable {
+struct AdminAvailabilityDraft: Codable, Hashable {
     static let types = ["PT available", "private session available", "group class available", "admin only", "open gym placeholder", "workshop placeholder"]
     var startTime: Date
     var endTime: Date
@@ -1369,7 +1369,7 @@ struct AdminBlackoutPeriod: Identifiable, Codable, Hashable {
     let updated_at: String
 }
 
-struct AdminBlackoutDraft: Equatable {
+struct AdminBlackoutDraft: Codable, Hashable {
     static let scopes = ["all", "group_classes", "pt_only", "facility_only", "coach_only"]
     static let reasons = ["full day unavailable", "partial day unavailable", "recurring unavailable", "personal work", "facility maintenance", "equipment install", "private event", "soft launch restricted"]
     var startTime: Date

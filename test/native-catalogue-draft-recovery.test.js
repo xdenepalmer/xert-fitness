@@ -12,7 +12,14 @@ test('native catalogue recovery is bounded, account scoped, and stale-baseline s
     read('ios/XertFitnessApp/XertFitnessApp/Services/MemberLocalState.swift'),
   ])
 
-  for (const draft of ['AdminClassDraft', 'AdminProductDraft', 'AdminEventDraft', 'AdminCoachDraft']) {
+  for (const draft of [
+    'AdminClassDraft',
+    'AdminAvailabilityDraft',
+    'AdminBlackoutDraft',
+    'AdminProductDraft',
+    'AdminEventDraft',
+    'AdminCoachDraft',
+  ]) {
     assert.match(models, new RegExp(`struct ${draft}: Codable, Hashable`))
   }
   assert.match(store, /maximumAge: TimeInterval = 24 \* 60 \* 60/)
@@ -30,7 +37,14 @@ test('all high-value native catalogue editors recover and atomically clear draft
     'ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift',
   )
 
-  for (const kind of ['classSession', 'product', 'event', 'coach']) {
+  for (const kind of [
+    'classSession',
+    'availability',
+    'blackout',
+    'product',
+    'event',
+    'coach',
+  ]) {
     assert.match(
       view,
       new RegExp(`AdminCatalogueDraftStore\\.load\\([\\s\\S]*?kind: \\.${kind}`),
