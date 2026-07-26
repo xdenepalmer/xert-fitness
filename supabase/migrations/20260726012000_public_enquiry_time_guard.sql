@@ -31,6 +31,8 @@ declare
   v_extra text;
   v_owner text;
   v_session text;
+  v_bookings text;
+  v_health text;
 begin
   foreach v_table in array array[
     'member_interest', 'trainer_interest', 'partner_interest',
@@ -46,9 +48,6 @@ begin
       else 'new'
     end;
 
-    -- The signed-in variant of the PT request form sets user_id from
-    -- auth.uid(); an anonymous one must leave it null. The column arrives with
-    -- the PT request tracking work, so it is checked rather than assumed.
     v_owner := '';
     if v_table = 'private_session_requests' and exists (
       select 1 from information_schema.columns
@@ -59,7 +58,7 @@ begin
         (auth.uid() is null and user_id is null)
         or (auth.uid() is not null and user_id = auth.uid())
       )
-    $owner$;
+      $owner$;
     end if;
 
     v_session := '';
@@ -73,7 +72,22 @@ begin
           and session.public_visible is true
           and session.start_time > now()
       )
-    $session$;
+      $session$;
+    end if;
+
+    -- Soft-launch bookings_enabled already gates signed-in session_bookings via
+    -- enforce_member_booking_switch. Public "Request spot" writes class_bookings
+    -- instead, so the same switch must refuse those inserts or the timetable UI
+    -- is only cosmetic.
+    v_bookings := '';
+    if v_table = 'class_bookings' and to_regclass('public.admin_settings') is not null then
+      v_bookings := $bookings$
+      and exists (
+        select 1
+        from public.admin_settings settings
+        where settings.bookings_enabled is true
+      )
+      $bookings$;
     end if;
 
     v_extra := '';
@@ -84,12 +98,77 @@ begin
       v_extra := $notes$ and coalesce(btrim(admin_notes), '') = '' $notes$;
     end if;
 
+    v_health := '';
+    if v_table = 'member_interest'
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'injuries_or_limitations_optional'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+    then
+      v_health := $health$
+      and (
+        coalesce(btrim(injuries_or_limitations_optional), '') = ''
+        or health_info_consent is true
+      )
+      $health$;
+    elsif v_table = 'private_session_requests'
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'notes'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'training_goal'
+      )
+    then
+      v_health := $health$
+      and (
+        (
+          coalesce(btrim(notes), '') = ''
+          and coalesce(btrim(training_goal), '') is distinct from 'Rehab / return to fitness'
+        )
+        or health_info_consent is true
+      )
+      $health$;
+    elsif v_table = 'class_bookings'
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'notes'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+    then
+      v_health := $health$
+      and (
+        coalesce(btrim(notes), '') = ''
+        or health_info_consent is true
+      )
+      $health$;
+    end if;
+
     execute format('alter table public.%I enable row level security', v_table);
     execute format('drop policy if exists %I on public.%I', 'public_insert_' || v_table, v_table);
     execute format(
       'create policy %I on public.%I for insert to anon, authenticated '
-      || 'with check (status = %L and consent_to_contact is true%s%s%s)',
-      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner, v_session
+      || 'with check (status = %L and consent_to_contact is true%s%s%s%s%s)',
+      'public_insert_' || v_table, v_table, v_status, v_extra, v_owner, v_session, v_bookings, v_health
     );
   end loop;
 end;

@@ -455,6 +455,88 @@ test('Ops Health / release readiness remediations never point at weak fulfill or
   }
 });
 
+test('Ops Health / release readiness remediations never point at weak public-form or waitlist migrations', async () => {
+  // Historical public-form migrations used to recreate install_public_form_insert_
+  // policies without bookings_enabled / notes health-consent WITH CHECK. Waitlist
+  // FIFO / booking-decision migrations still carry weaker skip/refund/notice bodies
+  // behind skip-if-newer; Ops Health must remediate via the strong src/supabase mirrors.
+  const { REQUIRED_SCHEMA_CAPABILITIES } = await import('../src/lib/schemaCapabilities.js');
+  const readiness = readFileSync(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8');
+  const weakPublicForm = [
+    '20260726010000_public_form_staff_column_guard.sql',
+    '20260726012000_public_enquiry_time_guard.sql',
+    '20260726103000_member_interest_health_consent.sql',
+    '20260726109000_request_notes_health_consent.sql',
+    '20260726113000_public_booking_switch_gate.sql',
+  ];
+  const weakWaitlist = [
+    '20260714004100_waitlist_fifo_promotion.sql',
+    '20260722000000_booking_decision_notifications.sql',
+    '20260726110000_waitlist_skip_concurrency.sql',
+    '20260726115000_waitlist_skip_notice_accuracy.sql',
+  ];
+  for (const file of [...weakPublicForm, ...weakWaitlist, '20260726114000_member_onboarding_booking_gate.sql']) {
+    assert.doesNotMatch(
+      readiness,
+      new RegExp(file.replace(/\./g, '\\.')),
+      `release_readiness_check.sql must not remediate via ${file}`,
+    );
+  }
+  for (const capability of [
+    'public_form_staff_column_guard',
+    'public_enquiry_time_guard',
+    'member_interest_health_consent',
+    'request_notes_health_consent',
+    'pt_rehab_goal_health_consent',
+    'public_booking_switch_gate',
+    'waitlist_fifo_promotion',
+    'booking_decision_notifications',
+    'waitlist_skip_concurrency',
+    'waitlist_skip_notice_accuracy',
+    'member_onboarding_booking_gate',
+    'member_interest_health_reveal_authz',
+  ]) {
+    const action = REQUIRED_SCHEMA_CAPABILITIES[capability];
+    assert.match(action, /src\/supabase\//, `${capability} Ops Health action must use a src/supabase mirror`);
+    const sqlPath = (readiness.match(new RegExp(`\\('${capability}', '([^']+)'\\)`)) || [])[1];
+    const actionPath = (action.match(/(src\/supabase\/[\w.-]+\.sql)/) || [])[1];
+    assert.equal(sqlPath, actionPath, `${capability} release_readiness path must match Ops Health`);
+  }
+
+  // Migration copies that still redefine the installer must keep the soft-launch
+  // bookings gate and notes health-consent WITH CHECK (re-run safe).
+  const migrationDir = fileURLToPath(new URL('../supabase/migrations/', import.meta.url));
+  for (const name of [
+    '20260726010000_public_form_staff_column_guard.sql',
+    '20260726012000_public_enquiry_time_guard.sql',
+    '20260726103000_member_interest_health_consent.sql',
+    '20260726109000_request_notes_health_consent.sql',
+  ]) {
+    const sql = readFileSync(path.join(migrationDir, name), 'utf8')
+      .split('\n')
+      .filter(line => !line.trimStart().startsWith('--'))
+      .join('\n');
+    assert.match(sql, /bookings_enabled is true/, `${name} must keep public_booking_switch_gate`);
+    assert.match(sql, /coalesce\(btrim\(notes\), ''\) = ''/, `${name} must keep request_notes notes WITH CHECK`);
+    assert.match(sql, /Rehab \/ return to fitness/, `${name} must keep PT rehab-goal health consent`);
+  }
+  const requestNotesMig = readFileSync(
+    path.join(migrationDir, '20260726109000_request_notes_health_consent.sql'),
+    'utf8',
+  );
+  assert.match(requestNotesMig, /keeping audited admin_reveal_member_interest_health/);
+  const bookingDecisionMig = readFileSync(
+    path.join(migrationDir, '20260722000000_booking_decision_notifications.sql'),
+    'utf8',
+  );
+  assert.match(bookingDecisionMig, /keeping newer admin_set_booking_status_with_notice/);
+  const fifoMig = readFileSync(
+    path.join(migrationDir, '20260714004100_waitlist_fifo_promotion.sql'),
+    'utf8',
+  );
+  assert.match(fifoMig, /keeping newer admin_set_booking_status/);
+});
+
 test('waitlist_fifo operator script cannot recreate admin_set_booking_status with an inline refund', () => {
   // credit_batch_refund_reactivation / fulfillment_erasure put refunds through
   // refund_credits_to_batch (skips Stripe-refunded packs). Re-running the older

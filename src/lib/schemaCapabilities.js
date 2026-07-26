@@ -4,10 +4,11 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   booking_waitlist_withdrawal: 'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
   member_booking_switch_guard: 'Apply supabase/migrations/20260721000000_member_booking_switch_guard.sql in Supabase.',
   member_onboarding_foundation: 'Apply supabase/migrations/20260721010000_member_onboarding_foundation.sql in Supabase.',
-  member_onboarding_booking_gate: 'Apply supabase/migrations/20260726114000_member_onboarding_booking_gate.sql in Supabase.',
+  member_onboarding_booking_gate: 'Apply src/supabase/member_onboarding_booking_gate.sql in Supabase.',
   member_activation_cockpit: 'Apply supabase/migrations/20260721020000_member_activation_cockpit.sql in Supabase.',
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
-  waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
+  // Historical 20260714004100 still inlines remaining+1; operator skips-if-newer.
+  waitlist_fifo_promotion: 'Apply src/supabase/waitlist_fifo_promotion_upgrade.sql in Supabase.',
   // Bootstrap attendance_roll_call_upgrade skips-if-newer; prefer the release
   // path that also returns unactioned request credits.
   attendance_roll_call: 'Apply src/supabase/roll_call_releases_pending_requests.sql in Supabase.',
@@ -52,11 +53,15 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   product_commercial_terms_guard: 'Apply supabase/migrations/20260720000000_product_commercial_terms_guard.sql in Supabase.',
   targeted_member_notices: 'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
   waitlist_promotion_notifications: 'Apply supabase/migrations/20260721030000_waitlist_promotion_notifications.sql in Supabase.',
-  booking_decision_notifications: 'Apply supabase/migrations/20260722000000_booking_decision_notifications.sql in Supabase.',
+  // Operator skips-if-newer so waitlist Skip notice accuracy is not stripped.
+  booking_decision_notifications: 'Apply src/supabase/booking_decision_notifications_upgrade.sql in Supabase.',
   owner_stripe_price_provisioning: 'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
-  public_form_staff_column_guard: 'Apply supabase/migrations/20260726010000_public_form_staff_column_guard.sql in Supabase.',
+  // Prefer src/supabase mirrors: historical public-form migrations used to
+  // recreate install_public_form_insert_policies without bookings_enabled /
+  // notes health-consent WITH CHECK (public_booking_switch_gate + request_notes).
+  public_form_staff_column_guard: 'Apply src/supabase/public_form_staff_column_guard.sql in Supabase.',
   schedule_blackout_historic_edit_fix: 'Apply supabase/migrations/20260726011000_schedule_blackout_historic_edit_fix.sql in Supabase.',
-  public_enquiry_time_guard: 'Apply supabase/migrations/20260726012000_public_enquiry_time_guard.sql in Supabase.',
+  public_enquiry_time_guard: 'Apply src/supabase/public_enquiry_time_guard.sql in Supabase.',
   my_bookings_duration: 'Apply supabase/migrations/20260726013000_my_bookings_duration.sql in Supabase.',
   product_currency_aud_only: 'Apply supabase/migrations/20260726014000_product_currency_aud_only.sql in Supabase.',
   stripe_signature_failure_ledger: 'Apply supabase/migrations/20260726015000_stripe_signature_failure_ledger.sql in Supabase.',
@@ -69,16 +74,18 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   member_history_index: 'Apply supabase/migrations/20260726019000_member_history_index.sql in Supabase.',
   cancel_booking_expired_batch_refund: 'Apply src/supabase/cancel_booking_expired_batch_refund.sql in Supabase.',
   credit_batch_refund_reactivation: 'Apply src/supabase/credit_batch_refund_reactivation.sql in Supabase.',
-  member_interest_health_consent: 'Apply supabase/migrations/20260726103000_member_interest_health_consent.sql in Supabase.',
+  member_interest_health_consent: 'Apply src/supabase/member_interest_health_consent.sql in Supabase.',
   account_deletion_public_lead_cleanup: 'Apply src/supabase/account_deletion_public_lead_cleanup.sql in Supabase.',
-  request_notes_health_consent: 'Apply supabase/migrations/20260726109000_request_notes_health_consent.sql in Supabase.',
-  waitlist_skip_concurrency: 'Apply supabase/migrations/20260726110000_waitlist_skip_concurrency.sql in Supabase.',
-  pt_rehab_goal_health_consent: 'Apply supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql in Supabase.',
+  // Operator keeps notes WITH CHECK + audited reveal; historical migration used
+  // to install the ledger-skipping reveal bootstrap on re-run.
+  request_notes_health_consent: 'Apply src/supabase/request_notes_health_consent.sql in Supabase.',
+  waitlist_skip_concurrency: 'Apply src/supabase/waitlist_skip_concurrency_upgrade.sql in Supabase.',
+  pt_rehab_goal_health_consent: 'Apply src/supabase/pt_rehab_goal_health_consent.sql in Supabase.',
   stripe_fulfillment_deleted_email_erasure: 'Apply src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql in Supabase.',
   refund_skips_stripe_refunded_batches: 'Apply src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql in Supabase.',
-  public_booking_switch_gate: 'Apply supabase/migrations/20260726113000_public_booking_switch_gate.sql in Supabase.',
-  waitlist_skip_notice_accuracy: 'Apply supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql in Supabase.',
-  member_interest_health_reveal_authz: 'Apply supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql in Supabase.',
+  public_booking_switch_gate: 'Apply src/supabase/public_booking_switch_gate.sql in Supabase.',
+  waitlist_skip_notice_accuracy: 'Apply src/supabase/waitlist_skip_notice_accuracy.sql in Supabase.',
+  member_interest_health_reveal_authz: 'Apply src/supabase/member_interest_health_reveal_authz.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

@@ -81,6 +81,7 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.match(leadTable, /key=\{selectedLead\.id\}/);
   assert.match(migration, /create or replace function public\.admin_reveal_member_interest_health\(p_lead_id uuid\)/i);
   assert.match(migration, /v_consent is not true/);
+  assert.match(migration, /keeping audited admin_reveal_member_interest_health/);
   assert.match(requestNotesOperator, /keeping audited admin_reveal_member_interest_health/);
   assert.equal(authz, authzMirror);
   assert.match(authz, /member_interest_health_reveals/);

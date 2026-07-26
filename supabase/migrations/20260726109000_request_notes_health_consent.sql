@@ -175,14 +175,102 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 
 select public.install_public_form_insert_policies();
 
--- Narrow reveal: injuries stay out of admin list/CSV selects; staff fetch them
--- only for a single lead when consent was recorded.
+-- Narrow reveal bootstrap: injuries stay out of admin list/CSV selects; staff
+-- fetch them only for a single lead when consent was recorded.
+-- Re-run safe:
+-- 1. Keep an already-audited body (writes member_interest_health_reveals).
+-- 2. If the audit table exists but the RPC is missing or still unaudited, install
+--    the audited body here — never the bootstrap that skips the reveal ledger.
+--    (A prior guard treated "table exists" as keep-even-when-unaudited, and the
+--    missing-RPC branch installed the unaudited body over an authz'd database.)
+-- 3. Only the true pre-authz bootstrap installs the unaudited shape.
+do $install_admin_reveal_member_interest_health$
+declare
+  v_def text;
+  v_audited boolean := false;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_reveal_member_interest_health'
+    and pg_get_function_identity_arguments(p.oid) = 'p_lead_id uuid';
+  v_audited := v_def is not null
+    and (
+      v_def ilike '%member_interest_health_reveals%'
+      or v_def ilike '%audit_event_id%'
+    );
+  if v_audited then
+    raise notice 'keeping audited admin_reveal_member_interest_health';
+  elsif to_regclass('public.member_interest_health_reveals') is not null then
+    execute $fn$
 create or replace function public.admin_reveal_member_interest_health(p_lead_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
+declare
+  v_admin_id uuid := auth.uid();
+  v_consent boolean;
+  v_injuries text;
+  v_reveal_id uuid;
+  v_revealed_at timestamptz;
+begin
+  if v_admin_id is null or not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
+  if p_lead_id is null then
+    raise exception 'LEAD_REQUIRED';
+  end if;
+
+  select health_info_consent,
+         nullif(btrim(injuries_or_limitations_optional), '')
+    into v_consent, v_injuries
+  from public.member_interest
+  where id = p_lead_id;
+
+  if not found then
+    raise exception 'LEAD_NOT_FOUND';
+  end if;
+
+  if v_consent is not true or v_injuries is null then
+    return jsonb_build_object(
+      'lead_id', p_lead_id,
+      'available', false,
+      'injuries_or_limitations_optional', null
+    );
+  end if;
+
+  insert into public.member_interest_health_reveals (
+    lead_id,
+    revealed_by,
+    revealed_at
+  ) values (
+    p_lead_id,
+    v_admin_id,
+    now()
+  )
+  returning id, revealed_at into v_reveal_id, v_revealed_at;
+
+  return jsonb_build_object(
+    'lead_id', p_lead_id,
+    'available', true,
+    'audit_event_id', v_reveal_id,
+    'revealed_at', v_revealed_at,
+    'injuries_or_limitations_optional', v_injuries
+  );
+end;
+$body$;
+$fn$;
+  else
+    execute $fn$
+create or replace function public.admin_reveal_member_interest_health(p_lead_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $body$
 declare
   v_consent boolean;
   v_injuries text;
@@ -218,10 +306,14 @@ begin
     'injuries_or_limitations_optional', v_injuries
   );
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_reveal_member_interest_health$;
 
 revoke all on function public.admin_reveal_member_interest_health(uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.admin_reveal_member_interest_health(uuid)
   to authenticated;
 

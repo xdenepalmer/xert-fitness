@@ -8,6 +8,12 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Public-form / waitlist / onboarding Ops Health remediations no longer point at
+  historical migrations that could strip `bookings_enabled`, notes health-consent
+  WITH CHECK, waitlist Skip notice accuracy, or helper-backed refunds. Older
+  public-form migrations now carry the full installer; `request_notes` migration
+  keeps the audited reveal; booking-decision + waitlist FIFO migrations
+  skip-if-newer. Drift tests pin the strong `src/supabase/` remediation paths.
 - Bootstrap `booking_modes_upgrade` / `admin_cms_schema` / attendance roll-call
   scripts skip-if-newer on cancel/refund/class-cancel/status/roll-call RPCs, and
   roll-call recreate now keeps pending-request credit release + Stripe-refunded
@@ -460,6 +466,16 @@ No new migration for this batch (operator tip). Apply through **26116** remains 
 
 No new migration for this batch (operator tip). Apply through **26116** remains current.
 
+### 32. This batch — public-form / waitlist / onboarding operator re-run downgrades
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (public booking + notes) | Re-running older `install_public_form_insert_policies` migrations (`public_form_staff_column_guard`, `public_enquiry_time_guard`, `member_interest_health_consent`) stripped `bookings_enabled` and notes/rehab health-consent WITH CHECK | Those migrations now ship the full installer (parity with `src/supabase/` mirrors) |
+| Operator SQL drift (privacy reveal) | Re-running `20260726109000_request_notes_health_consent.sql` still installed the unaudited reveal bootstrap | Migration synced to operator skip-if-audited / restore-audited reveal install |
+| Operator SQL drift (waitlist Skip) | Re-running `booking_decision_notifications` / `waitlist_fifo_promotion` migrations could restore false credit-return Skip notices or inline `remaining+1` refunds used by Skip | Skip-if-newer on those migrations (`keeping newer…`) |
+| Ops Health / release gate | Remediations for public-form, booking switch, request notes, waitlist skip/FIFO/notices, onboarding gate, and reveal authz still pointed at the historical migration filenames | Retargeted to strong `src/supabase/` mirrors; drift test pins path parity + installer WITH CHECK markers |
+
+No new migration for this batch (operator tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -648,3 +664,10 @@ show `installed = true` and `release_ready = true`, including
     present restores/keeps the audited reveal RPC (never the unaudited
     bootstrap); Privacy lists iOS device notification tokens and says
     member-interest injury reveals are recorded/logged.
+33. **Public-form / waitlist / onboarding remediations** — Ops Health actions for
+    `public_booking_switch_gate`, `request_notes_health_consent`,
+    `waitlist_skip_concurrency`, `member_onboarding_booking_gate` (and related
+    public-form / waitlist caps) point at `src/supabase/` mirrors; re-running
+    older public-form migrations keeps bookings_enabled + notes WITH CHECK;
+    re-running booking-decision / waitlist FIFO migrations keeps Skip notice
+    accuracy and helper refunds.

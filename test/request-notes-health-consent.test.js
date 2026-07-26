@@ -49,33 +49,35 @@ test('migration and operator mirror install notes health consent and admin revea
     read('../supabase/migrations/20260726109000_request_notes_health_consent.sql'),
     read('../src/supabase/request_notes_health_consent.sql'),
   ]);
-  // Applied migration keeps the historical reveal body; the operator mirror is
-  // re-run safe and must not replace the audited authz shape.
-  assert.match(migration, /add column if not exists health_info_consent/i);
-  assert.match(migration, /private_session_requests/);
-  assert.match(migration, /class_bookings/);
-  assert.match(migration, /Rehab \/ return to fitness/);
-  assert.match(migration, /values \('request_notes_health_consent'\)/i);
-  assert.match(migration, /admin_reveal_member_interest_health/);
-  assert.match(upgrade, /add column if not exists health_info_consent/i);
-  assert.match(upgrade, /values \('request_notes_health_consent'\)/i);
-  assert.match(upgrade, /keeping audited admin_reveal_member_interest_health/);
-  assert.match(upgrade, /member_interest_health_reveals/);
-  assert.match(upgrade, /audit_event_id/);
-  // Table-exists alone must not keep an unaudited body, and must not install the
-  // bootstrap that skips the reveal ledger when the authz table is present.
-  assert.match(
-    upgrade,
-    /elsif to_regclass\('public\.member_interest_health_reveals'\) is not null then[\s\S]*insert into public\.member_interest_health_reveals/i,
-  );
-  assert.doesNotMatch(
-    upgrade,
-    /v_def is not null\s+and\s*\([\s\S]*to_regclass\('public\.member_interest_health_reveals'\) is not null\s*\)/i,
-  );
-  assert.match(
-    upgrade,
-    /revoke all on function public\.admin_reveal_member_interest_health\(uuid\)\s+from public, anon, authenticated/i,
-  );
+  // Migration + operator mirror are both re-run safe: notes WITH CHECK stays,
+  // and neither may replace an audited reveal with the ledger-skipping bootstrap.
+  for (const [label, sql] of [['migration', migration], ['upgrade', upgrade]]) {
+    assert.match(sql, /add column if not exists health_info_consent/i, label);
+    assert.match(sql, /private_session_requests/, label);
+    assert.match(sql, /class_bookings/, label);
+    assert.match(sql, /Rehab \/ return to fitness/, label);
+    assert.match(sql, /values \('request_notes_health_consent'\)/i, label);
+    assert.match(sql, /bookings_enabled is true/, label);
+    assert.match(sql, /coalesce\(btrim\(notes\), ''\) = ''/, label);
+    assert.match(sql, /keeping audited admin_reveal_member_interest_health/, label);
+    assert.match(sql, /member_interest_health_reveals/, label);
+    assert.match(sql, /audit_event_id/, label);
+    assert.match(
+      sql,
+      /elsif to_regclass\('public\.member_interest_health_reveals'\) is not null then[\s\S]*insert into public\.member_interest_health_reveals/i,
+      label,
+    );
+    assert.doesNotMatch(
+      sql,
+      /v_def is not null\s+and\s*\([\s\S]*to_regclass\('public\.member_interest_health_reveals'\) is not null\s*\)/i,
+      label,
+    );
+    assert.match(
+      sql,
+      /revoke all on function public\.admin_reveal_member_interest_health\(uuid\)\s+from public, anon, authenticated/i,
+      label,
+    );
+  }
 });
 
 test('rehab-goal health consent migration and mirror stay aligned', async () => {
