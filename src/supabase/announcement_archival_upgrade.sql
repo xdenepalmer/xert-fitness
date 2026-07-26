@@ -305,11 +305,7 @@ revoke execute on function public.prepare_member_announcement_lifecycle() from p
 revoke execute on function public.guard_member_announcement_delete() from public, anon, authenticated;
 revoke execute on function public.audit_member_announcement_lifecycle() from public, anon, authenticated;
 revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from public, anon;
-revoke execute on function public.my_member_announcements() from public, anon;
-revoke execute on function public.dismiss_member_announcement(uuid) from public, anon;
 grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
-grant execute on function public.my_member_announcements() to authenticated;
-grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 
 insert into public.xert_schema_capabilities (capability)
 values ('announcement_archival')

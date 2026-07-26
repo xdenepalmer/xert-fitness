@@ -23,6 +23,8 @@ test('reusable setup does not restore insecure private-notice functions', () => 
   for (const sql of [bookingSchema, archivalUpgrade]) {
     assert.doesNotMatch(sql, /create(?:\s+or\s+replace)?\s+function public\.my_member_announcements/i);
     assert.doesNotMatch(sql, /create(?:\s+or\s+replace)?\s+function public\.dismiss_member_announcement/i);
+    assert.doesNotMatch(sql, /(?:revoke|grant) execute on function public\.my_member_announcements/i);
+    assert.doesNotMatch(sql, /(?:revoke|grant) execute on function public\.dismiss_member_announcement/i);
   }
 });
 

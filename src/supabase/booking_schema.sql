@@ -1252,8 +1252,6 @@ revoke execute on function public.join_session_waitlist(uuid) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.my_bookings() from public, anon;
 revoke execute on function public.is_admin() from public, anon;
-revoke execute on function public.my_member_announcements() from public, anon;
-revoke execute on function public.dismiss_member_announcement(uuid) from public, anon;
 revoke execute on function public.admin_announcement_metrics() from public, anon;
 revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from public, anon;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
@@ -1262,8 +1260,6 @@ grant execute on function public.join_session_waitlist(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid)        to authenticated;
 grant execute on function public.my_bookings()               to authenticated;
 grant execute on function public.is_admin()                  to authenticated;
-grant execute on function public.my_member_announcements() to authenticated;
-grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 grant execute on function public.admin_announcement_metrics() to authenticated;
 grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
 
