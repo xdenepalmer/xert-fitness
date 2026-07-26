@@ -20,9 +20,12 @@ begin
     return new;
   end if;
 
-  -- Already holding a capacity slot; status churn among active places does not
-  -- consume an extra seat.
-  if tg_op = 'UPDATE' and old.status in ('requested', 'confirmed') then
+  -- Already holding a capacity slot on the same session; status churn among
+  -- active places does not consume an extra seat. Moving an active booking to
+  -- another class_session_id must re-check the destination capacity.
+  if tg_op = 'UPDATE'
+     and old.status in ('requested', 'confirmed')
+     and old.class_session_id is not distinct from new.class_session_id then
     return new;
   end if;
 

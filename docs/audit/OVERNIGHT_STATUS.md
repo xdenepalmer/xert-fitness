@@ -11,11 +11,13 @@ were **not** built.
 - Concurrent class capacity: `enforce_session_capacity` BEFORE ROW trigger
   re-locks `class_sessions` and raises `SESSION_FULL` if a new
   requested/confirmed place would overfill — defence for concurrent
-  `book_session` / waitlist confirmation paths. Capability
-  `session_capacity_concurrency_guard` (**26117**).
-- APNs error surfacing: private member notices, class-cancel follow-up, iOS
-  booking/waitlist decisions, and iOS broadcast publish no longer describe a
-  real `push.failed` outage as “no devices”; reason is shown so operators retry.
+  `book_session` / waitlist confirmation paths, including an active booking
+  moved onto another session. Capability `session_capacity_concurrency_guard`
+  (**26117**).
+- APNs error surfacing + retry: private notices, class-cancel, booking desk /
+  promote / skip, and iOS publish no longer describe a real `push.failed`
+  outage as “no devices”; transient failed delivery rows no longer permanently
+  block a later notify retry.
 - SEO: `X-Robots-Tag: noindex, nofollow` on `/admin`, `/account`, `/open/*`,
   auth/checkout paths (static scrapers otherwise inherited indexable home tags
   from the SPA rewrite); `robots.txt` also Disallows `/open` and auth screens.
@@ -188,17 +190,17 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726116000_member_interest_health_reveal_authz.sql` (**26116** — full
+   `20260726117000_session_capacity_concurrency_guard.sql` (**26117** — full
    list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
-   `member_interest_health_reveal_authz` (26116*).
+   `session_capacity_concurrency_guard` (26117*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
    enable bookings only when Ops Health shows the booking-switch guard;
    with bookings paused, `/timetable` footer + sticky Book stay off and
    `/booking` class rows show Register interest. Lead health Reveal on a
    consented injury writes an audit row; direct PostgREST select of injuries
-   fails.
+   fails. Concurrent book/confirm against a full class raises `SESSION_FULL`.
 
 ---
 
@@ -534,6 +536,17 @@ No new migration for this batch (historical tip). Apply through **26116** remain
 
 No new migration timestamp for this batch (operator + historical tip). Apply through **26116** remains current.
 
+### 36. This batch — capacity session-move guard, APNs failed-retry, booking-desk push honesty
+| Area | Defect | Fix |
+|---|---|---|
+| Capacity race | `enforce_session_capacity` early-returned on any UPDATE whose *old* status was requested/confirmed, so a `class_session_id` move onto a full destination skipped the lock/`SESSION_FULL` check | Skip only when the active place stays on the same session; session moves re-lock and count |
+| Silent failure (APNs) | Targeted / class-cancel notify short-circuited when *any* prior delivery row existed, and resend treated transient `failed` like terminal — operators could not finish devices after timeouts; booking desk / promote / skip toasts also ignored `push.failed` | Retry when prior status is `failed`; only `delivered` / `invalid_token` skip; desk toasts use `describeTargetedMemberNoticePush` |
+| Docs | Morning briefing named **26117** but the copy-paste list + numbered table still stopped at **26116** | Apply checklist now includes `session_capacity_concurrency_guard` end-to-end |
+
+Migration / operator mirror (already on tip; body tightened this batch):
+`supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql`
+↔ `src/supabase/session_capacity_concurrency_guard.sql`. Apply through **26117**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -583,7 +596,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26116)
+### Copy-paste ordered filenames (overnight catch-up through 26117)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -603,6 +616,7 @@ supabase/migrations/20260726113000_public_booking_switch_gate.sql
 supabase/migrations/20260726114000_member_onboarding_booking_gate.sql
 supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql
 supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
+supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -619,12 +633,12 @@ supabase db push
 
 # Or apply each missing file from the copy-paste list above, e.g.:
 # while IFS= read -r f; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done <<'EOF'
-# …paste the 15 lines…
+# …paste the 16 lines…
 # EOF
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
+  -f supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -654,6 +668,7 @@ row shows `installed = true` and `release_ready = true`.
 | 13 | `20260726114000_member_onboarding_booking_gate.sql` | `member_onboarding_booking_gate` — book/waitlist require Member Readiness |
 | 14 | `20260726115000_waitlist_skip_notice_accuracy.sql` | `waitlist_skip_notice_accuracy` — waitlist Skip notice does not claim a credit return |
 | 15 | `20260726116000_member_interest_health_reveal_authz.sql` | `member_interest_health_reveal_authz` — injury columns locked; reveal audited |
+| 16 | `20260726117000_session_capacity_concurrency_guard.sql` | `session_capacity_concurrency_guard` — session-locked `SESSION_FULL` on concurrent book/confirm (incl. session moves) |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -661,14 +676,14 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`member_interest_health_reveal_authz`.
+`session_capacity_concurrency_guard`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726116000_member_interest_health_reveal_authz.sql`. Confirm readiness SQL.
+   `20260726117000_session_capacity_concurrency_guard.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -774,3 +789,7 @@ show `installed = true` and `release_ready = true`, including
     keeps lead-cleanup `delete_member_account`; re-run
     `roll_call_releases_pending_requests` / `fulfillment_erasure` keeps
     Stripe-refunded pack skips and deleted-buyer email erasure.
+35. **Capacity + APNs retry** — Concurrent book/confirm (and an active booking
+    moved onto a full class) raises `SESSION_FULL`; after a transient APNs
+    `failed` row, targeted / class-cancel notify retries remaining devices;
+    booking desk / promote / skip toasts surface `push.failed` reasons.

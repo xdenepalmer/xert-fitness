@@ -8,6 +8,7 @@ import {
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
+import { describeTargetedMemberNoticePush } from '@/lib/memberAnnouncements';
 import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
@@ -143,11 +144,7 @@ export default function BookingRequestsTable() {
         await updateBookingStatus(booking.id, status);
       }
       const memberNotice = result?.warning
-        || (result?.notice_created
-          ? Number(result.push?.delivered || 0) > 0
-            ? 'Their private in-app notice is live and Apple push was delivered.'
-            : 'Their private in-app notice is live in their member account.'
-          : null);
+        || (result?.notice_created ? describeTargetedMemberNoticePush(result.push) : null);
       toast({
         title: result?.notice_created ? 'Booking updated and member notified' : 'Booking updated',
         description: memberNotice || `${booking.full_name || 'Booking'} is now ${status.replace(/_/g, ' ')}.`,

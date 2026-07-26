@@ -242,14 +242,19 @@ test('resend only targets devices without a delivery row for the notice', async 
   });
 
   assert.deepEqual(
-    [...await loadDeliveredSubscriptionIds(admin([{ subscription_id: 'sub-1' }]), 'ann-1')],
+    [...await loadDeliveredSubscriptionIds(admin([
+      { subscription_id: 'sub-1', status: 'delivered' },
+      { subscription_id: 'sub-failed', status: 'failed' },
+    ]), 'ann-1')],
     ['sub-1'],
   );
 
-  // Every device already has a delivery row, so a resend sends
-  // nothing and never opens an APNs connection instead of re-notifying the base.
+  // Terminal delivery rows skip resend; transient `failed` must remain retryable.
   const result = await sendMemberAnnouncementPushes({
-    admin: admin([{ subscription_id: 'sub-1' }, { subscription_id: 'sub-2' }]),
+    admin: admin([
+      { subscription_id: 'sub-1', status: 'delivered' },
+      { subscription_id: 'sub-2', status: 'invalid_token' },
+    ]),
     announcement: { id: 'ann-1', audience: 'all', title: 'Hi', body: 'There' },
     environment: apnsEnv,
   });
@@ -382,10 +387,15 @@ test('private notice and class-cancel UI surface swallowed APNs failures instead
 
   const members = read('../src/components/admin/MembersManager.jsx');
   const calendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const bookings = read('../src/components/admin/BookingRequestsTable.jsx');
   const iosApi = read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift');
   const iosStore = read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
   assert.match(members, /describeTargetedMemberNoticePush\(result\.push\)/);
   assert.match(calendar, /describeClassCancellationPush\(followUp\.notification\.push\)/);
+  assert.match(calendar, /describeTargetedMemberNoticePush\(result\.push\)/);
+  assert.match(bookings, /describeTargetedMemberNoticePush\(result\.push\)/);
+  assert.doesNotMatch(calendar, /Number\(result\.push\?\.delivered \|\| 0\) > 0/);
+  assert.doesNotMatch(bookings, /Number\(result\.push\?\.delivered \|\| 0\) > 0/);
   assert.match(iosApi, /targetedPushWarning\(/);
   assert.match(iosApi, /broadcastPushWarning\(push: response\.push\)/);
   assert.match(iosApi, /AdminAnnouncementPublishResponse/);

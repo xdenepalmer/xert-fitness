@@ -89,15 +89,21 @@ export async function notifyClassCancellation(admin, sessionId) {
   if (targetError) throw targetError;
   if (previousError) throw previousError;
   const userIds = [...new Set((targets || []).map(target => target.user_id).filter(Boolean))];
-  if ((previous || []).length > 0) {
-    return { announcement_id: announcement.id, recipients: userIds.length, push: summarizePreviousClassAlertPushes(previous) };
-  }
-
+  // Always attempt delivery: sendMemberAnnouncementPushes skips only terminal
+  // subscription rows (delivered / invalid_token). A prior transient `failed`
+  // row, or a device registered after the first attempt, must still be reachable.
   const push = await sendMemberAnnouncementPushes({
     admin,
     announcement,
     targetUserIds: userIds,
   });
+  if ((Number(push.attempted) || 0) === 0 && (previous || []).length > 0) {
+    return {
+      announcement_id: announcement.id,
+      recipients: userIds.length,
+      push: summarizePreviousClassAlertPushes(previous),
+    };
+  }
   return { announcement_id: announcement.id, recipients: userIds.length, push };
 }
 
@@ -124,10 +130,16 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
   if (previousError) throw previousError;
   const userIds = [...new Set((targets || []).map(target => target.user_id).filter(Boolean))];
   if (userIds.length !== 1) throw new Error('TARGETED_NOTICE_RECIPIENT_INVALID');
-  if ((previous || []).length > 0) {
-    return { announcement_id: announcement.id, recipients: 1, push: summarizePreviousClassAlertPushes(previous) };
-  }
+  // Same retry contract as class-cancel: do not short-circuit on any prior row.
+  // Transient failures and newly registered devices must still be attempted.
   const push = await sendMemberAnnouncementPushes({ admin, announcement, targetUserIds: userIds });
+  if ((Number(push.attempted) || 0) === 0 && (previous || []).length > 0) {
+    return {
+      announcement_id: announcement.id,
+      recipients: 1,
+      push: summarizePreviousClassAlertPushes(previous),
+    };
+  }
   return { announcement_id: announcement.id, recipients: 1, push };
 }
 

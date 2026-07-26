@@ -69,7 +69,7 @@ test('admin cancellation attempts bounded targeted APNs and retains contact fall
   assert.match(flow, /cancelClassLockRef\.current = false/);
 });
 
-test('delivery retries do not send a second push after an audited attempt', () => {
+test('delivery history is summarised when no new APNs attempt is needed', () => {
   assert.deepEqual(summarizePreviousClassAlertPushes([
     { status: 'delivered' },
     { status: 'failed' },
@@ -81,7 +81,11 @@ test('delivery retries do not send a second push after an audited attempt', () =
     delivered: 1,
     failed: 2,
   });
-  assert.match(endpoint, /if \(\(previous \|\| \[\]\)\.length > 0\)/);
+  // Class-cancel / targeted notify always call sendMemberAnnouncementPushes so
+  // transient `failed` rows and newly registered devices stay retryable; history
+  // is only surfaced when that call attempts nothing new.
+  assert.match(endpoint, /Number\(push\.attempted\) \|\| 0\) === 0 && \(previous \|\| \[\]\)\.length > 0/);
+  assert.match(endpoint, /sendMemberAnnouncementPushes\(\{[\s\S]*targetUserIds: userIds/);
 });
 
 test('announcement publishing logs 500s behind a request id for operators', () => {

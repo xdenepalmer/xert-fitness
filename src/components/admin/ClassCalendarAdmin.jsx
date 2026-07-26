@@ -6,7 +6,7 @@ import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
-import { describeClassCancellationPush } from '@/lib/memberAnnouncements';
+import { describeClassCancellationPush, describeTargetedMemberNoticePush } from '@/lib/memberAnnouncements';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
@@ -759,10 +759,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       if (result?.notice_created) {
         toast({
           title: 'Booking updated and member notified',
-          description: result.warning
-            || (Number(result.push?.delivered || 0) > 0
-              ? 'Their private notice is live and Apple push was delivered.'
-              : 'Their private notice is live in their member account.'),
+          description: result.warning || describeTargetedMemberNoticePush(result.push),
         });
       }
     } catch (e) {
@@ -783,9 +780,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       // promote attempt against a queue that has already moved.
       const result = await adminPromoteNextWaitlisted(candidate.session_id, candidate.next_booking_id);
       const delivery = result.warning
-        || (Number(result.push?.delivered || 0) > 0
-          ? 'Their credit is reserved, their member notice is live, and Apple push was delivered.'
-          : 'Their credit is reserved and a private notice is waiting in their member account.');
+        || `Their credit is reserved. ${describeTargetedMemberNoticePush(result.push)}`;
       toast({ title: 'Member promoted and notified', description: delivery });
       try {
         const [overviewResult] = await Promise.all([
@@ -826,9 +821,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         title: 'Removed from waitlist',
         description: result?.notice_created
           ? (result.warning
-            || (Number(result.push?.delivered || 0) > 0
-              ? 'They were notified, and the next credited member can be promoted.'
-              : 'Their private notice is live. Promote the next credited member when ready.'))
+            || `${describeTargetedMemberNoticePush(result.push)} Promote the next credited member when ready.`)
           : 'No credit was charged or refunded. Promote the next credited member when ready.',
       });
       try {

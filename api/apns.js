@@ -157,13 +157,18 @@ export async function loadDeliveredSubscriptionIds(admin, announcementId) {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await admin
       .from('push_notification_deliveries')
-      .select('subscription_id')
+      .select('subscription_id,status')
       .eq('announcement_id', announcementId)
       .order('subscription_id')
       .range(from, from + pageSize - 1);
     if (error) throw error;
     for (const row of data || []) {
-      if (row.subscription_id) ids.add(row.subscription_id);
+      // Terminal outcomes only. Transient `failed` (timeout / APNs blip) must
+      // not permanently silence a later operator retry — Privacy/operator copy
+      // says publish again can finish devices that still need a delivery.
+      if (row.subscription_id && (row.status === 'delivered' || row.status === 'invalid_token')) {
+        ids.add(row.subscription_id);
+      }
     }
     if ((data || []).length < pageSize) break;
   }
@@ -201,9 +206,9 @@ export async function sendMemberAnnouncementPushes({ admin, announcement, target
   if (!config.ready) return { configured: false, missing: config.missing, attempted: 0, delivered: 0, failed: 0 };
   const subscriptions = await loadSubscriptions(admin, targetUserIds);
   if (subscriptions.length === 0) return { configured: true, attempted: 0, delivered: 0, failed: 0 };
-  // Resend is driven by delivery rows, not published_at: only devices without a
-  // delivery row for this notice are sent to, so re-publishing completes an
-  // interrupted fan-out without re-notifying the whole base.
+  // Resend is driven by terminal delivery rows, not published_at: devices with
+  // delivered / invalid_token are skipped; transient `failed` stays retryable so
+  // re-publish can finish an interrupted fan-out without re-notifying successes.
   const alreadyDelivered = await loadDeliveredSubscriptionIds(admin, announcement.id);
   const pending = subscriptions.filter(subscription => !alreadyDelivered.has(subscription.id));
   if (pending.length === 0) {

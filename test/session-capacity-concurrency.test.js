@@ -17,6 +17,11 @@ for (const path of [
       sql,
       /before insert or update of status, class_session_id on public\.session_bookings/i,
     );
+    // Active-place churn may skip, but a class_session_id move must re-check.
+    assert.match(
+      sql,
+      /old\.class_session_id is not distinct from new\.class_session_id/i,
+    );
     assert.match(sql, /values \('session_capacity_concurrency_guard'\)/i);
     assert.match(sql, /revoke all on function public\.enforce_session_capacity\(\)/i);
   });
