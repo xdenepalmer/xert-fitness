@@ -97,6 +97,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var classRosterReadiness: [UUID: AdminMemberOnboardingSummary] = [:]
     @Published private(set) var loadedRosterSessionID: UUID?
+    @Published private(set) var rosterLoadErrorSessionID: UUID?
+    @Published private(set) var rosterLoadErrorMessage: String?
     @Published private(set) var rosterReadinessStatusMessage: String?
     @Published private(set) var classSessions: [AdminClassSession] = []
     @Published private(set) var classCancellationFollowUp: AdminClassCancellationFollowUp?
@@ -198,6 +200,7 @@ final class AdminStore: ObservableObject {
     private var operationalRefreshGeneration: UInt = 0
     private var eventRosterGeneration: UInt = 0
     private var rosterLoadGeneration: UInt = 0
+    private var requestedRosterSessionID: UUID?
 
     var memberCount: Int {
         max(members.map(\.total_count).max() ?? 0, members.count)
@@ -1778,13 +1781,24 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func loadClassRoster(session: AuthSession, classSessionID: UUID) async {
+    @discardableResult
+    func loadClassRoster(
+        session: AuthSession,
+        classSessionID: UUID,
+        preserveCurrent: Bool = false
+    ) async -> Bool {
         rosterLoadGeneration &+= 1
         let generation = rosterLoadGeneration
+        requestedRosterSessionID = classSessionID
         loadingRosterSessionID = classSessionID
-        loadedRosterSessionID = nil
-        classRoster = []
-        classRosterReadiness = [:]
+        rosterLoadErrorSessionID = nil
+        rosterLoadErrorMessage = nil
+        let canPreserveCurrent = preserveCurrent && loadedRosterSessionID == classSessionID
+        if !canPreserveCurrent {
+            loadedRosterSessionID = nil
+            classRoster = []
+            classRosterReadiness = [:]
+        }
         rosterReadinessStatusMessage = nil
         defer {
             if rosterLoadGeneration == generation {
@@ -1793,7 +1807,7 @@ final class AdminStore: ObservableObject {
         }
         do {
             let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
-            guard rosterLoadGeneration == generation else { return }
+            guard rosterLoadGeneration == generation else { return false }
             loadedRosterSessionID = classSessionID
             classRoster = roster
             do {
@@ -1801,17 +1815,20 @@ final class AdminStore: ObservableObject {
                     session: session,
                     memberIDs: roster.map(\.member_id)
                 )
-                guard rosterLoadGeneration == generation else { return }
+                guard rosterLoadGeneration == generation else { return false }
                 classRosterReadiness = Dictionary(
                     uniqueKeysWithValues: summaries.map { ($0.user_id, $0) }
                 )
             } catch {
-                guard rosterLoadGeneration == generation else { return }
+                guard rosterLoadGeneration == generation else { return false }
                 rosterReadinessStatusMessage = "Member readiness is unavailable. Open a member record before relying on their training clearance."
             }
+            return true
         } catch {
-            guard rosterLoadGeneration == generation else { return }
-            errorMessage = error.localizedDescription
+            guard rosterLoadGeneration == generation else { return false }
+            rosterLoadErrorSessionID = classSessionID
+            rosterLoadErrorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -1821,14 +1838,22 @@ final class AdminStore: ObservableObject {
         bookingID: UUID,
         status: String
     ) async -> Bool {
-        guard updatingBookingID == nil else { return false }
+        guard updatingBookingID == nil,
+              requestedRosterSessionID == classSessionID,
+              loadedRosterSessionID == classSessionID else { return false }
         updatingBookingID = bookingID
         defer { updatingBookingID = nil }
         do {
             bookingDecisionNoticeWarning = nil
             let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
             bookingDecisionNoticeWarning = outcome.warning
-            await loadClassRoster(session: session, classSessionID: classSessionID)
+            if requestedRosterSessionID == classSessionID {
+                await loadClassRoster(
+                    session: session,
+                    classSessionID: classSessionID,
+                    preserveCurrent: true
+                )
+            }
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)
             lastUpdatedAt = Date()
@@ -1845,7 +1870,9 @@ final class AdminStore: ObservableObject {
         attendedIDs: [UUID],
         noShowIDs: [UUID]
     ) async -> Bool {
-        guard recordingAttendanceSessionID == nil else { return false }
+        guard recordingAttendanceSessionID == nil,
+              requestedRosterSessionID == classSessionID,
+              loadedRosterSessionID == classSessionID else { return false }
         recordingAttendanceSessionID = classSessionID
         defer { recordingAttendanceSessionID = nil }
         do {
@@ -1855,7 +1882,13 @@ final class AdminStore: ObservableObject {
                 attendedIDs: attendedIDs,
                 noShowIDs: noShowIDs
             )
-            await loadClassRoster(session: session, classSessionID: classSessionID)
+            if requestedRosterSessionID == classSessionID {
+                await loadClassRoster(
+                    session: session,
+                    classSessionID: classSessionID,
+                    preserveCurrent: true
+                )
+            }
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true

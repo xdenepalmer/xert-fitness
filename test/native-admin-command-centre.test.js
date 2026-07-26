@@ -1162,16 +1162,37 @@ test('native class rosters surface privacy-safe readiness and reject stale class
     store.indexOf('func loadClassRoster('),
     store.indexOf('func setBookingStatus('),
   );
+  const bookingMutation = store.slice(
+    store.indexOf('func setBookingStatus('),
+    store.indexOf('func recordAttendance('),
+  );
+  const attendanceMutation = store.slice(
+    store.indexOf('func recordAttendance('),
+    store.indexOf('func logFollowUp('),
+  );
 
   assert.match(api, /func adminMemberOnboardingSummaries[\s\S]*stride\(from: 0, to: uniqueIDs\.count, by: 100\)/);
   assert.match(api, /summaries\.count == uniqueIDs\.count[\s\S]*returnedIDs == Set\(uniqueIDs\)/);
   assert.match(store, /@Published private\(set\) var classRosterReadiness: \[UUID: AdminMemberOnboardingSummary\]/);
   assert.match(store, /@Published private\(set\) var loadedRosterSessionID: UUID\?/);
+  assert.match(store, /@Published private\(set\) var rosterLoadErrorSessionID: UUID\?/);
   assert.match(rosterLoader, /rosterLoadGeneration &\+= 1/);
-  assert.match(rosterLoader, /loadedRosterSessionID = nil[\s\S]*classRoster = \[\]/);
-  assert.match(rosterLoader, /guard rosterLoadGeneration == generation else \{ return \}/);
+  assert.match(rosterLoader, /requestedRosterSessionID = classSessionID/);
+  assert.match(rosterLoader, /let canPreserveCurrent = preserveCurrent && loadedRosterSessionID == classSessionID/);
+  assert.match(rosterLoader, /if !canPreserveCurrent \{[\s\S]*loadedRosterSessionID = nil[\s\S]*classRoster = \[\]/);
+  assert.match(rosterLoader, /guard rosterLoadGeneration == generation else \{ return false \}/);
+  assert.match(rosterLoader, /rosterLoadErrorSessionID = classSessionID[\s\S]*rosterLoadErrorMessage = error\.localizedDescription/);
   assert.match(rosterLoader, /adminMemberOnboardingSummaries[\s\S]*Dictionary\([\s\S]*summaries\.map \{ \(\$0\.user_id, \$0\) \}/);
+  assert.match(bookingMutation, /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID else \{ return false \}/);
+  assert.match(bookingMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);
+  assert.match(attendanceMutation, /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID else \{ return false \}/);
+  assert.match(attendanceMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);
   assert.match(roster, /private var rosterIsCurrent: Bool \{ admin\.loadedRosterSessionID == operation\.id \}/);
+  assert.match(roster, /\.task\(id: operation\.id\) \{ await loadRoster\(preserveCurrent: false\) \}/);
+  assert.match(roster, /\.refreshable \{ await loadRoster\(preserveCurrent: true\) \}/);
+  assert.match(roster, /guard didLoad, admin\.loadedRosterSessionID == operation\.id else \{ return \}/);
+  assert.match(roster, /Showing the last verified roster/);
+  assert.match(roster, /Label\("Retry roster", systemImage: "arrow\.clockwise"\)/);
   assert.match(roster, /Section\("Training readiness"\)/);
   assert.match(roster, /Every active booking has completed the required readiness steps/);
   assert.match(roster, /need readiness review before training/);

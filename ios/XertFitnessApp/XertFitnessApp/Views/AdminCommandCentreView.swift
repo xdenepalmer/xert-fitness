@@ -4927,8 +4927,9 @@ private struct AdminClassRosterView: View {
     private var attendanceSummary: AdminAttendanceSummary { attendance.summary }
     private var isDirty: Bool { attendance != attendanceBaseline }
     private var isBusy: Bool { admin.recordingAttendanceSessionID == operation.id }
+    private var loadFailed: Bool { admin.rosterLoadErrorSessionID == operation.id }
     private var canRecordAttendance: Bool {
-        attendanceSummary.isComplete && operation.start_time <= Date()
+        rosterIsCurrent && attendanceSummary.isComplete && operation.start_time <= Date()
             && !isBusy
     }
 
@@ -5014,6 +5015,34 @@ private struct AdminClassRosterView: View {
             Section("Member roster") {
                 if !rosterIsCurrent, admin.loadingRosterSessionID == operation.id {
                     HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
+                } else if !rosterIsCurrent, loadFailed {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Roster unavailable", systemImage: "wifi.exclamationmark")
+                            .font(.headline)
+                            .foregroundStyle(Color.orange)
+                        Text(admin.rosterLoadErrorMessage ?? "The class roster could not be loaded.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            Task { await loadRoster(preserveCurrent: false) }
+                        } label: {
+                            Label("Retry roster", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.xertSteel)
+                        .foregroundStyle(Color.xertNavy)
+                    }
+                    .padding(.vertical, 4)
+                } else if rosterIsCurrent, loadFailed {
+                    Label(
+                        "Showing the last verified roster. Refresh failed: \(admin.rosterLoadErrorMessage ?? "connection unavailable")",
+                        systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
                 } else if rosterIsCurrent, roster.isEmpty {
                     Text("No member bookings for this class.")
                 }
@@ -5098,11 +5127,8 @@ private struct AdminClassRosterView: View {
         .background(Color.xertNavy)
         .navigationTitle(operation.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await admin.loadClassRoster(session: session, classSessionID: operation.id)
-            attendance = AdminAttendanceDraft(roster: admin.classRoster)
-            attendanceBaseline = attendance
-        }
+        .task(id: operation.id) { await loadRoster(preserveCurrent: false) }
+        .refreshable { await loadRoster(preserveCurrent: true) }
         .onChange(of: admin.classRoster) { roster in
             guard rosterIsCurrent else { return }
             attendance.reconcile(roster: roster)
@@ -5115,6 +5141,19 @@ private struct AdminClassRosterView: View {
         }
         .navigationBarBackButtonHidden(isDirty)
         .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await loadRoster(preserveCurrent: true) }
+                } label: {
+                    if admin.loadingRosterSessionID == operation.id {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .disabled(admin.loadingRosterSessionID == operation.id || isBusy)
+                .accessibilityLabel("Refresh class roster")
+            }
             if isDirty {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: requestDismiss) {
@@ -5146,8 +5185,10 @@ private struct AdminClassRosterView: View {
                         noShowIDs: noShows
                     )
                     if didRecord {
-                        attendance = AdminAttendanceDraft(roster: admin.classRoster)
-                        attendanceBaseline = attendance
+                        if admin.loadedRosterSessionID == operation.id {
+                            attendance = AdminAttendanceDraft(roster: admin.classRoster)
+                            attendanceBaseline = attendance
+                        }
                         XertHaptics.play(.success)
                     } else {
                         XertHaptics.play(.error)
@@ -5353,6 +5394,21 @@ private struct AdminClassRosterView: View {
             confirmingDiscard = true
         } else {
             dismiss()
+        }
+    }
+
+    @MainActor
+    private func loadRoster(preserveCurrent: Bool) async {
+        let wasDirty = isDirty
+        let didLoad = await admin.loadClassRoster(
+            session: session,
+            classSessionID: operation.id,
+            preserveCurrent: preserveCurrent
+        )
+        guard didLoad, admin.loadedRosterSessionID == operation.id else { return }
+        if !wasDirty {
+            attendance = AdminAttendanceDraft(roster: admin.classRoster)
+            attendanceBaseline = attendance
         }
     }
 }
