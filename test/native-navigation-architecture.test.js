@@ -277,6 +277,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerNavigation, /case event\(UUID\)/);
   assert.match(ownerNavigation, /case announcement\(UUID\)/);
   assert.match(ownerNavigation, /case ptRequest\(UUID\)/);
+  assert.match(ownerNavigation, /case bookingRequest\(AdminBookingRequestSource, UUID\)/);
   assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
   assert.match(ownerNavigation, /case \(\.timetable, "class-setup"\): return \.classSetup\(id\)/);
   assert.match(ownerNavigation, /case \(\.orders, "order"\), \(\.finance, "order"\): return \.order\(id\)/);
@@ -284,6 +285,8 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
   assert.match(ownerNavigation, /case \(\.notices, "announcement"\): return \.announcement\(id\)/);
   assert.match(ownerNavigation, /case \(\.ptRequests, "pt-request"\): return \.ptRequest\(id\)/);
+  assert.match(ownerNavigation, /case \(\.bookingRequests, "member-booking-request"\): return \.bookingRequest\(\.member, id\)/);
+  assert.match(ownerNavigation, /case \(\.bookingRequests, "booking-enquiry"\): return \.bookingRequest\(\.enquiry, id\)/);
   assert.match(ownerNavigation, /parts\.count == 2 \|\| parts\.count == 4/);
   assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);
   assert.match(root, /requestedAdminRoute = route[\s\S]*showingAdminCommandCentre = true/);
@@ -297,6 +300,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.announcements\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /case \.ptRequest\(let id\):[\s\S]*admin\.ptRequests\.first\(where: \{ \$0\.id == id \}\)[\s\S]*AdminPTRequestDetailView/);
+  assert.match(ownerView, /case \.bookingRequest\(let source, let id\):[\s\S]*\$0\.source == source && \$0\.routeRecordID == id[\s\S]*AdminBookingRequestDetailView/);
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
   assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
   assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
@@ -317,6 +321,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(adminStore, /case \.classSetup\(let sessionID\):[\s\S]*api\.adminClassSessions[\s\S]*classSessions = timetable/);
   assert.match(adminStore, /case \.announcement\(let announcementID\):[\s\S]*api\.adminAnnouncement\([\s\S]*mergeAnnouncement\(announcement\)/);
   assert.match(adminStore, /case \.ptRequest\(let requestID\):[\s\S]*api\.adminPTRequests\(session: session\)[\s\S]*ptRequests = refreshedRequests/);
+  assert.match(adminStore, /case \.bookingRequest\(let source, let recordID\):[\s\S]*api\.adminBookingRequests\(session: session\)[\s\S]*bookingRequests = refreshedRequests/);
   assert.match(modelsTests, /testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound/);
   assert.match(modelsTests, /owner\/finance\/member/);
   assert.match(modelsTests, /\.requireAuthentication/);

@@ -324,13 +324,14 @@ test('native owner priorities open the exact protected task when one workload is
   );
 
   assert.match(priorities, /title: "Pack sales setup"[\s\S]*task: singlePricingAttentionTask/);
-  assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestClassTask/);
+  assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestTask \?\? singleBookingRequestClassTask/);
   assert.match(priorities, /title: "PT enquiries"[\s\S]*task: singlePTRequestTask/);
   assert.match(priorities, /title: "Waitlisted members"[\s\S]*task: singleWaitlistClassTask/);
   assert.match(priorities, /title: "Retention follow-ups"[\s\S]*task: singleRetentionTask/);
   assert.match(priorities, /title: "Orders to reconcile"[\s\S]*task: singleRecoverableOrderTask/);
 
   assert.match(priorities, /private var singlePricingAttentionTask:[\s\S]*return \.product\(product\.id\)[\s\S]*return \.product\(draft\.id\)/);
+  assert.match(priorities, /private var singleBookingRequestTask:[\s\S]*admin\.bookingRequests\.filter \{ \$0\.status == "requested" \}[\s\S]*let recordID = request\.routeRecordID[\s\S]*return \.bookingRequest\(request\.source, recordID\)/);
   assert.match(priorities, /private var singleBookingRequestClassTask:[\s\S]*requested_count \+ \$0\.public_request_count > 0[\s\S]*return \.classSession\(operation\.id\)/);
   assert.match(priorities, /private var singlePTRequestTask:[\s\S]*admin\.ptRequests\.filter\(\\\.isPending\)[\s\S]*return \.ptRequest\(request\.id\)/);
   assert.match(priorities, /private var singleWaitlistClassTask:[\s\S]*\$0\.waitlist_count > 0[\s\S]*return \.classSession\(item\.session_id\)/);

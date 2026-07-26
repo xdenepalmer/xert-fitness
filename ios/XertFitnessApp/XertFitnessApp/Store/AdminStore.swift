@@ -846,6 +846,10 @@ final class AdminStore: ObservableObject {
                 && !refreshUnavailableSources.contains("PT requests")
             requiresResolution = !ptRequests.contains(where: { $0.id == requestID })
                 || !ptRequestsAreCurrent
+        case .bookingRequest(let source, let recordID):
+            requiresResolution = !bookingRequests.contains(where: {
+                $0.source == source && $0.routeRecordID == recordID
+            }) || !bookingRequestsAreCurrent
         }
         guard requiresResolution else {
             resolvingOwnerTask = nil
@@ -924,6 +928,17 @@ final class AdminStore: ObservableObject {
                 loadedSources.insert("PT requests")
                 refreshUnavailableSources.removeAll { $0 == "PT requests" }
                 guard refreshedRequests.contains(where: { $0.id == requestID }) else { return }
+            case .bookingRequest(let source, let recordID):
+                let refreshedRequests = try await api.adminBookingRequests(session: session)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
+                bookingRequests = refreshedRequests
+                hasLoadedBookingRequests = true
+                bookingRequestsUnavailable = false
+                bookingRequestStatusMessage = nil
+                guard refreshedRequests.contains(where: {
+                    $0.source == source && $0.routeRecordID == recordID
+                }) else { return }
             }
         } catch {
             guard ownerTaskResolutionGeneration == generation,

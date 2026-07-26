@@ -2028,7 +2028,7 @@ struct AdminCommandCentreView: View {
                 icon: "person.crop.circle.badge.questionmark",
                 count: admin.requestedPlaces,
                 workspace: .bookingRequests,
-                task: singleBookingRequestClassTask
+                task: singleBookingRequestTask ?? singleBookingRequestClassTask
             ),
             AdminPriorityAction(
                 title: "Class setup gaps",
@@ -2131,6 +2131,14 @@ struct AdminCommandCentreView: View {
         }
         guard affectedClasses.count == 1, let operation = affectedClasses.first else { return nil }
         return .classSession(operation.id)
+    }
+
+    private var singleBookingRequestTask: XertOwnerTask? {
+        let pendingRequests = admin.bookingRequests.filter { $0.status == "requested" }
+        guard pendingRequests.count == 1,
+              let request = pendingRequests.first,
+              let recordID = request.routeRecordID else { return nil }
+        return .bookingRequest(request.source, recordID)
     }
 
     private var singleAttendanceTask: XertOwnerTask? {
@@ -3032,6 +3040,19 @@ private struct AdminOwnerTaskSheet: View {
                 )
             } else {
                 resolutionView(recordName: "PT request")
+            }
+        case .bookingRequest(let source, let id):
+            if let booking = admin.bookingRequests.first(where: {
+                $0.source == source && $0.routeRecordID == id
+            }) {
+                AdminBookingRequestDetailView(
+                    admin: admin,
+                    session: session,
+                    booking: booking,
+                    mutationAllowed: admin.bookingRequestsAreCurrent
+                )
+            } else {
+                resolutionView(recordName: "booking request")
             }
         }
     }

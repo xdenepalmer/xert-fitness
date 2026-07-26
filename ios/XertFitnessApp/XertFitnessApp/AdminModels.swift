@@ -2141,6 +2141,7 @@ struct AdminBookingRequest: Identifiable, Hashable {
     let session: AdminBookingSession?
 
     var id: String { "\(source.rawValue):\(recordID)" }
+    var routeRecordID: UUID? { memberBookingID ?? UUID(uuidString: recordID) }
     var searchableText: String {
         [fullName, email, phone, session?.title, session?.coach_name, session?.location_zone]
             .compactMap { $0 }.joined(separator: " ").lowercased()

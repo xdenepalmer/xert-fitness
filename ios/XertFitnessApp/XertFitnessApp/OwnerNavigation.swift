@@ -440,6 +440,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case event(UUID)
     case announcement(UUID)
     case ptRequest(UUID)
+    case bookingRequest(AdminBookingRequestSource, UUID)
 
     var id: String { restorationValue }
 
@@ -453,6 +454,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .event: return .events
         case .announcement: return .notices
         case .ptRequest: return .ptRequests
+        case .bookingRequest: return .bookingRequests
         }
     }
 
@@ -466,6 +468,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .event: return "Event Detail"
         case .announcement: return "Member Notice"
         case .ptRequest: return "PT Request"
+        case .bookingRequest: return "Booking Request"
         }
     }
 
@@ -479,6 +482,9 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .event(let id): return "event/\(id.uuidString.lowercased())"
         case .announcement(let id): return "announcement/\(id.uuidString.lowercased())"
         case .ptRequest(let id): return "pt-request/\(id.uuidString.lowercased())"
+        case .bookingRequest(let source, let id):
+            let kind = source == .member ? "member-booking-request" : "booking-enquiry"
+            return "\(kind)/\(id.uuidString.lowercased())"
         }
     }
 
@@ -497,6 +503,8 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case (.events, "event"): return .event(id)
         case (.notices, "announcement"): return .announcement(id)
         case (.ptRequests, "pt-request"): return .ptRequest(id)
+        case (.bookingRequests, "member-booking-request"): return .bookingRequest(.member, id)
+        case (.bookingRequests, "booking-enquiry"): return .bookingRequest(.enquiry, id)
         default: return nil
         }
     }

@@ -108,6 +108,7 @@ final class ModelsTests: XCTestCase {
         let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000085"))
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000086"))
         let ptRequestID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000087"))
+        let bookingRequestID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000088"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
             XertOwnerRoute(task: .classSession(classID)),
@@ -117,6 +118,8 @@ final class ModelsTests: XCTestCase {
             XertOwnerRoute(task: .event(eventID)),
             XertOwnerRoute(task: .announcement(announcementID)),
             XertOwnerRoute(task: .ptRequest(ptRequestID)),
+            XertOwnerRoute(task: .bookingRequest(.member, bookingRequestID)),
+            XertOwnerRoute(task: .bookingRequest(.enquiry, bookingRequestID)),
         ]
 
         for route in routes {
@@ -151,6 +154,16 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/events/announcement/\(announcementID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/members/pt-request/\(ptRequestID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/members/member-booking-request/\(bookingRequestID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/bookingrequests/pt-request/\(ptRequestID.uuidString)"))
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/bookingrequests/member-booking-request/\(bookingRequestID.uuidString)"),
+            XertOwnerRoute(task: .bookingRequest(.member, bookingRequestID))
+        )
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/bookingrequests/booking-enquiry/\(bookingRequestID.uuidString)"),
+            XertOwnerRoute(task: .bookingRequest(.enquiry, bookingRequestID))
+        )
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/notices/announcement/\(announcementID.uuidString)"),
             XertOwnerRoute(task: .announcement(announcementID))
