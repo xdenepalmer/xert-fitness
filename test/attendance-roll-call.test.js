@@ -10,6 +10,7 @@ import {
 
 const freshSchema = await readFile(new URL('../src/supabase/admin_cms_schema.sql', import.meta.url), 'utf8');
 const upgradeSchema = await readFile(new URL('../src/supabase/attendance_roll_call_upgrade.sql', import.meta.url), 'utf8');
+const requestGuardMigration = await readFile(new URL('../supabase/migrations/20260727020000_attendance_request_resolution_guard.sql', import.meta.url), 'utf8');
 const adminData = await readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
 const classCalendar = await readFile(new URL('../src/components/admin/ClassCalendarAdmin.jsx', import.meta.url), 'utf8');
 
@@ -20,6 +21,7 @@ test('fresh and upgrade database paths install the audited roll-call RPC', () =>
     assert.match(source, /attendance_marked_by\s*=\s*auth\.uid\(\)/i);
     assert.match(source, /p_attended_ids\s*&&\s*p_no_show_ids/i);
     assert.match(source, /INCOMPLETE_ROLL_CALL/i);
+    assert.match(source, /PENDING_BOOKING_REQUESTS/i);
     assert.match(source, /SESSION_NOT_STARTED/i);
     assert.match(source, /'published', 'full', 'completed'/i);
     assert.match(source, /set status = 'completed', public_visible = false/i);
@@ -27,6 +29,13 @@ test('fresh and upgrade database paths install the audited roll-call RPC', () =>
     assert.match(source, /grant execute on function public\.admin_record_session_attendance\(uuid, uuid\[\], uuid\[\]\) to authenticated/i);
     assert.match(source, /values \('attendance_roll_call'\)/i);
   }
+});
+
+test('production roll-call upgrade atomically guards unresolved booking requests', () => {
+  assert.match(requestGuardMigration, /from public\.class_sessions where id = p_session_id for update/i);
+  assert.match(requestGuardMigration, /status\s*=\s*'requested'\s*[\r\n]+\s*for update/i);
+  assert.match(requestGuardMigration, /raise exception 'PENDING_BOOKING_REQUESTS'/i);
+  assert.match(requestGuardMigration, /values \('attendance_request_resolution_guard'\)/i);
 });
 
 test('admin roll call sends one bounded RPC and exposes complete attendance controls', () => {
@@ -43,7 +52,9 @@ test('admin roll call sends one bounded RPC and exposes complete attendance cont
   assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[member\.booking_id\] === 'no_show'\}/);
   assert.match(classCalendar, /Mark all present/);
   assert.match(classCalendar, /Clear marks/);
-  assert.match(classCalendar, /disabled=\{isSavingAttendance \|\| !attendanceSummary\.complete\}/);
+  assert.match(classCalendar, /pendingAttendanceRequests\.length > 0/);
+  assert.match(classCalendar, /Resolve pending booking requests first/);
+  assert.match(classCalendar, /disabled=\{isSavingAttendance \|\| !attendanceSummary\.complete \|\| pendingAttendanceRequests\.length > 0\}/);
   assert.match(classCalendar, /'Save attendance'/);
 });
 

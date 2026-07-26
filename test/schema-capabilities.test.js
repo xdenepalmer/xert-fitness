@@ -6,7 +6,7 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_booking_switch_guard', 'member_onboarding_foundation', 'member_activation_cockpit', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'stripe_payment_fulfillment', 'guarded_payment_activation', 'payment_activation_drift_guard', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'product_commercial_terms_guard', 'targeted_member_notices', 'waitlist_promotion_notifications', 'booking_decision_notifications', 'staff_assisted_booking', 'owner_stripe_price_provisioning'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_booking_switch_guard', 'member_onboarding_foundation', 'member_activation_cockpit', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'attendance_request_resolution_guard', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'stripe_payment_fulfillment', 'guarded_payment_activation', 'payment_activation_drift_guard', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'product_commercial_terms_guard', 'targeted_member_notices', 'waitlist_promotion_notifications', 'booking_decision_notifications', 'staff_assisted_booking', 'owner_stripe_price_provisioning'],
     ready: false,
     actions: [
       'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
@@ -17,6 +17,7 @@ test('reports the exact missing production database capabilities', () => {
       'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
       'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
       'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
+      'Apply supabase/migrations/20260727020000_attendance_request_resolution_guard.sql in Supabase.',
       'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
       'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
       'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
@@ -62,6 +63,7 @@ test('reports the exact missing production database capabilities', () => {
   assert.equal(summarizeSchemaCapabilities([
     { capability: 'audited_credit_grants' },
     { capability: 'attendance_roll_call' },
+    { capability: 'attendance_request_resolution_guard' },
     { capability: 'class_session_update_guard' },
     { capability: 'product_update_guard' },
     { capability: 'stripe_refund_reconciliation' },
@@ -133,6 +135,9 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/admin_role_safety_upgrade.sql', 'admin_role_safety'],
     ['../src/supabase/admin_cms_schema.sql', 'attendance_roll_call'],
     ['../src/supabase/attendance_roll_call_upgrade.sql', 'attendance_roll_call'],
+    ['../src/supabase/admin_cms_schema.sql', 'attendance_request_resolution_guard'],
+    ['../src/supabase/attendance_roll_call_upgrade.sql', 'attendance_request_resolution_guard'],
+    ['../supabase/migrations/20260727020000_attendance_request_resolution_guard.sql', 'attendance_request_resolution_guard'],
     ['../src/supabase/admin_cms_schema.sql', 'class_session_update_guard'],
     ['../supabase/migrations/20260713000000_class_session_update_guard.sql', 'class_session_update_guard'],
     ['../src/supabase/admin_cms_schema.sql', 'product_update_guard'],
@@ -240,6 +245,7 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /member_waitlist_join/);
   assert.match(yaml, /waitlist_fifo_promotion/);
   assert.match(yaml, /attendance_roll_call/);
+  assert.match(yaml, /attendance_request_resolution_guard/);
   assert.match(yaml, /class_session_update_guard/);
   assert.match(yaml, /product_update_guard/);
   assert.match(yaml, /stripe_refund_reconciliation/);
@@ -307,6 +313,7 @@ test('read-only production check reports every release capability and migration'
     'member_waitlist_join',
     'waitlist_fifo_promotion',
     'attendance_roll_call',
+    'attendance_request_resolution_guard',
     'class_session_update_guard',
     'product_update_guard',
     'stripe_refund_reconciliation',

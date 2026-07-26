@@ -5295,6 +5295,9 @@ private struct AdminClassRosterView: View {
     private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
     private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
     private var eligible: [AdminRosterMember] { roster.filter(\.attendanceEligible) }
+    private var unresolvedRequests: [AdminRosterMember] {
+        roster.filter { $0.status == "requested" }
+    }
     private var readinessRelevant: [AdminRosterMember] {
         roster.filter { ["requested", "confirmed", "attended"].contains($0.status) }
     }
@@ -5308,8 +5311,8 @@ private struct AdminClassRosterView: View {
     private var isBusy: Bool { admin.recordingAttendanceSessionID == operation.id }
     private var loadFailed: Bool { admin.rosterLoadErrorSessionID == operation.id }
     private var canRecordAttendance: Bool {
-        rosterIsCurrent && attendanceSummary.isComplete && operation.start_time <= Date()
-            && !isBusy
+        rosterIsCurrent && unresolvedRequests.isEmpty && attendanceSummary.isComplete
+            && operation.start_time <= Date() && !isBusy
     }
     private var canAddMember: Bool {
         let assumedEnd = operation.end_time
@@ -5368,6 +5371,17 @@ private struct AdminClassRosterView: View {
                             )
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.orange)
+                        }
+
+                        if !unresolvedRequests.isEmpty {
+                            Label(
+                                "\(unresolvedRequests.count) booking request\(unresolvedRequests.count == 1 ? "" : "s") must be confirmed or declined before this class can close.",
+                                systemImage: "person.crop.circle.badge.questionmark"
+                            )
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("owner.roster.pendingRequestGuard")
                         }
                     }
                     .padding(.vertical, 4)
@@ -5528,9 +5542,11 @@ private struct AdminClassRosterView: View {
                                 ProgressView().tint(Color.xertNavy)
                             }
                             Label(
-                                attendanceSummary.isComplete
-                                    ? "Save complete roll call"
-                                    : "\(attendanceSummary.marked) of \(attendanceSummary.total) marked",
+                                !unresolvedRequests.isEmpty
+                                    ? "Resolve \(unresolvedRequests.count) booking request\(unresolvedRequests.count == 1 ? "" : "s")"
+                                    : attendanceSummary.isComplete
+                                        ? "Save complete roll call"
+                                        : "\(attendanceSummary.marked) of \(attendanceSummary.total) marked",
                                 systemImage: "checklist"
                             )
                             .fontWeight(.bold)
@@ -5630,7 +5646,7 @@ private struct AdminClassRosterView: View {
             }
             Button("Review roll call", role: .cancel) {}
         } message: {
-            Text("Record \(attendanceSummary.attended) present and \(attendanceSummary.noShow) no show, complete the class, and remove it from the public timetable.")
+            Text("Record \(attendanceSummary.attended) present and \(attendanceSummary.noShow) no show, complete the class, and remove it from the public timetable. Every booking request has been resolved.")
         }
         .confirmationDialog(
             "Discard unfinished roll call?",

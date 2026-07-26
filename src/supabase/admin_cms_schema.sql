@@ -800,6 +800,9 @@ begin
   if v_session_status not in ('published', 'full', 'completed') then raise exception 'SESSION_NOT_OPEN_FOR_ATTENDANCE'; end if;
   if v_start_time > now() then raise exception 'SESSION_NOT_STARTED'; end if;
   perform 1 from public.session_bookings
+    where class_session_id = p_session_id and status = 'requested' for update;
+  if found then raise exception 'PENDING_BOOKING_REQUESTS'; end if;
+  perform 1 from public.session_bookings
     where class_session_id = p_session_id and status in ('confirmed', 'attended', 'no_show') for update;
   select count(*) into v_eligible_count from public.session_bookings
     where class_session_id = p_session_id and status in ('confirmed', 'attended', 'no_show');
@@ -869,6 +872,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('admin_role_safety') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('attendance_roll_call') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('attendance_request_resolution_guard') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('waitlist_fifo_promotion') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)

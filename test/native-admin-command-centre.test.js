@@ -1258,6 +1258,11 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.doesNotMatch(roster, /default: member\.status != "no_show"/);
   assert.match(roster, /attendanceSummary\.isComplete/);
   assert.match(roster, /Mark every member present or no show before saving/);
+  assert.match(roster, /private var unresolvedRequests: \[AdminRosterMember\]/);
+  assert.match(roster, /unresolvedRequests\.isEmpty && attendanceSummary\.isComplete/);
+  assert.match(roster, /must be confirmed or declined before this class can close/);
+  assert.match(roster, /accessibilityIdentifier\("owner\.roster\.pendingRequestGuard"\)/);
+  assert.ok(roster.includes('Resolve \\(unresolvedRequests.count) booking request'));
   assert.match(roster, /Label\("Mark all present", systemImage: "checkmark\.circle"\)/);
   assert.match(roster, /Label\("Clear marks", systemImage: "arrow\.counterclockwise"\)/);
   assert.match(roster, /title: "Present"[\s\S]*mark: \.attended/);
@@ -1312,6 +1317,7 @@ test('native class rosters surface privacy-safe readiness and reject stale class
   assert.match(bookingMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);
   assert.match(attendanceMutation, /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID else \{ return false \}/);
   assert.match(attendanceMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);
+  assert.match(attendanceMutation, /PENDING_BOOKING_REQUESTS[\s\S]*Confirm or decline every pending booking request/);
   assert.match(roster, /private var rosterIsCurrent: Bool \{ admin\.loadedRosterSessionID == operation\.id \}/);
   assert.match(roster, /\.task\(id: operation\.id\) \{ await loadRoster\(preserveCurrent: false\) \}/);
   assert.match(roster, /\.refreshable \{ await loadRoster\(preserveCurrent: true\) \}/);

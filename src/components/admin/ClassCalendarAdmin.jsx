@@ -765,6 +765,15 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const saveAttendance = async () => {
     if (!attendanceSession) return;
     const summary = summarizeAttendanceDraft(roster, attendanceDraft);
+    const pendingRequests = roster.filter(member => member.status === 'requested');
+    if (pendingRequests.length > 0) {
+      toast({
+        title: 'Resolve booking requests first',
+        description: `Confirm or decline the ${pendingRequests.length} pending ${pendingRequests.length === 1 ? 'request' : 'requests'} before completing this class.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!summary.complete) {
       toast({
         title: 'Roll call is incomplete',
@@ -798,6 +807,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   });
   const upcomingCount = sessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
   const attendanceSummary = summarizeAttendanceDraft(roster, attendanceDraft);
+  const pendingAttendanceRequests = roster.filter(member => member.status === 'requested');
 
   return (
     <div className="p-6">
@@ -1049,6 +1059,19 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   </button>
                 </div>
               </div>
+              {pendingAttendanceRequests.length > 0 && (
+                <div role="alert" className="mb-4 flex gap-3 border border-xert-orange/40 bg-xert-orange/10 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-xert-orange" aria-hidden="true" />
+                  <div>
+                    <p className="font-body text-sm font-semibold text-xert-offwhite">
+                      Resolve {pendingAttendanceRequests.length} booking {pendingAttendanceRequests.length === 1 ? 'request' : 'requests'} before completing this class.
+                    </p>
+                    <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">
+                      Close roll call, then confirm or decline each requested member in the roster. This protects their reserved training credit.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 {attendanceSummary.members.map(member => (
                   <div key={member.booking_id} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-charcoal p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1076,8 +1099,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             <div className="flex flex-col-reverse gap-3 border-t border-xert-steel/20 p-5 sm:flex-row sm:justify-end sm:p-6">
               <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
                 className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
-              <button type="button" onClick={() => void saveAttendance()} disabled={isSavingAttendance || !attendanceSummary.complete}
-                title={attendanceSummary.complete ? 'Save complete roll call' : 'Mark every member before saving'}
+              <button type="button" onClick={() => void saveAttendance()} disabled={isSavingAttendance || !attendanceSummary.complete || pendingAttendanceRequests.length > 0}
+                title={pendingAttendanceRequests.length > 0 ? 'Resolve pending booking requests first' : attendanceSummary.complete ? 'Save complete roll call' : 'Mark every member before saving'}
                 className="min-h-11 bg-green-700 px-5 font-display text-xs uppercase text-white transition-colors hover:bg-green-600 disabled:opacity-40">
                 {isSavingAttendance ? 'Saving roll call...' : 'Save attendance'}
               </button>

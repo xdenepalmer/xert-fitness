@@ -8,6 +8,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
   waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
   attendance_roll_call: 'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
+  attendance_request_resolution_guard: 'Apply supabase/migrations/20260727020000_attendance_request_resolution_guard.sql in Supabase.',
   class_session_update_guard: 'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
   product_update_guard: 'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
   stripe_refund_reconciliation: 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',

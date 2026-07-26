@@ -1,9 +1,5 @@
--- Transactional class roll call with staff audit metadata.
--- Idempotent and safe to re-run after booking_schema.sql and admin_cms_schema.sql.
-
-alter table public.session_bookings
-  add column if not exists attendance_marked_at timestamptz,
-  add column if not exists attendance_marked_by uuid references auth.users(id) on delete set null;
+-- Do not close a class around an unresolved credit-backed booking request.
+-- The class row lock serialises this check with normal booking mutations.
 
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
@@ -78,14 +74,15 @@ begin
   return v_updated_count;
 end; $$;
 
-revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
-grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
+revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[])
+  from public, anon;
+grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[])
+  to authenticated;
 
 create table if not exists public.xert_schema_capabilities (
   capability text primary key,
   installed_at timestamptz not null default now()
 );
 insert into public.xert_schema_capabilities (capability)
-values ('attendance_roll_call') on conflict (capability) do nothing;
-insert into public.xert_schema_capabilities (capability)
-values ('attendance_request_resolution_guard') on conflict (capability) do nothing;
+values ('attendance_request_resolution_guard')
+on conflict (capability) do nothing;

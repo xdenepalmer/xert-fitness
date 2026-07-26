@@ -2089,7 +2089,12 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            let message = error.localizedDescription
+            if message.localizedCaseInsensitiveContains("PENDING_BOOKING_REQUESTS") {
+                errorMessage = "Confirm or decline every pending booking request before completing this class."
+            } else {
+                errorMessage = message
+            }
             return false
         }
     }
