@@ -485,6 +485,41 @@ test('native owner queues auto-sync without disturbing unrelated command-centre 
   assert.doesNotMatch(api, /func adminOperationalPulse/);
 });
 
+test('native owner overview creates a privacy-safe current-only shift handoff', async () => {
+  const [view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+  const briefing = view.slice(
+    view.indexOf('private var shiftBriefing: some View'),
+    view.indexOf('private func operationalFreshnessColour'),
+  );
+  const model = models.slice(
+    models.indexOf('struct AdminShiftClassBrief'),
+    models.indexOf('struct AdminRosterMember'),
+  );
+
+  assert.match(model, /struct AdminShiftBriefing: Equatable/);
+  assert.match(model, /var openActionCount: Int/);
+  assert.match(model, /XERT OWNER SHIFT BRIEF/);
+  assert.match(model, /TODAY'S CLASSES/);
+  assert.match(model, /DATA WARNING/);
+  assert.match(model, /requested_count \+ operation\.public_request_count/);
+  assert.doesNotMatch(model, /full_name|email|phone|member_id|payment_intent/);
+
+  assert.match(briefing, /AdminShiftBriefing\(/);
+  assert.match(briefing, /admin\.operationalQueueState == \.ready/);
+  assert.match(briefing, /freshness == \.current/);
+  assert.match(briefing, /No member names, contact details, notes or payment identifiers are included\./);
+  assert.match(briefing, /ShareLink\([\s\S]*item: briefing\.text/);
+  assert.match(briefing, /UIPasteboard\.general\.string = briefing\.text/);
+  assert.match(briefing, /UIAccessibility\.post\(notification: \.announcement, argument: "Shift brief copied"\)/);
+  assert.match(briefing, /shiftBriefCopyFeedbackID == nil \? "Copy brief" : "Copied"/);
+  assert.match(briefing, /Refresh operational queues before copying or sharing this handoff\./);
+  assert.match(briefing, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(briefing, /frame\(maxWidth: \.infinity, minHeight: 58/);
+});
+
 test('native protected order and event routes resolve records outside the initial snapshot', async () => {
   const [store, api] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),

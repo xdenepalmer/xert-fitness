@@ -561,6 +561,125 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var activeCount: Int { requested_count + confirmed_count }
 }
 
+struct AdminShiftClassBrief: Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let startTime: Date
+    let status: String
+    let confirmed: Int
+    let requested: Int
+    let waitlisted: Int
+    let attendanceDue: Bool
+
+    init(operation: AdminDailyOperation) {
+        id = operation.id
+        title = operation.title
+        startTime = operation.start_time
+        status = operation.status
+        confirmed = operation.confirmed_count
+        requested = operation.requested_count + operation.public_request_count
+        waitlisted = operation.waitlist_count
+        attendanceDue = operation.attendance_due
+    }
+}
+
+struct AdminShiftBriefing: Equatable {
+    let generatedAt: Date
+    let sourceUpdatedAt: Date?
+    let classes: [AdminShiftClassBrief]
+    let requestedPlaces: Int
+    let waitlistedMembers: Int
+    let attendanceDue: Int
+    let activationActions: Int
+    let retentionFollowUps: Int
+    let pendingPTRequests: Int
+    let recoverableOrders: Int
+    let unavailableSources: [String]
+
+    var openActionCount: Int {
+        requestedPlaces
+            + waitlistedMembers
+            + attendanceDue
+            + activationActions
+            + retentionFollowUps
+            + pendingPTRequests
+            + recoverableOrders
+    }
+
+    var summary: String {
+        "\(classes.count) class\(classes.count == 1 ? "" : "es") | "
+            + "\(openActionCount) open action\(openActionCount == 1 ? "" : "s")"
+    }
+
+    var text: String {
+        var lines = [
+            "XERT OWNER SHIFT BRIEF",
+            "Generated: \(Self.timestamp(generatedAt))",
+            sourceUpdatedAt.map { "Operational snapshot: \(Self.timestamp($0))" }
+                ?? "Operational snapshot: unavailable",
+            "",
+            "OPEN WORK"
+        ]
+        let actions = [
+            ("Class booking requests", requestedPlaces),
+            ("Waitlisted members", waitlistedMembers),
+            ("Attendance roll calls due", attendanceDue),
+            ("Member activation actions", activationActions),
+            ("Retention follow-ups", retentionFollowUps),
+            ("PT requests", pendingPTRequests),
+            ("Payments needing recovery", recoverableOrders)
+        ].filter { $0.1 > 0 }
+        if actions.isEmpty {
+            lines.append("- No open queue actions")
+        } else {
+            lines.append(contentsOf: actions.map { "- \($0.0): \($0.1)" })
+        }
+
+        lines.append(contentsOf: ["", "TODAY'S CLASSES"])
+        if classes.isEmpty {
+            lines.append("- No classes scheduled")
+        } else {
+            lines.append(contentsOf: classes.sorted { $0.startTime < $1.startTime }.map { item in
+                let attendance = item.attendanceDue ? " | ATTENDANCE DUE" : ""
+                return "- \(Self.time(item.startTime)) \(item.title) | "
+                    + "\(item.confirmed) confirmed | \(item.requested) requested | "
+                    + "\(item.waitlisted) waiting\(attendance)"
+            })
+        }
+
+        if !unavailableSources.isEmpty {
+            lines.append(contentsOf: [
+                "",
+                "DATA WARNING",
+                "- Unavailable: \(unavailableSources.sorted().joined(separator: ", "))"
+            ])
+        }
+        lines.append(contentsOf: [
+            "",
+            "Re-open live XERT workspaces before any irreversible action."
+        ])
+        return lines.joined(separator: "\n")
+    }
+
+    private static func timestamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = EventItem.calendar
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = EventItem.calendar.timeZone
+        formatter.dateFormat = "d MMM yyyy, h:mm a zzz"
+        return formatter.string(from: date)
+    }
+
+    private static func time(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = EventItem.calendar
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = EventItem.calendar.timeZone
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    }
+}
+
 struct AdminRosterMember: Identifiable, Codable, Hashable {
     var id: UUID { booking_id }
     let booking_id: UUID

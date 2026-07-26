@@ -72,6 +72,7 @@ struct AdminCommandCentreView: View {
     @State private var pendingEditorExitRequest: OwnerExitRequest?
     @State private var showingEditorExitConfirmation = false
     @State private var isSavingPlatformExit = false
+    @State private var shiftBriefCopyFeedbackID: UUID?
     let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
 
@@ -781,6 +782,7 @@ struct AdminCommandCentreView: View {
                     }
                 }
                 priorityQueue
+                shiftBriefing
                 stripeLaunchRunway
                 quickTools
                 attentionGrid
@@ -1215,6 +1217,202 @@ struct AdminCommandCentreView: View {
             )
             .accessibilityHint("Refreshes requests, waitlists, retention, activation, orders and private training without leaving this screen")
             .accessibilityIdentifier("owner.operationalPulse")
+        }
+    }
+
+    private var shiftBriefing: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let freshness = AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: admin.hasCompletedRefresh,
+                updatedAt: admin.operationalUpdatedAt,
+                isRefreshing: admin.isRefreshingOperations,
+                hasUnavailableSources: admin.operationalQueueHasUnavailableSources,
+                now: context.date
+            )
+            let unavailableSources: [String]
+            if case .partial(let sources) = admin.operationalQueueState {
+                unavailableSources = sources
+            } else {
+                unavailableSources = []
+            }
+            let briefing = AdminShiftBriefing(
+                generatedAt: context.date,
+                sourceUpdatedAt: admin.operationalUpdatedAt,
+                classes: admin.dailyOperations.map { AdminShiftClassBrief(operation: $0) },
+                requestedPlaces: admin.requestedPlaces,
+                waitlistedMembers: admin.waitingMembers,
+                attendanceDue: admin.attendanceDue,
+                activationActions: admin.activationQueue.count,
+                retentionFollowUps: admin.followUps.count,
+                pendingPTRequests: admin.pendingPTRequests,
+                recoverableOrders: admin.orders.lazy.filter(\.isRecoverable).count,
+                unavailableSources: unavailableSources
+            )
+            let canShare = freshness == .current && admin.operationalQueueState == .ready
+
+            VStack(alignment: .leading, spacing: 12) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        shiftBriefingHeading
+                        Spacer(minLength: 8)
+                        shiftBriefingStatus(freshness: freshness)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        shiftBriefingHeading
+                        shiftBriefingStatus(freshness: freshness)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    shiftBriefingMetric(
+                        briefing.classes.count,
+                        label: "Today's classes",
+                        icon: "calendar"
+                    )
+                    shiftBriefingMetric(
+                        briefing.openActionCount,
+                        label: "Open actions",
+                        icon: briefing.openActionCount > 0 ? "exclamationmark.circle" : "checkmark.circle"
+                    )
+                }
+
+                if let nextClass = briefing.classes
+                    .filter({ $0.startTime >= context.date })
+                    .min(by: { $0.startTime < $1.startTime }) {
+                    Label(
+                        "Next: \(nextClass.startTime.formatted(date: .omitted, time: .shortened)) - \(nextClass.title)",
+                        systemImage: "clock"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.xertPale.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text("No member names, contact details, notes or payment identifiers are included.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        shiftBriefingActions(briefing: briefing, canShare: canShare)
+                    }
+                    VStack(spacing: 10) {
+                        shiftBriefingActions(briefing: briefing, canShare: canShare)
+                    }
+                }
+
+                if !canShare {
+                    Label(
+                        "Refresh operational queues before copying or sharing this handoff.",
+                        systemImage: "lock.shield"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(16)
+            .xertCardStyle()
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private var shiftBriefingHeading: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            adminHeading("Owner shift brief")
+            Text("A privacy-safe staff handoff from the live operating queues")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func shiftBriefingStatus(freshness: AdminOperationalFreshness) -> some View {
+        Label(freshness.label.uppercased(), systemImage: freshness == .current ? "checkmark.shield.fill" : "clock.badge.exclamationmark")
+            .font(.caption2.weight(.black))
+            .foregroundStyle(operationalFreshnessColour(freshness))
+            .padding(.horizontal, 9)
+            .frame(minHeight: 32)
+            .background(operationalFreshnessColour(freshness).opacity(0.1))
+            .overlay(
+                Rectangle()
+                    .stroke(operationalFreshnessColour(freshness).opacity(0.34), lineWidth: 1)
+            )
+    }
+
+    private func shiftBriefingMetric(_ value: Int, label: String, icon: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.xertSteel)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value.formatted())
+                    .font(.title3.weight(.bold).monospacedDigit())
+                    .foregroundStyle(Color.xertOffWhite)
+                Text(label.uppercased())
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .padding(.horizontal, 12)
+        .background(Color.xertDeep.opacity(0.3))
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func shiftBriefingActions(
+        briefing: AdminShiftBriefing,
+        canShare: Bool
+    ) -> some View {
+        if canShare {
+            ShareLink(
+                item: briefing.text,
+                subject: Text("XERT owner shift brief")
+            ) {
+                Label("Share brief", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+            .accessibilityHint("Shares a current privacy-safe operational handoff")
+
+            Button {
+                UIPasteboard.general.string = briefing.text
+                XertHaptics.play(.success)
+                UIAccessibility.post(notification: .announcement, argument: "Shift brief copied")
+                let feedbackID = UUID()
+                shiftBriefCopyFeedbackID = feedbackID
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard shiftBriefCopyFeedbackID == feedbackID else { return }
+                    shiftBriefCopyFeedbackID = nil
+                }
+            } label: {
+                Label(
+                    shiftBriefCopyFeedbackID == nil ? "Copy brief" : "Copied",
+                    systemImage: shiftBriefCopyFeedbackID == nil ? "doc.on.doc" : "checkmark"
+                )
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.xertSteel)
+            .accessibilityHint("Copies a current privacy-safe operational handoff")
+        } else {
+            Button(action: refreshOperationalPulse) {
+                Label(
+                    admin.isRefreshingOperations ? "Refreshing..." : "Refresh to unlock",
+                    systemImage: "arrow.clockwise"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+            .disabled(admin.isLoading || admin.isRefreshingOperations)
         }
     }
 

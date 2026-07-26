@@ -1241,6 +1241,55 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOwnerShiftBriefingIsActionableAndOmitsPrivateMemberData() {
+        let generatedAt = queenslandDate(2026, 7, 27, 16, 0)
+        let operation = AdminDailyOperation(
+            session_id: UUID(),
+            title: "XERT Engine",
+            class_type: "conditioning",
+            start_time: queenslandDate(2026, 7, 27, 17, 0),
+            end_time: queenslandDate(2026, 7, 27, 18, 0),
+            status: "published",
+            capacity: 12,
+            coach_name: "Coach",
+            location_zone: "Main floor",
+            booking_mode: "instant_book",
+            requested_count: 2,
+            confirmed_count: 7,
+            waitlist_count: 1,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 1,
+            attendance_due: true
+        )
+        let briefing = AdminShiftBriefing(
+            generatedAt: generatedAt,
+            sourceUpdatedAt: generatedAt.addingTimeInterval(-60),
+            classes: [AdminShiftClassBrief(operation: operation)],
+            requestedPlaces: 3,
+            waitlistedMembers: 1,
+            attendanceDue: 1,
+            activationActions: 2,
+            retentionFollowUps: 3,
+            pendingPTRequests: 1,
+            recoverableOrders: 1,
+            unavailableSources: ["orders", "waitlists"]
+        )
+
+        XCTAssertEqual(briefing.classes.first?.requested, 3)
+        XCTAssertEqual(briefing.openActionCount, 12)
+        XCTAssertEqual(briefing.summary, "1 class | 12 open actions")
+        XCTAssertTrue(briefing.text.contains("XERT OWNER SHIFT BRIEF"))
+        XCTAssertTrue(briefing.text.contains("Class booking requests: 3"))
+        XCTAssertTrue(briefing.text.contains("XERT Engine"))
+        XCTAssertTrue(briefing.text.contains("7 confirmed | 3 requested | 1 waiting"))
+        XCTAssertTrue(briefing.text.contains("ATTENDANCE DUE"))
+        XCTAssertTrue(briefing.text.contains("Unavailable: orders, waitlists"))
+        XCTAssertFalse(briefing.text.lowercased().contains("email"))
+        XCTAssertFalse(briefing.text.lowercased().contains("phone"))
+        XCTAssertFalse(briefing.text.lowercased().contains("member name"))
+    }
+
     func testOperationalRefreshPolicyReportsHonestQueueFreshness() {
         let now = Date(timeIntervalSince1970: 10_000)
 
