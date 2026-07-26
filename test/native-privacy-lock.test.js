@@ -17,8 +17,13 @@ test('native privacy lock protects signed-in tabs across app lifecycle changes',
   assert.match(service, /deviceOwnerAuthentication/);
   assert.match(service, /localizedCancelTitle = "Keep Locked"/);
   assert.match(service, /isSignedIn && isEnabled && !isUnlocked/);
+  assert.match(service, /requiresOwnerProtection[\s\S]*isAdmin && !isEnabled/);
   assert.match(root, /if isPrivacyLocked[\s\S]*PrivacyLockView[\s\S]*else \{[\s\S]*memberTabs/);
   assert.match(root, /guard phase == \.active else[\s\S]*isPrivacyUnlocked = false/);
+  assert.match(root, /if showingAdminCommandCentre \{[\s\S]*pendingOwnerNavigation = XertOwnerRoute\(workspace: workspace\)[\s\S]*showingAdminCommandCentre = false/);
+  assert.match(root, /private func authorizeAndOpenOwnerRoute[\s\S]*DeviceAuthenticator\.support\(\)[\s\S]*privacyLockEnabled = true/);
+  assert.match(root, /isPrivacyUnlocked = true[\s\S]*resumePendingOwnerNavigation\(\)/);
+  assert.match(root, /protectsOwnerTools[\s\S]*protected owner operations/);
   assert.match(root, /guard isPrivacyLocked, !isUnlocking, scenePhase == \.active/);
   assert.match(root, /Button\("Sign Out", role: \.destructive/);
   assert.ok(account.includes('"Require \\(authenticationSupport.methodName)"'));

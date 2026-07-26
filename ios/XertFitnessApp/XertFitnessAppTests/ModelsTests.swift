@@ -2534,6 +2534,18 @@ final class ModelsTests: XCTestCase {
             isEnabled: true,
             isUnlocked: true
         ))
+        XCTAssertTrue(AppPrivacyLock.requiresOwnerProtection(
+            isAdmin: true,
+            isEnabled: false
+        ))
+        XCTAssertFalse(AppPrivacyLock.requiresOwnerProtection(
+            isAdmin: false,
+            isEnabled: false
+        ))
+        XCTAssertFalse(AppPrivacyLock.requiresOwnerProtection(
+            isAdmin: true,
+            isEnabled: true
+        ))
     }
 
     func testMemberLocalStateClearsAccountLinkedIdentifiersAndPreferences() throws {

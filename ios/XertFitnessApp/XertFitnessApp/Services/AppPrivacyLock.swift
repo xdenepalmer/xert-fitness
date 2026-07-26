@@ -21,6 +21,10 @@ enum AppPrivacyLock {
     static func requiresUnlock(isSignedIn: Bool, isEnabled: Bool, isUnlocked: Bool) -> Bool {
         isSignedIn && isEnabled && !isUnlocked
     }
+
+    static func requiresOwnerProtection(isAdmin: Bool, isEnabled: Bool) -> Bool {
+        isAdmin && !isEnabled
+    }
 }
 
 enum DeviceAuthenticator {

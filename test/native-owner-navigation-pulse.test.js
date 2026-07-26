@@ -63,7 +63,7 @@ test('iPad and iPhone expose a visible owner pulse with exact priority routing',
   assert.match(root, /accessibilityIdentifier\("xert-navigation-owner-priority"\)/);
   assert.match(root, /private struct XertNavigationDock:[\s\S]*if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /private func openOwnerCommandCentre\(_ workspace: XertOwnerWorkspace\? = nil\)/);
-  assert.match(root, /requestedAdminRoute = workspace\.map \{ XertOwnerRoute\(workspace: \$0\) \}/);
+  assert.match(root, /authorizeAndOpenOwnerRoute\(XertOwnerRoute\(workspace: workspace \?\? \.overview\)\)/);
   assert.match(root, /Label\("Open owner overview", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /refreshOwnerNavigationPulse\(force: true\)/);
   assert.match(root, /ownerNavigationPulse\.reset\(\)/);

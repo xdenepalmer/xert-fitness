@@ -43,6 +43,7 @@ struct RootView: View {
                 PrivacyLockView(
                     isUnlocking: isUnlocking,
                     errorMessage: privacyLockError,
+                    protectsOwnerTools: pendingOwnerNavigation != nil,
                     onUnlock: { Task { await unlockApp() } },
                     onSignOut: signOutFromLock
                 )
@@ -597,8 +598,7 @@ struct RootView: View {
     private func completeCommandDismissal() {
         guard opensAdminAfterCommandDismissal else { return }
         opensAdminAfterCommandDismissal = false
-        guard store.profile?.isAdmin == true else { return }
-        showingAdminCommandCentre = true
+        openOwnerCommandCentre()
     }
 
     private func executeSceneNavigationCommand(_ command: XertSceneNavigationCommand) {
@@ -642,6 +642,12 @@ struct RootView: View {
 
     private func handleScenePhase(_ phase: ScenePhase) {
         guard phase == .active else {
+            if showingAdminCommandCentre {
+                let workspace = XertOwnerWorkspace(rawValue: restoredAdminWorkspace) ?? .overview
+                pendingOwnerNavigation = XertOwnerRoute(workspace: workspace)
+                showingAdminCommandCentre = false
+                requestedAdminRoute = nil
+            }
             if store.isSignedIn, privacyLockEnabled {
                 isPrivacyUnlocked = false
             }
@@ -687,11 +693,14 @@ struct RootView: View {
 
         do {
             try await DeviceAuthenticator.authenticate(
-                reason: "Unlock your XERT member account, bookings and purchase history."
+                reason: pendingOwnerNavigation == nil
+                    ? "Unlock your XERT member account, bookings and purchase history."
+                    : "Unlock the XERT Owner Command Centre and protected member operations."
             )
             guard scenePhase == .active, store.isSignedIn, privacyLockEnabled else { return }
             isPrivacyUnlocked = true
             XertHaptics.play(.success)
+            resumePendingOwnerNavigation()
             if store.hasBootstrapped, !store.isLoading {
                 await store.refreshIfStale()
                 await store.reconcilePendingCheckout()
@@ -883,16 +892,13 @@ struct RootView: View {
 
     private func openOwnerCommandCentre(_ workspace: XertOwnerWorkspace? = nil) {
         guard store.profile?.isAdmin == true else { return }
-        requestedAdminRoute = workspace.map { XertOwnerRoute(workspace: $0) }
-        showingAdminCommandCentre = true
+        authorizeAndOpenOwnerRoute(XertOwnerRoute(workspace: workspace ?? .overview))
     }
 
     private func handleOwnerRoute(_ route: XertOwnerRoute) {
         switch ownerDisposition(for: route) {
         case .open:
-            pendingOwnerNavigation = nil
-            requestedAdminRoute = route
-            showingAdminCommandCentre = true
+            authorizeAndOpenOwnerRoute(route)
         case .deny:
             pendingOwnerNavigation = nil
             store.errorMessage = "Owner access is required for this XERT workspace."
@@ -908,15 +914,39 @@ struct RootView: View {
         guard let route = pendingOwnerNavigation else { return }
         switch ownerDisposition(for: route) {
         case .open:
-            pendingOwnerNavigation = nil
-            requestedAdminRoute = route
-            showingAdminCommandCentre = true
+            authorizeAndOpenOwnerRoute(route)
         case .deny:
             pendingOwnerNavigation = nil
             store.errorMessage = "Owner access is required for this XERT workspace."
         case .requireAuthentication, .waitForProfile:
             break
         }
+    }
+
+    private func authorizeAndOpenOwnerRoute(_ route: XertOwnerRoute) {
+        guard store.profile?.isAdmin == true else { return }
+        if AppPrivacyLock.requiresOwnerProtection(
+            isAdmin: true,
+            isEnabled: privacyLockEnabled
+        ) {
+            let support = DeviceAuthenticator.support()
+            guard support.isAvailable else {
+                store.errorMessage = support.unavailableMessage
+                    ?? "Set a device passcode before opening the Owner Command Centre."
+                return
+            }
+            pendingOwnerNavigation = route
+            privacyLockEnabled = true
+            return
+        }
+        guard !isPrivacyLocked else {
+            pendingOwnerNavigation = route
+            lockAndAuthenticate()
+            return
+        }
+        pendingOwnerNavigation = nil
+        requestedAdminRoute = route.workspace == .overview ? nil : route
+        showingAdminCommandCentre = true
     }
 
     private func ownerDisposition(for route: XertOwnerRoute) -> XertOwnerNavigationDisposition {
@@ -2258,6 +2288,7 @@ private struct XertWorkspaceOrderEditor: View {
 private struct PrivacyLockView: View {
     let isUnlocking: Bool
     let errorMessage: String?
+    let protectsOwnerTools: Bool
     let onUnlock: () -> Void
     let onSignOut: () -> Void
 
@@ -2272,7 +2303,9 @@ private struct PrivacyLockView: View {
             VStack(spacing: 8) {
                 Text("XERT Locked")
                     .xertDisplay(34)
-                Text("Authenticate to view your member account.")
+                Text(protectsOwnerTools
+                    ? "Authenticate to continue to protected owner operations."
+                    : "Authenticate to view your member account.")
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.xertPale)
