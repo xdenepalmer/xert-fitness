@@ -1003,28 +1003,67 @@ final class XertAPI {
     }
 
     func adminLeadActionCounts(session auth: AuthSession) async throws -> AdminLeadActionCounts {
+        let overdueCutoff = Date().addingTimeInterval(-86_400)
         async let memberLeads = adminLeadCount(session: auth, pipeline: .members, status: "new")
         async let trainerApplicants = adminLeadCount(session: auth, pipeline: .trainers, status: "new")
         async let partnerEnquiries = adminLeadCount(session: auth, pipeline: .partners, status: "new")
-        let counts = try await (memberLeads, trainerApplicants, partnerEnquiries)
+        async let overdueMemberLeads = adminLeadCount(
+            session: auth,
+            pipeline: .members,
+            status: "new",
+            createdBefore: overdueCutoff
+        )
+        async let overdueTrainerApplicants = adminLeadCount(
+            session: auth,
+            pipeline: .trainers,
+            status: "new",
+            createdBefore: overdueCutoff
+        )
+        async let overduePartnerEnquiries = adminLeadCount(
+            session: auth,
+            pipeline: .partners,
+            status: "new",
+            createdBefore: overdueCutoff
+        )
+        let counts = try await (
+            memberLeads,
+            trainerApplicants,
+            partnerEnquiries,
+            overdueMemberLeads,
+            overdueTrainerApplicants,
+            overduePartnerEnquiries
+        )
         return AdminLeadActionCounts(
             memberLeads: counts.0,
             trainerApplicants: counts.1,
-            partnerEnquiries: counts.2
+            partnerEnquiries: counts.2,
+            overdueMemberLeads: counts.3,
+            overdueTrainerApplicants: counts.4,
+            overduePartnerEnquiries: counts.5
         )
     }
 
     private func adminLeadCount(
         session auth: AuthSession,
         pipeline: AdminLeadPipeline,
-        status: String
+        status: String,
+        createdBefore: Date? = nil
     ) async throws -> Int {
-        try await restCount(
+        var queryItems = [
+            URLQueryItem(name: "select", value: "id"),
+            URLQueryItem(name: "status", value: "eq.\(status)")
+        ]
+        if let createdBefore {
+            queryItems.append(
+                URLQueryItem(
+                    name: "created_at",
+                    value: "lt.\(ISO8601DateFormatter.standard.string(from: createdBefore))"
+                )
+            )
+        }
+        return try await restCount(
             path: "/rest/v1/\(pipeline.rawValue)",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id"),
-                URLQueryItem(name: "status", value: "eq.\(status)")
-            ],
+            queryItems: queryItems,
             auth: auth
         )
     }

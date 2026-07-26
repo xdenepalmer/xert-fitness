@@ -673,10 +673,16 @@ final class ModelsTests: XCTestCase {
         let counts = AdminLeadActionCounts(
             memberLeads: 4,
             trainerApplicants: 2,
-            partnerEnquiries: 1
+            partnerEnquiries: 1,
+            overdueMemberLeads: 1,
+            overdueTrainerApplicants: 0,
+            overduePartnerEnquiries: 2
         )
         XCTAssertEqual(counts.total, 7)
+        XCTAssertEqual(counts.overdueTotal, 3)
         XCTAssertEqual(counts.priorityPipeline, .members)
+        XCTAssertEqual(counts.overduePriorityPipeline, .partners)
+        XCTAssertEqual(counts.triagePipeline, .partners)
         XCTAssertEqual(
             AdminLeadActionCounts(
                 memberLeads: 0,

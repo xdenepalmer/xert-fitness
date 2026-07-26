@@ -1546,14 +1546,60 @@ struct AdminLeadActionCounts: Equatable {
     let memberLeads: Int
     let trainerApplicants: Int
     let partnerEnquiries: Int
+    let overdueMemberLeads: Int
+    let overdueTrainerApplicants: Int
+    let overduePartnerEnquiries: Int
+
+    init(
+        memberLeads: Int,
+        trainerApplicants: Int,
+        partnerEnquiries: Int,
+        overdueMemberLeads: Int = 0,
+        overdueTrainerApplicants: Int = 0,
+        overduePartnerEnquiries: Int = 0
+    ) {
+        self.memberLeads = memberLeads
+        self.trainerApplicants = trainerApplicants
+        self.partnerEnquiries = partnerEnquiries
+        self.overdueMemberLeads = overdueMemberLeads
+        self.overdueTrainerApplicants = overdueTrainerApplicants
+        self.overduePartnerEnquiries = overduePartnerEnquiries
+    }
 
     var total: Int { memberLeads + trainerApplicants + partnerEnquiries }
+    var overdueTotal: Int {
+        overdueMemberLeads + overdueTrainerApplicants + overduePartnerEnquiries
+    }
 
     var priorityPipeline: AdminLeadPipeline? {
+        Self.priorityPipeline(
+            members: memberLeads,
+            trainers: trainerApplicants,
+            partners: partnerEnquiries
+        )
+    }
+
+    var overduePriorityPipeline: AdminLeadPipeline? {
+        Self.priorityPipeline(
+            members: overdueMemberLeads,
+            trainers: overdueTrainerApplicants,
+            partners: overduePartnerEnquiries
+        )
+    }
+
+    var triagePipeline: AdminLeadPipeline? {
+        overduePriorityPipeline ?? priorityPipeline
+    }
+
+    private static func priorityPipeline(
+        members: Int,
+        trainers: Int,
+        partners: Int
+    ) -> AdminLeadPipeline? {
         let pipelines: [(pipeline: AdminLeadPipeline, count: Int)] = [
-            (.members, memberLeads),
-            (.trainers, trainerApplicants),
-            (.partners, partnerEnquiries)
+            (.members, members),
+            (.trainers, trainers),
+            (.partners, partners)
         ]
         return pipelines
             .filter { $0.count > 0 }

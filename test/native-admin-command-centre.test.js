@@ -351,8 +351,11 @@ test('native owner overview counts fresh lead work without downloading lead hist
   ]);
 
   assert.match(models, /struct AdminLeadActionCounts: Equatable[\s\S]*var total: Int/);
-  assert.match(models, /var priorityPipeline: AdminLeadPipeline\?[\s\S]*filter \{ \$0\.count > 0 \}[\s\S]*AdminLeadPipeline\.allCases\.firstIndex/);
+  assert.match(models, /var overdueTotal: Int[\s\S]*var overduePriorityPipeline: AdminLeadPipeline\?[\s\S]*var triagePipeline: AdminLeadPipeline\?/);
+  assert.match(models, /private static func priorityPipeline[\s\S]*filter \{ \$0\.count > 0 \}[\s\S]*AdminLeadPipeline\.allCases\.firstIndex/);
   assert.match(api, /func adminLeadActionCounts[\s\S]*pipeline: \.members, status: "new"[\s\S]*pipeline: \.trainers, status: "new"[\s\S]*pipeline: \.partners, status: "new"/);
+  assert.match(api, /overdueCutoff = Date\(\)\.addingTimeInterval\(-86_400\)[\s\S]*overdueMemberLeads[\s\S]*overdueTrainerApplicants[\s\S]*overduePartnerEnquiries/);
+  assert.match(api, /createdBefore: Date\? = nil[\s\S]*name: "created_at"[\s\S]*value: "lt\.\\\(ISO8601DateFormatter\.standard\.string\(from: createdBefore\)\)"/);
   assert.match(api, /private func restCount[\s\S]*request\.httpMethod = "HEAD"[\s\S]*"count=exact"[\s\S]*"Content-Range"/);
   assert.ok(
     (store.match(/async let leadActionCountRequest = api\.adminLeadActionCounts/g) || []).length === 2,
@@ -361,12 +364,16 @@ test('native owner overview counts fresh lead work without downloading lead hist
   assert.match(store, /leadActionCounts = try await leadActionCountRequest[\s\S]*successfulSources\.insert\("lead actions"\)/);
   assert.match(store, /let next = try await leadActionCountRequest[\s\S]*generation == operationalRefreshGeneration[\s\S]*leadActionCounts = next/);
   assert.match(store, /"activation actions", "orders", "PT requests", "lead actions"/);
-  assert.match(view, /title: "New lead enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads/);
+  assert.match(view, /title: "New lead enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads,[\s\S]*isCritical: \(admin\.leadActionCounts\?\.overdueTotal \?\? 0\) > 0/);
   assert.match(view, /counts\.memberLeads[\s\S]*counts\.trainerApplicants[\s\S]*counts\.partnerEnquiries/);
+  assert.match(view, /counts\.overdueTotal > 0[\s\S]*waiting 24h\+/);
   assert.match(view, /case \.leads:[\s\S]*admin\.leadActionCounts\?\.total/);
-  assert.match(view, /AdminLeadsView\([\s\S]*initialPipeline: admin\.leadActionCounts\?\.priorityPipeline[\s\S]*prioritizesNewWork: \(admin\.leadActionCounts\?\.total \?\? 0\) > 0/);
+  assert.match(view, /AdminLeadsView\([\s\S]*initialPipeline: admin\.leadActionCounts\?\.triagePipeline[\s\S]*prioritizesNewWork: \(admin\.leadActionCounts\?\.total \?\? 0\) > 0/);
   assert.match(view, /let initialStatus = prioritizesNewWork \? "new" : "all"[\s\S]*_pipeline = State\(initialValue: initialPipeline \?\? \.members\)[\s\S]*_status = State\(initialValue: initialStatus\)/);
   assert.match(view, /\.onChange\(of: pipeline\)[\s\S]*status = defaultStatus/);
+  assert.match(view, /if status == "new"[\s\S]*matches\.sorted \{ \$0\.created_at < \$1\.created_at \}/);
+  assert.match(view, /owner\.leads\.overdueSLA/);
+  assert.match(view, /private var pipelinePicker: some View[\s\S]*dynamicTypeSize\.isAccessibilitySize[\s\S]*pickerStyle\(\.menu\)[\s\S]*pickerStyle\(\.segmented\)/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {

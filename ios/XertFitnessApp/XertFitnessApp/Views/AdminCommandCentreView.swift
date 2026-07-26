@@ -2076,7 +2076,8 @@ struct AdminCommandCentreView: View {
                 detail: leadActionPriorityDetail,
                 icon: "person.2.badge.plus",
                 count: admin.leadActionCounts?.total ?? 0,
-                workspace: .leads
+                workspace: .leads,
+                isCritical: (admin.leadActionCounts?.overdueTotal ?? 0) > 0
             ),
             AdminPriorityAction(
                 title: "Retention follow-ups",
@@ -2183,6 +2184,9 @@ struct AdminCommandCentreView: View {
     private var leadActionPriorityDetail: String {
         guard let counts = admin.leadActionCounts else {
             return "Member, trainer and partner intake"
+        }
+        if counts.overdueTotal > 0 {
+            return "\(counts.overdueTotal) waiting 24h+ · \(counts.memberLeads) members · \(counts.trainerApplicants) trainers · \(counts.partnerEnquiries) partners"
         }
         return "\(counts.memberLeads) members · \(counts.trainerApplicants) trainers · \(counts.partnerEnquiries) partners"
     }
@@ -2627,7 +2631,7 @@ struct AdminCommandCentreView: View {
             AdminLeadsView(
                 admin: admin,
                 session: session,
-                initialPipeline: admin.leadActionCounts?.priorityPipeline,
+                initialPipeline: admin.leadActionCounts?.triagePipeline,
                 prioritizesNewWork: (admin.leadActionCounts?.total ?? 0) > 0
             )
         case .campaigns:
@@ -8988,6 +8992,7 @@ private struct AdminCampaignCSVDocument: FileDocument {
 }
 
 private struct AdminLeadsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     private let defaultStatus: String
@@ -9009,13 +9014,40 @@ private struct AdminLeadsView: View {
     }
     private var filteredLeads: [AdminLead] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return leads.filter { lead in
+        let matches = leads.filter { lead in
             (status == "all" || lead.effectiveStatus == status)
                 && (needle.isEmpty || lead.searchableText.contains(needle))
         }
+        if status == "new" {
+            return matches.sorted { $0.created_at < $1.created_at }
+        }
+        return matches
     }
     private var exportDateStamp: String {
         String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+    }
+
+    @ViewBuilder
+    private var pipelinePicker: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Picker("Lead pipeline", selection: $pipeline) {
+                pipelineOptions
+            }
+            .pickerStyle(.menu)
+            .tint(Color.xertSteel)
+        } else {
+            Picker("Lead pipeline", selection: $pipeline) {
+                pipelineOptions
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    @ViewBuilder
+    private var pipelineOptions: some View {
+        ForEach(AdminLeadPipeline.allCases) { option in
+            Text(option.shortLabel).tag(option)
+        }
     }
 
     init(
@@ -9042,14 +9074,20 @@ private struct AdminLeadsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.xertInk)
             }
+            if let counts = admin.leadActionCounts, counts.overdueTotal > 0 {
+                Label(
+                    "\(counts.overdueTotal) new enquiries have waited more than 24 hours. Oldest are shown first.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowBackground(Color.orange.opacity(0.08))
+                .accessibilityIdentifier("owner.leads.overdueSLA")
+            }
             Section {
-                Picker("Lead pipeline", selection: $pipeline) {
-                    ForEach(AdminLeadPipeline.allCases) { option in
-                        Text(option.shortLabel).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(admin.loadingLeadPipeline != nil)
+                pipelinePicker
+                    .disabled(admin.loadingLeadPipeline != nil)
 
                 Picker("Status", selection: $status) {
                     Text("All statuses").tag("all")
