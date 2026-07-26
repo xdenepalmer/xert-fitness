@@ -168,6 +168,8 @@ The Supabase schema is defined in:
 - `src/supabase/audit_immutability_account_deletion_fix.sql` — lets an account with audit
   history actually be deleted, by allowing the referential `on delete set null` update
   through the five audit-immutability triggers while still blocking any content change
+- `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
+  order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
