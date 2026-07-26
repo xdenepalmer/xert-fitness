@@ -1809,6 +1809,7 @@ export async function adminMemberDetail(userId) {
     if (r.error) throw new Error(r.error.message);
   }
   return {
+    memberId: userId,
     credits: credits.data || [],
     bookings: bookings.data || [],
     orders: orders.data || [],

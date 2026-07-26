@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]';
+const MODAL_SELECTOR = `${DIALOG_SELECTOR}, [role="alertdialog"][aria-modal="true"]`;
 const FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
   'a[href]',
@@ -72,6 +73,14 @@ export function useAdminDialogLayer(workspaceRef) {
 
     const trapFocus = event => {
       if (event.key !== 'Tab' || !activeDialog) return;
+      const foregroundModal = Array.from(document.querySelectorAll(MODAL_SELECTOR))
+        .filter(dialog => dialog instanceof HTMLElement
+          && !dialog.hidden
+          && dialog.getAttribute('aria-hidden') !== 'true')
+        .at(-1);
+      // Portalled Radix dialogs own their own focus scope. The underlying
+      // hand-built drawer must not intercept Tab while one is in front.
+      if (foregroundModal && foregroundModal !== activeDialog) return;
       const focusable = visibleFocusableElements(activeDialog);
       if (!focusable.length) {
         event.preventDefault();

@@ -42,3 +42,10 @@ test('custom admin dialogs receive initial focus and a complete tab boundary', (
   assert.match(layer, /first\.focus\(\)/);
   assert.match(layer, /activeDialog\.focus\(\)/);
 });
+
+test('portalled Radix confirmations own focus above a custom admin drawer', () => {
+  assert.match(layer, /role="alertdialog"/);
+  assert.match(layer, /document\.querySelectorAll\(MODAL_SELECTOR\)/);
+  assert.match(layer, /foregroundModal && foregroundModal !== activeDialog/);
+  assert.match(layer, /if \(foregroundModal && foregroundModal !== activeDialog\) return/);
+});
