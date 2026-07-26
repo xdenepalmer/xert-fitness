@@ -120,9 +120,16 @@ export async function getMyOrders() {
 }
 
 export async function getMemberAnnouncements() {
-  const { data, error } = await supabase.rpc('my_member_announcements');
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated notice inbox silently hid later
+  // class-cancel / booking-decision private notices from Account (iOS parity).
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc('my_member_announcements')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function dismissMemberAnnouncement(announcementId) {
@@ -135,15 +142,29 @@ export async function dismissMemberAnnouncement(announcementId) {
 // ─── Sessions & bookings ──────────────────────────────────────────────────────
 
 export async function getAvailableSessions() {
-  const { data, error } = await supabase.rpc('sessions_with_availability');
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated RPC result silently hid later
+  // bookable classes from /booking and Overview (iOS sessions() parity).
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc('sessions_with_availability')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getMyBookings() {
-  const { data, error } = await supabase.rpc('my_bookings');
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated Account booking list silently
+  // hid later places (incl. cancelable credit holds) from web + iPhone.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc('my_bookings')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getMyPrivateSessionRequests() {
@@ -298,11 +319,23 @@ export async function getCoaches() {
 }
 
 export async function getEvents() {
-  const { data, error } = await supabase.from('events').select('*').eq('published', true).order('event_date', { ascending: true });
+  // Page past PostgREST max_rows — a truncated public catalogue silently hid
+  // later published events from Events / train-for (admin getAllEvents parity).
   // Fail closed on fetch errors — returning the seed calendar over an outage
   // hid the failure and let members train-for events that are not in the DB.
-  if (error) throw new Error(error.message);
-  return data?.length ? sortEvents(data) : XERT_2026_EVENTS;
+  const data = await collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data: rows, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('published', true)
+      .order('event_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return rows || [];
+  });
+  return data.length ? sortEvents(data) : XERT_2026_EVENTS;
 }
 
 async function requireCurrentUserId() {
@@ -318,9 +351,20 @@ async function requireCurrentUserId() {
 
 export async function getMyEventGoals() {
   const userId = await requireCurrentUserId();
-  const { data, error } = await supabase.from('member_event_goals').select('event_id, created_at, events(id, name, category, event_date, end_date, location, region, url, published, sort_order)').eq('user_id', userId).order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated goals list silently hid later
+  // train-for selections from Account / Events (iOS eventGoals parity).
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('member_event_goals')
+      .select('event_id, created_at, events(id, name, category, event_date, end_date, location, region, url, published, sort_order)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .order('event_id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function addMyEventGoal(eventId) {

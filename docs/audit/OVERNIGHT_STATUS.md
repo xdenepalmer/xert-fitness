@@ -8,6 +8,12 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Member booking surfaces + Ops Health class silence (app-only tip after
+  **26124**): `/booking` + iPhone Book `sessions_with_availability`, Account
+  `my_bookings` / member notices, public Events + train-for goals, and Ops
+  Health “Bookable launch classes” page past PostgREST `max_rows` so later
+  bookable classes, cancelable places, private notices and published events
+  cannot vanish (and launch readiness cannot undercount bookable classes).
 - Member service history + schedule/events silence (**26124** + app tip): Member
   drawer staff notes and private notices page past the old hard 100 / 50 RPC
   cuts so later coaching/billing notes and class-cancel / booking-decision
@@ -288,6 +294,10 @@ were **not** built.
    Member drawer with >100 staff notes / >50 private notices still lists every
    row. Availability / blackouts / Events with >1000 rows still list every row.
    Seed calendar with a large existing events table does not re-insert seeds.
+   `/booking` / iPhone Book with >1000 upcoming classes still lists every class;
+   Account with many bookings/notices/goals still lists every row; public Events
+   with >1000 published rows still lists every event; Ops Health bookable-class
+   count matches the full upcoming public catalogue.
 
 ---
 
@@ -737,6 +747,17 @@ Migration / operator mirror:
 `admin_member_notes_upgrade` / `targeted_member_notices_upgrade` /
 `admin_cms_schema` aligned). Apply through **26124**.
 
+### 46. This batch — member booking surfaces + Ops Health class silence
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (money/bookings) | `sessions_with_availability` (web `/booking` + iPhone Book) hit PostgREST `max_rows` with no Range/offset loop — later upcoming classes vanished from the bookable list | Page via `collectAdminBatches` / iOS limit+offset on the RPC |
+| Silent failure (money) | `my_bookings` uncapped — Account booking history (incl. cancelable credit holds) truncated without warning | Same Range/offset paging (web + iPhone) |
+| Silent failure (privacy/ops) | `my_member_announcements` uncapped — later class-cancel / booking-decision private notices vanished from the member inbox | Same paging (web + iPhone) |
+| Silent failure (ops) | Public `getEvents` / iOS `events` and member event goals uncapped while admin Events already paged — later published events / train-for goals vanished | `collectAdminBatches` / iOS offset page at 500 |
+| Silent failure (ops/launch) | Ops Health “Bookable launch classes” used a single uncapped select — could undercount or miss every bookable class past `max_rows` | Page with `collectAdminBatches` |
+
+No new migration for this batch (app-only tip). Apply through **26124** remains current.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -1044,3 +1065,7 @@ show `installed = true` and `release_ready = true`, including
     private notices page past the old 100 / 50 cuts (**26124**); Availability /
     blackouts / Events (web + iPhone) page past max_rows; event seed inventory
     pages so seed re-insert cannot duplicate existing calendar rows.
+45. **Member booking surfaces + Ops Health class silence** — With >1000 upcoming
+    public classes, `/booking` / iPhone Book still list every class; Account
+    bookings/notices/goals and public Events page past max_rows; Ops Health
+    bookable-class count matches the full upcoming public catalogue.

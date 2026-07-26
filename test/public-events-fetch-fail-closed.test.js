@@ -13,5 +13,7 @@ test('getEvents fails closed on fetch errors instead of painting the seed calend
   assert.match(block, /if \(error\) throw new Error\(error\.message\)/);
   assert.doesNotMatch(block, /if \(error\) return XERT_2026_EVENTS/);
   // Empty catalogue may still fall back to the seed calendar for soft launch.
-  assert.match(block, /data\?\.length \? sortEvents\(data\) : XERT_2026_EVENTS/);
+  assert.match(block, /data\.length \? sortEvents\(data\) : XERT_2026_EVENTS/);
+  // Page past PostgREST max_rows so later published events cannot vanish.
+  assert.match(block, /collectAdminBatches/);
 });

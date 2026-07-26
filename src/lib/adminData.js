@@ -1880,13 +1880,21 @@ export async function getOperationsHealth() {
     }),
 
     healthCheck('classes', 'Bookable launch classes', async () => {
-      const { data, error } = await supabase.from('class_sessions')
-        .select('id, booking_mode, capacity')
-        .eq('status', 'published')
-        .eq('public_visible', true)
-        .gte('start_time', nowIso);
-      if (error) throw error;
-      const sessions = data || [];
+      // Page past PostgREST max_rows — a truncated sample could miss every
+      // bookable class (false "No upcoming") or undercount launch readiness.
+      const sessions = await collectAdminBatches(async (page, pageSize) => {
+        const from = (page - 1) * pageSize;
+        const { data, error } = await supabase.from('class_sessions')
+          .select('id, booking_mode, capacity')
+          .eq('status', 'published')
+          .eq('public_visible', true)
+          .gte('start_time', nowIso)
+          .order('start_time', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        return data || [];
+      });
       const actionable = sessions.filter(session => (
         ['instant_book', 'request_to_book'].includes(session.booking_mode || 'instant_book')
         && Number.isInteger(session.capacity)

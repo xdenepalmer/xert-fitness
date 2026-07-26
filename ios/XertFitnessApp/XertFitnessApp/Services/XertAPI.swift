@@ -153,29 +153,70 @@ final class XertAPI {
     }
 
     func sessions() async throws -> [ClassSession] {
-        try await rpc(path: "sessions_with_availability", body: EmptyBody())
+        // Page past PostgREST max_rows — a truncated RPC result silently hid
+        // later bookable classes from Book (web getAvailableSessions parity).
+        let pageSize = 500
+        var offset = 0
+        var sessions: [ClassSession] = []
+        while true {
+            let page: [ClassSession] = try await rpc(
+                path: "sessions_with_availability",
+                body: EmptyBody(),
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ]
+            )
+            sessions.append(contentsOf: page)
+            if page.count < pageSize { return sessions }
+            offset += pageSize
+        }
     }
 
     func events() async throws -> [EventItem] {
-        try await restRequest(
-            path: "/rest/v1/events",
-            queryItems: [
-                URLQueryItem(name: "select", value: "*"),
-                URLQueryItem(name: "published", value: "eq.true"),
-                URLQueryItem(name: "order", value: "event_date.asc,sort_order.asc")
-            ]
-        )
+        // Page past PostgREST max_rows — a truncated public catalogue silently
+        // hid later published events from Explore / train-for (adminEvents parity).
+        let pageSize = 500
+        var offset = 0
+        var events: [EventItem] = []
+        while true {
+            let page: [EventItem] = try await restRequest(
+                path: "/rest/v1/events",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "*"),
+                    URLQueryItem(name: "published", value: "eq.true"),
+                    URLQueryItem(name: "order", value: "event_date.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ]
+            )
+            events.append(contentsOf: page)
+            if page.count < pageSize { return events }
+            offset += pageSize
+        }
     }
 
     func eventGoals(session auth: AuthSession) async throws -> [EventGoal] {
-        try await restRequest(
-            path: "/rest/v1/member_event_goals",
-            queryItems: [
-                URLQueryItem(name: "select", value: "event_id"),
-                URLQueryItem(name: "order", value: "created_at.desc")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated goals list silently hid
+        // later train-for selections from Account (web getMyEventGoals parity).
+        let pageSize = 500
+        var offset = 0
+        var goals: [EventGoal] = []
+        while true {
+            let page: [EventGoal] = try await restRequest(
+                path: "/rest/v1/member_event_goals",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "event_id"),
+                    URLQueryItem(name: "order", value: "created_at.desc,event_id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ],
+                auth: auth
+            )
+            goals.append(contentsOf: page)
+            if page.count < pageSize { return goals }
+            offset += pageSize
+        }
     }
 
     func addEventGoal(session auth: AuthSession, eventID: UUID) async throws {
@@ -313,7 +354,25 @@ final class XertAPI {
     }
 
     func announcements(session auth: AuthSession) async throws -> [MemberAnnouncement] {
-        try await rpc(path: "my_member_announcements", body: EmptyBody(), auth: auth)
+        // Page past PostgREST max_rows — a truncated notice inbox silently hid
+        // later class-cancel / booking-decision notices (web getMemberAnnouncements parity).
+        let pageSize = 500
+        var offset = 0
+        var rows: [MemberAnnouncement] = []
+        while true {
+            let page: [MemberAnnouncement] = try await rpc(
+                path: "my_member_announcements",
+                body: EmptyBody(),
+                auth: auth,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ]
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func dismissAnnouncement(session auth: AuthSession, announcementID: UUID) async throws {
@@ -2071,7 +2130,25 @@ final class XertAPI {
     }
 
     func bookings(session auth: AuthSession) async throws -> [BookingItem] {
-        try await rpc(path: "my_bookings", body: EmptyBody(), auth: auth)
+        // Page past PostgREST max_rows — a truncated Account booking list
+        // silently hid later places (web getMyBookings parity).
+        let pageSize = 500
+        var offset = 0
+        var rows: [BookingItem] = []
+        while true {
+            let page: [BookingItem] = try await rpc(
+                path: "my_bookings",
+                body: EmptyBody(),
+                auth: auth,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset)),
+                ]
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func privateSessionRequests(session auth: AuthSession) async throws -> [PrivateSessionStatusItem] {
@@ -2242,9 +2319,14 @@ final class XertAPI {
     private func rpc<T: Decodable, Body: Encodable>(
         path: String,
         body: Body,
-        auth: AuthSession? = nil
+        auth: AuthSession? = nil,
+        queryItems: [URLQueryItem] = []
     ) async throws -> T {
-        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/rpc/\(path)")
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/rpc/\(path)",
+            queryItems: queryItems
+        )
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
