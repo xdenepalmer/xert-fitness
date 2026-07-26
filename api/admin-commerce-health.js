@@ -449,9 +449,10 @@ export function stripeIncidentResolution(errorCode) {
 
 export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const staleBefore = now.getTime() - 10 * 60 * 1000;
+  const staleBeforeTime = now.getTime() - 10 * 60 * 1000;
+  const staleBefore = new Date(staleBeforeTime).toISOString();
   const fields = 'event_id,event_type,status,attempts,order_id,last_received_at,last_error_code';
-  const [recentResult, reviewResult] = await Promise.all([
+  const [recentResult, failedResult, stalledResult] = await Promise.all([
     admin
       .from('stripe_webhook_events')
       .select(fields)
@@ -462,11 +463,17 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       .from('stripe_webhook_events')
       .select(fields)
       .eq('status', 'failed')
-      .in('last_error_code', STRIPE_OPERATOR_REVIEW_CODES)
+      .order('last_received_at', { ascending: false })
+      .limit(100),
+    admin
+      .from('stripe_webhook_events')
+      .select(fields)
+      .eq('status', 'processing')
+      .lt('last_received_at', staleBefore)
       .order('last_received_at', { ascending: false })
       .limit(100),
   ]);
-  if (recentResult.error || reviewResult.error) {
+  if (recentResult.error || failedResult.error || stalledResult.error) {
     return {
       ready: false, available: false, received: 0, failed: 0,
       stale_processing: 0, retries: 0, incidents: [],
@@ -474,19 +481,24 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     };
   }
   const rows = recentResult.data || [];
-  const reviewRows = reviewResult.data || [];
-  const incidentRows = [...reviewRows, ...rows].filter((row, index, all) => (
-    all.findIndex(candidate => candidate.event_id === row.event_id) === index
-  ));
+  const failedRows = failedResult.data || [];
+  const stalledRows = stalledResult.data || [];
+  const incidentRows = [...failedRows, ...stalledRows, ...rows]
+    .filter((row, index, all) => (
+      all.findIndex(candidate => candidate.event_id === row.event_id) === index
+    ))
+    .sort((left, right) => (
+      Date.parse(right.last_received_at || '') - Date.parse(left.last_received_at || '')
+    ));
   const failed = incidentRows.filter(row => row.status === 'failed').length;
-  const staleProcessing = rows.filter(row => (
-    row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore
+  const staleProcessing = incidentRows.filter(row => (
+    row.status === 'processing' && Date.parse(row.last_received_at) < staleBeforeTime
   )).length;
   const retries = rows.reduce((total, row) => total + Math.max(0, Number(row.attempts || 0) - 1), 0);
   const incidents = incidentRows
     .filter(row => (
       row.status === 'failed'
-      || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore)
+      || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBeforeTime)
     ))
     .slice(0, 10)
     .map(row => {
@@ -506,8 +518,9 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       };
     });
   const recentTruncated = rows.length === 500;
-  const reviewTruncated = reviewRows.length === 100;
-  const truncated = recentTruncated || reviewTruncated;
+  const failedTruncated = failedRows.length === 100;
+  const stalledTruncated = stalledRows.length === 100;
+  const truncated = recentTruncated || failedTruncated || stalledTruncated;
   const ready = failed === 0 && staleProcessing === 0 && !truncated;
   return {
     ready,
@@ -517,8 +530,8 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     stale_processing: staleProcessing,
     retries,
     incidents,
-    issue: reviewTruncated
-      ? 'The unresolved Stripe operator review queue reached its safety limit.'
+    issue: failedTruncated || stalledTruncated
+      ? 'The unresolved Stripe delivery queue reached its safety limit.'
       : recentTruncated
         ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
       : failed > 0

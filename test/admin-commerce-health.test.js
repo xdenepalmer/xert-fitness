@@ -106,6 +106,7 @@ function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
           select() { return query; },
           gte() { return query; },
           eq() { return query; },
+          lt() { return query; },
           in() { return query; },
           order() { return query; },
           async limit() { return { data: webhookRows, error: null }; },
@@ -628,7 +629,7 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
       const rows = queryNumber === 1 ? [] : [oldReview];
       const query = {
         select() { return query; }, gte() { return query; }, eq() { return query; },
-        in() { return query; }, order() { return query; },
+        in() { return query; }, lt() { return query; }, order() { return query; },
         async limit() { return { data: rows, error: null }; },
       };
       return query;
@@ -639,6 +640,68 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
   assert.equal(result.failed, 1);
   assert.equal(result.ready, false);
   assert.equal(result.incidents[0].event_id, oldReview.event_id);
+});
+
+test('every checkout-blocking delivery remains visible and recoverable after 24 hours', async () => {
+  const oldFailure = {
+    event_id: 'evt_old_fulfilment_failure',
+    event_type: 'checkout.session.completed',
+    status: 'failed',
+    attempts: 4,
+    order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2',
+    last_received_at: '2026-07-10T05:59:00.000Z',
+    last_error_code: 'DATABASE_TIMEOUT',
+  };
+  const oldStall = {
+    event_id: 'evt_old_processing',
+    event_type: 'checkout.session.async_payment_succeeded',
+    status: 'processing',
+    attempts: 2,
+    order_id: null,
+    last_received_at: '2026-07-10T06:00:00.000Z',
+    last_error_code: null,
+  };
+  const queryRows = [[], [oldFailure], [oldStall]];
+  const calls = [];
+  const admin = {
+    from(table) {
+      assert.equal(table, 'stripe_webhook_events');
+      const rows = queryRows.shift() || [];
+      const query = {
+        select() { return query; },
+        gte(column, value) { calls.push(['gte', column, value]); return query; },
+        eq(column, value) { calls.push(['eq', column, value]); return query; },
+        lt(column, value) { calls.push(['lt', column, value]); return query; },
+        order() { return query; },
+        async limit(value) { calls.push(['limit', value]); return { data: rows, error: null }; },
+      };
+      return query;
+    },
+  };
+
+  const result = await inspectWebhookDeliveryHealth(
+    admin,
+    new Date('2026-07-16T06:00:00.000Z'),
+  );
+
+  assert.equal(result.ready, false);
+  assert.equal(result.received, 0);
+  assert.equal(result.failed, 1);
+  assert.equal(result.stale_processing, 1);
+  assert.deepEqual(result.incidents.map(incident => incident.event_id), [
+    oldStall.event_id,
+    oldFailure.event_id,
+  ]);
+  assert.deepEqual(calls.filter(call => call[0] === 'eq'), [
+    ['eq', 'status', 'failed'],
+    ['eq', 'status', 'processing'],
+  ]);
+  assert.deepEqual(calls.find(call => call[0] === 'lt'), [
+    'lt',
+    'last_received_at',
+    '2026-07-16T05:50:00.000Z',
+  ]);
+  assert.deepEqual(calls.filter(call => call[0] === 'limit').map(call => call[1]), [500, 100, 100]);
 });
 
 test('Stripe review resolution is confirmed, allow-listed, and compare-and-set', async () => {
@@ -969,7 +1032,8 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(source, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
   assert.match(source, /if \(reviewResolution\)[\s\S]*resolveStripeOperatorReview\(admin, reviewResolution\)[\s\S]*actorId: user\.id/);
   assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.eq\('last_error_code', review\.errorCode\)/);
-  assert.match(source, /\.in\('last_error_code', STRIPE_OPERATOR_REVIEW_CODES\)/);
+  assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.limit\(100\)/);
+  assert.match(source, /\.eq\('status', 'processing'\)[\s\S]*\.lt\('last_received_at', staleBefore\)/);
   assert.match(source, /createClient\(SUPABASE_URL, SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /global: \{ headers: \{ Authorization: `Bearer \$\{token\}` \} \}/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);
