@@ -2019,6 +2019,7 @@ struct AdminCommandCentreView: View {
                 icon: "ticket",
                 count: pricingAttentionCount,
                 workspace: .products,
+                task: singlePricingAttentionTask,
                 isCritical: admin.settings?.payments_enabled == true
             ),
             AdminPriorityAction(
@@ -2026,7 +2027,8 @@ struct AdminCommandCentreView: View {
                 detail: "Confirm or decline member places",
                 icon: "person.crop.circle.badge.questionmark",
                 count: admin.requestedPlaces,
-                workspace: .bookingRequests
+                workspace: .bookingRequests,
+                task: singleBookingRequestClassTask
             ),
             AdminPriorityAction(
                 title: "Class setup gaps",
@@ -2057,14 +2059,16 @@ struct AdminCommandCentreView: View {
                 detail: "Review queues and available places",
                 icon: "person.2.badge.clock",
                 count: admin.waitingMembers,
-                workspace: .classDesk
+                workspace: .classDesk,
+                task: singleWaitlistClassTask
             ),
             AdminPriorityAction(
                 title: "Retention follow-ups",
                 detail: "Contact members who need support",
                 icon: "phone.arrow.up.right",
                 count: admin.followUps.count,
-                workspace: .retention
+                workspace: .retention,
+                task: singleRetentionTask
             ),
             AdminPriorityAction(
                 title: "Orders to reconcile",
@@ -2072,6 +2076,7 @@ struct AdminCommandCentreView: View {
                 icon: "arrow.triangle.2.circlepath.circle",
                 count: admin.orders.lazy.filter(\.isRecoverable).count,
                 workspace: .orders,
+                task: singleRecoverableOrderTask,
                 isCritical: true
             ),
         ]
@@ -2107,10 +2112,47 @@ struct AdminCommandCentreView: View {
         return admin.products.filter { $0.active && !$0.hasStableStripePriceID }.count
     }
 
+    private var singlePricingAttentionTask: XertOwnerTask? {
+        guard !admin.refreshUnavailableSources.contains("session packs") else { return nil }
+        let unlinkedActiveProducts = admin.products.filter { $0.active && !$0.hasStableStripePriceID }
+        if unlinkedActiveProducts.count == 1, let product = unlinkedActiveProducts.first {
+            return .product(product.id)
+        }
+        guard !admin.products.contains(where: \.active),
+              admin.products.count == 1,
+              let draft = admin.products.first else { return nil }
+        return .product(draft.id)
+    }
+
+    private var singleBookingRequestClassTask: XertOwnerTask? {
+        let affectedClasses = admin.dailyOperations.filter {
+            $0.requested_count + $0.public_request_count > 0
+        }
+        guard affectedClasses.count == 1, let operation = affectedClasses.first else { return nil }
+        return .classSession(operation.id)
+    }
+
     private var singleAttendanceTask: XertOwnerTask? {
         let due = admin.dailyOperations.filter(\.attendance_due)
         guard due.count == 1, let operation = due.first else { return nil }
         return .classSession(operation.id)
+    }
+
+    private var singleWaitlistClassTask: XertOwnerTask? {
+        let affectedClasses = admin.waitlist.filter { $0.waitlist_count > 0 }
+        guard affectedClasses.count == 1, let item = affectedClasses.first else { return nil }
+        return .classSession(item.session_id)
+    }
+
+    private var singleRetentionTask: XertOwnerTask? {
+        guard admin.followUps.count == 1, let followUp = admin.followUps.first else { return nil }
+        return .member(followUp.id)
+    }
+
+    private var singleRecoverableOrderTask: XertOwnerTask? {
+        let recoverableOrders = admin.orders.filter(\.isRecoverable)
+        guard recoverableOrders.count == 1, let order = recoverableOrders.first else { return nil }
+        return .order(order.id)
     }
 
     private var attendancePriorityRoute: XertOwnerRoute {
@@ -13632,6 +13674,10 @@ private struct AdminPriorityAction: Identifiable {
         task.map { XertOwnerRoute(task: $0) } ?? XertOwnerRoute(workspace: workspace)
     }
 
+    var actionTitle: String {
+        task == nil ? "Open workspace" : "Open exact task"
+    }
+
     var id: String { "\(route.restorationValue):\(title)" }
 }
 
@@ -13671,7 +13717,7 @@ private struct AdminPriorityRow: View {
                                 .foregroundStyle(Color.red)
                         }
                         Spacer()
-                        Label("Open workspace", systemImage: "arrow.right")
+                        Label(priority.actionTitle, systemImage: "arrow.right")
                             .foregroundStyle(Color.xertSteel)
                     }
                     .font(.caption.weight(.bold))
@@ -13683,7 +13729,7 @@ private struct AdminPriorityRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(priority.isCritical ? "Critical, " : "")\(priority.title), \(priority.count)")
-        .accessibilityHint(priority.detail)
+        .accessibilityHint("\(priority.detail). \(priority.actionTitle).")
     }
 
     private var priorityIcon: some View {

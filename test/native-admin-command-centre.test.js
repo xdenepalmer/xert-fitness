@@ -305,6 +305,8 @@ test('native owner dashboard consolidates live priorities into actionable worksp
     assert.match(view, new RegExp(`workspace: \\.${destination}`));
   }
   assert.match(view, /openOwnerRouteWithFeedback\(priority\.route\)/);
+  assert.match(view, /var actionTitle: String \{\s*task == nil \? "Open workspace" : "Open exact task"/);
+  assert.match(view, /Label\(priority\.actionTitle, systemImage: "arrow\.right"\)/);
   assert.match(view, /All operational queues are clear/);
   assert.match(view, /case \.idle, \.loading:[\s\S]*Checking operational queues/);
   assert.match(view, /case \.partial\(let unavailableSources\)/);
@@ -312,6 +314,26 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   assert.match(view, /Button \{\s*openWorkspaceWithFeedback\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
   assert.match(view, /private func adminHeading\(_ title: String\)[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
+});
+
+test('native owner priorities open the exact protected task when one workload is affected', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const priorities = view.slice(
+    view.indexOf('private var operationalPriorities: [AdminPriorityAction]'),
+    view.indexOf('private var attendancePriorityRoute: XertOwnerRoute'),
+  );
+
+  assert.match(priorities, /title: "Pack sales setup"[\s\S]*task: singlePricingAttentionTask/);
+  assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestClassTask/);
+  assert.match(priorities, /title: "Waitlisted members"[\s\S]*task: singleWaitlistClassTask/);
+  assert.match(priorities, /title: "Retention follow-ups"[\s\S]*task: singleRetentionTask/);
+  assert.match(priorities, /title: "Orders to reconcile"[\s\S]*task: singleRecoverableOrderTask/);
+
+  assert.match(priorities, /private var singlePricingAttentionTask:[\s\S]*return \.product\(product\.id\)[\s\S]*return \.product\(draft\.id\)/);
+  assert.match(priorities, /private var singleBookingRequestClassTask:[\s\S]*requested_count \+ \$0\.public_request_count > 0[\s\S]*return \.classSession\(operation\.id\)/);
+  assert.match(priorities, /private var singleWaitlistClassTask:[\s\S]*\$0\.waitlist_count > 0[\s\S]*return \.classSession\(item\.session_id\)/);
+  assert.match(priorities, /private var singleRetentionTask:[\s\S]*admin\.followUps\.count == 1[\s\S]*return \.member\(followUp\.id\)/);
+  assert.match(priorities, /private var singleRecoverableOrderTask:[\s\S]*admin\.orders\.filter\(\\\.isRecoverable\)[\s\S]*return \.order\(order\.id\)/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {
