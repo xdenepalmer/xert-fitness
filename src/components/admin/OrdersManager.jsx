@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { getAllOrders, reconcileOrder, refundOrder } from '@/lib/adminData';
@@ -38,6 +38,8 @@ export default function OrdersManager() {
   const [refundConfirmation, setRefundConfirmation] = useState('');
   const [refunding, setRefunding] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  // Same-paint double-click must not fire two Stripe reconciles.
+  const reconcileLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -101,7 +103,8 @@ export default function OrdersManager() {
 
   const submitReconciliation = async () => {
     const orderId = selectedOrder?.id;
-    if (!orderId) return;
+    if (!orderId || reconcileLockRef.current || reconciling) return;
+    reconcileLockRef.current = true;
     setReconciling(true);
     try {
       const result = await reconcileOrder(orderId);
@@ -112,15 +115,18 @@ export default function OrdersManager() {
           : result.already_paid ? 'Fulfilment verified' : 'Payment reconciled',
         description: expired
           ? 'Stripe confirms no payment was taken. The pending order is now closed without granting credits.'
-          : result.buyer_deleted || Number(result.credits_granted || 0) === 0
+          : result.buyer_deleted
             ? 'Payment settled without granting credits — the buying account is gone.'
-            : `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
+            : result.already_paid || Number(result.credits_granted || 0) === 0
+              ? 'Stripe fulfilment matches this order. No new credits were granted.'
+              : `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
       });
       setSelectedOrder(null);
       await load();
     } catch (error) {
       toast({ title: 'Reconciliation stopped', description: error.message, variant: 'destructive' });
     } finally {
+      reconcileLockRef.current = false;
       setReconciling(false);
     }
   };

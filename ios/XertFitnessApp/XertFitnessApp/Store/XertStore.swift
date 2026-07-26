@@ -547,13 +547,18 @@ final class XertStore: ObservableObject {
                             enabled: false
                         )
                         PendingPushUnregisterStore.clear()
+                        // Only revoke the JWT after unregister succeeds. Signing
+                        // out first poisoned launch retries with a dead token.
+                        try? await api.signOut(session: currentSession)
                     } catch {
                         PendingPushUnregisterStore.save(
                             PendingPushUnregister(session: currentSession, token: pushToken)
                         )
+                        // Keep the refresh token alive for flushPendingPushUnregister.
                     }
+                } else {
+                    try? await api.signOut(session: currentSession)
                 }
-                try? await api.signOut(session: currentSession)
             }
         }
     }
@@ -917,12 +922,25 @@ final class XertStore: ObservableObject {
     private func flushPendingPushUnregister() async {
         guard let pending = PendingPushUnregisterStore.load() else { return }
         do {
-            try await api.updatePushSubscription(
-                session: pending.session,
-                token: pending.token,
-                enabled: false
-            )
+            var session = pending.session
+            do {
+                try await api.updatePushSubscription(
+                    session: session,
+                    token: pending.token,
+                    enabled: false
+                )
+            } catch let error as APIError where error.statusCode == 401 {
+                // Access token may have expired while the refresh token was kept
+                // alive for this retry. Refresh, then unregister, then revoke.
+                session = try await api.refresh(session: session)
+                try await api.updatePushSubscription(
+                    session: session,
+                    token: pending.token,
+                    enabled: false
+                )
+            }
             PendingPushUnregisterStore.clear()
+            try? await api.signOut(session: session)
         } catch {
             // Keep the pending record for the next launch.
         }

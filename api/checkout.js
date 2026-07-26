@@ -418,9 +418,14 @@ export function assertStripePriceMatchesProduct(product, stripePrice, expectedLi
 export function reusableCheckoutURL(checkout, user, product, options = {}) {
   const metadata = checkout?.metadata || {};
   const expectedLivemode = options.stripeMode === 'live';
+  const expectedOriginContext = options.returnTarget === 'ios' ? 'mobile_app' : 'web';
   const url = (() => {
     try { return new URL(checkout?.url || ''); } catch { return null; }
   })();
+  // After CHECKOUT_ATTEMPT_STALE, idempotency can leave an open session whose
+  // success/cancel URLs no longer match this deployment. Reuse must apply the
+  // same return-URL contract as verifiedCreatedCheckoutURL or the member pays
+  // into a handoff the current app can no longer confirm.
   if (
     checkout?.status !== 'open'
     || checkout?.payment_status !== 'unpaid'
@@ -438,6 +443,9 @@ export function reusableCheckoutURL(checkout, user, product, options = {}) {
     || metadata.validity_days !== String(product?.validity_days)
     || metadata.return_target !== options.returnTarget
     || metadata.checkout_contract !== CHECKOUT_CONTRACT_VERSION
+    || checkout.origin_context !== expectedOriginContext
+    || checkout.success_url !== options.returnURLs?.success
+    || checkout.cancel_url !== options.returnURLs?.cancel
     || String(checkout.customer_email || '').trim().toLowerCase() !== options.memberEmail
     || checkout.amount_total !== product?.price_cents
     || String(checkout.currency || '').toLowerCase() !== String(product?.currency || '').toLowerCase()
@@ -543,7 +551,8 @@ export function verifiedCreatedCheckoutURL(checkout, user, product, options = {}
 }
 
 async function findReusableCheckout({
-  admin, stripe, user, product, returnTarget, stripeMode, memberEmail, now = new Date(),
+  admin, stripe, user, product, returnTarget, returnURLs, stripeMode, memberEmail,
+  now = new Date(),
 }) {
   const cutoff = new Date(now.getTime() - REUSABLE_CHECKOUT_WINDOW_MS).toISOString();
   const { data, error } = await admin
@@ -565,7 +574,7 @@ async function findReusableCheckout({
     try {
       const checkout = await stripe.checkout.sessions.retrieve(order.stripe_checkout_session_id);
       const url = reusableCheckoutURL(checkout, user, product, {
-        returnTarget, stripeMode, memberEmail,
+        returnTarget, returnURLs, stripeMode, memberEmail,
       });
       if (url) return { url, checkoutSessionID: checkout.id };
     } catch {
@@ -573,6 +582,21 @@ async function findReusableCheckout({
     }
   }
   return null;
+}
+
+/**
+ * After CHECKOUT_ATTEMPT_STALE, the Stripe session is unusable for this attempt
+ * id. Close any matching pending order so findReusableCheckout cannot hand the
+ * member a poisoned open session on the next mint.
+ */
+export async function closeStaleCheckoutAttemptOrder(admin, checkoutSessionID) {
+  if (!checkoutSessionID || !admin) return;
+  const { error } = await admin
+    .from('orders')
+    .update({ status: 'failed' })
+    .eq('stripe_checkout_session_id', checkoutSessionID)
+    .eq('status', 'pending');
+  if (error) throw error;
 }
 
 /**
@@ -774,6 +798,7 @@ export default async function handler(request, response) {
       user,
       product,
       returnTarget,
+      returnURLs,
       stripeMode,
       memberEmail: receiptDetails.email,
     });
@@ -838,9 +863,12 @@ export default async function handler(request, response) {
         checkoutAttemptID,
       });
     } catch (error) {
-      // Idempotency can replay a session we previously expired. Tell the client
-      // to mint a fresh attempt id instead of looping on the dead key.
+      // Idempotency can replay a session we previously expired / whose return
+      // URLs no longer match. Expire it, close any pending order row, and tell
+      // the client to mint a fresh attempt id instead of looping on the dead key
+      // or reusing the poisoned session via findReusableCheckout.
       await stripe.checkout.sessions.expire(session.id).catch(() => {});
+      await closeStaleCheckoutAttemptOrder(admin, session.id).catch(() => {});
       const staleError = /** @type {Error & { code?: string }} */ (
         new Error('Checkout attempt is no longer usable.')
       );

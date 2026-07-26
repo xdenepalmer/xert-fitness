@@ -3,12 +3,20 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726115000_waitlist_skip_notice_accuracy.sql` (**26115**). This latest
-batch is **app-only** (no new SQL) — tip commit on
-`cursor/xert-audit-continuation-8c8e` (see git log). Staff roles were **not**
-built.
+`20260726116000_member_interest_health_reveal_authz.sql` (**26116**). Tip
+commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
+were **not** built.
 
 **What was made safer overnight (plain English)**
+- Admin “Check Stripe Outcome” cannot double-fire on the same paint; concurrent
+  reconcile no longer claims a second credit grant; audit markers only stamp
+  paid rows (refund races fail closed).
+- After `CHECKOUT_ATTEMPT_STALE`, reusable checkout cannot hand back a session
+  with stale return URLs; the poisoned pending order is closed as failed.
+- Member-interest injury columns are no longer directly selectable by admins;
+  reveal goes through the audited RPC only (`member_interest_health_reveal_authz`).
+- iPhone push unregister on sign-out keeps the refresh token when unregister
+  fails, and launch retry refreshes then unregisters before remote sign-out.
 - Overview quick actions open Create Class / Coach / Event (same as ⌘K) and
   still go through the unsaved-changes guard; iPhone Overview class/notice
   sheets refuse swipe-dismiss of dirty drafts.
@@ -62,16 +70,17 @@ built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726115000_waitlist_skip_notice_accuracy.sql` (**26115** — full list +
-   command examples below). Latest tip is app-only (no new SQL).
+   `20260726116000_member_interest_health_reveal_authz.sql` (**26116** — full
+   list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
-   `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`
-   (26115*).
+   `member_interest_health_reveal_authz` (26116*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
    enable bookings only when Ops Health shows the booking-switch guard;
    with bookings paused, `/timetable` footer + sticky Book stay off and
-   `/booking` class rows show Register interest.
+   `/booking` class rows show Register interest. Lead health Reveal on a
+   consented injury writes an audit row; direct PostgREST select of injuries
+   fails.
 
 ---
 
@@ -246,6 +255,18 @@ No new migration for this batch (app-only tip after `45e2b8e`).
 
 No new migration for this batch (app-only tip).
 
+### 19. This batch — reconcile race, stale checkout reuse, health reveal authz, push unregister retry
+| Area | Defect | Fix |
+|---|---|---|
+| Admin reconcile | Concurrent double reconcile / refund race could stamp audit on non-paid rows and claim pack credits again; UI same-paint double-click | Audit update requires `status='paid'`; `credits_granted` from `credit_created`; `reconcileLockRef` |
+| Checkout reuse after STALE | `reusableCheckoutURL` ignored success/cancel URLs / origin_context, so a poisoned open session could be reused after `CHECKOUT_ATTEMPT_STALE` | Match return-URL contract on reuse; `closeStaleCheckoutAttemptOrder` marks pending failed |
+| Member-interest health | Admins could `SELECT` injuries directly despite the reveal RPC | Column lockdown + audited `member_interest_health_reveals`; capability `member_interest_health_reveal_authz` |
+| iOS push unregister | Failed unregister then `signOut` revoked the JWT, so launch retry always 401’d and private pushes kept targeting the device | Save pending without remote sign-out; flush refreshes on 401 then unregisters then signs out |
+
+Migration / operator mirror:
+`supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql`
+↔ `src/supabase/member_interest_health_reveal_authz.sql`.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -268,7 +289,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql
+  -f supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -297,6 +318,7 @@ row shows `installed = true` and `release_ready = true`.
 | 12 | `20260726113000_public_booking_switch_gate.sql` | `public_booking_switch_gate` — public `class_bookings` respect `bookings_enabled` |
 | 13 | `20260726114000_member_onboarding_booking_gate.sql` | `member_onboarding_booking_gate` — book/waitlist require Member Readiness |
 | 14 | `20260726115000_waitlist_skip_notice_accuracy.sql` | `waitlist_skip_notice_accuracy` — waitlist Skip notice does not claim a credit return |
+| 15 | `20260726116000_member_interest_health_reveal_authz.sql` | `member_interest_health_reveal_authz` — injury columns locked; reveal audited |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -304,14 +326,14 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`member_onboarding_booking_gate` and `waitlist_skip_notice_accuracy`.
+`member_interest_health_reveal_authz`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726115000_waitlist_skip_notice_accuracy.sql`. Confirm readiness SQL.
+   `20260726116000_member_interest_health_reveal_authz.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.

@@ -65,9 +65,19 @@ test('native sign-out clears local push registration and retries failed unregist
   assert.match(signOut, /isSigningOut = true/);
   assert.match(signOut, /defer \{ isSigningOut = false \}/);
   assert.match(signOut, /PendingPushUnregisterStore\.save\(/);
+  // Failed unregister must keep the refresh token — remote signOut only after success.
+  assert.match(signOut, /Keep the refresh token alive for flushPendingPushUnregister/);
+  assert.match(signOut, /Only revoke the JWT after unregister succeeds/);
   assert.match(store, /func deleteAccount[\s\S]*clearLocalPushRegistration\(\)/);
   assert.match(store, /flushPendingPushUnregister\(\)/);
   assert.match(store, /restoreMemberPushRegistration[\s\S]*await flushPendingPushUnregister\(\)/);
+  const flush = store.slice(
+    store.indexOf('private func flushPendingPushUnregister'),
+    store.indexOf('private func restoreMemberPushRegistration'),
+  );
+  assert.match(flush, /api\.refresh\(session:/);
+  assert.match(flush, /error\.statusCode == 401/);
+  assert.match(flush, /api\.signOut\(session: session\)/);
   assert.match(swiftTests, /PendingPushUnregisterStore\.save\(pending, defaults: defaults\)/);
 });
 

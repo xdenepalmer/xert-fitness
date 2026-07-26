@@ -75,7 +75,8 @@ with required (capability, migration) as (
     ('stripe_fulfillment_deleted_email_erasure', 'supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql'),
     ('refund_skips_stripe_refunded_batches', 'supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql'),
     ('public_booking_switch_gate', 'supabase/migrations/20260726113000_public_booking_switch_gate.sql'),
-    ('waitlist_skip_notice_accuracy', 'supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql')
+    ('waitlist_skip_notice_accuracy', 'supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql'),
+    ('member_interest_health_reveal_authz', 'supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql')
 ), readiness as (
   select
     required.capability,

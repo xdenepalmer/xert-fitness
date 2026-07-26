@@ -18,6 +18,7 @@ import {
   paymentFulfillmentDeliveryIsHealthy,
   paymentFulfillmentIsReady,
   paymentActivationDriftGuardIsReady,
+  closeStaleCheckoutAttemptOrder,
   publicCheckoutFailure,
   reusableCheckoutURL,
   sessionPackPaymentsAreEnabled,
@@ -570,6 +571,42 @@ test('checkout never exposes raw provider errors to members', async () => {
   );
   assert.doesNotMatch(recordingCatch, /sessions\.expire/);
   assert.match(source, /CHECKOUT_ATTEMPT_STALE/);
+  assert.match(source, /closeStaleCheckoutAttemptOrder\(admin, session\.id\)/);
+  assert.match(source, /returnURLs/);
+});
+
+test('CHECKOUT_ATTEMPT_STALE closes matching pending orders so reuse cannot revive them', async () => {
+  const calls = [];
+  const admin = {
+    from(table) {
+      calls.push(['from', table]);
+      return {
+        update(payload) {
+          calls.push(['update', payload]);
+          return {
+            eq(column, value) {
+              calls.push(['eq', column, value]);
+              return {
+                eq(column2, value2) {
+                  calls.push(['eq', column2, value2]);
+                  return Promise.resolve({ error: null });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  await closeStaleCheckoutAttemptOrder(admin, 'cs_stale_xert');
+  assert.deepEqual(calls, [
+    ['from', 'orders'],
+    ['update', { status: 'failed' }],
+    ['eq', 'stripe_checkout_session_id', 'cs_stale_xert'],
+    ['eq', 'status', 'pending'],
+  ]);
+  await closeStaleCheckoutAttemptOrder(admin, '');
+  assert.equal(calls.filter(call => call[0] === 'from').length, 1);
 });
 
 test('accepts only an active one-time Stripe price matching the configured pack', () => {
@@ -613,10 +650,17 @@ test('keeps test and live Stripe objects in the same payment environment', () =>
 test('reuses only the current same-platform pack snapshot from an open unpaid Checkout session', () => {
   const user = { id: 'member-xert' };
   const product = { id: 'product-xert', ...validProduct };
+  const returnURLs = {
+    success: 'https://xert-fitness.vercel.app/checkout-return?status=success&checkout_session_id={CHECKOUT_SESSION_ID}',
+    cancel: 'https://xert-fitness.vercel.app/checkout-return?status=cancelled',
+  };
   const checkout = {
     status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_test_xert',
     amount_total: 4800, currency: 'aud', livemode: false,
     customer_email: 'member@example.com',
+    origin_context: 'mobile_app',
+    success_url: returnURLs.success,
+    cancel_url: returnURLs.cancel,
     metadata: {
       user_id: user.id,
       product_id: product.id,
@@ -628,7 +672,7 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
     },
   };
   const options = {
-    returnTarget: 'ios', stripeMode: 'test', memberEmail: 'member@example.com',
+    returnTarget: 'ios', returnURLs, stripeMode: 'test', memberEmail: 'member@example.com',
   };
   assert.equal(reusableCheckoutURL(checkout, user, product, options), checkout.url);
   for (const invalid of [
@@ -647,6 +691,9 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
     { ...checkout, metadata: { ...checkout.metadata, return_target: 'web' } },
     { ...checkout, metadata: { ...checkout.metadata, checkout_contract: 'legacy' } },
     { ...checkout, customer_email: 'another@example.com' },
+    { ...checkout, origin_context: 'web' },
+    { ...checkout, success_url: 'https://attacker.example/success' },
+    { ...checkout, cancel_url: 'https://attacker.example/cancel' },
   ]) assert.equal(reusableCheckoutURL(invalid, user, product, options), null);
 });
 

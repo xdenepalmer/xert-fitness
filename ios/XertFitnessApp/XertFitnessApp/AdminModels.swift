@@ -1189,7 +1189,7 @@ enum AdminSchemaReadiness {
         "request_notes_health_consent", "waitlist_skip_concurrency",
         "pt_rehab_goal_health_consent", "stripe_fulfillment_deleted_email_erasure",
         "refund_skips_stripe_refunded_batches", "public_booking_switch_gate",
-        "waitlist_skip_notice_accuracy",
+        "waitlist_skip_notice_accuracy", "member_interest_health_reveal_authz",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

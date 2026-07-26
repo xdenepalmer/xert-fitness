@@ -101,6 +101,33 @@ test('deleted-buyer orders still reconcile when Stripe keeps the original user i
   );
 });
 
+function paidAuditQuery(calls, table, orderRow = order) {
+  const query = {
+    eq(column, value) {
+      calls.push({ action: 'where', column, value });
+      return query;
+    },
+    select(columns) {
+      calls.push({ action: 'returning', columns });
+      return query;
+    },
+    async maybeSingle() {
+      return { data: { id: orderRow.id, status: 'paid' }, error: null };
+    },
+  };
+  return {
+    select() {
+      return {
+        eq() { return { async single() { return { data: orderRow, error: null }; } }; },
+      };
+    },
+    update(payload) {
+      calls.push({ action: 'update', table, payload });
+      return query;
+    },
+  };
+}
+
 test('deleted-buyer reconcile settles paid without claiming pack credits were granted', async () => {
   const deletedBuyerOrder = { ...order, user_id: null };
   const calls = [];
@@ -113,17 +140,7 @@ test('deleted-buyer reconcile settles paid without claiming pack credits were gr
       };
     },
     from(table) {
-      return {
-        select() {
-          return {
-            eq() { return { async single() { return { data: deletedBuyerOrder, error: null }; } }; },
-          };
-        },
-        update(payload) {
-          calls.push({ action: 'update', table, payload });
-          return { async eq(column, value) { calls.push({ action: 'where', column, value }); return { error: null }; } };
-        },
-      };
+      return paidAuditQuery(calls, table, deletedBuyerOrder);
     },
   };
   const stripe = { checkout: { sessions: { async retrieve() { return checkout; } } } };
@@ -137,6 +154,7 @@ test('deleted-buyer reconcile settles paid without claiming pack credits were gr
   assert.equal(result.buyer_deleted, true);
   assert.equal(result.already_paid, false);
   assert.equal(calls.filter(call => call.action === 'rpc' && call.name === 'fulfill_stripe_checkout').length, 1);
+  assert.ok(calls.some(call => call.action === 'where' && call.column === 'status' && call.value === 'paid'));
 });
 
 test('expired checkout cleanup requires the complete pending order identity', () => {
@@ -165,17 +183,7 @@ test('admin recovery reuses idempotent fulfilment and saves its actor audit', as
       return { data: [{ fulfilled_order_id: ORDER_ID, final_status: 'paid', credit_created: true }], error: null };
     },
     from(table) {
-      return {
-        select() {
-          return {
-            eq() { return { async single() { return { data: order, error: null }; } }; },
-          };
-        },
-        update(payload) {
-          calls.push({ action: 'update', table, payload });
-          return { async eq(column, value) { calls.push({ action: 'where', column, value }); return { error: null }; } };
-        },
-      };
+      return paidAuditQuery(calls, table);
     },
   };
   const stripeCalls = [];
@@ -186,10 +194,57 @@ test('admin recovery reuses idempotent fulfilment and saves its actor audit', as
   assert.equal(result.status, 'paid');
   assert.equal(result.credits_granted, 4);
   assert.equal(result.buyer_deleted, false);
+  assert.equal(result.already_paid, false);
   assert.deepEqual(stripeCalls[0], { id: 'cs_xert', options: { expand: ['payment_intent.latest_charge'] } });
   assert.equal(calls.filter(call => call.action === 'rpc' && call.name === 'fulfill_stripe_checkout').length, 1);
   assert.equal(calls.find(call => call.action === 'update').payload.reconciled_by, 'admin-xert');
   assert.equal(calls.find(call => call.action === 'update').payload.reconciled_at, NOW.toISOString());
+  assert.ok(calls.some(call => call.action === 'where' && call.column === 'status' && call.value === 'paid'));
+});
+
+test('concurrent double reconcile does not claim a second credit grant', async () => {
+  const calls = [];
+  const admin = {
+    async rpc() {
+      return { data: [{ fulfilled_order_id: ORDER_ID, final_status: 'paid', credit_created: false }], error: null };
+    },
+    from(table) {
+      return paidAuditQuery(calls, table);
+    },
+  };
+  const stripe = { checkout: { sessions: { async retrieve() { return checkout; } } } };
+  const result = await reconcileCheckoutOrder({
+    admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW,
+  });
+  assert.equal(result.credits_granted, 0);
+  assert.equal(result.already_paid, true);
+  assert.equal(result.buyer_deleted, false);
+});
+
+test('paid reconcile refuses to audit when a concurrent refund wins the order row', async () => {
+  const updateQuery = {
+    eq() { return updateQuery; },
+    select() { return updateQuery; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const admin = {
+    async rpc() {
+      return { data: [{ fulfilled_order_id: ORDER_ID, final_status: 'paid', credit_created: true }], error: null };
+    },
+    from() {
+      return {
+        select() {
+          return { eq() { return { async single() { return { data: order, error: null }; } }; } };
+        },
+        update() { return updateQuery; },
+      };
+    },
+  };
+  const stripe = { checkout: { sessions: { async retrieve() { return checkout; } } } };
+  await assert.rejects(
+    reconcileCheckoutOrder({ admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW }),
+    /ORDER_STATE_CHANGED/,
+  );
 });
 
 test('admin recovery cannot report paid when a concurrent refund wins the order lock', async () => {
@@ -299,4 +354,6 @@ test('orders admin exposes authenticated payment recovery for unresolved checkou
   assert.match(ui, /safely closes an expired unpaid checkout/);
   assert.match(ui, /buying account is gone/);
   assert.match(ui, /result\.buyer_deleted/);
+  assert.match(ui, /reconcileLockRef/);
+  assert.match(ui, /No new credits were granted/);
 });

@@ -303,6 +303,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     'public_booking_switch_gate.sql',
     'member_onboarding_booking_gate.sql',
     'waitlist_skip_notice_accuracy.sql',
+    'member_interest_health_reveal_authz.sql',
   ]) {
     assert.match(
       readme,
@@ -311,7 +312,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     );
   }
   // Fresh + already-deployed apply sequences both provision Stripe prices before the
-  // July 2026 audit fixes, and both end with the waitlist skip notice fix.
+  // July 2026 audit fixes, and both end with the health-reveal authz fix.
   assert.match(
     readme,
     /member_activation_cockpit\.sql`, then\n`supabase\/migrations\/20260722010000_owner_stripe_price_provisioning\.sql`\. Finally apply the July 2026 audit/,
@@ -323,11 +324,11 @@ test('README operator apply order includes the newest Ops Health migrations', ()
   );
   assert.match(
     readme,
-    /member_onboarding_booking_gate\.sql` and\n`waitlist_skip_notice_accuracy\.sql`\. This/,
+    /waitlist_skip_notice_accuracy\.sql` and\n`member_interest_health_reveal_authz\.sql`\. This/,
   );
   assert.match(
     readme,
-    /member_onboarding_booking_gate\.sql` and\n`waitlist_skip_notice_accuracy\.sql`\. The/,
+    /waitlist_skip_notice_accuracy\.sql` and\n`member_interest_health_reveal_authz\.sql`\. The/,
   );
 });
 

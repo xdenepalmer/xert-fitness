@@ -59,10 +59,12 @@ test('admin intake queues no longer use wildcard reads', async () => {
 });
 
 test('member-interest injuries stay out of list selects and reach admins only via deliberate reveal', async () => {
-  const [adminData, leadTable, migration] = await Promise.all([
+  const [adminData, leadTable, migration, authz, authzMirror] = await Promise.all([
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/admin/LeadTable.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/20260726109000_request_notes_health_consent.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../src/supabase/member_interest_health_reveal_authz.sql', import.meta.url), 'utf8'),
   ]);
 
   assert.match(adminData, /admin_reveal_member_interest_health/);
@@ -74,4 +76,13 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.match(leadTable, /key=\{selectedLead\.id\}/);
   assert.match(migration, /create or replace function public\.admin_reveal_member_interest_health\(p_lead_id uuid\)/i);
   assert.match(migration, /v_consent is not true/);
+  assert.equal(authz, authzMirror);
+  assert.match(authz, /member_interest_health_reveals/);
+  assert.match(authz, /revoke all on table public\.member_interest from public, anon, authenticated/i);
+  assert.match(authz, /injuries_or_limitations_optional/);
+  assert.match(authz, /health_info_consent/);
+  assert.match(authz, /insert into public\.member_interest_health_reveals/);
+  assert.match(authz, /'audit_event_id'/);
+  assert.match(authz, /values \('member_interest_health_reveal_authz'\)/i);
+  assert.match(authz, /if v_admin_id is null or not public\.is_admin\(\)/i);
 });

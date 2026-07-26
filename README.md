@@ -256,6 +256,8 @@ The Supabase schema is defined in:
   complete, matching the launch-guide / Account soft UX at the database boundary
 - `src/supabase/waitlist_skip_notice_accuracy.sql` — waitlist Skip notices say no
   credit was charged (waitlisted members never hold a reserved credit)
+- `src/supabase/member_interest_health_reveal_authz.sql` — member-interest injury
+  columns are not directly selectable; admins reveal them only via the audited RPC
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -306,8 +308,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `pt_rehab_goal_health_consent.sql`,
 `fulfillment_erasure_and_refunded_pack_guard.sql`,
 `public_booking_switch_gate.sql`,
-`member_onboarding_booking_gate.sql` and
-`waitlist_skip_notice_accuracy.sql`. This
+`member_onboarding_booking_gate.sql`,
+`waitlist_skip_notice_accuracy.sql` and
+`member_interest_health_reveal_authz.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -365,8 +368,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `pt_rehab_goal_health_consent.sql`,
 `fulfillment_erasure_and_refunded_pack_guard.sql`,
 `public_booking_switch_gate.sql`,
-`member_onboarding_booking_gate.sql` and
-`waitlist_skip_notice_accuracy.sql`. The
+`member_onboarding_booking_gate.sql`,
+`waitlist_skip_notice_accuracy.sql` and
+`member_interest_health_reveal_authz.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

@@ -87,7 +87,14 @@ test('deleted-member live overload settles without credits and does not claim a 
           };
         },
         update() {
-          return { async eq() { return { error: null }; } };
+          const query = {
+            eq() { return query; },
+            select() { return query; },
+            async maybeSingle() {
+              return { data: { id: ORDER_ID, status: 'paid' }, error: null };
+            },
+          };
+          return query;
         },
       };
     },
@@ -124,6 +131,7 @@ test('deleted-member live overload settles without credits and does not claim a 
   assert.equal(result.status, 'paid');
   assert.equal(result.credits_granted, 0);
   assert.equal(result.buyer_deleted, true);
+  assert.equal(result.already_paid, false);
 });
 
 test('empty ledger kill-switch ignores reconciled recovery and historical paid rows', async () => {

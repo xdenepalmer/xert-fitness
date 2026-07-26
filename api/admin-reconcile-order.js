@@ -114,22 +114,38 @@ export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, n
   const settlement = await persistCheckoutFulfillment(admin, fulfillment);
   if (settlement.final_status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
 
-  const { error: auditError } = await admin
+  // A concurrent refund can win after fulfill returns paid. Never stamp the
+  // admin audit marker onto a non-paid row, or Ops will treat a refunded
+  // recovery as a clean reconcile.
+  const { data: audited, error: auditError } = await admin
     .from('orders')
     .update({ reconciled_at: now.toISOString(), reconciled_by: userId })
-    .eq('id', order.id);
+    .eq('id', order.id)
+    .eq('status', 'paid')
+    .select('id,status')
+    .maybeSingle();
   if (auditError) throw new Error('RECONCILIATION_AUDIT_FAILED');
+  if (audited?.id !== order.id || audited?.status !== 'paid') {
+    throw new Error('ORDER_STATE_CHANGED');
+  }
 
   // Deleted buyers leave orders.user_id NULL; fulfill_stripe_checkout settles
-  // without inserting credit_batches. Never report the Stripe pack size as
-  // granted when no account remains to hold credits.
-  const creditsGranted = order.user_id == null ? 0 : fulfillment.credit.total;
+  // without inserting credit_batches. Concurrent double-reconcile also returns
+  // credit_created=false — never report the pack size as newly granted.
+  const creditsGranted = order.user_id == null
+    ? 0
+    : (settlement.credit_created ? fulfillment.credit.total : 0);
+  // credit_created=false for a live buyer means credits were already on the
+  // order (webhook or a racing reconcile). Deleted buyers also get
+  // credit_created=false on first settle — that is not "already paid".
+  const alreadyPaid = order.status === 'paid'
+    || (settlement.credit_created === false && order.user_id != null);
 
   return {
     order_id: order.id,
     status: 'paid',
     credits_granted: creditsGranted,
-    already_paid: order.status === 'paid',
+    already_paid: alreadyPaid,
     checkout_status: checkout.status,
     buyer_deleted: order.user_id == null,
   };
