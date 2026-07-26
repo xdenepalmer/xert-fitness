@@ -28,6 +28,8 @@ test('notice centre supports push highlighting, actions and dismissal', () => {
   assert.match(home, /lastHandledRouteSequence/);
   assert.match(home, /onAction: \{ announcement in[\s\S]*handleAnnouncementAction\(announcement\)/);
   assert.match(home, /onDismiss: \{ announcement in[\s\S]*store\.dismissAnnouncement\(announcement\)/);
+  assert.match(home, /dismissDisabled: dismissingAnnouncementID != nil/);
+  assert.match(home, /\.disabled\(dismissDisabled\)/);
   assert.match(home, /presentationDetents\(\[\.medium, \.large\]\)/);
 });
 

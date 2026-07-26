@@ -89,12 +89,16 @@ test('announcement schema and clients enforce member visibility and privacy life
   assert.match(account, /Promise\.allSettled\([\s\S]*getMemberAnnouncements\(\)/);
   assert.match(account, /accountSourceErrors\.announcements|nextErrors\[source\]/);
   assert.match(account, /handleDismissAnnouncement[\s\S]*?dismissMemberAnnouncement/);
+  assert.match(account, /dismissingAnnouncementIdRef\.current/);
+  assert.match(account, /disabled=\{Boolean\(dismissingAnnouncementId\)\}/);
   assert.match(account, /announcementAction\(notice\)[\s\S]*?action\.external/);
   assert.match(store, /announcements = \[\][\s\S]*?unavailableDataSources\.subtract/);
-  assert.match(store, /func dismissAnnouncement[\s\S]*?canApplyMemberState/);
+  assert.match(store, /func dismissAnnouncement[\s\S]*?guard dismissingAnnouncementID == nil/);
+  assert.match(store, /dismissingAnnouncementID == announcement\.id/);
   assert.match(api, /func announcements[\s\S]*?my_member_announcements/);
   assert.match(api, /func dismissAnnouncement[\s\S]*?dismiss_member_announcement/);
   assert.match(home, /Member notices[\s\S]*?MemberAnnouncementRow/);
+  assert.match(home, /dismissDisabled: store\.dismissingAnnouncementID != nil/);
   assert.match(home, /accessibilityLabel\("Dismiss/);
   assert.match(home, /handleAnnouncementAction[\s\S]*?action\.memberRoute[\s\S]*?action\.nativeTab/);
   assert.match(admin, /announcement-cta-label/);

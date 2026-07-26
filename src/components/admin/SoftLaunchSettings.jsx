@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import {
   activateSessionPackPayments,
@@ -31,6 +31,10 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [pendingPaymentActivation, setPendingPaymentActivation] = useState(null);
+  // Preflight briefly clears `saving` between awaits; block re-entry so a
+  // second Save cannot open another activation confirm or double-persist.
+  const saveLockRef = useRef(false);
+  const paymentActivationLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -87,6 +91,8 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   };
 
   const handleSave = async () => {
+    if (saveLockRef.current || saving || pendingPaymentActivation) return;
+    saveLockRef.current = true;
     try {
       const normalized = normalizeLaunchSettings(settings);
       if (livePaymentSettingsRequirePause(normalized, savedSettings)) {
@@ -136,6 +142,8 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     } catch (e) {
       setSaving(false);
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      saveLockRef.current = false;
     }
   };
 
@@ -188,7 +196,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={handleSave} disabled={saving || !dirty}
+        <button onClick={handleSave} disabled={saving || !dirty || Boolean(pendingPaymentActivation)}
           className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-xert-navy' : 'bg-xert-steel text-xert-navy hover:bg-xert-pale'}`}>
           {saved ? 'Saved ✓' : saving ? 'Saving...' : dirty ? 'Save settings' : 'Settings saved'}
         </button>
@@ -201,17 +209,27 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       </div>
       <AdminConfirmDialog
         open={Boolean(pendingPaymentActivation)}
-        onOpenChange={open => !open && setPendingPaymentActivation(null)}
+        onOpenChange={open => {
+          // Ignore Radix's immediate close on confirm — `saving` is not true
+          // until the next render, so a ref keeps the dialog mounted.
+          if (!open && !saving && !paymentActivationLockRef.current) {
+            setPendingPaymentActivation(null);
+          }
+        }}
         title="Open session pack checkout?"
         description="Stripe launch checks are passing. Saving will allow signed-in members to start real pack purchases on the website and iOS app."
         warning="Run one low-value purchase and refund immediately after activation."
         cancelLabel="Keep payments paused"
         confirmLabel="Enable pack checkout"
-        busy={saving}
+        busy={saving || paymentActivationLockRef.current}
         onConfirm={() => {
           const pending = pendingPaymentActivation;
-          setPendingPaymentActivation(null);
-          if (pending) void persistSettings(pending, true);
+          if (!pending || saving || paymentActivationLockRef.current) return;
+          paymentActivationLockRef.current = true;
+          void persistSettings(pending, true).finally(() => {
+            paymentActivationLockRef.current = false;
+            setPendingPaymentActivation(null);
+          });
         }}
       />
     </div>

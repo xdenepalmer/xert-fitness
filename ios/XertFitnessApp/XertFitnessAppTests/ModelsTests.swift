@@ -1784,8 +1784,10 @@ final class ModelsTests: XCTestCase {
             now: now.addingTimeInterval(60),
             defaults: defaults
         ))
+        // Mismatched return identity must drop the local handoff (fail closed).
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
 
-        PendingCheckoutStore.clear(defaults: defaults)
+        PendingCheckoutStore.save(issued, defaults: defaults)
         XCTAssertNil(PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: "not-stripe",
@@ -1793,6 +1795,7 @@ final class ModelsTests: XCTestCase {
             now: now,
             defaults: defaults
         ))
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
     }
 
     func testPrivacyLockPreferenceRoundTripsAndOnlyLocksSignedInMembers() throws {

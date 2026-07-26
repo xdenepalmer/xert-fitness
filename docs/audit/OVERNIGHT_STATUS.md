@@ -3,6 +3,14 @@
 ## Morning owner briefing
 
 **What was made safer overnight (plain English)**
+- Notice dismiss on web + iPhone no longer races: one dismiss at a time, and an
+  earlier finish cannot clear a newer in-flight spinner.
+- Pack purchase return URLs that disagree with the local Stripe handoff fail
+  closed (web + iPhone) instead of confirming the wrong session or leaving a
+  zombie pending checkout.
+- Soft Launch payment activation cannot double-fire while the confirm dialog is
+  open; Lead health reveal ignores stale responses and stops offering Reveal
+  after a consented-empty result.
 - Admin “Check Stripe Outcome” no longer claims pack credits were granted when
   the buying account was deleted (web + iOS); payment still settles, credits stay 0.
 - Checkout kill-switch fails closed when webhook delivery probes error
@@ -24,11 +32,12 @@
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726115000_waitlist_skip_notice_accuracy.sql` (full list + command
-   examples below). This batch is app-only (no new SQL).
+   `20260726115000_waitlist_skip_notice_accuracy.sql` (**26115** — full list +
+   command examples below). This batch is app-only (no new SQL).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
-   `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`.
+   `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`
+   (26115*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
    enable bookings only when Ops Health shows the booking-switch guard.
 
@@ -162,6 +171,17 @@ No new migration for this batch.
 
 No new migration for this batch.
 
+### 15. This batch — notice dismiss races, checkout identity mismatch, Soft Launch / Lead reveal
+| Area | Defect | Fix |
+|---|---|---|
+| Notice center dismiss | Web/iOS used one `dismissingAnnouncementId`; finishing notice A cleared the spinner while B was in flight and re-enabled double-tap | Serialize dismissals; only clear when the finishing id is still current; disable all dismiss controls while any dismiss runs |
+| Purchase confirmation | Web `pendingWebCheckoutForReturn` preferred a leftover stored handoff over a different return `checkout_session_id`; iOS resolve left a zombie pending after mismatch and cleared the pending UI flag | Fail closed on identity mismatch (clear local handoff); iOS surfaces `.failed` |
+| Soft Launch Settings | Save preflight briefly cleared `saving`, so a second Save could open another payment-activation confirm / double-persist | `saveLockRef` + disable Save while confirm is open; activation lock keeps confirm mounted through persist |
+| LeadTable health reveal | Stale reveal responses could paint the wrong lead; `available: false` kept offering Reveal | Request generation + `key={lead.id}`; terminal “No consented injury notes” state |
+| Migration list (26115) | Confirm overnight apply checklist includes waitlist skip notice | Already row 14: `20260726115000_waitlist_skip_notice_accuracy.sql` |
+
+No new migration for this batch.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -265,5 +285,11 @@ show `installed = true` and `release_ready = true`, including
 16. **Kill-switch probe failure** — If orders/ledger health probes error, Ops
     Health delivery is not ready and `/api/checkout` returns 503 until probes
     succeed again.
-17. **Do not** implement staff roles yet — owner/legal gates in
+17. **Notice dismiss** — Dismiss two notices quickly → only one in flight; both
+    leave the list without spinner races.
+18. **Checkout identity mismatch** — Local handoff `cs_A` + return `cs_B` →
+    failed confirmation (not success against `cs_A`); pending storage cleared.
+19. **Lead health reveal** — Reveal on a lead with consent but empty notes →
+    “No consented injury notes”; drawer key resets per lead.
+20. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

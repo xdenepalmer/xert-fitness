@@ -68,6 +68,7 @@ export function pendingWebCheckoutForReturn({
 }) {
   const normalizedUserID = String(userID || '').trim().toLowerCase();
   const normalizedSessionID = String(checkoutSessionID || '').trim();
+  const hasReturnSession = normalizedSessionID.length > 0;
   const storedAge = now - Number(storedPending?.startedAt);
   const hasValidStoredPending = (
     storedPending?.userID === normalizedUserID
@@ -76,7 +77,14 @@ export function pendingWebCheckoutForReturn({
     && storedAge >= 0
     && storedAge <= MAXIMUM_AGE_MS
   );
-  if (hasValidStoredPending) return storedPending;
+
+  // A return URL with a different Stripe session must not settle against a
+  // leftover local handoff — fail closed like iOS PendingCheckoutStore.resolve.
+  if (hasValidStoredPending) {
+    if (!hasReturnSession) return storedPending;
+    if (!isCheckoutSessionID(normalizedSessionID)) return null;
+    return storedPending.checkoutSessionID === normalizedSessionID ? storedPending : null;
+  }
 
   if (
     !USER_ID_PATTERN.test(normalizedUserID)

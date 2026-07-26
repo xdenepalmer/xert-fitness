@@ -62,7 +62,7 @@ test('web checkout recovery settles only the exact Stripe session order', () => 
   assert.deepEqual(WEB_CHECKOUT_RETRY_DELAYS_MS, [0, 2_000, 3_000, 5_000]);
 });
 
-test('Stripe return identity recovers without storage but cannot replace a valid stored handoff', () => {
+test('Stripe return identity recovers without storage but fails closed on handoff mismatch', () => {
   const now = 1_800_000_000_000;
   const returned = pendingWebCheckoutForReturn({
     userID: USER_ID,
@@ -80,12 +80,30 @@ test('Stripe return identity recovers without storage but cannot replace a valid
     checkoutSessionID: 'cs_test_StoredIdentity',
     startedAt: now - 1_000,
   };
+  assert.deepEqual(pendingWebCheckoutForReturn({
+    userID: USER_ID,
+    checkoutSessionID: 'cs_test_StoredIdentity',
+    storedPending: stored,
+    now,
+  }), stored);
   assert.equal(pendingWebCheckoutForReturn({
     userID: USER_ID,
     checkoutSessionID: SESSION_ID,
     storedPending: stored,
     now,
+  }), null);
+  assert.deepEqual(pendingWebCheckoutForReturn({
+    userID: USER_ID,
+    checkoutSessionID: '',
+    storedPending: stored,
+    now,
   }), stored);
+  assert.equal(pendingWebCheckoutForReturn({
+    userID: USER_ID,
+    checkoutSessionID: 'not-a-session',
+    storedPending: stored,
+    now,
+  }), null);
   assert.equal(pendingWebCheckoutForReturn({
     userID: OTHER_USER_ID,
     checkoutSessionID: 'not-a-session',

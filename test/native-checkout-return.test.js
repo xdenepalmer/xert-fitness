@@ -64,7 +64,8 @@ test('native app accepts only the trusted checkout callback and verifies settlem
   assert.match(root, /settlement == \.confirmed[\s\S]*checkoutReturnStatus = \.success/);
   assert.doesNotMatch(pendingStore, /let recovered = PendingCheckout\(/);
   assert.match(pendingStore, /Never manufacture a pending checkout from an inbound URL/);
-  assert.match(pendingStore, /storedSessionID == normalizedCallback \? stored : nil/);
+  assert.match(pendingStore, /if storedSessionID == normalizedCallback \{ return stored \}/);
+  assert.match(pendingStore, /clear\(defaults: defaults\)\s+return nil/);
   assert.match(swiftTests, /testPendingCheckoutRejectsForgedCallbackWithoutLocallyIssuedPending/);
 });
 
@@ -95,7 +96,9 @@ test('native app polls bounded order and credit state while Stripe fulfilment se
   assert.match(pendingStore, /checkout\.userID == userID/);
   assert.match(pendingStore, /let checkoutSessionID: String\?/);
   assert.match(pendingStore, /CheckoutSessionIdentity\.normalize\(callbackSessionID\)/);
+  assert.match(pendingStore, /clear\(defaults: defaults\)/);
   assert.match(pendingStore, /now\.timeIntervalSince\(checkout\.startedAt\) <= maximumAge/);
+  assert.match(store, /hadStoredPending[\s\S]*callbackSessionID != nil[\s\S]*return \.failed/);
   assert.match(booking, /Confirming purchase\.\.\./);
   assert.match(booking, /Purchase confirmation is taking longer than usual/);
   assert.match(swiftTests, /testCheckoutReconciliationRequiresThePaidOrdersFulfillmentBatch/);

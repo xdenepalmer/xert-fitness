@@ -69,6 +69,9 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.doesNotMatch(adminLeadSelect('member_interest'), /injuries_or_limitations_optional|health_info_consent/);
   assert.match(leadTable, /revealMemberInterestHealth/);
   assert.match(leadTable, /Reveal consented health notes/);
+  assert.match(leadTable, /healthRevealRequestRef/);
+  assert.match(leadTable, /No consented injury notes on this lead/);
+  assert.match(leadTable, /key=\{selectedLead\.id\}/);
   assert.match(migration, /create or replace function public\.admin_reveal_member_interest_health\(p_lead_id uuid\)/i);
   assert.match(migration, /v_consent is not true/);
 });

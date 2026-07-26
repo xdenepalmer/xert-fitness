@@ -987,11 +987,15 @@ final class XertStore: ObservableObject {
     }
 
     func dismissAnnouncement(_ announcement: MemberAnnouncement) async {
+        // Serialize dismissals so an earlier finish cannot clear a newer
+        // dismissingAnnouncementID and re-enable double-tap.
+        guard dismissingAnnouncementID == nil else { return }
         let memberVersion = memberStateVersion.snapshot
         dismissingAnnouncementID = announcement.id
         errorMessage = nil
         defer {
-            if memberStateVersion.isCurrent(memberVersion) {
+            if memberStateVersion.isCurrent(memberVersion),
+               dismissingAnnouncementID == announcement.id {
                 dismissingAnnouncementID = nil
             }
         }
@@ -1055,11 +1059,23 @@ final class XertStore: ObservableObject {
             !isReconcilingCheckout
         else { return nil }
         let memberVersion = memberStateVersion.snapshot
+        let hadStoredPending = PendingCheckoutStore.load(for: userID) != nil
         let pendingCheckout = PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: callbackSessionID,
             baselineOrderIDs: Set(orders.map(\.id))
         )
+        // Callback identity mismatch / invalid session clears the store inside
+        // resolve(). Surface that as a failed confirmation instead of silently
+        // dropping the pending UI flag while leaving the member unsure.
+        if hadStoredPending, pendingCheckout == nil, callbackSessionID != nil {
+            isCheckoutConfirmationPending = false
+            if memberStateVersion.isCurrent(memberVersion) {
+                errorMessage = "Checkout did not complete. No session pack was activated."
+                XertHaptics.play(.warning)
+            }
+            return .failed
+        }
         isCheckoutConfirmationPending = pendingCheckout != nil
         guard pendingCheckout != nil else { return nil }
         isReconcilingCheckout = true

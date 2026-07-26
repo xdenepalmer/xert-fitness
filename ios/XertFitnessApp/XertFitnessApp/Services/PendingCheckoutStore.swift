@@ -66,10 +66,15 @@ enum PendingCheckoutStore {
         }
         guard let callbackSessionID else { return stored }
         guard let normalizedCallback = CheckoutSessionIdentity.normalize(callbackSessionID) else {
+            // Suspicious return identity — drop the local handoff so confirmation
+            // cannot resume later against the wrong Stripe session.
+            clear(defaults: defaults)
             return nil
         }
         if let storedSessionID = stored.checkoutSessionID {
-            return storedSessionID == normalizedCallback ? stored : nil
+            if storedSessionID == normalizedCallback { return stored }
+            clear(defaults: defaults)
+            return nil
         }
         // Legacy pending rows without a session id still reconcile against
         // order/credit settlement; the callback id is ignored for creation.

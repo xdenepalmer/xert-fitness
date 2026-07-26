@@ -35,19 +35,25 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
   const [saving, setSaving] = useState(false);
   const [healthReveal, setHealthReveal] = useState(null);
   const [revealingHealth, setRevealingHealth] = useState(false);
+  const healthRevealRequestRef = useRef(0);
 
   const revealHealth = async () => {
+    if (revealingHealth) return;
+    const leadId = lead.id;
+    const requestId = ++healthRevealRequestRef.current;
     setRevealingHealth(true);
     try {
-      const result = await revealMemberInterestHealth(lead.id);
+      const result = await revealMemberInterestHealth(leadId);
+      if (requestId !== healthRevealRequestRef.current || leadId !== lead.id) return;
       setHealthReveal(result);
       if (!result?.available) {
         toast({ title: 'No health details', description: 'This lead has no consented injury notes to reveal.' });
       }
     } catch (e) {
+      if (requestId !== healthRevealRequestRef.current || leadId !== lead.id) return;
       toast({ title: 'Reveal failed', description: e.message, variant: 'destructive' });
     } finally {
-      setRevealingHealth(false);
+      if (requestId === healthRevealRequestRef.current) setRevealingHealth(false);
     }
   };
 
@@ -102,6 +108,8 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
               <p className="font-body text-xs text-xert-concrete/40 uppercase">Health notes</p>
               {healthReveal?.available ? (
                 <p className="font-body text-sm text-xert-offwhite leading-relaxed mt-1">{healthReveal.injuries_or_limitations_optional}</p>
+              ) : healthReveal && healthReveal.available === false ? (
+                <p className="font-body text-sm text-xert-concrete/50 mt-1">No consented injury notes on this lead.</p>
               ) : (
                 <button
                   type="button"
@@ -355,6 +363,7 @@ export default function LeadTable({ type = 'member' }) {
 
       {selectedLead && (
         <LeadDetailDrawer
+          key={selectedLead.id}
           lead={selectedLead}
           statuses={statuses}
           table={table}

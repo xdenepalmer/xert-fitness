@@ -87,6 +87,7 @@ export default function Account() {
   const [privateSessionRequests, setPrivateSessionRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [dismissingAnnouncementId, setDismissingAnnouncementId] = useState(null);
+  const dismissingAnnouncementIdRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [hasLoadedAccount, setHasLoadedAccount] = useState(false);
   const [loadedAccountUserId, setLoadedAccountUserId] = useState('');
@@ -317,6 +318,10 @@ export default function Account() {
   }, [readinessUserID, refreshMemberReadiness]);
 
   const handleDismissAnnouncement = async announcement => {
+    // Serialize dismissals: a single id flag must not be cleared by an earlier
+    // in-flight dismiss finishing after a newer one started.
+    if (dismissingAnnouncementIdRef.current) return;
+    dismissingAnnouncementIdRef.current = announcement.id;
     setDismissingAnnouncementId(announcement.id);
     try {
       await dismissMemberAnnouncement(announcement.id);
@@ -324,7 +329,10 @@ export default function Account() {
     } catch (error) {
       toast({ title: 'Notice not dismissed', description: error.message, variant: 'destructive' });
     } finally {
-      setDismissingAnnouncementId(null);
+      if (dismissingAnnouncementIdRef.current === announcement.id) {
+        dismissingAnnouncementIdRef.current = null;
+        setDismissingAnnouncementId(null);
+      }
     }
   };
 
@@ -758,7 +766,7 @@ export default function Account() {
                   <article key={notice.id} className="border bg-xert-ink p-5" style={{ borderColor: tone.border }}>
                     <div className="flex items-start justify-between gap-4">
                       <p className="font-body text-[10px] uppercase tracking-[0.18em]" style={{ color: tone.color }}>{tone.label}</p>
-                      <button type="button" onClick={() => void handleDismissAnnouncement(notice)} disabled={dismissingAnnouncementId === notice.id} title="Dismiss notice" aria-label={'Dismiss ' + notice.title} className="min-w-11 min-h-11 -mr-2 -mt-2 inline-flex items-center justify-center text-xert-pale/50 hover:text-xert-offwhite disabled:opacity-40">
+                      <button type="button" onClick={() => void handleDismissAnnouncement(notice)} disabled={Boolean(dismissingAnnouncementId)} title="Dismiss notice" aria-label={'Dismiss ' + notice.title} className="min-w-11 min-h-11 -mr-2 -mt-2 inline-flex items-center justify-center text-xert-pale/50 hover:text-xert-offwhite disabled:opacity-40">
                         {dismissingAnnouncementId === notice.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                       </button>
                     </div>

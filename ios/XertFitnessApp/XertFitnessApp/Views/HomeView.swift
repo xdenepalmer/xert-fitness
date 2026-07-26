@@ -536,6 +536,7 @@ struct HomeView: View {
                         MemberAnnouncementRow(
                             announcement: announcement,
                             isDismissing: store.dismissingAnnouncementID == announcement.id,
+                            dismissDisabled: store.dismissingAnnouncementID != nil,
                             onAction: { handleAnnouncementAction(announcement) },
                             onDismiss: { Task { await store.dismissAnnouncement(announcement) } }
                         )
@@ -1401,6 +1402,7 @@ private struct MemberNoticeCenter: View {
                             MemberAnnouncementRow(
                                 announcement: announcement,
                                 isDismissing: dismissingAnnouncementID == announcement.id,
+                                dismissDisabled: dismissingAnnouncementID != nil,
                                 onAction: { onAction(announcement) },
                                 onDismiss: { onDismiss(announcement) }
                             )
@@ -1430,6 +1432,7 @@ private struct MemberNoticeCenter: View {
 private struct MemberAnnouncementRow: View {
     let announcement: MemberAnnouncement
     let isDismissing: Bool
+    let dismissDisabled: Bool
     let onAction: () -> Void
     let onDismiss: () -> Void
 
@@ -1465,7 +1468,7 @@ private struct MemberAnnouncementRow: View {
                     }
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
-                    .disabled(isDismissing)
+                    .disabled(dismissDisabled)
                     .foregroundStyle(Color.xertMuted)
                     .accessibilityLabel("Dismiss \(announcement.title)")
                 }
