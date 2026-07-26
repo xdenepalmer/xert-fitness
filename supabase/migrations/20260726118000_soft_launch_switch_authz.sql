@@ -1,36 +1,54 @@
--- Session-pack checkout may only move from paused to enabled through the
--- authenticated server preflight. Admin clients retain direct emergency shutdown.
-create or replace function public.guard_session_pack_payment_activation()
+-- Soft-launch switch authz (fail closed at the database boundary).
+--
+-- Soft Launch Settings / iOS Platform Controls already refuse to open pack
+-- checkout without bookings, and refuse to enable bookings without the
+-- member_booking_switch_guard capability. Those checks were UI-only:
+--   1. POST /api/admin-commerce-health action=activate_payments accepted
+--      bookings_enabled:false and admin_activate_session_pack_payments wrote it,
+--      leaving Ops Health "unsafe" while Stripe checkout stayed live.
+--   2. A direct PostgREST update of admin_settings.bookings_enabled=true
+--      succeeded even when the booking-switch trigger was not installed, so a
+--      later pause could not actually stop book_session / waitlist joins.
+--
+-- One BEFORE ROW trigger owns both invariants on every insert/update. The
+-- activation RPC also refuses p_bookings_enabled is not true so the trusted
+-- service-role path cannot mint the unsafe pair either.
+
+create or replace function public.enforce_soft_launch_switch_authz()
 returns trigger
 language plpgsql
+security definer
 set search_path = public, pg_temp
 as $$
-declare
-  v_is_activation boolean;
-  v_is_trusted_server boolean;
 begin
-  if tg_op = 'INSERT' then
-    v_is_activation := new.payments_enabled is true;
-  else
-    v_is_activation := new.payments_enabled is true and old.payments_enabled is not true;
+  if new.payments_enabled is true and new.bookings_enabled is not true then
+    raise exception 'PAYMENTS_REQUIRE_BOOKINGS';
   end if;
-  v_is_trusted_server := current_setting('xert.payment_activation_preflight', true) = 'passed'
-    or current_user in ('postgres', 'supabase_admin');
 
-  if v_is_activation and not v_is_trusted_server then
-    raise exception 'PAYMENT_ACTIVATION_REQUIRES_SERVER_PREFLIGHT';
+  if new.bookings_enabled is true
+     and (tg_op = 'INSERT' or old.bookings_enabled is distinct from true)
+     and not exists (
+       select 1
+         from public.xert_schema_capabilities as capability
+        where capability.capability = 'member_booking_switch_guard'
+     ) then
+    raise exception 'BOOKINGS_REQUIRE_SWITCH_GUARD';
   end if;
+
   return new;
 end;
 $$;
 
-revoke execute on function public.guard_session_pack_payment_activation() from public, anon, authenticated;
+revoke all on function public.enforce_soft_launch_switch_authz()
+  from public, anon, authenticated;
 
-drop trigger if exists admin_settings_guard_payment_activation on public.admin_settings;
-create trigger admin_settings_guard_payment_activation
-  before insert or update of payments_enabled on public.admin_settings
-  for each row execute function public.guard_session_pack_payment_activation();
+drop trigger if exists admin_settings_soft_launch_switch_authz on public.admin_settings;
+create trigger admin_settings_soft_launch_switch_authz
+  before insert or update on public.admin_settings
+  for each row execute function public.enforce_soft_launch_switch_authz();
 
+comment on function public.enforce_soft_launch_switch_authz() is
+  'Fails closed when pack checkout would go live without bookings, or bookings would go live without member_booking_switch_guard.';
 
 create or replace function public.admin_activate_session_pack_payments(
   p_actor_id uuid,
@@ -66,8 +84,8 @@ begin
   if p_announcement_banner_enabled and nullif(trim(coalesce(p_announcement_banner_text, '')), '') is null then
     raise exception 'PAYMENT_ACTIVATION_ANNOUNCEMENT_REQUIRED';
   end if;
-  -- Keep soft_launch_switch_authz: crafted activate_payments must not open
-  -- checkout while class booking stays paused.
+  -- Server fail-closed: UI already blocks this; crafted activate_payments bodies
+  -- must not open checkout while class booking stays paused.
   if p_bookings_enabled is not true then
     raise exception 'PAYMENTS_REQUIRE_BOOKINGS';
   end if;
@@ -107,16 +125,19 @@ $$;
 
 revoke all on function public.admin_activate_session_pack_payments(
   uuid, uuid, timestamptz, date, boolean, boolean, text, boolean
-) from public;
+) from public, anon, authenticated;
 grant execute on function public.admin_activate_session_pack_payments(
   uuid, uuid, timestamptz, date, boolean, boolean, text, boolean
 ) to service_role;
-
 
 create table if not exists public.xert_schema_capabilities (
   capability text primary key,
   installed_at timestamptz not null default now()
 );
+alter table public.xert_schema_capabilities enable row level security;
+drop policy if exists "xert_schema_capabilities_admin_read" on public.xert_schema_capabilities;
+create policy "xert_schema_capabilities_admin_read" on public.xert_schema_capabilities
+  for select to authenticated using ((select public.is_admin()));
 insert into public.xert_schema_capabilities (capability)
-values ('guarded_payment_activation')
+values ('soft_launch_switch_authz')
 on conflict (capability) do update set installed_at = excluded.installed_at;

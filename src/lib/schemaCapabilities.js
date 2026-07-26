@@ -87,6 +87,8 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   waitlist_skip_notice_accuracy: 'Apply src/supabase/waitlist_skip_notice_accuracy.sql in Supabase.',
   member_interest_health_reveal_authz: 'Apply src/supabase/member_interest_health_reveal_authz.sql in Supabase.',
   session_capacity_concurrency_guard: 'Apply src/supabase/session_capacity_concurrency_guard.sql in Supabase.',
+  soft_launch_switch_authz: 'Apply src/supabase/soft_launch_switch_authz.sql in Supabase.',
+  booking_credit_release_clears_batch: 'Apply src/supabase/booking_credit_release_clears_batch.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

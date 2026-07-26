@@ -91,6 +91,10 @@ export function normalizePaymentActivationRequest(body) {
     if (typeof settings[field] !== 'boolean') throw new Error('INVALID_PAYMENT_ACTIVATION');
   }
   if (settings.payments_enabled !== true) throw new Error('INVALID_PAYMENT_ACTIVATION');
+  // Fail closed here too: Soft Launch UI already blocks payments without
+  // bookings, but a crafted activate_payments body must not open checkout
+  // while class booking stays paused (Ops Health "unsafe").
+  if (settings.bookings_enabled !== true) throw new Error('PAYMENTS_REQUIRE_BOOKINGS');
   const announcement = settings.announcement_banner_text == null
     ? ''
     : String(settings.announcement_banner_text).trim();
@@ -104,7 +108,7 @@ export function normalizePaymentActivationRequest(body) {
     updates: {
       target_launch_date: normalizeLaunchDate(settings.target_launch_date),
       countdown_enabled: settings.countdown_enabled,
-      bookings_enabled: settings.bookings_enabled,
+      bookings_enabled: true,
       payments_enabled: true,
       announcement_banner_text: announcement || null,
       announcement_banner_enabled: settings.announcement_banner_enabled,
@@ -684,6 +688,9 @@ export async function activateSessionPackPayments(serverClient, actorId, activat
     p_announcement_banner_enabled: activation.updates.announcement_banner_enabled,
   });
   if (error) {
+    if (/PAYMENTS_REQUIRE_BOOKINGS|BOOKINGS_REQUIRE_SWITCH_GUARD/i.test(error.message || '')) {
+      throw new Error('PAYMENTS_REQUIRE_BOOKINGS');
+    }
     if (/PAYMENT_ACTIVATION_(?:STALE|ALREADY_ENABLED|SETTINGS_NOT_FOUND)/i.test(error.message || '')) {
       throw new Error('PAYMENT_ACTIVATION_STALE');
     }
@@ -804,6 +811,9 @@ export default async function handler(request, response) {
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
+      }
+      if (error.message === 'PAYMENTS_REQUIRE_BOOKINGS') {
+        return json({ error: 'Enable Bookings before opening session pack checkout. Payments remain paused.' }, 409);
       }
       return json({ error: 'Payment activation request is invalid.' }, 400);
     }
@@ -979,6 +989,9 @@ export default async function handler(request, response) {
     const settings = await activateSessionPackPayments(serverClient, user.id, activation);
     return json(settings);
   } catch (error) {
+    if (error.message === 'PAYMENTS_REQUIRE_BOOKINGS') {
+      return json({ error: 'Enable Bookings before opening session pack checkout. Payments remain paused.' }, 409);
+    }
     if (error.message === 'PAYMENT_ACTIVATION_STALE') {
       return json({ error: 'Platform settings changed during activation. Refresh and review them before retrying.' }, 409);
     }

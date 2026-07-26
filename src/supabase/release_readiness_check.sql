@@ -81,7 +81,9 @@ with required (capability, migration) as (
     ('public_booking_switch_gate', 'src/supabase/public_booking_switch_gate.sql'),
     ('waitlist_skip_notice_accuracy', 'src/supabase/waitlist_skip_notice_accuracy.sql'),
     ('member_interest_health_reveal_authz', 'src/supabase/member_interest_health_reveal_authz.sql'),
-    ('session_capacity_concurrency_guard', 'src/supabase/session_capacity_concurrency_guard.sql')
+    ('session_capacity_concurrency_guard', 'src/supabase/session_capacity_concurrency_guard.sql'),
+    ('soft_launch_switch_authz', 'src/supabase/soft_launch_switch_authz.sql'),
+    ('booking_credit_release_clears_batch', 'src/supabase/booking_credit_release_clears_batch.sql')
 ), readiness as (
   select
     required.capability,

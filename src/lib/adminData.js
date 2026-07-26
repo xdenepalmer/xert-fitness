@@ -20,6 +20,7 @@ import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
 import { adminAuditRangeStart } from './adminAudit.js';
 import { apiErrorMessage } from './apiError.js';
+import { paymentActivationRequiresBookingsMessage } from './launchSettings.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -476,6 +477,14 @@ export function getDefaultSettings() {
 
 function softLaunchSettingsError(error, fallback) {
   const message = String(error?.message || fallback || 'Launch settings could not be saved.');
+  if (/PAYMENTS_REQUIRE_BOOKINGS/i.test(message)) {
+    return new Error(paymentActivationRequiresBookingsMessage());
+  }
+  if (/BOOKINGS_REQUIRE_SWITCH_GUARD/i.test(message)) {
+    return new Error(
+      'Operations Health must verify the member booking-switch guard before bookings can go live.',
+    );
+  }
   if (/PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/i.test(message)) {
     return new Error(
       'Pause session pack payments before changing other soft-launch controls. Checkout must stay frozen while live platform settings change.',
@@ -1894,11 +1903,52 @@ export async function getOperationsHealth() {
 
 // ─── Member detail (admin drawer) ────────────────────────────────────────────
 
+export async function adminMemberOnboardingSummary(userIds) {
+  const ids = Array.isArray(userIds) ? userIds.filter(Boolean) : [];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.rpc('admin_member_onboarding_summary', {
+    p_user_ids: ids,
+  });
+  if (error) {
+    if (['42883', 'PGRST202'].includes(error.code)
+      || /admin_member_onboarding_summary/i.test(error.message || '')) {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+  return data || [];
+}
+
+export async function revealMemberEmergencyContact(userId) {
+  const { data, error } = await supabase.rpc('admin_reveal_member_emergency_contact', {
+    p_user_id: userId,
+  });
+  if (error) {
+    if (/EMERGENCY_CONTACT_NOT_FOUND/i.test(error.message || '')) {
+      return { available: false, user_id: userId, emergency_contact: null };
+    }
+    throw new Error(error.message);
+  }
+  return data;
+}
+
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders, grants, notes, notices] = await Promise.all([supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20), supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }), supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }), adminListMemberNotes(userId, true), adminListMemberNotices(userId)]);
+  const [credits, bookings, orders, grants, notes, notices, onboardingRows] = await Promise.all([
+    supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
+    supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    adminListMemberNotes(userId, true),
+    adminListMemberNotices(userId),
+    adminMemberOnboardingSummary([userId]),
+  ]);
   for (const r of [credits, bookings, orders]) {
     if (r.error) throw new Error(r.error.message);
   }
+  const onboardingAvailable = onboardingRows !== null;
+  const onboarding = onboardingAvailable
+    ? (onboardingRows.find(row => row.user_id === userId) || null)
+    : null;
   return {
     credits: credits.data || [],
     bookings: bookings.data || [],
@@ -1908,7 +1958,9 @@ export async function adminMemberDetail(userId) {
     notes: notes.rows,
     memberNotesAvailable: notes.available,
     notices: notices.rows,
-    memberNoticesAvailable: notices.available
+    memberNoticesAvailable: notices.available,
+    onboarding,
+    onboardingAvailable,
   };
 }
 

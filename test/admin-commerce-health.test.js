@@ -267,6 +267,13 @@ test('payment activation accepts only a confirmed bounded platform snapshot', ()
       /INVALID_PAYMENT_ACTIVATION/,
     );
   }
+  assert.throws(
+    () => normalizePaymentActivationRequest({
+      ...validActivationBody,
+      settings: { ...validActivationBody.settings, bookings_enabled: false },
+    }),
+    /PAYMENTS_REQUIRE_BOOKINGS/,
+  );
 });
 
 test('product activation accepts only a bounded active catalogue snapshot', () => {

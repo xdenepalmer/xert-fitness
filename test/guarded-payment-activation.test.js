@@ -13,7 +13,8 @@ const driftSQLURLs = [
 const settingsVersionSQLURL = new URL('../supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql', import.meta.url);
 
 test('fresh and upgrade SQL force payment activation through the trusted server', async () => {
-  for (const sql of await Promise.all(sqlURLs.map(url => readFile(url, 'utf8')))) {
+  const [operator, migration] = await Promise.all(sqlURLs.map(url => readFile(url, 'utf8')));
+  for (const sql of [operator, migration]) {
     assert.match(sql, /guard_session_pack_payment_activation/i);
     assert.match(sql, /if tg_op = 'INSERT'/i);
     assert.match(sql, /new\.payments_enabled is true and old\.payments_enabled is not true/i);
@@ -32,6 +33,11 @@ test('fresh and upgrade SQL force payment activation through the trusted server'
     assert.match(sql, /values \('guarded_payment_activation'\)/i);
     assert.doesNotMatch(sql, /new\.payments_enabled is false[\s\S]*raise exception/i);
   }
+  // Operator mirror keeps soft_launch_switch_authz so re-runs cannot restore
+  // activate_payments with bookings_enabled:false. Historical migration body
+  // stays as originally applied; 261180 replaces the live RPC.
+  assert.match(operator, /PAYMENTS_REQUIRE_BOOKINGS/);
+  assert.match(operator, /bookings_enabled = true/);
 });
 
 test('live platform settings require an explicit payment pause before mutation', async () => {

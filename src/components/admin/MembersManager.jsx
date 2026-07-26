@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Activity, Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
-import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole, revealMemberEmergencyContact } from '@/lib/adminData';
 import { describeTargetedMemberNoticePush } from '@/lib/memberAnnouncements';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
@@ -46,7 +46,10 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [noticeError, setNoticeError] = useState('');
   const [discardNoticeOpen, setDiscardNoticeOpen] = useState(false);
+  const [emergencyReveal, setEmergencyReveal] = useState(null);
+  const [revealingEmergency, setRevealingEmergency] = useState(false);
   const detailGenerationRef = useRef(0);
+  const emergencyRevealRequestRef = useRef(0);
   // admin_send_member_notice is not idempotent — same-paint double submit mints
   // two private notices and two APNs deliveries before `noticeSaving` re-renders.
   const noticeLockRef = useRef(false);
@@ -66,6 +69,11 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
     const memberId = member.id;
     setDetail(null);
     setDetailError('');
+    // Privacy: clear any prior emergency reveal when the subject changes or
+    // the drawer reloads — matches iOS clearRevealedMemberEmergencyContact.
+    emergencyRevealRequestRef.current += 1;
+    setEmergencyReveal(null);
+    setRevealingEmergency(false);
     adminMemberDetail(memberId)
       .then(result => {
         if (detailGenerationRef.current !== generation) return;
@@ -81,6 +89,26 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
     loadDetail();
     return () => { detailGenerationRef.current += 1; };
   }, [member.id]);
+
+  const revealEmergencyContact = async () => {
+    if (revealingEmergency) return;
+    const memberId = member.id;
+    const requestId = ++emergencyRevealRequestRef.current;
+    setRevealingEmergency(true);
+    try {
+      const result = await revealMemberEmergencyContact(memberId);
+      if (requestId !== emergencyRevealRequestRef.current || memberId !== member.id) return;
+      setEmergencyReveal(result);
+      if (result?.available === false || !result?.emergency_contact) {
+        toast({ title: 'No emergency contact', description: 'This member has not completed Member Readiness emergency contact details.' });
+      }
+    } catch (error) {
+      if (requestId !== emergencyRevealRequestRef.current || memberId !== member.id) return;
+      toast({ title: 'Reveal failed', description: error.message, variant: 'destructive' });
+    } finally {
+      if (requestId === emergencyRevealRequestRef.current) setRevealingEmergency(false);
+    }
+  };
 
   const handleAddNote = async event => {
     event.preventDefault();
@@ -178,6 +206,60 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
           </div>
         ) : (
           <div className="p-5 space-y-7">
+            {/* Member readiness — completion only until a deliberate reveal */}
+            <section>
+              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3" style={{ color: 'rgba(123,167,188,0.7)' }}>
+                <Phone className="w-3.5 h-3.5" /> Member readiness
+              </h4>
+              {!detail.onboardingAvailable ? (
+                <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+                  Member readiness is paused until member_onboarding_foundation is applied.
+                </p>
+              ) : (
+                <>
+                  <ul className="space-y-1.5 font-body text-xs text-xert-concrete/60">
+                    <li>Profile details: {detail.onboarding?.profile_complete ? 'Complete' : 'Incomplete'}</li>
+                    <li>Emergency contact: {detail.onboarding?.emergency_contact_complete ? 'Complete' : 'Incomplete'}</li>
+                    <li>Required acknowledgements: {detail.onboarding?.documents_complete ? 'Complete' : 'Incomplete'}</li>
+                  </ul>
+                  {detail.onboarding?.emergency_contact_complete ? (
+                    <div className="mt-3">
+                      {emergencyReveal?.emergency_contact ? (
+                        <div className="p-3 space-y-1" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)' }}>
+                          <p className="font-body text-sm text-xert-offwhite">{emergencyReveal.emergency_contact.name}</p>
+                          <p className="font-body text-sm text-xert-offwhite">
+                            <a href={`tel:${emergencyReveal.emergency_contact.phone}`} className="hover:text-xert-steel">{emergencyReveal.emergency_contact.phone}</a>
+                          </p>
+                          <p className="font-body text-xs text-xert-concrete/50">{emergencyReveal.emergency_contact.relationship}</p>
+                          {emergencyReveal.revealed_at && (
+                            <p className="font-body text-[10px] text-xert-concrete/35 mt-2">
+                              Revealed {fmtDateTime(emergencyReveal.revealed_at)}. Every reveal is recorded.
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={revealingEmergency}
+                          onClick={() => void revealEmergencyContact()}
+                          className="mt-1 min-h-11 px-3 py-2 border border-xert-steel/40 font-body text-xs uppercase tracking-wider text-xert-concrete/70 hover:border-xert-steel disabled:opacity-50"
+                        >
+                          {revealingEmergency ? 'Revealing...' : 'Reveal emergency contact'}
+                        </button>
+                      )}
+                      <p className="font-body text-[11px] text-xert-concrete/40 mt-2 leading-relaxed">
+                        Emergency-contact details stay out of lists and CSV exports. Reveal only when you need them for safe follow-up.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="font-body text-xs text-xert-concrete/45 mt-2">
+                      No emergency contact on file until the member finishes Member Readiness.
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+
             {/* Private member notices */}
             <section>
               <div className="flex items-start justify-between gap-3 mb-3">

@@ -174,6 +174,10 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql', 'member_interest_health_reveal_authz'],
     ['../src/supabase/session_capacity_concurrency_guard.sql', 'session_capacity_concurrency_guard'],
     ['../supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql', 'session_capacity_concurrency_guard'],
+    ['../src/supabase/soft_launch_switch_authz.sql', 'soft_launch_switch_authz'],
+    ['../supabase/migrations/20260726118000_soft_launch_switch_authz.sql', 'soft_launch_switch_authz'],
+    ['../src/supabase/booking_credit_release_clears_batch.sql', 'booking_credit_release_clears_batch'],
+    ['../supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql', 'booking_credit_release_clears_batch'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -300,6 +304,8 @@ test('read-only production check reports every release capability and migration'
     'waitlist_skip_notice_accuracy',
     'member_interest_health_reveal_authz',
     'session_capacity_concurrency_guard',
+    'soft_launch_switch_authz',
+    'booking_credit_release_clears_batch',
   ];
 
   for (const capability of capabilities) {

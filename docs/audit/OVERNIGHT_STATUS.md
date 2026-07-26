@@ -3,11 +3,20 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726117000_session_capacity_concurrency_guard.sql` (**26117**). Tip
+`20260726119000_booking_credit_release_clears_batch.sql` (**26119**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Soft-launch switch authz (**26118**): database + activate_payments API refuse
+  pack checkout without bookings, and refuse enabling bookings without
+  `member_booking_switch_guard` — UI-only gates are no longer bypassable via a
+  crafted API body or direct PostgREST settings update.
+- Credit release clears `credit_batch_id` (**26119**): cancel / status demote /
+  class cancel null the batch FK when a reserved credit is released so
+  waitlisted/cancelled places cannot look still charged.
+- Web Member drawer: audited emergency-contact reveal (iOS / Privacy parity);
+  completion flags only until deliberate Reveal; clears on member switch.
 - Concurrent class capacity: `enforce_session_capacity` BEFORE ROW trigger
   re-locks `class_sessions` and raises `SESSION_FULL` if a new
   requested/confirmed place would overfill — defence for concurrent
@@ -190,17 +199,18 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726117000_session_capacity_concurrency_guard.sql` (**26117** — full
+   `20260726119000_booking_credit_release_clears_batch.sql` (**26119** — full
    list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
-   `session_capacity_concurrency_guard` (26117*).
-3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
-   enable bookings only when Ops Health shows the booking-switch guard;
-   with bookings paused, `/timetable` footer + sticky Book stay off and
-   `/booking` class rows show Register interest. Lead health Reveal on a
-   consented injury writes an audit row; direct PostgREST select of injuries
-   fails. Concurrent book/confirm against a full class raises `SESSION_FULL`.
+   `soft_launch_switch_authz` (26118*) and
+   `booking_credit_release_clears_batch` (26119*).
+3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
+   API/DB, not only UI); enable bookings only when Ops Health shows the
+   booking-switch guard (DB refuses without it). Member drawer Reveal
+   emergency contact writes an audit row. Demote confirmed→waitlisted clears
+   `credit_batch_id`. Concurrent book/confirm against a full class raises
+   `SESSION_FULL`.
 
 ---
 
@@ -545,7 +555,20 @@ No new migration timestamp for this batch (operator + historical tip). Apply thr
 
 Migration / operator mirror (already on tip; body tightened this batch):
 `supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql`
-↔ `src/supabase/session_capacity_concurrency_guard.sql`. Apply through **26117**.
+↔ `src/supabase/session_capacity_concurrency_guard.sql`.
+
+### 37. This batch — soft-launch switch authz, credit-release FK clear, web emergency reveal
+| Area | Defect | Fix |
+|---|---|---|
+| Authz / fail-closed | Soft Launch UI refused payments without bookings and bookings without the switch guard, but `activate_payments` + `admin_activate_session_pack_payments` accepted `bookings_enabled:false`, and PostgREST could set `bookings_enabled=true` without `member_booking_switch_guard` | Trigger `enforce_soft_launch_switch_authz` + API/RPC refuse; capability `soft_launch_switch_authz` (**26118**) |
+| Silent credit marker | `admin_set_booking_status` / `cancel_booking` / class cancel refunded remaining but left `credit_batch_id` set on waitlisted/cancelled rows | Null the FK when a reserved credit is released; capability `booking_credit_release_clears_batch` (**26119**) |
+| Privacy / ops parity | Privacy + iOS offer audited emergency-contact reveal; web Members drawer had no path after column lockdown | Web `admin_reveal_member_emergency_contact` + readiness section; clear on member switch |
+
+Migration / operator mirrors:
+`supabase/migrations/20260726118000_soft_launch_switch_authz.sql`
+↔ `src/supabase/soft_launch_switch_authz.sql`;
+`supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql`
+↔ `src/supabase/booking_credit_release_clears_batch.sql`. Apply through **26119**.
 
 ---
 
@@ -596,7 +619,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26117)
+### Copy-paste ordered filenames (overnight catch-up through 26119)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -617,6 +640,8 @@ supabase/migrations/20260726114000_member_onboarding_booking_gate.sql
 supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql
 supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
 supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
+supabase/migrations/20260726118000_soft_launch_switch_authz.sql
+supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -638,7 +663,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
+  -f supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -669,6 +694,8 @@ row shows `installed = true` and `release_ready = true`.
 | 14 | `20260726115000_waitlist_skip_notice_accuracy.sql` | `waitlist_skip_notice_accuracy` — waitlist Skip notice does not claim a credit return |
 | 15 | `20260726116000_member_interest_health_reveal_authz.sql` | `member_interest_health_reveal_authz` — injury columns locked; reveal audited |
 | 16 | `20260726117000_session_capacity_concurrency_guard.sql` | `session_capacity_concurrency_guard` — session-locked `SESSION_FULL` on concurrent book/confirm (incl. session moves) |
+| 17 | `20260726118000_soft_launch_switch_authz.sql` | `soft_launch_switch_authz` — payments require bookings; bookings require switch guard (DB + API) |
+| 18 | `20260726119000_booking_credit_release_clears_batch.sql` | `booking_credit_release_clears_batch` — release paths null `credit_batch_id` |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -676,14 +703,14 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`session_capacity_concurrency_guard`.
+`soft_launch_switch_authz` and `booking_credit_release_clears_batch`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726117000_session_capacity_concurrency_guard.sql`. Confirm readiness SQL.
+   `20260726119000_booking_credit_release_clears_batch.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -793,3 +820,8 @@ show `installed = true` and `release_ready = true`, including
     moved onto a full class) raises `SESSION_FULL`; after a transient APNs
     `failed` row, targeted / class-cancel notify retries remaining devices;
     booking desk / promote / skip toasts surface `push.failed` reasons.
+36. **Soft-launch switch authz + credit-release clear + web emergency reveal** —
+    Crafted `activate_payments` with bookings off returns 409; PostgREST cannot
+    enable bookings without the switch-guard capability; demote/cancel/class
+    cancel clear `credit_batch_id` when releasing a credit; web Member drawer
+    can Reveal emergency contact (audited) and clears it on member switch.
