@@ -2107,6 +2107,7 @@ private struct AdminMemberDetailView: View {
     @State private var showingGrant = false
     @State private var showingNoticeComposer = false
     @State private var pendingRole: String?
+    @State private var historyTab = AdminMemberHistoryTab.credits
 
     private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
 
@@ -2130,9 +2131,23 @@ private struct AdminMemberDetailView: View {
                 LabeledContent("Paid orders", value: current.orders_count.formatted())
                 LabeledContent("Lifetime spend", value: current.totalSpent)
                 Button { showingGrant = true } label: { Label("Grant class credits", systemImage: "ticket") }
-                    .disabled(admin.servicingMemberID != nil)
+                    .disabled(
+                        admin.servicingMemberID != nil
+                            || admin.loadingMemberDetailID != nil
+                            || admin.memberDetailUnavailableSources.contains("credit audit")
+                    )
+                if admin.memberDetailUnavailableSources.contains("credit audit") {
+                    Label(
+                        "Credit grants are paused until the audit ledger refreshes.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+                }
             }
             .listRowBackground(Color.xertInk)
+
+            accountHistorySection
 
             memberReadinessSection
 
@@ -2243,6 +2258,232 @@ private struct AdminMemberDetailView: View {
         } message: { role in
             Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
         }
+    }
+
+    private var accountHistorySection: some View {
+        Section("Account history") {
+            Picker("Account history", selection: $historyTab) {
+                ForEach(AdminMemberHistoryTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("owner.member.accountHistory")
+
+            if admin.loadingMemberDetailID == current.id && accountHistoryIsEmpty {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading \(historyTab.rawValue.lowercased())...")
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                }
+                .frame(minHeight: 44)
+            } else {
+                switch historyTab {
+                case .credits:
+                    creditHistory
+                case .bookings:
+                    bookingHistory
+                case .purchases:
+                    purchaseHistory
+                }
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private var creditHistory: some View {
+        if admin.memberDetailUnavailableSources.contains("credit history") {
+            accountHistoryWarning(
+                "Credit history is unavailable.",
+                detail: "Refresh before relying on this balance or its expiry dates."
+            )
+        } else if admin.memberCreditBatches.isEmpty {
+            accountHistoryEmpty("No credit batches recorded.", icon: "ticket")
+        } else {
+            ForEach(admin.memberCreditBatches) { batch in
+                VStack(alignment: .leading, spacing: 7) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text("\(batch.remaining) of \(batch.total) credits")
+                                .font(.headline.monospacedDigit())
+                            Spacer()
+                            historyStatus(batch.stateLabel())
+                        }
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("\(batch.remaining) of \(batch.total) credits")
+                                .font(.headline.monospacedDigit())
+                            historyStatus(batch.stateLabel())
+                        }
+                    }
+
+                    if let expiry = batch.expires_at {
+                        Label(
+                            "Expires \(expiry.formatted(date: .abbreviated, time: .omitted))",
+                            systemImage: "calendar.badge.clock"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.65))
+                    } else {
+                        Label("No expiry", systemImage: "infinity")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                    }
+
+                    if let grant = admin.memberCreditGrants.first(where: { $0.credit_batch_id == batch.id }) {
+                        Label(grant.note, systemImage: "person.badge.plus")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertSteel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Text("Added \(batch.created_at.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(Color.xertPale.opacity(0.45))
+                }
+                .padding(.vertical, 5)
+                .accessibilityElement(children: .combine)
+            }
+
+            if admin.memberDetailUnavailableSources.contains("credit audit") {
+                accountHistoryWarning(
+                    "Manual grant reasons are unavailable.",
+                    detail: "Credit grants remain paused until the audit ledger refreshes."
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bookingHistory: some View {
+        if admin.memberDetailUnavailableSources.contains("booking history") {
+            accountHistoryWarning(
+                "Booking history is unavailable.",
+                detail: "Refresh before relying on this member's attendance record."
+            )
+        } else if admin.memberBookingHistory.isEmpty {
+            accountHistoryEmpty("No bookings recorded.", icon: "calendar")
+        } else {
+            ForEach(admin.memberBookingHistory) { booking in
+                VStack(alignment: .leading, spacing: 7) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text(booking.class_sessions?.displayName ?? "Class")
+                                .font(.headline)
+                            Spacer()
+                            historyStatus(booking.statusLabel)
+                        }
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(booking.class_sessions?.displayName ?? "Class")
+                                .font(.headline)
+                            historyStatus(booking.statusLabel)
+                        }
+                    }
+                    Label(
+                        (booking.class_sessions?.start_time ?? booking.created_at)
+                            .formatted(date: .abbreviated, time: .shortened),
+                        systemImage: "clock"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.62))
+                    if let cancelledAt = booking.cancelled_at {
+                        Text("Cancelled \(cancelledAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(Color.xertPale.opacity(0.45))
+                    }
+                }
+                .padding(.vertical, 5)
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var purchaseHistory: some View {
+        if admin.memberDetailUnavailableSources.contains("purchase history") {
+            accountHistoryWarning(
+                "Purchase history is unavailable.",
+                detail: "Refresh before discussing payments, refunds or purchased terms."
+            )
+        } else if admin.memberOrderHistory.isEmpty {
+            accountHistoryEmpty("No purchases recorded.", icon: "creditcard")
+        } else {
+            ForEach(admin.memberOrderHistory) { order in
+                VStack(alignment: .leading, spacing: 7) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text(order.products?.name ?? "Session pack")
+                                .font(.headline)
+                            Spacer()
+                            Text(order.displayAmount)
+                                .font(.subheadline.weight(.bold).monospacedDigit())
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(order.products?.name ?? "Session pack")
+                                .font(.headline)
+                            Text(order.displayAmount)
+                                .font(.subheadline.weight(.bold).monospacedDigit())
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        historyStatus(order.displayStatus)
+                        Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.58))
+                    }
+                    Text(order.purchasedTerms)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 5)
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
+    private var accountHistoryIsEmpty: Bool {
+        switch historyTab {
+        case .credits: return admin.memberCreditBatches.isEmpty
+        case .bookings: return admin.memberBookingHistory.isEmpty
+        case .purchases: return admin.memberOrderHistory.isEmpty
+        }
+    }
+
+    private func historyStatus(_ value: String) -> some View {
+        Text(value.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(historyStatusColour(value))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func historyStatusColour(_ value: String) -> Color {
+        switch value.lowercased() {
+        case "available", "paid", "confirmed", "attended": return .green
+        case "expired", "used", "cancelled", "declined", "refunded": return Color.xertPale.opacity(0.5)
+        case "failed": return .red
+        default: return .orange
+        }
+    }
+
+    private func accountHistoryWarning(_ title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: "wifi.exclamationmark")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.orange)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minHeight: 44, alignment: .leading)
+    }
+
+    private func accountHistoryEmpty(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.subheadline)
+            .foregroundStyle(Color.xertPale.opacity(0.62))
+            .frame(minHeight: 44, alignment: .leading)
     }
 
     private var memberReadinessSection: some View {

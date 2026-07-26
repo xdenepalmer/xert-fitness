@@ -706,3 +706,57 @@ test('native campaign attribution keeps form origin separate from marketing sour
   assert.match(summary, /Self\.clean\(row\.source\) \?\? ""/);
   assert.doesNotMatch(summary, /utm_source\) \?\? Self\.clean\([^\n]*source/);
 });
+
+test('native member records provide bounded truthful account history and guarded credit grants', async () => {
+  const [api, store, view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  for (const method of [
+    'adminMemberCreditBatches',
+    'adminMemberCreditGrants',
+    'adminMemberBookings',
+    'adminMemberOrders',
+  ]) {
+    const start = api.indexOf(`func ${method}`);
+    assert.notEqual(start, -1, `${method} should exist`);
+    const contract = api.slice(start, start + 1_900);
+    assert.match(contract, /URLQueryItem\(name: "user_id", value: "eq\.\\\(memberID\.uuidString\)"\)/);
+    assert.match(contract, /URLQueryItem\(name: "order", value: "created_at\.desc,id\.desc"\)/);
+    assert.match(contract, /URLQueryItem\(name: "limit", value: "50"\)/);
+  }
+
+  assert.match(models, /struct AdminMemberCreditBatch: Identifiable, Codable, Hashable/);
+  assert.match(models, /struct AdminMemberCreditGrant: Identifiable, Codable, Hashable/);
+  assert.match(models, /struct AdminMemberBookingHistory: Identifiable, Codable, Hashable/);
+  assert.match(models, /enum AdminMemberHistoryTab[\s\S]*case credits[\s\S]*case bookings[\s\S]*case purchases/);
+
+  for (const request of ['creditsRequest', 'grantsRequest', 'bookingsRequest', 'ordersRequest']) {
+    assert.match(store, new RegExp(`async let ${request}`));
+  }
+  for (const source of ['credit history', 'credit audit', 'booking history', 'purchase history']) {
+    assert.match(store, new RegExp(`failures\\.append\\("${source}"\\)`));
+  }
+  assert.match(store, /guard loadedMemberDetailID == memberID,[\s\S]*loadingMemberDetailID == nil,[\s\S]*!memberDetailUnavailableSources\.contains\("credit audit"\)/);
+  assert.match(store, /Credit audit is unavailable\. Refresh this member record before granting credits\./);
+  assert.match(store, /Credits were granted, but/);
+
+  const memberRecord = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private struct AdminMemberNoticeHistoryRow'),
+  );
+  assert.match(memberRecord, /Picker\("Account history", selection: \$historyTab\)/);
+  assert.match(memberRecord, /\.pickerStyle\(\.segmented\)/);
+  assert.match(memberRecord, /case \.credits:[\s\S]*creditHistory/);
+  assert.match(memberRecord, /case \.bookings:[\s\S]*bookingHistory/);
+  assert.match(memberRecord, /case \.purchases:[\s\S]*purchaseHistory/);
+  assert.match(memberRecord, /admin\.memberCreditGrants\.first\(where: \{ \$0\.credit_batch_id == batch\.id \}\)/);
+  assert.match(memberRecord, /Manual grant reasons are unavailable\./);
+  assert.match(memberRecord, /Purchase history is unavailable\./);
+  assert.match(memberRecord, /Booking history is unavailable\./);
+  assert.match(memberRecord, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(memberRecord, /admin\.memberDetailUnavailableSources\.contains\("credit audit"\)/);
+});

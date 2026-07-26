@@ -3753,6 +3753,54 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(notice.deliveryLabel, "Push delivered")
     }
 
+    func testAdminMemberCreditBatchStatesRespectExpiryBeforeRemainingBalance() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let expired = AdminMemberCreditBatch(
+            id: UUID(),
+            order_id: nil,
+            total: 10,
+            remaining: 4,
+            expires_at: now.addingTimeInterval(-1),
+            created_at: now.addingTimeInterval(-86_400)
+        )
+        let used = AdminMemberCreditBatch(
+            id: UUID(),
+            order_id: nil,
+            total: 5,
+            remaining: 0,
+            expires_at: now.addingTimeInterval(86_400),
+            created_at: now
+        )
+        let available = AdminMemberCreditBatch(
+            id: UUID(),
+            order_id: nil,
+            total: 3,
+            remaining: 2,
+            expires_at: nil,
+            created_at: now
+        )
+
+        XCTAssertEqual(expired.stateLabel(now: now), "Expired")
+        XCTAssertEqual(used.stateLabel(now: now), "Used")
+        XCTAssertEqual(available.stateLabel(now: now), "Available")
+    }
+
+    func testAdminMemberBookingHistoryProvidesSafeOperationalFallbacks() {
+        let fallbackClass = AdminMemberBookingClass(title: "  ", class_type: "Strength", start_time: nil)
+        let unnamedClass = AdminMemberBookingClass(title: nil, class_type: nil, start_time: nil)
+        let booking = AdminMemberBookingHistory(
+            id: UUID(),
+            status: "no_show",
+            created_at: Date(),
+            cancelled_at: nil,
+            class_sessions: fallbackClass
+        )
+
+        XCTAssertEqual(fallbackClass.displayName, "Strength")
+        XCTAssertEqual(unnamedClass.displayName, "Class")
+        XCTAssertEqual(booking.statusLabel, "No Show")
+    }
+
     func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 

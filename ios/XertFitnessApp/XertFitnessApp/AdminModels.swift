@@ -211,6 +211,62 @@ struct AdminMemberNoticeSendOutcome: Hashable {
     let warning: String?
 }
 
+struct AdminMemberCreditBatch: Identifiable, Codable, Hashable {
+    let id: UUID
+    let order_id: UUID?
+    let total: Int
+    let remaining: Int
+    let expires_at: Date?
+    let created_at: Date
+
+    func stateLabel(now: Date = Date()) -> String {
+        if let expires_at, expires_at <= now { return "Expired" }
+        if remaining == 0 { return "Used" }
+        return "Available"
+    }
+}
+
+struct AdminMemberCreditGrant: Identifiable, Codable, Hashable {
+    let id: UUID
+    let sessions: Int
+    let validity_days: Int?
+    let note: String
+    let credit_batch_id: UUID?
+    let created_at: Date
+}
+
+struct AdminMemberBookingClass: Codable, Hashable {
+    let title: String?
+    let class_type: String?
+    let start_time: Date?
+
+    var displayName: String {
+        let title = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let type = class_type?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty ? (type.isEmpty ? "Class" : type) : title
+    }
+}
+
+struct AdminMemberBookingHistory: Identifiable, Codable, Hashable {
+    let id: UUID
+    let status: String
+    let created_at: Date
+    let cancelled_at: Date?
+    let class_sessions: AdminMemberBookingClass?
+
+    var statusLabel: String {
+        status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+enum AdminMemberHistoryTab: String, CaseIterable, Identifiable {
+    case credits = "Credits"
+    case bookings = "Bookings"
+    case purchases = "Purchases"
+
+    var id: String { rawValue }
+}
+
 struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID

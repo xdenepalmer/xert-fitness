@@ -58,6 +58,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var memberNotices: [AdminMemberNotice] = []
     @Published private(set) var memberNoticeStatusMessage: String?
     @Published private(set) var memberNoticeStatusIsWarning = false
+    @Published private(set) var memberCreditBatches: [AdminMemberCreditBatch] = []
+    @Published private(set) var memberCreditGrants: [AdminMemberCreditGrant] = []
+    @Published private(set) var memberBookingHistory: [AdminMemberBookingHistory] = []
+    @Published private(set) var memberOrderHistory: [OrderItem] = []
     @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
     @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
     @Published private(set) var loadedMemberDetailID: UUID?
@@ -669,6 +673,10 @@ final class AdminStore: ObservableObject {
         memberNotices = []
         memberNoticeStatusMessage = nil
         memberNoticeStatusIsWarning = false
+        memberCreditBatches = []
+        memberCreditGrants = []
+        memberBookingHistory = []
+        memberOrderHistory = []
         memberOnboardingSummary = nil
         revealedMemberEmergencyContact = nil
         memberDetailUnavailableSources = []
@@ -679,6 +687,10 @@ final class AdminStore: ObservableObject {
 
         async let notesRequest = api.adminMemberNotes(session: session, memberID: memberID)
         async let noticesRequest = api.adminMemberNotices(session: session, memberID: memberID)
+        async let creditsRequest = api.adminMemberCreditBatches(session: session, memberID: memberID)
+        async let grantsRequest = api.adminMemberCreditGrants(session: session, memberID: memberID)
+        async let bookingsRequest = api.adminMemberBookings(session: session, memberID: memberID)
+        async let ordersRequest = api.adminMemberOrders(session: session, memberID: memberID)
         async let onboardingRequest = api.adminMemberOnboardingSummary(session: session, memberID: memberID)
         var failures: [String] = []
 
@@ -709,6 +721,42 @@ final class AdminStore: ObservableObject {
             failures.append("private notices")
         }
 
+        do {
+            let credits = try await creditsRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberCreditBatches = credits
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("credit history")
+        }
+
+        do {
+            let grants = try await grantsRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberCreditGrants = grants
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("credit audit")
+        }
+
+        do {
+            let bookings = try await bookingsRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberBookingHistory = bookings
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("booking history")
+        }
+
+        do {
+            let orders = try await ordersRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberOrderHistory = orders
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("purchase history")
+        }
+
         guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
         memberDetailUnavailableSources = failures
     }
@@ -725,6 +773,10 @@ final class AdminStore: ObservableObject {
         memberNotices = []
         memberNoticeStatusMessage = nil
         memberNoticeStatusIsWarning = false
+        memberCreditBatches = []
+        memberCreditGrants = []
+        memberBookingHistory = []
+        memberOrderHistory = []
         memberOnboardingSummary = nil
         revealedMemberEmergencyContact = nil
         memberDetailUnavailableSources = []
@@ -848,11 +900,52 @@ final class AdminStore: ObservableObject {
 
     func grantCredits(session: AuthSession, memberID: UUID, sessions: Int, validityDays: Int?, requestID: UUID, note: String) async -> Bool {
         guard servicingMemberID == nil else { return false }
+        guard loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
+              !memberDetailUnavailableSources.contains("credit audit") else {
+            errorMessage = "Credit audit is unavailable. Refresh this member record before granting credits."
+            return false
+        }
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             _ = try await api.adminGrantCredits(session: session, memberID: memberID, sessions: sessions, validityDays: validityDays, requestID: requestID, note: note)
-            members = try await api.adminMembers(session: session)
-            lastUpdatedAt = Date(); return true
+            var refreshWarnings: [String] = []
+            do {
+                members = try await api.adminMembers(session: session)
+            } catch {
+                refreshWarnings.append("member balance")
+            }
+            if loadedMemberDetailID == memberID {
+                do {
+                    memberCreditBatches = try await api.adminMemberCreditBatches(
+                        session: session,
+                        memberID: memberID
+                    )
+                    memberDetailUnavailableSources.removeAll { $0 == "credit history" }
+                } catch {
+                    refreshWarnings.append("credit history")
+                    if !memberDetailUnavailableSources.contains("credit history") {
+                        memberDetailUnavailableSources.append("credit history")
+                    }
+                }
+                do {
+                    memberCreditGrants = try await api.adminMemberCreditGrants(
+                        session: session,
+                        memberID: memberID
+                    )
+                    memberDetailUnavailableSources.removeAll { $0 == "credit audit" }
+                } catch {
+                    refreshWarnings.append("credit audit")
+                    if !memberDetailUnavailableSources.contains("credit audit") {
+                        memberDetailUnavailableSources.append("credit audit")
+                    }
+                }
+            }
+            if !refreshWarnings.isEmpty {
+                errorMessage = "Credits were granted, but \(refreshWarnings.joined(separator: " and ")) could not refresh."
+            }
+            lastUpdatedAt = Date()
+            return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 

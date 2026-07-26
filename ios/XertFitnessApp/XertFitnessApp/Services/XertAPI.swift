@@ -668,6 +668,70 @@ final class XertAPI {
         )
     }
 
+    func adminMemberCreditBatches(
+        session auth: AuthSession,
+        memberID: UUID
+    ) async throws -> [AdminMemberCreditBatch] {
+        try await restRequest(
+            path: "/rest/v1/credit_batches",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,order_id,total,remaining,expires_at,created_at"),
+                URLQueryItem(name: "user_id", value: "eq.\(memberID.uuidString)"),
+                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "50")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminMemberCreditGrants(
+        session auth: AuthSession,
+        memberID: UUID
+    ) async throws -> [AdminMemberCreditGrant] {
+        try await restRequest(
+            path: "/rest/v1/admin_credit_grants",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,sessions,validity_days,note,credit_batch_id,created_at"),
+                URLQueryItem(name: "user_id", value: "eq.\(memberID.uuidString)"),
+                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "50")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminMemberBookings(
+        session auth: AuthSession,
+        memberID: UUID
+    ) async throws -> [AdminMemberBookingHistory] {
+        try await restRequest(
+            path: "/rest/v1/session_bookings",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,status,created_at,cancelled_at,class_sessions(title,class_type,start_time)"),
+                URLQueryItem(name: "user_id", value: "eq.\(memberID.uuidString)"),
+                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "50")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminMemberOrders(
+        session auth: AuthSession,
+        memberID: UUID
+    ) async throws -> [OrderItem] {
+        try await restRequest(
+            path: "/rest/v1/orders",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                URLQueryItem(name: "user_id", value: "eq.\(memberID.uuidString)"),
+                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "50")
+            ],
+            auth: auth
+        )
+    }
+
     func adminSendMemberNotice(
         session auth: AuthSession,
         memberID: UUID,
