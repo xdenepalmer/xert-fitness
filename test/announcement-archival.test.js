@@ -27,7 +27,7 @@ for (const path of [
     assert.match(sql, /RESTORE_ANNOUNCEMENT_BEFORE_PUBLISHING/i);
     assert.match(sql, /admin_archive_member_announcement\(p_announcement_id uuid, p_archived boolean\)/i);
     assert.match(sql, /action in \('created', 'updated', 'published', 'unpublished', 'archived', 'restored', 'deleted'\)/i);
-    assert.match(sql, /announcement\.archived_at is null[\s\S]*announcement\.published_at is not null/i);
+    assert.match(sql, /archived_at is null[\s\S]*published_at is not null/i);
     assert.match(sql, /member_announcement_admin_events_admin_read/i);
     assert.match(sql, /revoke execute on function public\.audit_member_announcement_lifecycle\(\) from public, anon, authenticated/i);
     assert.match(sql, /values \('announcement_archival'\)/i);

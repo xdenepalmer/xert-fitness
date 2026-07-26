@@ -19,6 +19,13 @@ test('the reusable profile guard prevents members changing email', () => {
   assert.match(bookingSchema, /new\.email is distinct from old\.email[\s\S]*PROFILE_EMAIL_MANAGED_BY_AUTH/i);
 });
 
+test('reusable setup does not restore insecure private-notice functions', () => {
+  for (const sql of [bookingSchema, archivalUpgrade]) {
+    assert.doesNotMatch(sql, /create(?:\s+or\s+replace)?\s+function public\.my_member_announcements/i);
+    assert.doesNotMatch(sql, /create(?:\s+or\s+replace)?\s+function public\.dismiss_member_announcement/i);
+  }
+});
+
 test('the deployed repair and reusable copy are identical and protect both gaps', () => {
   assert.ok(existsSync(migrationPath), 'missing deployed database repair');
   assert.ok(existsSync(reusableRepairPath), 'missing reusable database repair');
@@ -30,4 +37,6 @@ test('the deployed repair and reusable copy are identical and protect both gaps'
   assert.match(migration, /drop policy if exists "member_announcements_select_live_or_admin"/i);
   assert.match(migration, /audience = 'targeted'[\s\S]*target\.user_id = \(select auth\.uid\(\)\)/i);
   assert.match(migration, /new\.email is distinct from old\.email[\s\S]*PROFILE_EMAIL_MANAGED_BY_AUTH/i);
+  assert.match(migration, /my_member_announcements[\s\S]*announcement\.audience = 'targeted'[\s\S]*target\.user_id = v_user_id/i);
+  assert.match(migration, /dismiss_member_announcement[\s\S]*announcement\.audience = 'targeted'[\s\S]*target\.user_id = v_user_id/i);
 });
