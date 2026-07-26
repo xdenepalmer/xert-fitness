@@ -262,7 +262,12 @@ test('checkout has a fail-closed owner payment switch before any Stripe operatio
   const settingsId = '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2';
   const actorId = '9bb45f52-9022-4b5b-933f-d8998dbe659f';
   const updatedAt = '2026-07-16T03:05:00.000Z';
-  const settings = { id: settingsId, payments_enabled: true, updated_at: updatedAt };
+  const settings = {
+    id: settingsId,
+    bookings_enabled: true,
+    payments_enabled: true,
+    updated_at: updatedAt,
+  };
   const receipt = {
     resource_id: settingsId,
     action: 'updated',
@@ -290,6 +295,9 @@ test('checkout has a fail-closed owner payment switch before any Stripe operatio
   assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin()), true);
   assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
     settingsRows: [{ ...settings, payments_enabled: false }],
+  })), false);
+  assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({
+    settingsRows: [{ ...settings, bookings_enabled: false }],
   })), false);
   assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({ settingsRows: [] })), false);
   assert.equal(await sessionPackPaymentsAreEnabled(activationAdmin({ settingsRows: [settings, settings] })), false);

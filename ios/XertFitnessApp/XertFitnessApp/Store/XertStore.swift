@@ -237,7 +237,8 @@ final class XertStore: ObservableObject {
             guard canApplyRefresh(refreshVersion) else { return }
             memberBookingsEnabled = loadedSettings?.bookings_enabled == true
             bookingAvailabilityLoaded = true
-            sessionPackPaymentsEnabled = loadedSettings?.payments_enabled == true
+            sessionPackPaymentsEnabled = loadedSettings?.bookings_enabled == true
+                && loadedSettings?.payments_enabled == true
             paymentAvailabilityLoaded = true
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }

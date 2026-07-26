@@ -52,14 +52,15 @@ test('owner pulse retains a deterministic exact workspace for the next best acti
   assert.match(swiftTests, /testOwnerNavigationPriorityRoutesTheMostUrgentWorkExactly/);
 });
 
-test('iPad keeps its visible owner pulse while iPhone owner access lives in the switcher', () => {
+test('iPad and iPhone expose a visible owner pulse with exact priority routing', () => {
   assert.match(root, /@StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore\(\)/);
   assert.equal((root.match(/ownerPulse: ownerNavigationPulse\.snapshot/g) || []).length, 2);
-  assert.equal((root.match(/XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/g) || []).length, 1);
-  assert.equal((root.match(/\.accessibilityValue\(ownerPulse\.accessibilityLabel\)/g) || []).length, 1);
-  assert.equal((root.match(/onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/g) || []).length, 1);
-  assert.equal((root.match(/onOpenAdmin\(priority\.workspace\)/g) || []).length, 2);
-  assert.equal((root.match(/\.contextMenu \{ ownerWorkspaceMenu \}/g) || []).length, 1);
+  assert.equal((root.match(/XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/g) || []).length, 2);
+  assert.equal((root.match(/\.accessibilityValue\(ownerPulse\.accessibilityLabel\)/g) || []).length, 2);
+  assert.equal((root.match(/onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/g) || []).length, 2);
+  assert.equal((root.match(/onOpenAdmin\(priority\.workspace\)/g) || []).length, 3);
+  assert.equal((root.match(/\.contextMenu \{ ownerWorkspaceMenu \}/g) || []).length, 2);
+  assert.match(root, /accessibilityIdentifier\("xert-navigation-owner-priority"\)/);
   assert.match(root, /private struct XertNavigationDock:[\s\S]*if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /private func openOwnerCommandCentre\(_ workspace: XertOwnerWorkspace\? = nil\)/);
   assert.match(root, /requestedAdminRoute = workspace\.map \{ XertOwnerRoute\(workspace: \$0\) \}/);

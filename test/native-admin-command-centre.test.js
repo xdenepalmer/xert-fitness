@@ -458,9 +458,13 @@ test('native owner overview turns Stripe launch evidence into one exact next act
   assert.match(navigation, /guard hasActiveProducts else/);
   assert.match(navigation, /guard activeProductsAreLinked else/);
   assert.match(navigation, /guard healthReady == true else/);
-  assert.match(navigation, /guard paymentsEnabled == true else/);
+  assert.match(navigation, /guard let bookingsEnabled, let paymentsEnabled else/);
+  assert.match(navigation, /if paymentsEnabled && !bookingsEnabled/);
+  assert.match(navigation, /guard bookingsEnabled else/);
+  assert.match(navigation, /guard paymentsEnabled else/);
   assert.match(navigation, /paymentSwitchState\?\.lowercased\(\) == "enabled", activationReceiptReady == true/);
   assert.match(navigation, /route: exactProductRoute\(blockingProductIDs\) \?\? XertOwnerRoute\(workspace: \.products\)/);
+  assert.match(navigation, /phase: \.readyToOpenBookings[\s\S]*route: XertOwnerRoute\(workspace: \.controls\)/);
   assert.match(navigation, /phase: \.readyToActivate[\s\S]*route: XertOwnerRoute\(workspace: \.controls\)/);
   assert.match(view, /stripeLaunchRunway[\s\S]*quickTools/);
   assert.match(view, /requiredSources = \["platform controls", "session packs", "Stripe health"\]/);
@@ -471,6 +475,9 @@ test('native owner overview turns Stripe launch evidence into one exact next act
   assert.match(view, /"stripe launch checkout payments activation"/);
   assert.match(view, /Button \{ onOpenRoute\(launchRunway\.route\) \}/);
   assert.match(view, /accessibilityIdentifier\("owner\.commands\.stripeLaunch"\)/);
+  assert.match(view, /Toggle\("Bookings enabled", isOn: bookingsEnabledBinding\)/);
+  assert.match(view, /if !isEnabled \{[\s\S]*value\.payments_enabled = false/);
+  assert.match(view, /Open bookings and complete the booking smoke test before enabling payments/);
 });
 
 test('native owner class work opens exact protected rosters from overview and search', async () => {

@@ -16,7 +16,7 @@ export async function getProducts() {
 export async function getSessionPackPaymentAvailability() {
   const { data, error } = await supabase
     .from('admin_settings')
-    .select('payments_enabled')
+    .select('bookings_enabled,payments_enabled')
     .limit(2);
   if (error) throw new Error(error.message);
   return data?.length === 1 && sessionPackPaymentsEnabled(data[0]);

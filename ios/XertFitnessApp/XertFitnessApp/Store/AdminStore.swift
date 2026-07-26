@@ -1045,6 +1045,10 @@ final class AdminStore: ObservableObject {
             errorMessage = "Refresh Platform Controls before saving live settings."
             return false
         }
+        guard !draft.payments_enabled || draft.bookings_enabled else {
+            errorMessage = "Open member bookings before enabling session-pack payments."
+            return false
+        }
         if draft.bookings_enabled {
             guard loadedSources.contains("schema health"),
                   !refreshUnavailableSources.contains("schema health"),

@@ -9,15 +9,30 @@
 // spreadsheet to treat the whole cell as literal text. (This also protects
 // legitimate values that merely look like formulas, e.g. a "+61" phone number
 // Excel would otherwise try to evaluate.)
+const FORMULA_TRIGGER = /^[=+\-@\t\r\n]/;
+const PLAIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
+
 export function neutralizeFormula(str) {
-  return /^[=+\-@\t\r\n]/.test(str) ? `'${str}` : str;
+  return FORMULA_TRIGGER.test(str) ? `'${str}` : str;
 }
 
-function escapeCell(value) {
+export function escapeCell(value) {
   if (value === null || value === undefined) return '';
   const raw = Array.isArray(value) ? value.join('; ') : String(value);
-  const str = neutralizeFormula(raw);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  const str = PLAIN_NUMBER.test(raw) ? raw : neutralizeFormula(raw);
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+/**
+ * Builds CSV text without transport encoding details such as a BOM.
+ */
+export function buildCsv(rows, columns) {
+  if (!rows || rows.length === 0) return '';
+  const cols = columns || Object.keys(rows[0]).map(k => ({ key: k, label: k }));
+  return [
+    cols.map(c => escapeCell(c.label)).join(','),
+    ...rows.map(row => cols.map(c => escapeCell(row[c.key])).join(',')),
+  ].join('\n');
 }
 
 /**
@@ -27,12 +42,7 @@ function escapeCell(value) {
  */
 export function toCsv(rows, columns) {
   if (!rows || rows.length === 0) return '';
-  const cols = columns || Object.keys(rows[0]).map(k => ({ key: k, label: k }));
-  return [
-    cols.map(c => escapeCell(c.label)).join(','),
-    ...rows.map(row => cols.map(c => escapeCell(row[c.key])).join(',')),
-  ];
-  return '﻿' + lines.join('\n');
+  return '﻿' + buildCsv(rows, columns);
 }
 
 /**

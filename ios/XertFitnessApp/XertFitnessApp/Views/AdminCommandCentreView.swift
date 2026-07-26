@@ -808,6 +808,7 @@ struct AdminCommandCentreView: View {
             hasCompletedRefresh: admin.hasCompletedRefresh,
             isRefreshing: admin.isLoading,
             sourcesAreCurrent: sourcesAreCurrent,
+            bookingsEnabled: admin.settings?.bookings_enabled,
             paymentsEnabled: admin.settings?.payments_enabled,
             hasActiveProducts: !activeProducts.isEmpty,
             activeProductsAreLinked: activeProducts.allSatisfy(\.hasStableStripePriceID),
@@ -877,6 +878,8 @@ struct AdminCommandCentreView: View {
         case .unavailable: return "wifi.exclamationmark"
         case .catalogBlocked: return "ticket"
         case .healthBlocked: return "exclamationmark.shield"
+        case .controlsBlocked: return "switch.2"
+        case .readyToOpenBookings: return "calendar.badge.checkmark"
         case .readyToActivate: return "checkmark.shield"
         case .live: return "bolt.shield.fill"
         }
@@ -885,8 +888,8 @@ struct AdminCommandCentreView: View {
     private func stripeRunwayColour(_ phase: XertStripeLaunchPhase) -> Color {
         switch phase {
         case .checking: return Color.xertSteel
-        case .unavailable, .catalogBlocked, .healthBlocked: return Color.orange
-        case .readyToActivate: return Color.xertSteel
+        case .unavailable, .catalogBlocked, .healthBlocked, .controlsBlocked: return Color.orange
+        case .readyToOpenBookings, .readyToActivate: return Color.xertSteel
         case .live: return Color.green
         }
     }
@@ -5039,12 +5042,18 @@ private struct AdminPlatformView: View {
                         }
                     }
                     Section("Member booking & purchases") {
-                        Toggle("Bookings enabled", isOn: settingBinding(\.bookings_enabled))
-                        Text("Controls both website and iOS class actions. When off, members can browse and register interest but cannot book or join waitlists.")
+                        Toggle("Bookings enabled", isOn: bookingsEnabledBinding)
+                        Text("Controls both website and iOS class actions. Turning bookings off also pauses checkout.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         Toggle("Session pack payments", isOn: settingBinding(\.payments_enabled))
+                            .disabled(draft?.bookings_enabled != true && draft?.payments_enabled != true)
                         Text("Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
+                        if draft?.bookings_enabled != true && draft?.payments_enabled != true {
+                            Label("Open bookings and complete the booking smoke test before enabling payments.", systemImage: "lock.shield")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
                         Toggle("Launch countdown", isOn: settingBinding(\.countdown_enabled))
                     }
                     .disabled(!platformMutationAvailable)
@@ -5202,6 +5211,20 @@ private struct AdminPlatformView: View {
             set: {
                 guard var value = draft else { return }
                 value.announcementText = $0
+                draft = value
+            }
+        )
+    }
+
+    private var bookingsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { draft?.bookings_enabled == true },
+            set: { isEnabled in
+                guard var value = draft else { return }
+                value.bookings_enabled = isEnabled
+                if !isEnabled {
+                    value.payments_enabled = false
+                }
                 draft = value
             }
         )
@@ -5734,6 +5757,7 @@ private struct AdminOperationsHealthView: View {
     private var launchGateIcon: String {
         switch memberLaunchGate.phase {
         case .preflightReady, .liveReady: return "checkmark.seal.fill"
+        case .bookingsOpen: return "calendar.badge.checkmark"
         case .blocked: return "hand.raised.fill"
         case .verifying: return "questionmark.circle.fill"
         }
@@ -5742,6 +5766,7 @@ private struct AdminOperationsHealthView: View {
     private var launchGateColor: Color {
         switch memberLaunchGate.phase {
         case .preflightReady, .liveReady: return .green
+        case .bookingsOpen: return Color.xertSteel
         case .blocked: return .red
         case .verifying: return .orange
         }

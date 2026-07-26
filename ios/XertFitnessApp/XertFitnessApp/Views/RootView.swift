@@ -1277,6 +1277,10 @@ private struct XertNavigationDock: View {
             taskStripLeadingControl
             taskStripTitle(minimumWidth: compact ? 64 : 100)
 
+            if isAdmin {
+                ownerPriorityControl
+            }
+
             if compact {
                 compactUtilitiesMenu
             } else {
@@ -1291,6 +1295,32 @@ private struct XertNavigationDock: View {
 
             quickSwitcherControl
         }
+    }
+
+    private var ownerPriorityControl: some View {
+        Button {
+            XertHaptics.play(.lightImpact)
+            onOpenAdmin(ownerPulse.priority?.workspace)
+        } label: {
+            ZStack {
+                Image(systemName: "waveform.path.ecg.rectangle")
+                    .font(.system(size: 16, weight: .semibold))
+                XertOwnerNavigationPulseBadge(pulse: ownerPulse)
+                    .offset(x: 15, y: -12)
+            }
+            .foregroundStyle(ownerPulse.attentionCount > 0 ? Color.xertSteel : Color.xertPale)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(ownerPulse.priority?.compactLabel ?? "Owner Command Centre")
+        .accessibilityValue(ownerPulse.accessibilityLabel)
+        .accessibilityHint(
+            ownerPulse.priority?.actionTitle
+                ?? "Opens protected gym operations and platform controls"
+        )
+        .accessibilityIdentifier("xert-navigation-owner-priority")
+        .contextMenu { ownerWorkspaceMenu }
     }
 
     @ViewBuilder
@@ -1521,6 +1551,18 @@ private struct XertNavigationDock: View {
             Button { onOpenAdmin(nil) } label: {
                 Label("Owner Command Centre", systemImage: XertOwnerWorkspace.overview.icon)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var ownerWorkspaceMenu: some View {
+        if let priority = ownerPulse.priority {
+            Button { onOpenAdmin(priority.workspace) } label: {
+                Label(priority.actionTitle, systemImage: priority.workspace.icon)
+            }
+        }
+        Button { onOpenAdmin(nil) } label: {
+            Label("Open owner overview", systemImage: XertOwnerWorkspace.overview.icon)
         }
     }
 

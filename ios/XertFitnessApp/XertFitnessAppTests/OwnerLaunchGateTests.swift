@@ -10,8 +10,20 @@ final class OwnerLaunchGateTests: XCTestCase {
         XCTAssertEqual(resolve(bookings: true, payments: true).phase, .liveReady)
     }
 
-    func testMixedSwitchesBlockLaunch() {
-        XCTAssertEqual(resolve(bookings: true, payments: false).phase, .blocked)
+    func testBookingsCanOpenBeforeGuardedPayments() {
+        let gate = resolve(bookings: true, payments: false)
+        XCTAssertEqual(gate.phase, .bookingsOpen)
+        XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks)
+        XCTAssertEqual(
+            gate.nextAction,
+            "Complete the booking smoke test, then activate session-pack payments."
+        )
+    }
+
+    func testPaymentsWithoutBookingsBlockLaunch() {
+        let gate = resolve(bookings: false, payments: true)
+        XCTAssertEqual(gate.phase, .blocked)
+        XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks - 1)
     }
 
     func testUnavailableEvidenceNeverProducesReady() {

@@ -5,14 +5,15 @@ import test from 'node:test';
 import { sessionPackPaymentsEnabled } from '../src/lib/launchSettings.js';
 
 test('public payment availability accepts only an explicit enabled setting', () => {
-  assert.equal(sessionPackPaymentsEnabled({ payments_enabled: true }), true);
+  assert.equal(sessionPackPaymentsEnabled({ bookings_enabled: true, payments_enabled: true }), true);
   for (const settings of [
     undefined,
     null,
     {},
-    { payments_enabled: false },
-    { payments_enabled: 1 },
-    { payments_enabled: 'true' },
+    { bookings_enabled: false, payments_enabled: true },
+    { bookings_enabled: true, payments_enabled: false },
+    { bookings_enabled: true, payments_enabled: 1 },
+    { bookings_enabled: true, payments_enabled: 'true' },
   ]) {
     assert.equal(sessionPackPaymentsEnabled(settings), false);
   }
@@ -28,7 +29,7 @@ test('web and native purchase surfaces fail closed before checkout', async () =>
     readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(webData, /admin_settings[\s\S]*select\('payments_enabled'\)[\s\S]*limit\(2\)/);
+  assert.match(webData, /admin_settings[\s\S]*select\('bookings_enabled,payments_enabled'\)[\s\S]*limit\(2\)/);
   assert.match(webData, /data\?\.length === 1/);
   assert.match(webBooking, /getSessionPackPaymentAvailability\(\)/);
   assert.match(webBooking, /disabled=\{!paymentsEnabled \|\| buyingSlug === pack\.slug\}/);
@@ -61,6 +62,7 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(commerceAPI, /Immutable Stripe order terms are not installed/);
   assert.match(commerceAPI, /Stripe webhook delivery ledger is not installed/);
   assert.match(commerceAPI, /request\.method === 'POST'/);
+  assert.match(commerceAPI, /BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION/);
   assert.match(commerceAPI, /if \(!health\.ready\)/);
   assert.match(commerceAPI, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
   assert.match(webData, /export async function getCommerceConfigurationHealth/);
@@ -70,10 +72,12 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(webAdmin, /await getCommerceConfigurationHealth\(\)/);
   assert.match(webAdmin, /if \(!health\.ready\)/);
   assert.match(webAdmin, /activateSessionPackPayments\(normalized, savedSettings\)/);
+  assert.match(webAdmin, /disabled=\{!settings\.bookings_enabled && !settings\.payments_enabled\}/);
   assert.match(webAdmin, /title="Open session pack checkout\?"/);
   assert.match(nativeAPI, /func adminActivatePlatformPayments/);
   assert.match(nativeAPI, /confirmation: "ENABLE PAYMENTS"/);
   assert.match(nativeStore, /let activatingPayments = draft\.payments_enabled/);
+  assert.match(nativeStore, /guard !draft\.payments_enabled \|\| draft\.bookings_enabled else/);
   assert.match(nativeStore, /api\.adminActivatePlatformPayments/);
   assert.match(nativeAdmin, /confirmationDialog\("Open session pack checkout\?"/);
   assert.match(nativeAdmin, /run every Stripe launch check on the server/);

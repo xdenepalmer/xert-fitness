@@ -54,7 +54,7 @@ export function resolveLaunchGate(checks = []) {
   }
 
   const platformPhase = byKey.get('platform-controls')?.phase;
-  if (!['preflight', 'live'].includes(platformPhase)) {
+  if (!['preflight', 'bookings-open', 'live'].includes(platformPhase)) {
     return {
       state: 'verifying',
       title: 'Verification incomplete',
@@ -65,6 +65,23 @@ export function resolveLaunchGate(checks = []) {
       warnings,
       missingKeys: ['platform-controls-phase'],
       next: byKey.get('platform-controls') || null,
+    };
+  }
+  if (platformPhase === 'bookings-open') {
+    const platformCheck = byKey.get('platform-controls');
+    return {
+      state: 'bookings-open',
+      title: 'Bookings open, checkout guarded',
+      detail: 'Member bookings are open while session-pack checkout remains safely paused. Complete the booking smoke test, then activate payments.',
+      completed,
+      total: REQUIRED_LAUNCH_CHECKS.length,
+      blockers: [],
+      warnings,
+      missingKeys: [],
+      next: {
+        ...platformCheck,
+        action: platformCheck?.action || 'Complete the booking smoke test, then activate session-pack payments.',
+      },
     };
   }
   const live = platformPhase === 'live';

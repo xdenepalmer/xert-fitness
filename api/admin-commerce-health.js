@@ -86,6 +86,7 @@ export function normalizePaymentActivationRequest(body) {
     if (typeof settings[field] !== 'boolean') throw new Error('INVALID_PAYMENT_ACTIVATION');
   }
   if (settings.payments_enabled !== true) throw new Error('INVALID_PAYMENT_ACTIVATION');
+  if (settings.bookings_enabled !== true) throw new Error('BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION');
   const announcement = settings.announcement_banner_text == null
     ? ''
     : String(settings.announcement_banner_text).trim();
@@ -782,6 +783,9 @@ export default async function handler(request, response) {
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
+      }
+      if (error.message === 'BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION') {
+        return json({ error: 'Open member bookings and complete the booking smoke test before enabling payments.' }, 409);
       }
       return json({ error: 'Payment activation request is invalid.' }, 400);
     }

@@ -430,6 +430,10 @@ export function getDefaultSettings() {
 
 export async function updateSoftLaunchSettings(updates, baseline) {
   if (baseline?.id) {
+    const nextSettings = { ...baseline, ...updates };
+    if (nextSettings.payments_enabled === true && nextSettings.bookings_enabled !== true) {
+      throw new Error('Open member bookings before enabling session-pack payments.');
+    }
     let query = supabase
       .from('admin_settings')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -440,12 +444,16 @@ export async function updateSoftLaunchSettings(updates, baseline) {
   }
 
   const current = await getSoftLaunchSettings();
+  const nextSettings = { ...current, ...updates };
+  if (nextSettings.payments_enabled === true && nextSettings.bookings_enabled !== true) {
+    throw new Error('Open member bookings before enabling session-pack payments.');
+  }
   if (current?.id) {
     throw new Error('Launch settings changed since you opened them. Refresh the admin view and review the latest version.');
   }
   const { data, error } = await supabase
     .from('admin_settings')
-    .insert([{ ...getDefaultSettings(), ...updates }])
+    .insert([nextSettings])
     .select('*')
     .single();
   if (error) throw new Error(error.message);
@@ -1549,20 +1557,30 @@ export async function getOperationsHealth() {
       const settings = await getSoftLaunchSettings();
       const bookingsEnabled = settings.bookings_enabled === true;
       const paymentsEnabled = settings.payments_enabled === true;
-      if (bookingsEnabled === paymentsEnabled) {
-        return bookingsEnabled
-          ? { phase: 'live', detail: 'Member bookings and session-pack checkout are enabled.' }
-          : { phase: 'preflight', detail: 'Member bookings and session-pack checkout are safely paused for preflight.' };
+      if (!bookingsEnabled && !paymentsEnabled) {
+        return {
+          phase: 'preflight',
+          detail: 'Member bookings and session-pack checkout are safely paused for preflight.',
+        };
       }
-      const paused = [
-        !bookingsEnabled ? 'bookings' : null,
-        !paymentsEnabled ? 'payments' : null,
-      ].filter(Boolean);
+      if (bookingsEnabled && !paymentsEnabled) {
+        return {
+          phase: 'bookings-open',
+          detail: 'Member bookings are open while session-pack checkout remains safely paused.',
+          action: 'Complete the booking smoke test, then activate session-pack payments.',
+        };
+      }
+      if (bookingsEnabled && paymentsEnabled) {
+        return {
+          phase: 'live',
+          detail: 'Member bookings and session-pack checkout are enabled.',
+        };
+      }
       return {
         status: 'attention',
-        detail: `Member ${paused.join(' and ')} ${paused.length === 1 ? 'is' : 'are'} still paused.`,
+        detail: 'Session-pack checkout is enabled while member bookings are paused.',
         phase: 'unsafe',
-        action: 'Use Soft Launch Settings to pause both switches for preflight or enable both for the controlled live launch.',
+        action: 'Pause payments or open bookings before allowing checkout.',
       };
     }),
 

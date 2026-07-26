@@ -123,6 +123,8 @@ export default function OperationsHealth({ onNavigate }) {
 
   const orderedChecks = useMemo(() => orderOperationsHealthChecks(checks), [checks]);
   const launchGate = useMemo(() => resolveLaunchGate(checks), [checks]);
+  const launchGateIsReady = launchGate.state.endsWith('ready') || launchGate.state === 'bookings-open';
+  const launchGateIsStaged = launchGate.state === 'bookings-open';
 
   const copyIncidentId = useCallback(async eventId => {
     try {
@@ -233,8 +235,8 @@ export default function OperationsHealth({ onNavigate }) {
           aria-labelledby="launch-gate-title"
           className="p-5"
           style={{
-            backgroundColor: launchGate.state.endsWith('ready') ? 'rgba(126,201,143,0.1)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.08)' : 'rgba(224,179,106,0.1)',
-            border: `1px solid ${launchGate.state.endsWith('ready') ? 'rgba(126,201,143,0.3)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.3)' : 'rgba(224,179,106,0.3)'}`,
+            backgroundColor: launchGateIsStaged ? 'rgba(123,167,188,0.1)' : launchGateIsReady ? 'rgba(126,201,143,0.1)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.08)' : 'rgba(224,179,106,0.1)',
+            border: `1px solid ${launchGateIsStaged ? 'rgba(123,167,188,0.3)' : launchGateIsReady ? 'rgba(126,201,143,0.3)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.3)' : 'rgba(224,179,106,0.3)'}`,
           }}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -253,7 +255,7 @@ export default function OperationsHealth({ onNavigate }) {
               className="h-full rounded-full transition-[width]"
               style={{
                 width: `${Math.round((launchGate.completed / launchGate.total) * 100)}%`,
-                backgroundColor: launchGate.state.endsWith('ready') ? '#7ec98f' : launchGate.state === 'blocked' ? '#f87171' : '#e0b36a',
+                backgroundColor: launchGateIsStaged ? '#7BA7BC' : launchGateIsReady ? '#7ec98f' : launchGate.state === 'blocked' ? '#f87171' : '#e0b36a',
               }}
             />
           </div>

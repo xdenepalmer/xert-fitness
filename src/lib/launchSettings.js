@@ -10,7 +10,7 @@ function normalizeDate(value) {
 }
 
 export function sessionPackPaymentsEnabled(settings) {
-  return settings?.payments_enabled === true;
+  return settings?.bookings_enabled === true && settings?.payments_enabled === true;
 }
 
 // Public pricing is hidden ("Coming soon") unless the flag is explicitly false,

@@ -513,12 +513,14 @@ enum XertStripeLaunchPhase: Equatable {
     case unavailable
     case catalogBlocked
     case healthBlocked
+    case controlsBlocked
+    case readyToOpenBookings
     case readyToActivate
     case live
 }
 
 struct XertStripeLaunchRunway: Equatable {
-    static let totalSteps = 4
+    static let totalSteps = 5
 
     let phase: XertStripeLaunchPhase
     let completedSteps: Int
@@ -531,6 +533,7 @@ struct XertStripeLaunchRunway: Equatable {
         hasCompletedRefresh: Bool,
         isRefreshing: Bool,
         sourcesAreCurrent: Bool,
+        bookingsEnabled: Bool?,
         paymentsEnabled: Bool?,
         hasActiveProducts: Bool,
         activeProductsAreLinked: Bool,
@@ -589,12 +592,42 @@ struct XertStripeLaunchRunway: Equatable {
                 route: exactProductRoute(blockingProductIDs) ?? XertOwnerRoute(workspace: .health)
             )
         }
-        guard paymentsEnabled == true else {
+        guard let bookingsEnabled, let paymentsEnabled else {
+            return Self(
+                phase: .unavailable,
+                completedSteps: 3,
+                title: "Launch switches unavailable",
+                detail: "Bookings and payment switch state could not be verified. Keep checkout paused and refresh owner data.",
+                actionTitle: "Refresh launch switches",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        if paymentsEnabled && !bookingsEnabled {
+            return Self(
+                phase: .controlsBlocked,
+                completedSteps: 3,
+                title: "Unsafe launch-switch order",
+                detail: "Session-pack checkout cannot open while member bookings are paused.",
+                actionTitle: "Repair launch switches",
+                route: XertOwnerRoute(workspace: .controls)
+            )
+        }
+        guard bookingsEnabled else {
+            return Self(
+                phase: .readyToOpenBookings,
+                completedSteps: 3,
+                title: "Ready to open bookings",
+                detail: "Stripe preflight is healthy. Open member bookings and complete the booking smoke test before activating payments.",
+                actionTitle: "Review booking switch",
+                route: XertOwnerRoute(workspace: .controls)
+            )
+        }
+        guard paymentsEnabled else {
             return Self(
                 phase: .readyToActivate,
-                completedSteps: 3,
+                completedSteps: 4,
                 title: "Ready for guarded activation",
-                detail: "All current Stripe launch checks pass. Payments remain paused until you confirm activation.",
+                detail: "Bookings are open and Stripe launch checks pass. Payments remain paused until you confirm activation.",
                 actionTitle: "Review payment switch",
                 route: XertOwnerRoute(workspace: .controls)
             )
@@ -602,7 +635,7 @@ struct XertStripeLaunchRunway: Equatable {
         guard paymentSwitchState?.lowercased() == "enabled", activationReceiptReady == true else {
             return Self(
                 phase: .healthBlocked,
-                completedSteps: 3,
+                completedSteps: 4,
                 title: "Payment activation needs verification",
                 detail: "Checkout is marked enabled, but its live switch or immutable activation receipt is not verified.",
                 actionTitle: "Verify activation",

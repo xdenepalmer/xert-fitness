@@ -94,6 +94,7 @@ function paymentActivationAdmin(result) {
 function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
   const settingsRows = options.settingsRows || [{
     id: validActivationBody.settings_id,
+    bookings_enabled: true,
     payments_enabled: false,
     updated_at: validActivationBody.expected_updated_at,
   }];
@@ -149,6 +150,7 @@ function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
 test('payment activation receipt must match the enabled settings version and actor', () => {
   const settings = [{
     id: validActivationBody.settings_id,
+    bookings_enabled: true,
     payments_enabled: true,
     updated_at: '2026-07-16T03:05:00.000Z',
   }];
@@ -177,6 +179,11 @@ test('payment activation receipt must match the enabled settings version and act
   const paused = inspectPaymentActivationReceipt([{ ...settings[0], payments_enabled: false }], null);
   assert.equal(paused.activation_receipt.required, false);
   assert.equal(paused.activation_receipt.ready, true);
+
+  const unsafe = inspectPaymentActivationReceipt([{ ...settings[0], bookings_enabled: false }], null, [receipt], null);
+  assert.equal(unsafe.payment_switch.state, 'unsafe');
+  assert.equal(unsafe.payment_switch.ready, false);
+  assert.match(unsafe.activation_receipt.issue, /bookings are paused/);
 });
 
 function readyStripe() {
@@ -236,6 +243,13 @@ test('payment activation accepts only a confirmed bounded platform snapshot', ()
   assert.throws(
     () => normalizePaymentActivationRequest({ ...validActivationBody, confirmation: 'yes' }),
     /PAYMENT_ACTIVATION_NOT_CONFIRMED/,
+  );
+  assert.throws(
+    () => normalizePaymentActivationRequest({
+      ...validActivationBody,
+      settings: { ...validActivationBody.settings, bookings_enabled: false },
+    }),
+    /BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION/,
   );
   for (const settings of [
     { ...validActivationBody.settings, payments_enabled: false },
@@ -423,6 +437,7 @@ test('commerce readiness cannot pass without the guarded activation capability',
     admin: capabilityAdmin(completeCommerceCapabilities, [], {
       settingsRows: [{
         id: validActivationBody.settings_id,
+        bookings_enabled: true,
         payments_enabled: true,
         updated_at: '2026-07-16T03:05:00.000Z',
       }],

@@ -16,7 +16,9 @@ export function inspectPaymentActivationReceipt(
     };
   }
   const settings = settingsRows[0];
-  if (!UUID_PATTERN.test(String(settings?.id || '')) || typeof settings?.payments_enabled !== 'boolean') {
+  if (!UUID_PATTERN.test(String(settings?.id || ''))
+      || typeof settings?.bookings_enabled !== 'boolean'
+      || typeof settings?.payments_enabled !== 'boolean') {
     return {
       payment_switch: { ready: false, state: 'invalid', updated_at: null },
       activation_receipt: {
@@ -39,6 +41,22 @@ export function inspectPaymentActivationReceipt(
       payment_switch: paymentSwitch,
       activation_receipt: {
         required: false, ready: true, activated_at: null, actor_recorded: false, issue: null,
+      },
+    };
+  }
+  if (!settings.bookings_enabled) {
+    return {
+      payment_switch: {
+        ready: false,
+        state: 'unsafe',
+        updated_at: paymentSwitch.updated_at,
+      },
+      activation_receipt: {
+        required: true,
+        ready: false,
+        activated_at: null,
+        actor_recorded: false,
+        issue: 'Session-pack checkout is enabled while member bookings are paused.',
       },
     };
   }
@@ -80,7 +98,7 @@ export function inspectPaymentActivationReceipt(
 export async function loadPaymentActivationHealth(admin) {
   const settingsResult = await admin
     .from('admin_settings')
-    .select('id,payments_enabled,updated_at')
+    .select('id,bookings_enabled,payments_enabled,updated_at')
     .limit(2);
   if (settingsResult.error || settingsResult.data?.[0]?.payments_enabled !== true) {
     return inspectPaymentActivationReceipt(settingsResult.data, settingsResult.error);

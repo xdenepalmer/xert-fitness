@@ -7,8 +7,11 @@ const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 test('native owner launch gate distinguishes paused preflight from live launch', async () => {
   const model = await read('../ios/XertFitnessApp/XertFitnessApp/OwnerLaunchGate.swift');
   assert.match(model, /case preflightReady/);
+  assert.match(model, /case bookingsOpen/);
   assert.match(model, /case liveReady/);
-  assert.match(model, /guard bookingsEnabled == paymentsEnabled else/);
+  assert.match(model, /if !bookingsEnabled && paymentsEnabled/);
+  assert.match(model, /if bookingsEnabled && !paymentsEnabled/);
+  assert.match(model, /phase: \.bookingsOpen/);
   assert.match(model, /phase: bookingsEnabled \? \.liveReady : \.preflightReady/);
 });
 

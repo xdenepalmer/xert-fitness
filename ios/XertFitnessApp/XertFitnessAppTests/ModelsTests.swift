@@ -171,6 +171,7 @@ final class ModelsTests: XCTestCase {
         func runway(
             refreshed: Bool = true,
             current: Bool = true,
+            bookingsEnabled: Bool? = true,
             paymentsEnabled: Bool? = false,
             hasProducts: Bool = true,
             linked: Bool = true,
@@ -183,6 +184,7 @@ final class ModelsTests: XCTestCase {
                 hasCompletedRefresh: refreshed,
                 isRefreshing: !refreshed,
                 sourcesAreCurrent: current,
+                bookingsEnabled: bookingsEnabled,
                 paymentsEnabled: paymentsEnabled,
                 hasActiveProducts: hasProducts,
                 activeProductsAreLinked: linked,
@@ -214,10 +216,23 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(blockedHealth.phase, .healthBlocked)
         XCTAssertEqual(blockedHealth.route, XertOwnerRoute(task: .product(productID)))
 
-        let ready = runway()
-        XCTAssertEqual(ready.phase, .readyToActivate)
-        XCTAssertEqual(ready.completedSteps, 3)
-        XCTAssertEqual(ready.route, XertOwnerRoute(workspace: .controls))
+        let unavailableSwitches = runway(bookingsEnabled: nil)
+        XCTAssertEqual(unavailableSwitches.phase, .unavailable)
+        XCTAssertEqual(unavailableSwitches.route, XertOwnerRoute(workspace: .health))
+
+        let readyForBookings = runway(bookingsEnabled: false)
+        XCTAssertEqual(readyForBookings.phase, .readyToOpenBookings)
+        XCTAssertEqual(readyForBookings.completedSteps, 3)
+        XCTAssertEqual(readyForBookings.route, XertOwnerRoute(workspace: .controls))
+
+        let unsafeControls = runway(bookingsEnabled: false, paymentsEnabled: true)
+        XCTAssertEqual(unsafeControls.phase, .controlsBlocked)
+        XCTAssertEqual(unsafeControls.route, XertOwnerRoute(workspace: .controls))
+
+        let readyForPayments = runway()
+        XCTAssertEqual(readyForPayments.phase, .readyToActivate)
+        XCTAssertEqual(readyForPayments.completedSteps, 4)
+        XCTAssertEqual(readyForPayments.route, XertOwnerRoute(workspace: .controls))
 
         let unverifiedActivation = runway(
             paymentsEnabled: true,

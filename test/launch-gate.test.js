@@ -18,9 +18,19 @@ test('paused switches produce a truthful preflight-ready state', () => {
   assert.deepEqual(gate.blockers, []);
 });
 
-test('a partially enabled platform truthfully blocks launch', () => {
+test('bookings can open while guarded payments remain paused', () => {
   const checks = readyChecks.map(check => check.key === 'platform-controls'
-    ? { ...check, status: 'attention', action: 'Enable member switches.' }
+    ? { ...check, phase: 'bookings-open', action: 'Activate payments after the smoke test.' }
+    : check);
+  const gate = resolveLaunchGate(checks);
+  assert.equal(gate.state, 'bookings-open');
+  assert.equal(gate.completed, gate.total);
+  assert.equal(gate.next.key, 'platform-controls');
+});
+
+test('payments without bookings remain an unsafe blocker', () => {
+  const checks = readyChecks.map(check => check.key === 'platform-controls'
+    ? { ...check, status: 'attention', phase: 'unsafe', action: 'Pause payments.' }
     : check);
   const gate = resolveLaunchGate(checks);
   assert.equal(gate.state, 'blocked');
@@ -61,5 +71,7 @@ test('operations health requires a real member-bookable class and models both sw
   assert.match(adminData, /Number\.isInteger\(session\.capacity\)/);
   assert.match(adminData, /session\.capacity > 0/);
   assert.match(adminData, /phase: 'preflight'/);
+  assert.match(adminData, /phase: 'bookings-open'/);
   assert.match(adminData, /phase: 'live'/);
+  assert.match(adminData, /Open member bookings before enabling session-pack payments/);
 });

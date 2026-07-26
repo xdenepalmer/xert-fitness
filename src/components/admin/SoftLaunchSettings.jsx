@@ -52,7 +52,11 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
 
   const set = (k, v) => {
     setSaved(false);
-    setSettings(p => ({ ...p, [k]: v }));
+    setSettings(previous => {
+      const next = { ...previous, [k]: v };
+      if (k === 'bookings_enabled' && v === false) next.payments_enabled = false;
+      return next;
+    });
   };
 
   const persistSettings = async (normalized, activatePayments = false) => {
@@ -99,14 +103,15 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   if (loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
   if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
 
-  const Toggle = ({ label, desc, field }) => (
+  const Toggle = ({ label, desc, field, disabled = false }) => (
     <div className="flex items-start justify-between gap-4 py-4 border-b border-xert-steel/20">
       <div id={`${field}-description`}>
         <p className="font-body text-sm text-xert-offwhite">{label}</p>
         {desc && <p className="font-body text-xs text-xert-concrete/40 mt-0.5">{desc}</p>}
       </div>
       <button type="button" role="switch" aria-checked={Boolean(settings[field])} aria-labelledby={`${field}-description`} onClick={() => set(field, !settings[field])}
-        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 ${settings[field] ? 'bg-xert-steel' : 'bg-xert-steel/40'}`}>
+        disabled={disabled}
+        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-35 ${settings[field] ? 'bg-xert-steel' : 'bg-xert-steel/40'}`}>
         <div className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white transition-transform ${settings[field] ? 'translate-x-7' : 'translate-x-1'}`} />
       </button>
     </div>
@@ -124,9 +129,16 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
 
       <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6 space-y-0">
         <Toggle label="Countdown enabled" desc="Shows countdown timer on public pages." field="countdown_enabled" />
-        <Toggle label="Bookings enabled" desc="Shows booking buttons on class cards. When off, shows Register Interest CTA." field="bookings_enabled" />
+        <Toggle label="Bookings enabled" desc="Shows booking buttons on class cards. Turning this off also pauses checkout." field="bookings_enabled" />
         <Toggle label="Prices coming soon" desc="When on, public session-pack pricing shows 'Coming soon' instead of amounts. Turn off to reveal real prices." field="prices_coming_soon" />
-        <Toggle label="Session pack payments" desc="Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass." field="payments_enabled" />
+        <Toggle
+          label="Session pack payments"
+          desc={settings.bookings_enabled
+            ? 'Master checkout switch for pack purchases. Keep off until Stripe launch checks pass.'
+            : 'Open bookings and complete the booking smoke test before enabling payments.'}
+          field="payments_enabled"
+          disabled={!settings.bookings_enabled && !settings.payments_enabled}
+        />
         <Toggle label="Announcement banner" desc="Shows a banner across the top of the public site." field="announcement_banner_enabled" />
       </div>
 
