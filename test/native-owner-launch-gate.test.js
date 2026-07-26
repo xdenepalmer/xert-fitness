@@ -13,9 +13,11 @@ test('native owner launch gate distinguishes paused preflight from live launch',
   assert.match(model, /if bookingsEnabled && !paymentsEnabled/);
   assert.match(model, /phase: \.bookingsOpen/);
   assert.match(model, /phase: bookingsEnabled \? \.liveReady : \.preflightReady/);
+  assert.match(model, /pushReady: Bool\?/);
+  assert.match(model, /\(pushReady, "Configure production member push delivery\."\)/);
 });
 
-test('native Operations Health requires real booking-path evidence', async () => {
+test('native Operations Health requires real booking and member-notification evidence', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   assert.match(view, /private var activeLinkedPacksReady: Bool\?/);
   assert.match(view, /private var bookableClassesReady: Bool\?/);
@@ -25,4 +27,6 @@ test('native Operations Health requires real booking-path evidence', async () =>
   assert.match(view, /admin\.launchGateUpdatedAt/);
   assert.match(view, /Refresh launch gates/);
   assert.match(view, /accessibilityIdentifier\("owner\.launchGate"\)/);
+  assert.match(view, /pushReady: pushHealthIsCurrent \? admin\.pushHealth\?\.ready : nil/);
+  assert.match(view, /guard pushHealthIsCurrent,[\s\S]*admin\.pushHealth\?\.ready == true else \{ return nil \}/);
 });

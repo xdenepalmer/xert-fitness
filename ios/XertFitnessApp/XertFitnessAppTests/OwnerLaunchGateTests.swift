@@ -34,9 +34,21 @@ final class OwnerLaunchGateTests: XCTestCase {
         XCTAssertEqual(resolve(classes: false).phase, .blocked)
     }
 
+    func testProductionPushFailureBlocksLaunch() {
+        let gate = resolve(push: false)
+        XCTAssertEqual(gate.phase, .blocked)
+        XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks - 1)
+        XCTAssertEqual(gate.nextAction, "Configure production member push delivery.")
+    }
+
+    func testUnavailablePushEvidenceNeverProducesReady() {
+        XCTAssertEqual(resolve(push: nil).phase, .verifying)
+    }
+
     private func resolve(
         database: Bool? = true,
         stripe: Bool? = true,
+        push: Bool? = true,
         packs: Bool? = true,
         classes: Bool? = true,
         bookings: Bool? = false,
@@ -45,6 +57,7 @@ final class OwnerLaunchGateTests: XCTestCase {
         XertOwnerLaunchGate.resolve(
             databaseReady: database,
             stripeReady: stripe,
+            pushReady: push,
             activeLinkedPacksReady: packs,
             bookableClassesReady: classes,
             bookingsEnabled: bookings,

@@ -288,7 +288,8 @@ final class AdminStore: ObservableObject {
 
     private static let healthSources: Set<String> = ["schema health", "Stripe health", "push health"]
     private static let launchGateSources: Set<String> = [
-        "schema health", "Stripe health", "platform controls", "session packs", "full timetable"
+        "schema health", "Stripe health", "push health",
+        "platform controls", "session packs", "full timetable"
     ]
 
     private func healthSourceIsCurrent(_ source: String) -> Bool {

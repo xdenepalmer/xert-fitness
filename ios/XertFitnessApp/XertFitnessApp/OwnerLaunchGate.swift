@@ -9,7 +9,7 @@ enum XertOwnerLaunchGatePhase: Equatable {
 }
 
 struct XertOwnerLaunchGate: Equatable {
-    static let totalChecks = 5
+    static let totalChecks = 6
 
     let phase: XertOwnerLaunchGatePhase
     let completedChecks: Int
@@ -43,6 +43,7 @@ struct XertOwnerLaunchGate: Equatable {
     static func resolve(
         databaseReady: Bool?,
         stripeReady: Bool?,
+        pushReady: Bool?,
         activeLinkedPacksReady: Bool?,
         bookableClassesReady: Bool?,
         bookingsEnabled: Bool?,
@@ -51,6 +52,7 @@ struct XertOwnerLaunchGate: Equatable {
         let required: [(ready: Bool?, action: String)] = [
             (databaseReady, "Repair the database release contract."),
             (stripeReady, "Resolve Stripe checkout health."),
+            (pushReady, "Configure production member push delivery."),
             (activeLinkedPacksReady, "Activate a Stripe-linked session pack."),
             (bookableClassesReady, "Publish a member-bookable class with valid capacity."),
         ]

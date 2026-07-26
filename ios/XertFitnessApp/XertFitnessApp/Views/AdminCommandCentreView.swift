@@ -12170,6 +12170,7 @@ private struct AdminOperationsHealthView: View {
             return XertOwnerLaunchGate.resolve(
                 databaseReady: nil,
                 stripeReady: nil,
+                pushReady: nil,
                 activeLinkedPacksReady: nil,
                 bookableClassesReady: nil,
                 bookingsEnabled: nil,
@@ -12179,6 +12180,7 @@ private struct AdminOperationsHealthView: View {
         return XertOwnerLaunchGate.resolve(
             databaseReady: databaseReady,
             stripeReady: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
+            pushReady: pushHealthIsCurrent ? admin.pushHealth?.ready : nil,
             activeLinkedPacksReady: activeLinkedPacksReady,
             bookableClassesReady: bookableClassesReady,
             bookingsEnabled: launchSwitches.bookings,
@@ -12190,6 +12192,8 @@ private struct AdminOperationsHealthView: View {
         guard databaseReady == true,
               stripeHealthIsCurrent,
               admin.commerceHealth?.ready == true else { return nil }
+        guard pushHealthIsCurrent,
+              admin.pushHealth?.ready == true else { return nil }
         if activeLinkedPacksReady == false { return .products }
         guard activeLinkedPacksReady == true else { return nil }
         if bookableClassesReady == false { return .timetable }
