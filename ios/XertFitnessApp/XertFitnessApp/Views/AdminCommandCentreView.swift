@@ -701,6 +701,22 @@ struct AdminCommandCentreView: View {
                     suggestedSortOrder: (admin.products.map(\.sort_order).max() ?? -1) + 1
                 )
             }
+        case .newCoach:
+            NavigationStack {
+                AdminCoachEditor(
+                    admin: admin,
+                    session: session,
+                    coach: nil
+                )
+            }
+        case .newEvent:
+            NavigationStack {
+                AdminEventEditor(
+                    admin: admin,
+                    session: session,
+                    event: nil
+                )
+            }
         }
     }
 
@@ -1565,6 +1581,29 @@ struct AdminCommandCentreView: View {
                     isEnabled: quickMutationIsAvailable(source: "session packs")
                 ) {
                     presentQuickAction(.newSessionPack)
+                }
+                AdminQuickToolButton(
+                    title: "Add a coach",
+                    detail: quickToolDetail(source: "team directory", ready: "Publish a team profile"),
+                    icon: "person.crop.rectangle.badge.plus",
+                    isEnabled: quickMutationIsAvailable(source: "team directory")
+                ) {
+                    presentQuickAction(.newCoach)
+                }
+                AdminQuickToolButton(
+                    title: "Add an event",
+                    detail: quickToolDetail(source: "event calendar", ready: "Grow the annual training calendar"),
+                    icon: "trophy.fill",
+                    isEnabled: quickMutationIsAvailable(source: "event calendar")
+                ) {
+                    presentQuickAction(.newEvent)
+                }
+                AdminQuickToolButton(
+                    title: "Edit site content",
+                    detail: "Hero, contact details and FAQs",
+                    icon: "text.badge.star"
+                ) {
+                    openWorkspaceWithFeedback(.content)
                 }
                 AdminQuickToolButton(
                     title: "Access control",
@@ -5417,6 +5456,7 @@ private struct AdminScheduleView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var query = ""
+    @State private var scope = AdminScheduleScope.upcoming
     @State private var showingCreate = false
     @State private var pendingCancellation: AdminClassSession?
 
@@ -5431,9 +5471,29 @@ private struct AdminScheduleView: View {
 
     private var rows: [AdminClassSession] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !term.isEmpty else { return admin.classSessions }
-        return admin.classSessions.filter {
+        let scoped = admin.classSessions.filter { scope.includes($0, now: Date()) }
+        let filtered = term.isEmpty ? scoped : scoped.filter {
             "\($0.title) \($0.class_type ?? "") \($0.coach_name ?? "") \($0.location_zone ?? "")".lowercased().contains(term)
+        }
+        return filtered.sorted {
+            let left = $0.start_time ?? .distantPast
+            let right = $1.start_time ?? .distantPast
+            return scope == .upcoming ? left < right : left > right
+        }
+    }
+
+    private func count(for scope: AdminScheduleScope) -> Int {
+        admin.classSessions.filter { scope.includes($0, now: Date()) }.count
+    }
+
+    private var emptyMessage: String {
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "No matching \(scope.title.lowercased()) classes."
+        }
+        switch scope {
+        case .upcoming: return "No current or upcoming classes are scheduled."
+        case .past: return "No past classes are available."
+        case .all: return "No classes are scheduled."
         }
     }
 
@@ -5453,6 +5513,20 @@ private struct AdminScheduleView: View {
 
     var body: some View {
         List {
+            Section {
+                Picker("Timetable scope", selection: $scope) {
+                    ForEach(AdminScheduleScope.allCases) { option in
+                        Text("\(option.title) \(count(for: option))")
+                            .tag(option)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("owner.timetable.scope")
+            }
+            .listRowBackground(Color.xertInk)
+
             if timetableIsLoading {
                 HStack(spacing: 10) {
                     ProgressView().tint(Color.xertSteel)
@@ -5475,7 +5549,8 @@ private struct AdminScheduleView: View {
                     .listRowBackground(Color.xertInk)
                 }
                 if rows.isEmpty {
-                    Text(admin.classSessions.isEmpty ? "No classes are scheduled." : "No matching classes.")
+                    Text(emptyMessage)
+                        .foregroundStyle(Color.xertPale.opacity(0.65))
                         .listRowBackground(Color.xertInk)
                 }
                 ForEach(rows) { item in
@@ -13433,6 +13508,8 @@ private enum AdminOwnerQuickAction: String, Identifiable {
     case newClass
     case newNotice
     case newSessionPack
+    case newCoach
+    case newEvent
 
     var id: String { rawValue }
 }

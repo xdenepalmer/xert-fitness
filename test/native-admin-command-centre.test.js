@@ -323,9 +323,17 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /@Environment\(\\\.scenePhase\) private var scenePhase/);
   assert.match(view, /Date\(\)\.timeIntervalSince\(updatedAt\) >= 120/);
   assert.match(view, /onChange\(of: scenePhase\)[\s\S]*ownerDataNeedsForegroundRefresh[\s\S]*admin\.refresh/);
-  assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack/);
+  assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack[\s\S]*case newCoach[\s\S]*case newEvent/);
   assert.match(view, /private var quickTools: some View/);
-  for (const label of ['Find a member', 'Create a class', 'Publish a notice', 'Create a session pack']) {
+  for (const label of [
+    'Find a member',
+    'Create a class',
+    'Publish a notice',
+    'Create a session pack',
+    'Add a coach',
+    'Add an event',
+    'Edit site content',
+  ]) {
     assert.match(view, new RegExp(label));
   }
   assert.match(view, /sheet\(item: \$presentedQuickAction, onDismiss:/);
@@ -335,6 +343,11 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   );
   assert.match(view, /AdminAnnouncementComposer\([\s\S]*announcement: nil,[\s\S]*isSaving: admin\.announcementMutationID != nil,[\s\S]*isPublishing: admin\.isPublishingAnnouncement/);
   assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
+  assert.match(view, /case \.newCoach:[\s\S]*AdminCoachEditor\([\s\S]*coach: nil/);
+  assert.match(view, /case \.newEvent:[\s\S]*AdminEventEditor\([\s\S]*event: nil/);
+  assert.match(view, /title: "Edit site content"[\s\S]*openWorkspaceWithFeedback\(\.content\)/);
+  assert.match(view, /quickToolDetail\(source: "team directory"/);
+  assert.match(view, /quickToolDetail\(source: "event calendar"/);
 
   assert.match(store, /@Published private\(set\) var loadedSources: Set<String> = \[\]/);
   assert.match(store, /@Published private\(set\) var hasCompletedRefresh = false/);
@@ -1379,6 +1392,33 @@ test('native class desk never presents unavailable operational data as an empty 
   assert.match(desk, /Showing the last waitlist snapshot\. Refresh before promoting a member/);
   assert.match(desk, /!waitlistIsCurrent \|\| !item\.can_promote/);
   assert.match(desk, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
+});
+
+test('native full timetable prioritizes current work with compact truthful scopes', async () => {
+  const [view, models, swiftTests] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift'),
+  ]);
+  const schedule = view.slice(
+    view.indexOf('private struct AdminScheduleView'),
+    view.indexOf('private struct AdminClassCancellationFollowUpView'),
+  );
+
+  assert.match(schedule, /@State private var scope = AdminScheduleScope\.upcoming/);
+  assert.match(schedule, /Picker\("Timetable scope", selection: \$scope\)/);
+  assert.match(schedule, /ForEach\(AdminScheduleScope\.allCases\)/);
+  assert.match(schedule, /\.pickerStyle\(\.segmented\)/);
+  assert.match(schedule, /owner\.timetable\.scope/);
+  assert.match(schedule, /scope\.includes\(\$0, now: Date\(\)\)/);
+  assert.match(schedule, /return scope == \.upcoming \? left < right : left > right/);
+  assert.match(schedule, /No current or upcoming classes are scheduled/);
+  assert.match(models, /enum AdminScheduleScope: String, CaseIterable, Identifiable/);
+  assert.match(models, /case \.upcoming: return end >= now/);
+  assert.match(models, /case \.past: return end < now/);
+  assert.match(swiftTests, /testAdminScheduleScopeKeepsActiveClassesInUpcomingWork/);
+  assert.match(swiftTests, /AdminScheduleScope\.upcoming\.includes\(active, now: now\)/);
+  assert.match(swiftTests, /AdminScheduleScope\.past\.includes\(past, now: now\)/);
 });
 
 test('native request notes can omit a workflow status exactly like the RPC contract', async () => {

@@ -960,6 +960,34 @@ struct AdminClassSession: Identifiable, Codable, Hashable {
     let notes: String?
 }
 
+enum AdminScheduleScope: String, CaseIterable, Identifiable {
+    case upcoming
+    case past
+    case all
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .upcoming: return "Upcoming"
+        case .past: return "Past"
+        case .all: return "All"
+        }
+    }
+
+    func includes(_ item: AdminClassSession, now: Date) -> Bool {
+        guard self != .all else { return true }
+        let start = item.start_time ?? .distantPast
+        let end = item.end_time
+            ?? start.addingTimeInterval(TimeInterval(max(item.duration_minutes ?? 0, 0) * 60))
+        switch self {
+        case .upcoming: return end >= now
+        case .past: return end < now
+        case .all: return true
+        }
+    }
+}
+
 struct AdminClassCancellationContact: Identifiable, Hashable {
     let name: String
     let email: String?

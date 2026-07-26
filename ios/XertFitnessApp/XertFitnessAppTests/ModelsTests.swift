@@ -3819,6 +3819,33 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(draft.hasEndTime)
     }
 
+    func testAdminScheduleScopeKeepsActiveClassesInUpcomingWork() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let active = adminClassSession(
+            title: "Active",
+            startTime: now.addingTimeInterval(-1_800),
+            endTime: now.addingTimeInterval(1_800)
+        )
+        let durationOnly = adminClassSession(
+            title: "Duration fallback",
+            startTime: now.addingTimeInterval(-900),
+            durationMinutes: 60
+        )
+        let past = adminClassSession(
+            title: "Past",
+            startTime: now.addingTimeInterval(-7_200),
+            endTime: now.addingTimeInterval(-3_600)
+        )
+
+        XCTAssertTrue(AdminScheduleScope.upcoming.includes(active, now: now))
+        XCTAssertTrue(AdminScheduleScope.upcoming.includes(durationOnly, now: now))
+        XCTAssertFalse(AdminScheduleScope.upcoming.includes(past, now: now))
+        XCTAssertTrue(AdminScheduleScope.past.includes(past, now: now))
+        XCTAssertFalse(AdminScheduleScope.past.includes(active, now: now))
+        XCTAssertTrue(AdminScheduleScope.all.includes(active, now: now))
+        XCTAssertTrue(AdminScheduleScope.all.includes(past, now: now))
+    }
+
     func testScheduleControlDraftsHydrateProtectedWindows() {
         let start = Date().addingTimeInterval(3_600)
         let end = start.addingTimeInterval(7_200)
