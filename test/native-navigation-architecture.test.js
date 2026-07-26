@@ -72,7 +72,8 @@ test('compact dock visibly exposes exact task context, back, and quick switching
   assert.match(root, /Returns to the exact previous XERT task/);
   assert.match(root, /Button\(action: onOpenCommands\)[\s\S]*magnifyingglass/);
   assert.match(root, /Searches workspaces, recent tasks and available actions/);
-  assert.doesNotMatch(dock, /Text\("Owner Command Centre"\)/);
+  assert.match(dock, /Text\("Owner Command Centre"\)/);
+  assert.match(dock, /accessibilityIdentifier\("xert-navigation-owner"\)/);
   assert.match(dock, /if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
 });
 
