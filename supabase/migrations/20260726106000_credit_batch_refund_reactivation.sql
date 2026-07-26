@@ -74,8 +74,23 @@ revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, 
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+-- Re-run safe: keep helper-backed cancel/status bodies (Stripe-refunded pack skip).
+do $install_cancel_booking$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'cancel_booking'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer cancel_booking';
+  else
+    execute $fn$
 create or replace function public.cancel_booking(p_booking_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $body$
 declare
   v_user   uuid := auth.uid();
   v_batch  uuid;
@@ -101,13 +116,32 @@ begin
      and v_batch is not null then
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
-end; $$;
+end;
+$body$;
+$fn$;
+  end if;
+end;
+$install_cancel_booking$;
 
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 grant execute on function public.cancel_booking(uuid) to authenticated;
 
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $body$
 declare
   v_batch uuid;
   v_current text;
@@ -180,7 +214,12 @@ begin
     end if;
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
-end; $$;
+end;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;

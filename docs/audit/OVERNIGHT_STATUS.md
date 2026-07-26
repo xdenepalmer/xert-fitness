@@ -8,6 +8,11 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Historical money/privacy migration re-runs: `260800` cancel, `260000` class
+  cancel, `261060` cancel/status, `261070` fulfill, and `160400` terms-snapshot
+  fulfill now skip-if-newer so they cannot restore inline `remaining+1`, strip
+  attended/no_show + Stripe-refunded pack skips, or re-attach deleted-buyer
+  email / reject deleted-member settle. Drift + overnight tests pin the notices.
 - Money operator re-runs: `credit_batch_refund_reactivation` now skip-if-newer on
   status + roll-call too; `roll_call_correction` skip-if-newer on refund/cancel/
   status. Historical `260030` / `260170` / `261060` migrations keep newer
@@ -491,6 +496,15 @@ No new migration for this batch (operator tip). Apply through **26116** remains 
 | Operator SQL drift (skip guard bug) | `booking_modes` / `admin_cms` compared `pg_get_function_identity_arguments` to `p_anchor timestamptz`, which never matches Postgres’s `timestamp with time zone` — skip-if-newer never kept the helper | Identity args corrected; drift + overnight tests pin the canonical form and the full money/privacy skip marker set |
 
 No new migration for this batch (operator tip). Apply through **26116** remains current.
+
+### 34. This batch — historical cancel/fulfill/class-cancel re-run downgrades
+| Area | Defect | Fix |
+|---|---|---|
+| Historical migration re-run (money) | `260800` still installed inline `remaining+1` cancel; `261060` still replaced helper-backed `cancel_booking` / `admin_set_booking_status` without skip-if-newer | Skip-if-newer (`keeping newer cancel_booking` / `admin_set_booking_status`); bootstrap bodies retained |
+| Historical migration re-run (money) | `260000` class-cancel fix still replaced attended/no_show + Stripe-refunded pack-skipping cancel bodies | Skip-if-newer when attended/no_show/refunded markers present |
+| Historical migration re-run (privacy/money) | `261070` / `160400` fulfill re-runs restored non-erasure email writes (and `160400` also stripped deleted-member settle) | Skip-if-newer (`keeping newer fulfill_stripe_checkout`) |
+
+No new migration for this batch (historical tip). Apply through **26116** remains current.
 
 ---
 

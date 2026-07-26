@@ -462,10 +462,32 @@ test('overnight money/privacy skip-if-newer markers stay locked for operator re-
       path: '../supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql',
       notices: [
         /keeping newer refund_credits_to_batch/,
+        /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
         /keeping newer admin_record_session_attendance/,
         /keeping newer admin_cancel_class_session/,
       ],
       shapes: [/p_anchor timestamp with time zone/],
+    },
+    {
+      path: '../supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql',
+      notices: [/keeping newer cancel_booking/],
+      shapes: [/remaining = remaining \+ 1/],
+    },
+    {
+      path: '../supabase/migrations/20260726000000_class_cancellation_credit_refund_fix.sql',
+      notices: [/keeping newer admin_cancel_class_session/],
+      shapes: [/status as previous_status/],
+    },
+    {
+      path: '../supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql',
+      notices: [/keeping newer fulfill_stripe_checkout/],
+      shapes: [/v_order\.user_id is not null and v_order\.user_id is distinct from p_user_id/],
+    },
+    {
+      path: '../supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql',
+      notices: [/keeping newer fulfill_stripe_checkout/],
+      shapes: [/p_credit_validity_days integer/],
     },
   ];
 

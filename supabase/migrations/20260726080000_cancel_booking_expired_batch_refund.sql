@@ -13,9 +13,28 @@
 -- (the same lead time that earned the refund). Unexpired and never-expiring
 -- batches are unchanged aside from remaining + 1. Waitlisted places still do
 -- not refund (they never held a credit). Late confirmed cancels still forfeit.
+--
+-- Re-run safe: later helpers put credit returns through refund_credits_to_batch
+-- (skips Stripe-refunded packs). Keep that shape; this bootstrap still inlines
+-- remaining+1 for databases that have never received the helper.
+-- Operator mirror: src/supabase/cancel_booking_expired_batch_refund.sql.
 
+do $install_cancel_booking$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'cancel_booking'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer cancel_booking';
+  else
+    execute $fn$
 create or replace function public.cancel_booking(p_booking_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $body$
 declare
   v_user   uuid := auth.uid();
   v_batch  uuid;
@@ -27,7 +46,7 @@ begin
   select b.credit_batch_id, s.start_time, b.status
     into v_batch, v_start, v_status
     from public.session_bookings b
-    join public.class_sessions s on s.id = b.class_session_id
+    join class_sessions s on s.id = b.class_session_id
     where b.id = p_booking_id and b.user_id = v_user
     for update;
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
@@ -48,7 +67,12 @@ begin
         end
     where id = v_batch;
   end if;
-end; $$;
+end;
+$body$;
+$fn$;
+  end if;
+end;
+$install_cancel_booking$;
 
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 grant execute on function public.cancel_booking(uuid) to authenticated;

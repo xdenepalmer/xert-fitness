@@ -22,10 +22,15 @@ test('historical migration keeps the expired-pack refund fix', async () => {
   const text = await executableBody(MIGRATION);
   assert.match(
     text,
+    /keeping newer cancel_booking/,
+    're-run must not strip helper-backed cancel_booking',
+  );
+  assert.match(
+    text,
     /v_status = 'requested' or \(v_status = 'confirmed' and v_start - now\(\) > interval '12 hours'\)/,
     '12-hour confirmed and always-requested refund window must remain',
   );
-  assert.match(text, /set remaining = remaining \+ 1/, 'credit must be restored');
+  assert.match(text, /set remaining = remaining \+ 1/, 'bootstrap still documents inline restore');
   assert.doesNotMatch(
     text,
     /where id = v_batch and \(expires_at is null or expires_at > now\(\)\)/,

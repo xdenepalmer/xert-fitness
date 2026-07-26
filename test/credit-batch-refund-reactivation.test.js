@@ -48,6 +48,8 @@ test('operator mirror keeps reactivation behaviour and refuses Stripe-refunded p
   assert.match(mirror, /keeping newer admin_set_booking_status/);
   assert.match(mirror, /keeping newer admin_record_session_attendance/);
   assert.match(migration, /keeping newer refund_credits_to_batch/);
+  assert.match(migration, /keeping newer cancel_booking/);
+  assert.match(migration, /keeping newer admin_set_booking_status/);
   assert.match(migration, /keeping newer admin_record_session_attendance/);
   assert.match(migration, /keeping newer admin_cancel_class_session/);
 });

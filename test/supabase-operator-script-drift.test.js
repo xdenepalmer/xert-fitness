@@ -449,10 +449,32 @@ test('historical money migrations skip-if-newer so re-runs cannot strip refunded
       name: '20260726106000_credit_batch_refund_reactivation.sql',
       notice: /keeping newer refund_credits_to_batch/,
       mustMatch: [
+        /keeping newer cancel_booking/,
+        /keeping newer admin_set_booking_status/,
         /keeping newer admin_record_session_attendance/,
         /keeping newer admin_cancel_class_session/,
         /p_anchor timestamp with time zone/,
       ],
+    },
+    {
+      name: '20260726080000_cancel_booking_expired_batch_refund.sql',
+      notice: /keeping newer cancel_booking/,
+      bootstrapWeak: /remaining = remaining \+ 1/,
+    },
+    {
+      name: '20260726000000_class_cancellation_credit_refund_fix.sql',
+      notice: /keeping newer admin_cancel_class_session/,
+      bootstrapWeak: /previous_status in \('requested', 'confirmed'\)/,
+    },
+    {
+      name: '20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      bootstrapWeak: /email = coalesce\(nullif\(btrim\(p_email\), ''\), orders\.email\)/,
+    },
+    {
+      name: '20260716040000_stripe_order_terms_snapshot.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      bootstrapWeak: /v_order\.user_id is distinct from p_user_id/,
     },
   ];
 

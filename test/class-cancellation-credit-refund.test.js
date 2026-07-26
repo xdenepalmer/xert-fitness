@@ -20,6 +20,11 @@ test('the cancel-class refund reads the pre-update status, not RETURNING status'
 
   // RETURNING exposes the post-UPDATE row, so the refund must come from a
   // snapshot CTE taken before the status is overwritten with 'cancelled'.
+  assert.match(
+    sql,
+    /keeping newer admin_cancel_class_session/,
+    're-run must not strip attended/no_show or Stripe-refunded pack skips',
+  );
   assert.match(sql, /status as previous_status/, 'must snapshot the pre-update status');
   assert.match(sql, /where previous_status in \('requested', 'confirmed'\)/,
     'refund must filter on the snapshotted status');

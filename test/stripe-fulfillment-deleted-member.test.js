@@ -67,6 +67,11 @@ test('superseded migration is marked unsafe to re-run and still documents the wr
 test('a deleted member no longer fails fulfilment for the whole store', async () => {
   const sql = await readFile(FIX, 'utf8');
 
+  assert.match(
+    sql,
+    /keeping newer fulfill_stripe_checkout/,
+    're-run must not strip deleted-buyer email erasure',
+  );
   // orders.user_id is `on delete set null`, so a deleted buyer leaves NULL.
   // NULL is always `distinct from` the event's user id, so the unguarded
   // comparison could never settle and gated checkout for every member.

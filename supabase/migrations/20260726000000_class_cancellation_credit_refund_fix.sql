@@ -14,13 +14,36 @@
 --
 -- This is corrective only. The function's signature, admin gate, notice
 -- creation, legacy class_bookings handling and return value are unchanged.
+--
+-- Re-run safe: later migrations widen refunds to attended/no_show, reactivate
+-- expired packs, and refuse Stripe-refunded batches. Keep those newer bodies;
+-- this bootstrap still owns the RETURNING-status fix for databases that have
+-- never received them. Operator mirror:
+-- src/supabase/class_cancellation_credit_refund_fix.sql.
 
+do $install_admin_cancel_class_session$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_cancel_class_session'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid';
+  if v_def is not null
+     and v_def ilike '%attended%'
+     and v_def ilike '%no_show%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_cancel_class_session';
+  else
+    execute $fn$
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 declare
   v_status text;
   v_cancelled_count integer := 0;
@@ -81,7 +104,11 @@ begin
 
   return v_cancelled_count + v_enquiry_cancelled_count;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_cancel_class_session$;
 
 revoke all on function public.admin_cancel_class_session(uuid) from public, anon;
 grant execute on function public.admin_cancel_class_session(uuid) to authenticated;
