@@ -262,6 +262,11 @@ test('soft-launch public booking gate keeps class_bookings inserts behind bookin
   assert.match(timetable, /settings\.bookings_enabled === true && <StickyMobileCTA/);
   assert.match(timetable, /<PublicFooter showBookCta=\{settings\.bookings_enabled === true\}/);
 
+  const home = read('../src/pages/Home.jsx');
+  assert.match(home, /const bookingsEnabled = settings\.bookings_enabled === true/);
+  assert.match(home, /bookingsEnabled && <StickyMobileCTA/);
+  assert.match(home, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
+
   const booking = read('../src/pages/Booking.jsx');
   assert.match(booking, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);
   assert.match(booking, /if \(!bookingsEnabled\)/);

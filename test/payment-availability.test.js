@@ -79,6 +79,12 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(webAdmin, /Bookings stay paused/);
   assert.match(webAdmin, /saveLockRef\.current/);
   assert.match(webAdmin, /paymentActivationLockRef\.current/);
+  assert.match(webAdmin, /pendingPaymentActivationRef/);
+  assert.match(webAdmin, /pendingPaymentActivationRef\.current = normalized/);
+  assert.match(webAdmin, /if \(!pendingPaymentActivationRef\.current\)/);
+  assert.match(webAdmin, /clearPendingPaymentActivation/);
+  assert.match(webAdmin, /mutationsLocked/);
+  assert.match(webAdmin, /disabled=\{mutationsLocked\}/);
   assert.match(webAdmin, /pendingPaymentActivation/);
   assert.match(webData, /export async function memberBookingSwitchGuardReady/);
   assert.match(webData, /member_booking_switch_guard/);

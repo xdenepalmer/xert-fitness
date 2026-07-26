@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Soft Launch Settings holds `saveLock` through the pack-checkout confirm
+  (ref, not just React state) and freezes toggles/inputs/Discard while the
+  dialog is open (iPhone Member App Controls parity). Public Home hero, final
+  CTA, footer and sticky Book CTAs switch to Register interest / hide sticky
+  while bookings are paused (timetable parity). iPhone Explore interest forms
+  lock submit before the Task; About CTA is Register interest when bookings
+  are paused.
 - Event training-group dialog (web) is generation + identity scoped like iOS /
   class roster: switching events cannot briefly show or CSV-export another
   group’s contacts under the new title. Class Repeat and manual Grant Credits
@@ -302,6 +309,15 @@ No new migration for this batch (app-only tip after `4c4a424`). Apply through **
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 22. This batch — Soft Launch saveLock, Home paused CTAs, iOS Explore interest submit
+| Area | Defect | Fix |
+|---|---|---|
+| SoftLaunchSettings | After Stripe health preflight, `finally` cleared `saveLockRef` before React painted `pendingPaymentActivation`, so a second Save could re-enter; toggles/Discard stayed live under the confirm dialog (iOS already froze) | `pendingPaymentActivationRef` + hold saveLock while confirm is open; `mutationsLocked` freezes toggles/inputs/Discard |
+| Public Home | Hero, final CTA, footer and sticky still offered “Book Your First Session” while `bookings_enabled` was false (timetable/footer/sticky were already gated) | Fail-closed `bookingsEnabled`; Register interest / `#eoi`; sticky only when bookings on |
+| iOS ExploreView | Interest form Submit only disabled on store flag after Task start — same-paint double tap could schedule two submits; About still said Book when bookings paused | Local `isSubmitting` lock before Task; About → Register interest when `!memberBookingsEnabled` |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -441,12 +457,17 @@ show `installed = true` and `release_ready = true`, including
     “No consented injury notes”; drawer key resets per lead.
 20. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.
-21. **Paused booking CTAs** — With bookings off: `/timetable` footer is Register
-    interest (not Book); sticky Book hidden; `/booking` class rows are Register
-    interest with the paused banner.
+21. **Paused booking CTAs** — With bookings off: `/` hero + final CTA + footer
+    are Register interest (not Book); sticky Book hidden; `/timetable` footer
+    is Register interest; sticky Book hidden; `/booking` class rows are
+    Register interest with the paused banner.
 22. **Pack create / Account delete / iOS Sign Out** — Double-click Create pack
     and Delete account confirm stay single-flight; iPhone Sign Out ignores a
     second tap.
 23. **Booking inbox / Orders refund / private notice** — Double-click booking
     status stays single-flight; Refund button matches reconcile lock; Send
     privately / Mark Contacted ignore a second same-paint submit.
+24. **Soft Launch confirm freeze** — Flip payments on → confirm dialog → toggles
+    and Discard stay disabled; Cancel unlocks; Confirm persists once.
+25. **iOS Explore interest** — Double-tap Submit on member/trainer/partner form
+    stays single-flight; with bookings off, About shows Register interest.

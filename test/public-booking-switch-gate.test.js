@@ -31,6 +31,21 @@ test('soft-launch timetable only offers booking CTAs when bookings_enabled is tr
   assert.match(footer, /Register interest/);
 });
 
+test('public Home only offers booking CTAs when bookings_enabled is true', async () => {
+  const [home, hero] = await Promise.all([
+    read('../src/pages/Home.jsx'),
+    read('../src/components/public/Hero.jsx'),
+  ]);
+  assert.match(home, /const bookingsEnabled = settings\.bookings_enabled === true/);
+  assert.match(home, /<Hero bookingsEnabled=\{bookingsEnabled\}/);
+  assert.match(home, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
+  assert.match(home, /bookingsEnabled && <StickyMobileCTA/);
+  assert.match(home, /Register interest/);
+  assert.match(hero, /bookingsEnabled = true/);
+  assert.match(hero, /Register interest/);
+  assert.match(hero, /\/#eoi/);
+});
+
 test('public /booking timetable only offers book CTAs when bookings_enabled is true', async () => {
   const page = await read('../src/pages/Booking.jsx');
   assert.match(page, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);

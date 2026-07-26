@@ -9,7 +9,7 @@ const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Q
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
-export default function Hero() {
+export default function Hero({ bookingsEnabled = true }) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia?.(DESKTOP_QUERY).matches ?? true);
   const bgRef = useRef(null);
@@ -161,10 +161,17 @@ export default function Hero() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link to="/booking"
-                  className="xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
-                  Book Your First Session
-                </Link>
+                {bookingsEnabled ? (
+                  <Link to="/booking"
+                    className="xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
+                    Book Your First Session
+                  </Link>
+                ) : (
+                  <a href="/#eoi"
+                    className="xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
+                    Register interest
+                  </a>
+                )}
                 <Link to="/timetable"
                   className="xert-btn-ghost inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
                   View Timetable

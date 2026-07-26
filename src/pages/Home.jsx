@@ -21,6 +21,9 @@ import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 export default function Home() {
   const [settings, setSettings] = useState(getDefaultSettings());
+  // Fail closed: Book CTAs stay off until launch settings confirm bookings_enabled
+  // (Soft Launch timetable / sticky parity).
+  const bookingsEnabled = settings.bookings_enabled === true;
 
   useEffect(() => {
     getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
@@ -39,7 +42,7 @@ export default function Home() {
       )}
 
       <main>
-        <Hero />
+        <Hero bookingsEnabled={bookingsEnabled} />
         <Countdown
           targetDate={settings.target_launch_date || '2026-08-01'}
           enabled={settings.countdown_enabled !== false}
@@ -74,16 +77,26 @@ export default function Home() {
             />
             <div className="max-w-xl mx-auto relative">
               <h2 className="font-display uppercase mb-4 text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)' }}>
-                Book your first session.
+                {bookingsEnabled ? 'Book your first session.' : 'Register your interest.'}
               </h2>
               <p className="font-body leading-relaxed mb-8" style={{ color: 'rgba(209,221,230,0.65)', fontSize: '1rem' }}>
-                Contact XERT to learn more about the coaching system, class packs and the training block that fits your next goal.
+                {bookingsEnabled
+                  ? 'Contact XERT to learn more about the coaching system, class packs and the training block that fits your next goal.'
+                  : 'Online bookings are paused during soft launch. Register interest and XERT will follow up when class spots open.'}
               </p>
-              <a href="/booking"
-                className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase transition-all active:scale-[0.98]"
-                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-                Book Your First Session
-              </a>
+              {bookingsEnabled ? (
+                <a href="/booking"
+                  className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase transition-all active:scale-[0.98]"
+                  style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                  Book Your First Session
+                </a>
+              ) : (
+                <a href="/#eoi"
+                  className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase transition-all active:scale-[0.98]"
+                  style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                  Register interest
+                </a>
+              )}
             </div>
           </section>
         </Reveal>
@@ -91,8 +104,8 @@ export default function Home() {
         <Reveal><FAQ /></Reveal>
       </main>
 
-      <PublicFooter />
-      <StickyMobileCTA />
+      <PublicFooter showBookCta={bookingsEnabled} />
+      {bookingsEnabled && <StickyMobileCTA />}
       <PWAInstallPrompt />
     </div>
   );

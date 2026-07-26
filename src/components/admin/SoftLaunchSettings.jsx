@@ -33,8 +33,19 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const [pendingPaymentActivation, setPendingPaymentActivation] = useState(null);
   // Preflight briefly clears `saving` between awaits; block re-entry so a
   // second Save cannot open another activation confirm or double-persist.
+  // Keep the lock held while the confirm dialog is open — React state alone
+  // lags one paint behind `setPendingPaymentActivation`.
   const saveLockRef = useRef(false);
   const paymentActivationLockRef = useRef(false);
+  const pendingPaymentActivationRef = useRef(null);
+
+  const clearPendingPaymentActivation = () => {
+    pendingPaymentActivationRef.current = null;
+    setPendingPaymentActivation(null);
+    saveLockRef.current = false;
+  };
+
+  const mutationsLocked = saving || Boolean(pendingPaymentActivation);
 
   const load = async () => {
     setLoading(true);
@@ -91,7 +102,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   };
 
   const handleSave = async () => {
-    if (saveLockRef.current || saving || pendingPaymentActivation) return;
+    if (saveLockRef.current || saving || pendingPaymentActivationRef.current) return;
     saveLockRef.current = true;
     try {
       const normalized = normalizeLaunchSettings(settings);
@@ -138,12 +149,16 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         toast({ title: 'Stripe is not ready to activate', description: reason, variant: 'destructive' });
         return;
       }
+      pendingPaymentActivationRef.current = normalized;
       setPendingPaymentActivation(normalized);
     } catch (e) {
       setSaving(false);
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
-      saveLockRef.current = false;
+      // Hold the lock while the activation confirm is open (ref is sync).
+      if (!pendingPaymentActivationRef.current) {
+        saveLockRef.current = false;
+      }
     }
   };
 
@@ -156,8 +171,10 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         <p className="font-body text-sm text-xert-offwhite">{label}</p>
         {desc && <p className="font-body text-xs text-xert-concrete/40 mt-0.5">{desc}</p>}
       </div>
-      <button type="button" role="switch" aria-checked={Boolean(settings[field])} aria-labelledby={`${field}-description`} onClick={() => set(field, !settings[field])}
-        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 ${settings[field] ? 'bg-xert-steel' : 'bg-xert-steel/40'}`}>
+      <button type="button" role="switch" aria-checked={Boolean(settings[field])} aria-labelledby={`${field}-description`}
+        disabled={mutationsLocked}
+        onClick={() => { if (!mutationsLocked) set(field, !settings[field]); }}
+        className={`relative min-w-12 w-12 min-h-11 rounded-full transition-colors shrink-0 disabled:opacity-50 ${settings[field] ? 'bg-xert-steel' : 'bg-xert-steel/40'}`}>
         <div className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white transition-transform ${settings[field] ? 'translate-x-7' : 'translate-x-1'}`} />
       </button>
     </div>
@@ -185,13 +202,15 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         <div>
           <label htmlFor="target-launch-date" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Target launch date</label>
           <input id="target-launch-date" type="date" value={settings.target_launch_date || ''} onChange={e => set('target_launch_date', e.target.value)}
-            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+            disabled={mutationsLocked}
+            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red disabled:opacity-50" />
         </div>
         <div>
           <label htmlFor="announcement-banner-text" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Announcement banner text</label>
           <input id="announcement-banner-text" value={settings.announcement_banner_text || ''} onChange={e => set('announcement_banner_text', e.target.value)}
             placeholder="e.g. Soft launch registrations now open — sign up today!"
-            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
+            disabled={mutationsLocked}
+            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red disabled:opacity-50" />
         </div>
       </div>
 
@@ -201,7 +220,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           {saved ? 'Saved ✓' : saving ? 'Saving...' : dirty ? 'Save settings' : 'Settings saved'}
         </button>
         {dirty && (
-          <button type="button" onClick={() => { setSettings(savedSettings); setSaved(false); }} disabled={saving}
+          <button type="button" onClick={() => { setSettings(savedSettings); setSaved(false); }} disabled={mutationsLocked}
             className="min-h-12 px-5 py-3 border border-xert-red/30 font-body text-xs uppercase tracking-wider text-xert-red/70 hover:border-xert-red hover:text-xert-red disabled:opacity-50">
             Discard changes
           </button>
@@ -213,7 +232,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           // Ignore Radix's immediate close on confirm — `saving` is not true
           // until the next render, so a ref keeps the dialog mounted.
           if (!open && !saving && !paymentActivationLockRef.current) {
-            setPendingPaymentActivation(null);
+            clearPendingPaymentActivation();
           }
         }}
         title="Open session pack checkout?"
@@ -223,12 +242,12 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         confirmLabel="Enable pack checkout"
         busy={saving || paymentActivationLockRef.current}
         onConfirm={() => {
-          const pending = pendingPaymentActivation;
+          const pending = pendingPaymentActivationRef.current;
           if (!pending || saving || paymentActivationLockRef.current) return;
           paymentActivationLockRef.current = true;
           void persistSettings(pending, true).finally(() => {
             paymentActivationLockRef.current = false;
-            setPendingPaymentActivation(null);
+            clearPendingPaymentActivation();
           });
         }}
       />

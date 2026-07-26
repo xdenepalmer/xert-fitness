@@ -37,9 +37,19 @@ struct ExploreView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .listRowBackground(Color.xertInk)
                     }
-                    Button("Book your first session") { onNavigate(.booking) }
+                    if store.memberBookingsEnabled {
+                        Button("Book your first session") { onNavigate(.booking) }
+                            .foregroundStyle(Color.xertSteel)
+                            .listRowBackground(Color.xertInk)
+                    } else {
+                        NavigationLink {
+                            NativeInterestFormView(kind: .member)
+                        } label: {
+                            Text("Register interest")
+                        }
                         .foregroundStyle(Color.xertSteel)
                         .listRowBackground(Color.xertInk)
+                    }
                 }
 
                 Section("Coaches and practitioners") {
@@ -145,6 +155,13 @@ private struct NativeInterestFormView: View {
     let kind: NativeInterestKind
     @State private var draft = NativeInterestDraft()
     @State private var submitted = false
+    // Lock before the Task so a second tap cannot start another submit while
+    // the first request is still building / in flight (web submitLockRef parity).
+    @State private var isSubmitting = false
+
+    private var isSubmitInFlight: Bool {
+        isSubmitting || store.isSubmittingInterest
+    }
 
     var body: some View {
         Form {
@@ -169,16 +186,14 @@ private struct NativeInterestFormView: View {
                     Toggle("Send me XERT launch and timetable updates", isOn: $draft.mailingList)
                 }
                 Button {
-                    Task {
-                        if await store.submitInterest(kind: kind, draft: draft) { submitted = true }
-                    }
+                    submitInterest()
                 } label: {
                     HStack {
-                        if store.isSubmittingInterest { ProgressView() }
-                        Text(store.isSubmittingInterest ? "Submitting..." : "Submit \(kind.title)")
+                        if isSubmitInFlight { ProgressView() }
+                        Text(isSubmitInFlight ? "Submitting..." : "Submit \(kind.title)")
                     }
                 }
-                .disabled(store.isSubmittingInterest)
+                .disabled(isSubmitInFlight)
             } footer: {
                 Text("Your details go directly to XERT's protected owner CRM for follow-up.")
             }
@@ -192,6 +207,17 @@ private struct NativeInterestFormView: View {
             Button("Done") { dismiss() }
         } message: {
             Text("XERT will follow up using the contact details you provided.")
+        }
+    }
+
+    private func submitInterest() {
+        guard !isSubmitInFlight else { return }
+        isSubmitting = true
+        Task {
+            defer { isSubmitting = false }
+            if await store.submitInterest(kind: kind, draft: draft) {
+                submitted = true
+            }
         }
     }
 
