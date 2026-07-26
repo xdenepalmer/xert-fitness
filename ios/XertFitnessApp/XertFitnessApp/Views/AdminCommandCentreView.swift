@@ -851,14 +851,21 @@ struct AdminCommandCentreView: View {
             let priority = operationalPriorities.first
 
             if freshness == .current,
-               admin.operationalQueueState == .ready,
-               let priority {
-                AdminOwnerRunNextBar(
-                    priority: priority,
-                    isRefreshing: admin.isLoading || admin.isRefreshingOperations,
-                    onOpen: { openOwnerRouteWithFeedback(priority.route) },
-                    onRefresh: refreshOperationalPulse
-                )
+               admin.operationalQueueState == .ready {
+                if let priority {
+                    AdminOwnerRunNextBar(
+                        priority: priority,
+                        isRefreshing: admin.isLoading || admin.isRefreshingOperations,
+                        onOpen: { openOwnerRouteWithFeedback(priority.route) },
+                        onRefresh: refreshOperationalPulse
+                    )
+                } else {
+                    AdminOwnerQueuesClearBar(
+                        updatedAt: admin.operationalUpdatedAt,
+                        isRefreshing: admin.isLoading || admin.isRefreshingOperations,
+                        onRefresh: refreshOperationalPulse
+                    )
+                }
             } else if priority != nil || admin.operationalQueueState != .ready {
                 AdminOwnerRunNextRefreshBar(
                     freshness: freshness,
@@ -14784,29 +14791,88 @@ private struct AdminOwnerRunNextBar: View {
     }
 }
 
-private struct AdminOwnerRunNextRefreshBar: View {
-    let freshness: AdminOperationalFreshness
+private struct AdminOwnerQueuesClearBar: View {
+    let updatedAt: Date?
     let isRefreshing: Bool
     let onRefresh: () -> Void
 
     var body: some View {
         Button(action: onRefresh) {
             HStack(spacing: 10) {
-                Image(systemName: freshness == .unavailable
-                    ? "wifi.exclamationmark"
-                    : "arrow.clockwise")
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.subheadline.weight(.bold))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isRefreshing ? "UPDATING OPERATIONS" : "REFRESH TO RUN NEXT")
+                    Text(isRefreshing ? "CHECKING OPERATIONS" : "ALL QUEUES CLEAR")
                         .font(.system(size: 9, weight: .black))
                         .tracking(1.1)
-                    Text("Actions unlock only from a current complete snapshot")
-                        .font(.caption)
-                        .foregroundStyle(Color.xertPale.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let updatedAt {
+                        Text("Complete snapshot updated \(updatedAt, style: .relative)")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Complete operational snapshot")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.72))
+                    }
                 }
                 Spacer(minLength: 4)
                 if isRefreshing {
                     ProgressView().tint(Color.xertSteel)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline.weight(.bold))
+                }
+            }
+            .foregroundStyle(Color.xertSteel)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .background(Color.xertInk.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.xertSteel.opacity(0.28)).frame(height: 1)
+        }
+        .accessibilityLabel(
+            isRefreshing ? "Checking operational queues" : "All operational queues clear"
+        )
+        .accessibilityValue(
+            updatedAt.map {
+                "Complete snapshot updated \($0.formatted(date: .omitted, time: .shortened))"
+            } ?? "Complete operational snapshot"
+        )
+        .accessibilityHint("Refreshes the owner operational snapshot")
+        .accessibilityIdentifier("owner.runNextDock.clear")
+    }
+}
+
+private struct AdminOwnerRunNextRefreshBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let freshness: AdminOperationalFreshness
+    let isRefreshing: Bool
+    let onRefresh: () -> Void
+
+    var body: some View {
+        Button(action: onRefresh) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        refreshBarCopy
+                        if isRefreshing {
+                            ProgressView().tint(Color.xertSteel)
+                        }
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        refreshBarCopy
+                        Spacer(minLength: 4)
+                        if isRefreshing {
+                            ProgressView().tint(Color.xertSteel)
+                        }
+                    }
                 }
             }
             .foregroundStyle(Color.xertSteel)
@@ -14826,6 +14892,23 @@ private struct AdminOwnerRunNextRefreshBar: View {
         )
         .accessibilityHint("Prevents acting from stale or incomplete owner data")
         .accessibilityIdentifier("owner.runNextDock.refresh")
+    }
+
+    private var refreshBarCopy: some View {
+        HStack(spacing: 10) {
+            Image(systemName: freshness == .unavailable
+                ? "wifi.exclamationmark"
+                : "arrow.clockwise")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isRefreshing ? "UPDATING OPERATIONS" : "REFRESH TO RUN NEXT")
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.1)
+                Text("Actions unlock only from a current complete snapshot")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

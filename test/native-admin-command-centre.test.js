@@ -20,11 +20,16 @@ test('compact owner overview keeps one freshness-gated run-next action above pho
   assert.match(dashboard, /freshness == \.current/);
   assert.match(dashboard, /admin\.operationalQueueState == \.ready/);
   assert.match(dashboard, /operationalPriorities\.first/);
+  assert.match(dashboard, /AdminOwnerQueuesClearBar\(/);
+  assert.match(runNext, /ALL QUEUES CLEAR/);
+  assert.match(runNext, /Complete snapshot updated/);
+  assert.match(runNext, /owner\.runNextDock\.clear/);
   assert.match(runNext, /RUN CRITICAL NEXT/);
   assert.match(runNext, /dynamicTypeSize\.isAccessibilitySize[\s\S]*refreshButton\(showsLabel: true\)/);
   assert.match(runNext, /frame\(width: showsLabel \? nil : 44\)/);
   assert.match(runNext, /owner\.runNextDock/);
   assert.match(runNext, /Actions unlock only from a current complete snapshot/);
+  assert.match(runNext, /AdminOwnerRunNextRefreshBar[\s\S]*dynamicTypeSize\.isAccessibilitySize/);
 });
 
 test('native member directory has complete server-backed operator controls', async () => {
