@@ -710,6 +710,62 @@ test('native campaign attribution keeps form origin separate from marketing sour
   assert.doesNotMatch(summary, /utm_source\) \?\? Self\.clean\([^\n]*source/);
 });
 
+test('native reporting desks never present unavailable evidence as zero activity', async () => {
+  const [api, store, view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+  const campaigns = view.slice(
+    view.indexOf('private struct AdminCampaignAttributionView'),
+    view.indexOf('private struct AdminCampaignMetric'),
+  );
+  const audit = view.slice(
+    view.indexOf('private struct AdminAuditView'),
+    view.indexOf('private struct AdminAuditCSVDocument'),
+  );
+
+  for (const state of [
+    'hasLoadedCampaignAttribution',
+    'campaignAttributionUnavailable',
+    'campaignAttributionStatusMessage',
+    'campaignAttributionUpdatedAt',
+    'hasLoadedAudit',
+    'auditUnavailable',
+    'auditPartialSources',
+    'auditStatusMessage',
+    'auditUpdatedAt',
+  ]) {
+    assert.match(store, new RegExp(`@Published private\\(set\\) var ${state}`));
+  }
+  assert.match(store, /var campaignAttributionIsCurrent: Bool/);
+  assert.match(store, /if !force, campaignAttributionIsCurrent \{ return \}/);
+  assert.match(store, /campaignAttributionStatusMessage = hasLoadedCampaignAttribution[\s\S]*last loaded report remains visible but is stale/);
+  assert.match(store, /var auditIsCurrent: Bool/);
+  assert.match(store, /func loadAudit\(session: AuthSession, force: Bool = false\)/);
+  assert.match(store, /auditStatusMessage = hasLoadedAudit[\s\S]*last loaded history remains visible but is stale/);
+  assert.match(api, /func adminAudit\(session auth: AuthSession\) async throws -> AdminAuditSnapshot/);
+  assert.match(api, /Result<\[AdminRoleAuditRow\], Error>/);
+  assert.match(api, /Result<\[AdminBookingAuditRow\], Error>/);
+  assert.match(api, /guard unavailableSources\.count < 8/);
+  assert.match(models, /struct AdminAuditSnapshot[\s\S]*unavailableSources: \[String\][\s\S]*var isComplete/);
+
+  assert.match(campaigns, /if !admin\.hasLoadedCampaignAttribution/);
+  assert.match(campaigns, /LIVE REPORT[\s\S]*CACHED REPORT/);
+  assert.match(campaigns, /\.disabled\(!reportIsCurrent \|\| summary\.total == 0\)/);
+  assert.match(campaigns, /Retry campaign report/);
+  assert.match(campaigns, /frame\(width: 44, height: 44\)/);
+
+  assert.match(audit, /if !admin\.hasLoadedAudit/);
+  assert.match(audit, /LIVE HISTORY[\s\S]*CACHED HISTORY[\s\S]*PARTIAL HISTORY/);
+  assert.match(audit, /\.disabled\(!reportIsCurrent \|\| rows\.isEmpty\)/);
+  assert.match(audit, /Retry Admin Audit/);
+  assert.match(audit, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(audit, /\.refreshable \{ await admin\.loadAudit\(session: session, force: true\) \}/);
+  assert.match(models, /struct AdminAuditExport[\s\S]*prefix\(300\)[\s\S]*replacingOccurrences\(of: "\\\"", with: "\\\"\\\""\)/);
+});
+
 test('native member records provide bounded truthful account history and guarded credit grants', async () => {
   const [api, store, view, models] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),

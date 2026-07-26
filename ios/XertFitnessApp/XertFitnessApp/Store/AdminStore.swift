@@ -140,6 +140,16 @@ final class AdminStore: ObservableObject {
     @Published private(set) var unavailableLeadPipelines: Set<AdminLeadPipeline> = []
     @Published private(set) var leadPipelineStatusMessage: String?
     @Published private(set) var isLoadingCampaignAttribution = false
+    @Published private(set) var hasLoadedCampaignAttribution = false
+    @Published private(set) var campaignAttributionUnavailable = false
+    @Published private(set) var campaignAttributionStatusMessage: String?
+    @Published private(set) var campaignAttributionUpdatedAt: Date?
+    @Published private(set) var isLoadingAudit = false
+    @Published private(set) var hasLoadedAudit = false
+    @Published private(set) var auditUnavailable = false
+    @Published private(set) var auditPartialSources: [String] = []
+    @Published private(set) var auditStatusMessage: String?
+    @Published private(set) var auditUpdatedAt: Date?
     @Published private(set) var hasLoadedSiteContent = false
     @Published private(set) var siteContentUnavailable = false
     @Published private(set) var siteContentStatusMessage: String?
@@ -232,8 +242,12 @@ final class AdminStore: ObservableObject {
     func refresh(session: AuthSession) async {
         guard !isLoading, !isRefreshingHealth, !isRefreshingOperations else { return }
         isLoading = true
+        isLoadingAudit = true
         operationalQueueState = .loading
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            isLoadingAudit = false
+        }
 
         async let operationsRequest = api.adminDailyOperations(session: session)
         async let waitlistRequest = api.adminWaitlist(session: session)
@@ -332,8 +346,30 @@ final class AdminStore: ObservableObject {
                 failures.append("push health")
             }
         }
-        do { auditEntries = try await auditRequest; successfulSources.insert("admin audit"); loadedSource = true }
-        catch { failures.append("admin audit") }
+        do {
+            let snapshot = try await auditRequest
+            auditEntries = snapshot.entries
+            hasLoadedAudit = true
+            auditUnavailable = false
+            auditPartialSources = snapshot.unavailableSources
+            auditStatusMessage = snapshot.isComplete
+                ? nil
+                : "Admin Audit is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
+            auditUpdatedAt = Date()
+            loadedSources.insert("admin audit")
+            if snapshot.isComplete {
+                successfulSources.insert("admin audit")
+            } else {
+                failures.append("admin audit")
+            }
+            loadedSource = true
+        } catch {
+            auditUnavailable = true
+            auditStatusMessage = hasLoadedAudit
+                ? "Admin Audit could not refresh. The last loaded history is labelled as stale."
+                : "Admin Audit could not load. Retry before relying on change history."
+            failures.append("admin audit")
+        }
         do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
         catch { failures.append("session packs") }
         do {
@@ -1050,14 +1086,66 @@ final class AdminStore: ObservableObject {
 
     func loadCampaignAttribution(session: AuthSession, force: Bool = false) async {
         guard !isLoadingCampaignAttribution else { return }
-        if !force, !campaignAttributionRows.isEmpty { return }
+        if !force, campaignAttributionIsCurrent { return }
         isLoadingCampaignAttribution = true
         defer { isLoadingCampaignAttribution = false }
         do {
             campaignAttributionRows = try await api.adminCampaignAttribution(session: session)
+            hasLoadedCampaignAttribution = true
+            campaignAttributionUnavailable = false
+            campaignAttributionStatusMessage = nil
+            campaignAttributionUpdatedAt = Date()
             lastUpdatedAt = Date()
         } catch {
-            errorMessage = error.localizedDescription
+            campaignAttributionUnavailable = true
+            campaignAttributionStatusMessage = hasLoadedCampaignAttribution
+                ? "Campaign Attribution could not refresh. The last loaded report remains visible but is stale."
+                : "Campaign Attribution could not load. Retry before relying on acquisition totals."
+        }
+    }
+
+    var campaignAttributionIsCurrent: Bool {
+        hasLoadedCampaignAttribution && !campaignAttributionUnavailable
+    }
+
+    var auditIsCurrent: Bool {
+        hasLoadedAudit
+            && !auditUnavailable
+            && auditPartialSources.isEmpty
+            && loadedSources.contains("admin audit")
+            && !refreshUnavailableSources.contains("admin audit")
+    }
+
+    func loadAudit(session: AuthSession, force: Bool = false) async {
+        guard !isLoadingAudit else { return }
+        if !force, auditIsCurrent { return }
+        isLoadingAudit = true
+        defer { isLoadingAudit = false }
+        do {
+            let snapshot = try await api.adminAudit(session: session)
+            auditEntries = snapshot.entries
+            hasLoadedAudit = true
+            auditUnavailable = false
+            auditPartialSources = snapshot.unavailableSources
+            auditStatusMessage = snapshot.isComplete
+                ? nil
+                : "Admin Audit is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
+            auditUpdatedAt = Date()
+            loadedSources.insert("admin audit")
+            if snapshot.isComplete {
+                refreshUnavailableSources.removeAll { $0 == "admin audit" }
+            } else if !refreshUnavailableSources.contains("admin audit") {
+                refreshUnavailableSources.append("admin audit")
+            }
+            lastUpdatedAt = Date()
+        } catch {
+            auditUnavailable = true
+            if !refreshUnavailableSources.contains("admin audit") {
+                refreshUnavailableSources.append("admin audit")
+            }
+            auditStatusMessage = hasLoadedAudit
+                ? "Admin Audit could not refresh. The last loaded history remains visible but is stale."
+                : "Admin Audit could not load. Retry before relying on change history."
         }
     }
 

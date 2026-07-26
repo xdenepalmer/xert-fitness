@@ -1808,6 +1808,40 @@ struct AdminAuditEntry: Identifiable, Hashable {
     let createdAt: Date
 }
 
+struct AdminAuditSnapshot {
+    let entries: [AdminAuditEntry]
+    let unavailableSources: [String]
+
+    var isComplete: Bool { unavailableSources.isEmpty }
+}
+
+struct AdminAuditExport {
+    let entries: [AdminAuditEntry]
+
+    var csv: String {
+        let header = "Created,Category,Action,Detail"
+        let rows = entries
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(300)
+            .map { entry in
+                [
+                    ISO8601DateFormatter().string(from: entry.createdAt),
+                    entry.category,
+                    entry.title,
+                    entry.detail
+                ]
+                .map(Self.csvField)
+                .joined(separator: ",")
+            }
+        return ([header] + rows).joined(separator: "\n")
+    }
+
+    private static func csvField(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return "\"\(escaped)\""
+    }
+}
+
 struct AdminProduct: Identifiable, Codable, Hashable {
     let id: UUID
     let slug: String

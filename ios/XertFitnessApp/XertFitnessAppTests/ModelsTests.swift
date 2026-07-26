@@ -3387,6 +3387,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(summary.csv.lowercased().contains("email"))
     }
 
+    func testAdminAuditExportIsBoundedAndEscapesCSVFields() {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let entries = (0..<305).map { index in
+            AdminAuditEntry(
+                id: "audit-\(index)",
+                category: index == 0 ? "Content, CMS" : "Bookings",
+                title: index == 0 ? "Changed \"hero\"" : "Booking updated",
+                detail: index == 0 ? "Line one\nLine two" : "Member \(index)",
+                createdAt: now.addingTimeInterval(TimeInterval(-index))
+            )
+        }
+
+        let csv = AdminAuditExport(entries: entries).csv
+        let rows = csv.split(separator: "\n", omittingEmptySubsequences: false)
+
+        XCTAssertEqual(rows.first, "Created,Category,Action,Detail")
+        XCTAssertEqual(rows.count, 302)
+        XCTAssertTrue(csv.contains(#""Content, CMS""#))
+        XCTAssertTrue(csv.contains(#""Changed ""hero""""#))
+        XCTAssertTrue(csv.contains("\"Line one\nLine two\""))
+        XCTAssertFalse(csv.contains("Member 304"))
+        XCTAssertFalse(AdminAuditSnapshot(
+            entries: Array(entries.prefix(1)),
+            unavailableSources: ["Role changes"]
+        ).isComplete)
+        XCTAssertTrue(AdminAuditSnapshot(entries: [], unavailableSources: []).isComplete)
+    }
+
     func testSiteContentNormalizationMatchesPublicSchemaAndRejectsUnsafeValues() throws {
         let contact = try AdminSiteContentData(
             paragraphs: ["must not leak"],

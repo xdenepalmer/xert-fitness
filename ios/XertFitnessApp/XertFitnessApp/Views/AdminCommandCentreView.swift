@@ -1655,7 +1655,7 @@ struct AdminCommandCentreView: View {
                 onOpenWorkspace: openWorkspace
             )
         case .audit:
-            AdminAuditView(admin: admin)
+            AdminAuditView(admin: admin, session: session)
         }
     }
 
@@ -5874,6 +5874,10 @@ private struct AdminCampaignAttributionView: View {
         AdminCampaignSummary(rows: admin.campaignAttributionRows, range: range)
     }
 
+    private var reportIsCurrent: Bool {
+        admin.campaignAttributionIsCurrent && !admin.isLoadingCampaignAttribution
+    }
+
     var body: some View {
         List {
             Section {
@@ -5887,40 +5891,82 @@ private struct AdminCampaignAttributionView: View {
                 Text("Member-interest attribution uses Australia/Brisbane reporting days and matches the desktop command centre.")
             }
 
-            Section("Acquisition pulse") {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    AdminCampaignMetric(title: "Leads", value: "\(summary.total)")
-                    AdminCampaignMetric(title: "UTM attributed", value: "\(summary.attributed)")
-                    AdminCampaignMetric(title: "Direct / unknown", value: "\(summary.direct)")
-                    AdminCampaignMetric(
-                        title: "Attribution rate",
-                        value: summary.attributionRate.formatted(.percent.precision(.fractionLength(0)))
-                    )
-                }
-                .padding(.vertical, 4)
-                .listRowBackground(Color.xertNavy)
-            }
-
-            AdminCampaignBreakdownSection(
-                title: "Traffic sources", items: summary.sources, total: summary.total,
-                emptyText: "No source data in this range."
-            )
-            AdminCampaignBreakdownSection(
-                title: "Campaigns", items: summary.campaigns, total: summary.total,
-                emptyText: "No UTM campaigns in this range."
-            )
-            AdminCampaignBreakdownSection(
-                title: "Channels / mediums", items: summary.mediums, total: summary.total,
-                emptyText: "No channel data in this range."
-            )
-
-            Section("Daily signups - latest 30 Queensland days") {
-                if summary.dailySignups.allSatisfy({ $0.count == 0 }) {
-                    AdminEmptyState(icon: "chart.bar", text: "No member leads in the latest 30 days.")
-                        .listRowInsets(EdgeInsets())
-                } else {
-                    AdminCampaignDailyChart(days: summary.dailySignups)
+            if !admin.hasLoadedCampaignAttribution {
+                Section {
+                    if admin.isLoadingCampaignAttribution {
+                        HStack(spacing: 12) {
+                            ProgressView().tint(Color.xertSteel)
+                            Text("Loading acquisition evidence...")
+                        }
+                        .frame(minHeight: 64)
                         .listRowBackground(Color.xertInk)
+                    } else {
+                        reportingUnavailablePanel(
+                            message: admin.campaignAttributionStatusMessage
+                                ?? "Campaign Attribution has not loaded. Retry before relying on acquisition totals."
+                        )
+                    }
+                }
+            } else {
+                if !reportIsCurrent {
+                    Section {
+                        reportingUnavailablePanel(
+                            message: admin.campaignAttributionStatusMessage
+                                ?? "Showing the last acquisition snapshot. Refresh before using these totals."
+                        )
+                    }
+                }
+
+                Section {
+                    Label(
+                        reportIsCurrent ? "LIVE REPORT" : "CACHED REPORT",
+                        systemImage: reportIsCurrent ? "checkmark.circle.fill" : "clock.arrow.circlepath"
+                    )
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(reportIsCurrent ? Color.green : Color.orange)
+                    if let updatedAt = admin.campaignAttributionUpdatedAt {
+                        Text("Loaded \(updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.52))
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+
+                Section("Acquisition pulse") {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        AdminCampaignMetric(title: "Leads", value: "\(summary.total)")
+                        AdminCampaignMetric(title: "UTM attributed", value: "\(summary.attributed)")
+                        AdminCampaignMetric(title: "Direct / unknown", value: "\(summary.direct)")
+                        AdminCampaignMetric(
+                            title: "Attribution rate",
+                            value: summary.attributionRate.formatted(.percent.precision(.fractionLength(0)))
+                        )
+                    }
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.xertNavy)
+                }
+
+                AdminCampaignBreakdownSection(
+                    title: "Traffic sources", items: summary.sources, total: summary.total,
+                    emptyText: "No source data in this range."
+                )
+                AdminCampaignBreakdownSection(
+                    title: "Campaigns", items: summary.campaigns, total: summary.total,
+                    emptyText: "No UTM campaigns in this range."
+                )
+                AdminCampaignBreakdownSection(
+                    title: "Channels / mediums", items: summary.mediums, total: summary.total,
+                    emptyText: "No channel data in this range."
+                )
+
+                Section("Daily signups - latest 30 Queensland days") {
+                    if summary.dailySignups.allSatisfy({ $0.count == 0 }) {
+                        AdminEmptyState(icon: "chart.bar", text: "No member leads in the latest 30 days.")
+                            .listRowInsets(EdgeInsets())
+                    } else {
+                        AdminCampaignDailyChart(days: summary.dailySignups)
+                            .listRowBackground(Color.xertInk)
+                    }
                 }
             }
         }
@@ -5928,15 +5974,23 @@ private struct AdminCampaignAttributionView: View {
         .background(Color.xertNavy)
         .navigationTitle("Campaign Attribution")
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
                     exportDocument = AdminCampaignCSVDocument(csv: summary.csv)
                     isExporting = true
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
                 }
-                .disabled(summary.total == 0)
+                .disabled(!reportIsCurrent || summary.total == 0)
                 .accessibilityLabel("Export campaign attribution CSV")
+                .accessibilityHint(reportIsCurrent ? "Exports the selected live reporting range" : "Refresh the report before exporting")
+                Button {
+                    Task { await admin.loadCampaignAttribution(session: session, force: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise").frame(width: 44, height: 44)
+                }
+                .disabled(admin.isLoadingCampaignAttribution)
+                .accessibilityLabel("Refresh campaign attribution")
             }
         }
         .fileExporter(
@@ -5947,13 +6001,31 @@ private struct AdminCampaignAttributionView: View {
         ) { result in
             if case .failure(let error) = result { admin.errorMessage = error.localizedDescription }
         }
-        .overlay {
-            if admin.isLoadingCampaignAttribution && admin.campaignAttributionRows.isEmpty {
-                ProgressView("Loading attribution...").tint(Color.xertSteel)
-            }
-        }
         .refreshable { await admin.loadCampaignAttribution(session: session, force: true) }
         .task { await admin.loadCampaignAttribution(session: session) }
+    }
+
+    private func reportingUnavailablePanel(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(message, systemImage: "wifi.exclamationmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Task { await admin.loadCampaignAttribution(session: session, force: true) }
+            } label: {
+                Label(
+                    admin.isLoadingCampaignAttribution ? "Retrying..." : "Retry campaign report",
+                    systemImage: "arrow.clockwise"
+                )
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .disabled(admin.isLoadingCampaignAttribution)
+        }
+        .padding(.vertical, 4)
+        .listRowBackground(Color.xertInk)
     }
 }
 
@@ -8236,8 +8308,11 @@ private struct HealthCountRow: View {
 
 private struct AdminAuditView: View {
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
     @State private var query = ""
     @State private var category = "All"
+    @State private var exportDocument: AdminAuditCSVDocument?
+    @State private var isExporting = false
 
     private var categories: [String] {
         ["All"] + Set(admin.auditEntries.map(\.category)).sorted()
@@ -8251,41 +8326,179 @@ private struct AdminAuditView: View {
         }
     }
 
+    private var reportIsCurrent: Bool {
+        admin.auditIsCurrent && !admin.isLoadingAudit
+    }
+
+    private var reportStateLabel: String {
+        if reportIsCurrent { return "LIVE HISTORY" }
+        if admin.auditUnavailable { return "CACHED HISTORY" }
+        return admin.auditPartialSources.isEmpty ? "CACHED HISTORY" : "PARTIAL HISTORY"
+    }
+
+    private var reportStateIcon: String {
+        if reportIsCurrent { return "checkmark.circle.fill" }
+        if admin.auditUnavailable { return "clock.arrow.circlepath" }
+        return admin.auditPartialSources.isEmpty ? "clock.arrow.circlepath" : "exclamationmark.triangle.fill"
+    }
+
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+    }
+
     var body: some View {
         List {
-            Section {
-                Picker("Audit category", selection: $category) {
-                    ForEach(categories, id: \.self) { Text($0).tag($0) }
-                }
-            }
-            .listRowBackground(Color.xertNavy)
-
-            if rows.isEmpty { Text("No matching administrative actions.").listRowBackground(Color.xertInk) }
-            ForEach(rows) { entry in
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: auditIcon(entry.category))
-                        .frame(width: 24).foregroundStyle(Color.xertSteel)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(entry.title).font(.headline)
-                            Spacer()
-                            Text(entry.category.uppercased())
-                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+            if !admin.hasLoadedAudit {
+                Section {
+                    if admin.isLoadingAudit {
+                        HStack(spacing: 12) {
+                            ProgressView().tint(Color.xertSteel)
+                            Text("Loading protected change history...")
                         }
-                        Text(entry.detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
-                        Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.4))
+                        .frame(minHeight: 64)
+                        .listRowBackground(Color.xertInk)
+                    } else {
+                        auditUnavailablePanel(
+                            message: admin.auditStatusMessage
+                                ?? "Admin Audit has not loaded. Retry before relying on change history."
+                        )
                     }
                 }
-                .foregroundStyle(Color.xertOffWhite)
-                .padding(.vertical, 5)
+            } else {
+                if !reportIsCurrent {
+                    Section {
+                        auditUnavailablePanel(
+                            message: admin.auditStatusMessage
+                                ?? "Showing the last audit snapshot. Refresh before treating this history as current."
+                        )
+                    }
+                }
+
+                Section {
+                    HStack {
+                        Label(
+                            reportStateLabel,
+                            systemImage: reportStateIcon
+                        )
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(reportIsCurrent ? Color.green : Color.orange)
+                        Spacer()
+                        Text("\(admin.auditEntries.count) RECORDS")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertPale.opacity(0.5))
+                    }
+                    if let updatedAt = admin.auditUpdatedAt {
+                        Text("Loaded \(updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.52))
+                    }
+                }
                 .listRowBackground(Color.xertInk)
+
+                Section {
+                    Picker("Audit category", selection: $category) {
+                        ForEach(categories, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                .listRowBackground(Color.xertNavy)
+
+                if rows.isEmpty {
+                    Text(
+                        reportIsCurrent
+                            ? "No matching administrative actions."
+                            : "No matching actions in the last loaded snapshot."
+                    )
+                    .listRowBackground(Color.xertInk)
+                }
+                ForEach(rows) { entry in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: auditIcon(entry.category))
+                            .frame(width: 24).foregroundStyle(Color.xertSteel)
+                        VStack(alignment: .leading, spacing: 4) {
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    Text(entry.title).font(.headline)
+                                    Spacer()
+                                    auditCategory(entry.category)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(entry.title).font(.headline)
+                                    auditCategory(entry.category)
+                                }
+                            }
+                            Text(entry.detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.62))
+                            Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.4))
+                        }
+                    }
+                    .foregroundStyle(Color.xertOffWhite)
+                    .padding(.vertical, 5)
+                    .listRowBackground(Color.xertInk)
+                }
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Admin Audit")
         .searchable(text: $query, prompt: "Search changes")
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminAuditCSVDocument(
+                        csv: AdminAuditExport(entries: rows).csv
+                    )
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
+                }
+                .disabled(!reportIsCurrent || rows.isEmpty)
+                .accessibilityLabel("Export filtered admin audit CSV")
+                .accessibilityHint(reportIsCurrent ? "Exports the visible live history" : "Refresh Admin Audit before exporting")
+                Button {
+                    Task { await admin.loadAudit(session: session, force: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise").frame(width: 44, height: 44)
+                }
+                .disabled(admin.isLoadingAudit)
+                .accessibilityLabel("Refresh admin audit")
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-admin-audit-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result { admin.errorMessage = error.localizedDescription }
+        }
+        .refreshable { await admin.loadAudit(session: session, force: true) }
+        .task { await admin.loadAudit(session: session) }
+    }
+
+    private func auditUnavailablePanel(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(message, systemImage: "wifi.exclamationmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Task { await admin.loadAudit(session: session, force: true) }
+            } label: {
+                Label(admin.isLoadingAudit ? "Retrying..." : "Retry Admin Audit", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .disabled(admin.isLoadingAudit)
+        }
+        .padding(.vertical, 4)
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func auditCategory(_ category: String) -> some View {
+        Text(category.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color.xertSteel)
     }
 
     private func auditIcon(_ category: String) -> String {
@@ -8298,6 +8511,25 @@ private struct AdminAuditView: View {
         case "Schedule": return "calendar"
         default: return "clock.arrow.circlepath"
         }
+    }
+}
+
+private struct AdminAuditCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
     }
 }
 

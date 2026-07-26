@@ -1486,59 +1486,73 @@ final class XertAPI {
         try await vercelGet(path: "/api/admin-push-health", auth: auth)
     }
 
-    func adminAudit(session auth: AuthSession) async throws -> [AdminAuditEntry] {
-        async let roles: [AdminRoleAuditRow] = adminAuditRows(
+    func adminAudit(session auth: AuthSession) async throws -> AdminAuditSnapshot {
+        async let roles: Result<[AdminRoleAuditRow], Error> = adminAuditResult(
             table: "admin_role_changes",
             select: "id,target_user_id,previous_role,new_role,created_at",
             auth: auth
         )
-        async let credits: [AdminCreditAuditRow] = adminAuditRows(
+        async let credits: Result<[AdminCreditAuditRow], Error> = adminAuditResult(
             table: "admin_credit_grants",
             select: "id,user_id,sessions,note,created_at",
             auth: auth
         )
-        async let requests: [AdminRequestAuditRow] = adminAuditRows(
+        async let requests: Result<[AdminRequestAuditRow], Error> = adminAuditResult(
             table: "admin_request_status_changes",
             select: "id,request_type,previous_status,new_status,subject_label,subject_email,created_at",
             auth: auth
         )
-        async let notices: [AdminNoticeAuditRow] = adminAuditRows(
+        async let notices: Result<[AdminNoticeAuditRow], Error> = adminAuditResult(
             table: "member_announcement_admin_events",
             select: "id,announcement_title,action,created_at",
             auth: auth
         )
-        async let leads: [AdminLeadAuditRow] = adminAuditRows(
+        async let leads: Result<[AdminLeadAuditRow], Error> = adminAuditResult(
             table: "admin_lead_changes",
             select: "id,lead_type,previous_status,new_status,subject_label,subject_email,created_at",
             auth: auth
         )
-        async let schedules: [AdminResourceAuditRow] = adminAuditRows(
+        async let schedules: Result<[AdminResourceAuditRow], Error> = adminAuditResult(
             table: "admin_schedule_changes",
             select: "id,resource_type,action,subject_label,created_at",
             auth: auth
         )
-        async let content: [AdminResourceAuditRow] = adminAuditRows(
+        async let content: Result<[AdminResourceAuditRow], Error> = adminAuditResult(
             table: "admin_content_changes",
             select: "id,resource_type,action,subject_label,created_at",
             auth: auth
         )
-        async let bookings: [AdminBookingAuditRow] = adminAuditRows(
+        async let bookings: Result<[AdminBookingAuditRow], Error> = adminAuditResult(
             table: "session_booking_changes",
             select: "id,action,class_label,created_at",
             auth: auth
         )
 
-        let rows = try await (roles, credits, requests, notices, leads, schedules, content, bookings)
+        let results = await (roles, credits, requests, notices, leads, schedules, content, bookings)
+        var unavailableSources: [String] = []
+        let roleRows = resolvedAuditRows(results.0, source: "Role changes", unavailable: &unavailableSources)
+        let creditRows = resolvedAuditRows(results.1, source: "Credit grants", unavailable: &unavailableSources)
+        let requestRows = resolvedAuditRows(results.2, source: "Request changes", unavailable: &unavailableSources)
+        let noticeRows = resolvedAuditRows(results.3, source: "Announcement changes", unavailable: &unavailableSources)
+        let leadRows = resolvedAuditRows(results.4, source: "Lead changes", unavailable: &unavailableSources)
+        let scheduleRows = resolvedAuditRows(results.5, source: "Schedule changes", unavailable: &unavailableSources)
+        let contentRows = resolvedAuditRows(results.6, source: "Content changes", unavailable: &unavailableSources)
+        let bookingRows = resolvedAuditRows(results.7, source: "Booking changes", unavailable: &unavailableSources)
+        guard unavailableSources.count < 8 else {
+            throw APIError(message: "Every protected Admin Audit source is unavailable.")
+        }
         let all = [
-            rows.0.map { $0.entry }, rows.1.map { $0.entry }, rows.2.map { $0.entry },
-            rows.3.map { $0.entry }, rows.4.map { $0.entry }, rows.5.map { $0.entry(category: "Schedule") },
-            rows.6.map { $0.entry(category: "Content") }, rows.7.map { $0.entry }
+            roleRows.map { $0.entry }, creditRows.map { $0.entry }, requestRows.map { $0.entry },
+            noticeRows.map { $0.entry }, leadRows.map { $0.entry },
+            scheduleRows.map { $0.entry(category: "Schedule") },
+            contentRows.map { $0.entry(category: "Content") }, bookingRows.map { $0.entry }
         ]
-        return all
+        let entries = all
             .flatMap { $0 }
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(300)
             .map { $0 }
+        return AdminAuditSnapshot(entries: entries, unavailableSources: unavailableSources)
     }
 
     func adminProducts(session auth: AuthSession) async throws -> [AdminProduct] {
@@ -1933,6 +1947,32 @@ final class XertAPI {
             announcement: nil,
             draft: draft
         )
+    }
+
+    private func adminAuditResult<T: Decodable>(
+        table: String,
+        select: String,
+        auth: AuthSession
+    ) async -> Result<[T], Error> {
+        do {
+            return .success(try await adminAuditRows(table: table, select: select, auth: auth))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func resolvedAuditRows<T>(
+        _ result: Result<[T], Error>,
+        source: String,
+        unavailable: inout [String]
+    ) -> [T] {
+        switch result {
+        case .success(let rows):
+            return rows
+        case .failure:
+            unavailable.append(source)
+            return []
+        }
     }
 
     func adminPublishAnnouncement(
