@@ -18,3 +18,11 @@ test('confirmed native bookings can be saved as idempotent timed calendar events
   assert.match(account, /EventCalendarWriter\.add\(booking\)/);
   assert.match(account, /Already in Calendar/);
 });
+
+test('native calendar writes request the minimum iOS permission scope', () => {
+  assert.match(writer, /requestWriteOnlyAccessToEvents\(\)/);
+  assert.doesNotMatch(writer, /requestFullAccessToEvents\(\)/);
+  assert.match(writer, /status == \.writeOnly \|\| status == \.fullAccess/);
+  assert.match(writer, /private static var canReadEvents/);
+  assert.match(writer, /authorizationStatus\(for: \.event\) == \.fullAccess/);
+});

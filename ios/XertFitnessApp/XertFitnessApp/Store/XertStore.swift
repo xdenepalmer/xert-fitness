@@ -508,7 +508,9 @@ final class XertStore: ObservableObject {
 
     func signOut() {
         let currentSession = authSession
+        let currentUserID = currentSession?.user?.id ?? profile?.id
         let pushToken = PushDeviceTokenStore.load()
+        clearLocalMemberState(for: currentUserID)
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         XertHaptics.play(.softImpact)
@@ -528,7 +530,9 @@ final class XertStore: ObservableObject {
         defer { isDeletingAccount = false }
         do {
             let authSession = try await validAuthSession()
+            let currentUserID = authSession.user?.id ?? profile?.id
             try await api.deleteAccount(session: authSession)
+            clearLocalMemberState(for: currentUserID)
             replaceAuthSession(with: nil)
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
@@ -1359,6 +1363,20 @@ final class XertStore: ObservableObject {
         memberDataUpdatedAt = nil
         isUsingStaleMemberData = false
         unavailableDataSources.subtract(Self.memberDataSources)
+    }
+
+    private func clearLocalMemberState(for userID: UUID?) {
+        if let userID {
+            MemberLocalState.clear(for: userID)
+        } else {
+            PendingCheckoutStore.clear()
+            PushDeviceTokenStore.clear()
+            ClassReminderPreference.setEnabled(false)
+            MemberPushPreference.setEnabled(false)
+        }
+        classRemindersEnabled = false
+        classReminderSyncState = .off
+        memberPushEnabled = false
     }
 
     private func applyMemberOnboarding(_ onboarding: MemberOnboardingState) {

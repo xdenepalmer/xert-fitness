@@ -55,14 +55,15 @@ enum EventCalendarWriter {
             throw EventCalendarWriterError.missingDate
         }
 
-        let predicate = store.predicateForEvents(
-            withStart: start,
+        if canReadEvents, containsEvent(
+            in: store,
+            calendar: calendar,
+            start: start,
             end: end,
-            calendars: [calendar]
-        )
-        if store.events(matching: predicate).contains(where: {
-            $0.title == item.name && $0.isAllDay && $0.startDate == start && $0.endDate == end
-        }) {
+            matching: {
+                $0.title == item.name && $0.isAllDay && $0.startDate == start && $0.endDate == end
+            }
+        ) {
             return .alreadyExists
         }
 
@@ -90,17 +91,18 @@ enum EventCalendarWriter {
 
         let start = booking.start_time
         let end = BookingCalendarPlanner.endDate(for: booking)
-        let predicate = store.predicateForEvents(
-            withStart: start.addingTimeInterval(-60),
+        if canReadEvents, containsEvent(
+            in: store,
+            calendar: calendar,
+            start: start.addingTimeInterval(-60),
             end: end.addingTimeInterval(60),
-            calendars: [calendar]
-        )
-        if store.events(matching: predicate).contains(where: {
-            $0.title == booking.title
-                && !$0.isAllDay
-                && abs($0.startDate.timeIntervalSince(start)) < 1
-                && abs($0.endDate.timeIntervalSince(end)) < 1
-        }) {
+            matching: {
+                $0.title == booking.title
+                    && !$0.isAllDay
+                    && abs($0.startDate.timeIntervalSince(start)) < 1
+                    && abs($0.endDate.timeIntervalSince(end)) < 1
+            }
+        ) {
             return .alreadyExists
         }
 
@@ -121,7 +123,9 @@ enum EventCalendarWriter {
 
     private static func requestAccess(using store: EKEventStore) async -> Bool {
         if #available(iOS 17.0, *) {
-            return (try? await store.requestFullAccessToEvents()) ?? false
+            let status = EKEventStore.authorizationStatus(for: .event)
+            if status == .writeOnly || status == .fullAccess { return true }
+            return (try? await store.requestWriteOnlyAccessToEvents()) ?? false
         }
 
         return await withCheckedContinuation { continuation in
@@ -129,5 +133,23 @@ enum EventCalendarWriter {
                 continuation.resume(returning: granted)
             }
         }
+    }
+
+    private static var canReadEvents: Bool {
+        if #available(iOS 17.0, *) {
+            return EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        }
+        return EKEventStore.authorizationStatus(for: .event) == .authorized
+    }
+
+    private static func containsEvent(
+        in store: EKEventStore,
+        calendar: EKCalendar,
+        start: Date,
+        end: Date,
+        matching predicate: (EKEvent) -> Bool
+    ) -> Bool {
+        let query = store.predicateForEvents(withStart: start, end: end, calendars: [calendar])
+        return store.events(matching: query).contains(where: predicate)
     }
 }

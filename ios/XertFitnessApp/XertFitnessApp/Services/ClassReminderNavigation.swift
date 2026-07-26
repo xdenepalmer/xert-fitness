@@ -91,6 +91,11 @@ enum ClassReminderNavigation {
         defaults.removeObject(forKey: pendingBookingIDKey)
         return bookingID
     }
+
+    static func clearPending(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingBookingIDKey)
+        defaults.removeObject(forKey: pendingBrowseClassesKey)
+    }
 }
 
 enum AnnouncementPushNavigation {
@@ -110,6 +115,10 @@ enum AnnouncementPushNavigation {
         }
         defaults.removeObject(forKey: pendingAnnouncementIDKey)
         return announcementID
+    }
+
+    static func clearPending(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingAnnouncementIDKey)
     }
 }
 

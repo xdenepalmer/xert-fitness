@@ -2283,6 +2283,62 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testMemberLocalStateClearsAccountLinkedIdentifiersAndPreferences() throws {
+        let suiteName = "MemberLocalStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = UUID()
+        let bookingID = UUID()
+        let announcementID = UUID()
+
+        _ = XertWorkspaceOrderStore.save(
+            Array(XertPrimaryDestination.dockOrder.reversed()),
+            for: userID,
+            defaults: defaults
+        )
+        _ = XertPinnedWorkspaceStore.toggle(.events, for: userID, defaults: defaults)
+        _ = XertOwnerWorkspacePinsStore.toggle(.members, for: userID, defaults: defaults)
+        PendingCheckoutStore.save(
+            PendingCheckout(
+                userID: userID,
+                baselineOrderIDs: [UUID()],
+                startedAt: Date(),
+                checkoutSessionID: "cs_test_LocalClear123"
+            ),
+            defaults: defaults
+        )
+        ClassReminderNavigation.markPending(bookingID: bookingID, defaults: defaults)
+        AnnouncementPushNavigation.markPending(announcementID: announcementID, defaults: defaults)
+        _ = XertQuickActionNavigation.markPending(
+            shortcutType: XertQuickActionNavigation.bookingsType,
+            defaults: defaults
+        )
+        ClassReminderPreference.setEnabled(true, defaults: defaults)
+        MemberPushPreference.setEnabled(true, defaults: defaults)
+        AppPrivacyLock.setEnabled(true, defaults: defaults)
+        PushDeviceTokenStore.save(
+            DevicePushToken(value: "device-token", environment: "sandbox"),
+            defaults: defaults
+        )
+
+        MemberLocalState.clear(for: userID, defaults: defaults)
+
+        XCTAssertEqual(
+            XertWorkspaceOrderStore.load(for: userID, defaults: defaults),
+            XertPrimaryDestination.dockOrder
+        )
+        XCTAssertTrue(XertPinnedWorkspaceStore.load(for: userID, defaults: defaults).isEmpty)
+        XCTAssertTrue(XertOwnerWorkspacePinsStore.load(for: userID, defaults: defaults).isEmpty)
+        XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
+        XCTAssertNil(defaults.object(forKey: ClassReminderNavigation.pendingBookingIDKey))
+        XCTAssertNil(defaults.object(forKey: AnnouncementPushNavigation.pendingAnnouncementIDKey))
+        XCTAssertNil(defaults.object(forKey: XertQuickActionNavigation.pendingShortcutTypeKey))
+        XCTAssertFalse(ClassReminderPreference.isEnabled(defaults: defaults))
+        XCTAssertFalse(MemberPushPreference.isEnabled(defaults: defaults))
+        XCTAssertFalse(AppPrivacyLock.isEnabled(defaults: defaults))
+        XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
+    }
+
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
         let request = try MemberSignUpRequest(
             fullName: "  Alex Runner  ",

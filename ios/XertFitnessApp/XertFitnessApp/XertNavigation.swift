@@ -465,6 +465,10 @@ enum XertWorkspaceOrderStore {
         return uniqueKnown + XertPrimaryDestination.dockOrder.filter { seen.insert($0).inserted }
     }
 
+    static func clear(for userID: UUID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey(for: userID))
+    }
+
     private static func isCompletePermutation(_ destinations: [XertPrimaryDestination]) -> Bool {
         destinations.count == XertPrimaryDestination.dockOrder.count
             && Set(destinations) == Set(XertPrimaryDestination.dockOrder)
@@ -516,6 +520,10 @@ enum XertPinnedWorkspaceStore {
         }
         save(routes, for: userID, defaults: defaults)
         return routes
+    }
+
+    static func clear(for userID: UUID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey(for: userID))
     }
 
     private static func save(

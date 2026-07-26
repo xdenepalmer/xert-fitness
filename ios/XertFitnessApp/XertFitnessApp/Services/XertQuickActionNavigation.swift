@@ -30,6 +30,10 @@ enum XertQuickActionNavigation {
         defaults.removeObject(forKey: pendingShortcutTypeKey)
         return route(for: shortcutType)
     }
+
+    static func clearPending(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingShortcutTypeKey)
+    }
 }
 
 extension Notification.Name {
