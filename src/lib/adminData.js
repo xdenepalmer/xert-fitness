@@ -1962,9 +1962,11 @@ export async function adminMemberDetail(userId) {
     })
   );
 
+  // Bookings must page too — the old hard limit(20) silently hid later
+  // places during refund / attendance review once credits/orders already paged.
   const [credits, bookings, orders, grantsResult, notes, notices, onboardingRows] = await Promise.all([
     loadMemberBatches('credit_batches', '*'),
-    supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
+    loadMemberBatches('session_bookings', '*, class_sessions(title, class_type, start_time)'),
     loadMemberBatches('orders', '*, products(name)'),
     loadMemberBatches('admin_credit_grants', '*').then(
       rows => ({ rows, available: true }),
@@ -1981,14 +1983,13 @@ export async function adminMemberDetail(userId) {
     adminListMemberNotices(userId),
     adminMemberOnboardingSummary([userId]),
   ]);
-  if (bookings.error) throw new Error(bookings.error.message);
   const onboardingAvailable = onboardingRows !== null;
   const onboarding = onboardingAvailable
     ? (onboardingRows.find(row => row.user_id === userId) || null)
     : null;
   return {
     credits,
-    bookings: bookings.data || [],
+    bookings,
     orders,
     grants: grantsResult.rows,
     creditAuditAvailable: grantsResult.available,

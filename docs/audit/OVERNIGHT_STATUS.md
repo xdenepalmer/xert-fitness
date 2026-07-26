@@ -5,9 +5,15 @@
 **Still shipping; apply through latest migration timestamp**
 `20260726123000_booking_decision_notice_credit_honesty.sql` (**26123**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
-were **not** built.
+were **not** built. No new migration in the latest app tip.
 
 **What was made safer overnight (plain English)**
+- Member cancel credit honesty + money/history silence (app-only tip after
+  **26123**): Account cancel confirm/toast (web + iPhone) no longer claim an
+  unconditional credit return when Stripe-refunded packs no-op; Member drawer
+  bookings page past the old hard 20 cut (credits/orders/grants parity); iPhone
+  Command Centre PT desk and admin audit page past the old hard 100 cut so later
+  PT queues and subject-email audit rows cannot vanish.
 - Booking-decision notice honesty + credits/events silence (**26123** + app tip):
   waitlist / decline / cancel private notices no longer claim an unconditional
   credit return (Stripe-refunded packs no-op); web + iOS Account credits page
@@ -257,7 +263,9 @@ were **not** built.
    was returned. Waitlist desk shows up to 50 queued classes. Decline / demote
    a credit place → private notice says credit returns when the pack is still
    live (not an unconditional return). Events fetch outage shows an error (not
-   the seed calendar).
+   the seed calendar). Member cancel confirm/toast says credit returns when the
+   pack is still live. Member drawer with >20 bookings still lists every place.
+   iPhone PT desk / Admin Audit with >100 rows still show the full queue.
 
 ---
 
@@ -673,6 +681,16 @@ Migration / operator mirror:
 `supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql`
 ↔ `src/supabase/booking_decision_notice_credit_honesty.sql`. Apply through **26123**.
 
+### 43. This batch — member cancel credit honesty + bookings/PT/audit silence
+| Area | Defect | Fix |
+|---|---|---|
+| Money honesty | Account cancel confirm/toast claimed an unconditional credit return — false when `refund_credits_to_batch` no-ops for Stripe-refunded packs | Honest “returned when the pack is still live” copy (web + iPhone); booking-decision notice parity |
+| Silent failure (money/ops) | Member drawer `session_bookings` hard-`limit(20)` while credits/orders/grants already paged — refund/attendance review could miss later places | Page bookings via `loadMemberBatches` / `collectAdminBatches` |
+| Silent failure (privacy/ops) | iPhone Command Centre `adminPTRequests` hard-`limit=100` while web server-pages — later PT queues (name/email/notes) vanished | Offset page via `adminBookingPages` |
+| Silent failure (privacy/ops) | iPhone `adminAuditRows` hard-`limit=100` while web `getAdminAuditRecords` pages — subject email / privilege history truncated | Offset page at 500 |
+
+No new migration for this batch (app-only tip). Apply through **26123** remains current.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -964,3 +982,7 @@ show `installed = true` and `release_ready = true`, including
     returns when the pack is still live; Account credits (web + iPhone) page
     past max_rows; Events fetch outage shows an error (not the seed calendar);
     waitlist Promote / Skip ignore a second same-paint Confirm.
+42. **Member cancel credit honesty + bookings/PT/audit silence** — Account cancel
+    confirm/toast (web + iPhone) say credit returns when the pack is still live;
+    Member drawer bookings page past the old 20 cut; iPhone PT desk and Admin
+    Audit page past the old 100 cut.

@@ -1463,7 +1463,7 @@ private extension BookingItem {
             return "This will remove you from the waitlist for \(title). No class credit is currently reserved."
         }
         if BookingCancellationPolicy.returnsCredit(status: status, startTime: start_time) {
-            return "This will remove you from \(title) and return your class credit."
+            return "This will remove you from \(title). \(BookingCancellationPolicy.creditReturnCopy)"
         }
         return "This will remove you from \(title). Confirmed bookings cancelled within 12 hours do not return a class credit."
     }

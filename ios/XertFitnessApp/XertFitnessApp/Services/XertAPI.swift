@@ -811,13 +811,11 @@ final class XertAPI {
     }
 
     func adminPTRequests(session auth: AuthSession) async throws -> [AdminPTRequest] {
-        try await restRequest(
+        // Page past the old hard limit=100 — later PT queues (name/email/notes)
+        // silently vanished from Command Centre while web already server-pages.
+        try await adminBookingPages(
             path: "/rest/v1/private_session_requests",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,full_name,email,phone,requested_session_type,preferred_day,preferred_time,training_goal,experience_level,notes,admin_notes,status,created_at"),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "limit", value: "100")
-            ],
+            select: "id,full_name,email,phone,requested_session_type,preferred_day,preferred_time,training_goal,experience_level,notes,admin_notes,status,created_at",
             auth: auth
         )
     }
@@ -1646,15 +1644,27 @@ final class XertAPI {
     }
 
     private func adminAuditRows<T: Decodable>(table: String, select: String, auth: AuthSession) async throws -> [T] {
-        try await restRequest(
-            path: "/rest/v1/\(table)",
-            queryItems: [
-                URLQueryItem(name: "select", value: select),
-                URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
-                URLQueryItem(name: "limit", value: "100")
-            ],
-            auth: auth
-        )
+        // Page past the old hard limit=100 — truncated role/lead/request audit
+        // silently hid subject email / privilege history from Command Centre
+        // while web `getAdminAuditRecords` already pages.
+        let pageSize = 500
+        var offset = 0
+        var rows: [T] = []
+        while true {
+            let page: [T] = try await restRequest(
+                path: "/rest/v1/\(table)",
+                queryItems: [
+                    URLQueryItem(name: "select", value: select),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func adminPublishAnnouncement(

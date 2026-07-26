@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyMemberOnboarding, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, saveMyMemberOnboarding, updateMyProfile } from '@/lib/bookingData';
-import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
+import { cancellationCreditReturnMessage, cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
 import { summarizeMemberProgress } from '@/lib/memberProgress';
@@ -446,7 +446,7 @@ export default function Account() {
         description: booking.status === 'waitlisted'
           ? 'You have been removed from the waitlist.'
           : cancellationReturnsCredit(booking)
-            ? 'Your class credit has been returned.'
+            ? cancellationCreditReturnMessage()
             : 'Cancelled within 12 hours of the class, so the credit was used.'
       });
       await refresh();

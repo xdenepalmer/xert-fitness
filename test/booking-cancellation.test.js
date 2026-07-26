@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { cancellationMessage, cancellationReturnsCredit } from '../src/lib/bookingCancellation.js';
+import {
+  cancellationCreditReturnMessage,
+  cancellationMessage,
+  cancellationReturnsCredit,
+} from '../src/lib/bookingCancellation.js';
+
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('uses the server cancellation credit policy for requests and confirmed bookings', () => {
   const now = Date.parse('2026-08-01T00:00:00.000Z');
@@ -20,12 +27,29 @@ test('explains the cancellation outcome before a member confirms', () => {
   );
   assert.match(
     cancellationMessage({ title: 'XERT Strength', status: 'requested', start_time: '2026-08-01T01:00:00.000Z' }, now),
-    /return your class credit/
+    /returned when the pack is still live/
   );
   assert.match(
     cancellationMessage({ title: 'XERT Strength', status: 'waitlisted', start_time: '2026-08-02T01:00:00.000Z' }, now),
     /remove you from the waitlist.*No class credit is currently reserved/
   );
+});
+
+test('member cancel copy does not claim an unconditional credit return', () => {
+  // Stripe-refunded packs make refund_credits_to_batch no-op — confirm/toast
+  // must not promise the credit already landed (booking-decision notice parity).
+  assert.match(cancellationCreditReturnMessage(), /pack is still live/);
+  assert.doesNotMatch(cancellationCreditReturnMessage(), /has been returned/);
+
+  const account = read('../src/pages/Account.jsx');
+  assert.match(account, /cancellationCreditReturnMessage/);
+  assert.doesNotMatch(account, /Your class credit has been returned\./);
+
+  const iosPolicy = read('../ios/XertFitnessApp/XertFitnessApp/BookingCancellationPolicy.swift');
+  const iosAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
+  assert.match(iosPolicy, /pack is still live/);
+  assert.match(iosAccount, /BookingCancellationPolicy\.creditReturnCopy/);
+  assert.doesNotMatch(iosAccount, /and return your class credit/);
 });
 
 test('both booking schema paths let members leave a waitlist without double-refunding credit', async () => {
