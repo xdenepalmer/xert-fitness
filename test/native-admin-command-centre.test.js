@@ -679,6 +679,71 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.match(roster, /title: "No show"[\s\S]*mark: \.noShow/);
   assert.match(roster, /\.disabled\(!canRecordAttendance\)/);
   assert.match(roster, /attendedIDs: attended[\s\S]*noShowIDs: noShows/);
+  assert.match(roster, /@State private var attendanceBaseline = AdminAttendanceDraft\(\)/);
+  assert.match(roster, /private var isDirty: Bool \{ attendance != attendanceBaseline \}/);
+  assert.match(roster, /attendanceBaseline = attendance/);
+  assert.match(roster, /\.adminOwnerExitState\([\s\S]*roll call for/);
+  assert.match(roster, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+  assert.match(roster, /Discard unfinished roll call\?/);
+  assert.match(roster, /didRecord[\s\S]*attendanceBaseline = attendance[\s\S]*XertHaptics\.play\(\.success\)/);
+});
+
+test('high-consequence owner drafts share command-centre exit protection', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const taskSheet = view.slice(
+    view.indexOf('private struct AdminOwnerTaskSheet'),
+    view.indexOf('private struct AdminMembersView'),
+  );
+  const memberNotice = view.slice(
+    view.indexOf('private struct AdminMemberNoticeComposer'),
+    view.indexOf('private struct AdminCreditGrantView'),
+  );
+  const creditGrant = view.slice(
+    view.indexOf('private struct AdminCreditGrantView'),
+    view.indexOf('private struct AdminClassesView'),
+  );
+  const productEditor = view.slice(
+    view.indexOf('private struct AdminProductEditor'),
+    view.indexOf('private struct AdminEventsView'),
+  );
+  const eventEditor = view.slice(
+    view.indexOf('private struct AdminEventEditor'),
+    view.indexOf('private struct AdminEventRosterView'),
+  );
+  const coachEditor = view.slice(
+    view.indexOf('private struct AdminCoachEditor'),
+    view.indexOf('private struct AdminAnnouncementComposer'),
+  );
+  const announcementEditor = view.slice(
+    view.indexOf('private struct AdminAnnouncementComposer'),
+    view.indexOf('private struct AdminOwnerFreshnessBadge'),
+  );
+
+  assert.match(taskSheet, /editorExitCoordinator\?\.active\?\.isDirty == true/);
+  assert.match(taskSheet, /editorExitCoordinator\?\.active\?\.isBusy == true/);
+  assert.match(taskSheet, /Discard unsaved \\\(editorExitCoordinator\?\.active\?\.title/);
+  assert.match(taskSheet, /Button\("Close", action: requestClose\)/);
+
+  assert.match(creditGrant, /private var isDirty: Bool/);
+  assert.match(creditGrant, /title: "manual credit grant"/);
+  assert.match(creditGrant, /Discard manual credit grant\?/);
+  assert.match(creditGrant, /ToolbarItemGroup\(placement: \.keyboard\)/);
+  assert.match(creditGrant, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+
+  for (const editor of [
+    memberNotice,
+    productEditor,
+    eventEditor,
+    coachEditor,
+    announcementEditor,
+  ]) {
+    assert.match(editor, /@State private var exitStateID = UUID\(\)/);
+    assert.match(editor, /\.adminOwnerExitState\(/);
+    assert.match(editor, /isDirty:/);
+    assert.match(editor, /isBusy:/);
+  }
+
+  assert.ok((view.match(/\.adminOwnerExitState\(/g) || []).length >= 10);
 });
 
 test('native class desk never presents unavailable operational data as an empty queue', async () => {
@@ -1001,6 +1066,8 @@ test('native schedule editors protect dirty work across local and command-centre
   assert.match(ownerNavigation, /order\.reversed\(\)\.compactMap \{ states\[\$0\] \}\.first/);
   assert.match(swiftTests, /testOwnerEditorExitCoordinatorRestoresTheUnderlyingDirtyDraft/);
   assert.match(swiftTests, /coordinator\.clear\(id: classID\)[\s\S]*XCTAssertEqual\(coordinator\.active\?\.id, blackoutID\)/);
+  assert.match(ownerShell, /private struct AdminOwnerExitReportingModifier: ViewModifier/);
+  assert.match(ownerShell, /\.onChange\(of: state\) \{ coordinator\?\.report\(\$0\) \}/);
   assert.match(ownerShell, /\.environment\(\\\.adminEditorExitCoordinator, editorExitCoordinator\)/);
   assert.match(ownerShell, /editorExitCoordinator\.active\?\.isDirty == true/);
   assert.match(ownerShell, /editorExitCoordinator\.active\?\.isBusy == true/);
@@ -1017,7 +1084,7 @@ test('native schedule editors protect dirty work across local and command-centre
     assert.match(editor, /\.scrollDismissesKeyboard\(\.interactively\)/);
     assert.match(editor, /ToolbarItemGroup\(placement: \.keyboard\)[\s\S]*Button\("Done"\)/);
     assert.match(editor, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
-    assert.match(editor, /editorExitCoordinator\?\.report\(/);
+    assert.match(editor, /\.adminOwnerExitState\(/);
     assert.match(editor, /frame\(width: 44, height: 44\)/);
   }
 
@@ -1138,8 +1205,10 @@ test('native event and team catalogues preserve mutation truth and never fake em
   assert.match(catalogueViews, /\.refreshable \{ await admin\.refreshTeamDirectory\(session: session\) \}/);
   assert.match(catalogueViews, /This calendar snapshot is not current/);
   assert.match(catalogueViews, /This team snapshot is not current/);
-  assert.match(catalogueViews, /interactiveDismissDisabled\(isDirty \|\| admin\.savingEventID != nil\)/);
-  assert.match(catalogueViews, /interactiveDismissDisabled\(isDirty \|\| admin\.savingCoachID != nil\)/);
+  assert.match(catalogueViews, /interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+  assert.ok(
+    (catalogueViews.match(/interactiveDismissDisabled\(isDirty \|\| isBusy\)/g) || []).length >= 2,
+  );
 
   assert.match(models, /struct AdminEventRosterReport/);
   assert.match(models, /Event,Member,Email,Phone,Joined/);

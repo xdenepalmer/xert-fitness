@@ -15,6 +15,38 @@ private extension EnvironmentValues {
     }
 }
 
+private struct AdminOwnerExitReportingModifier: ViewModifier {
+    @Environment(\.adminEditorExitCoordinator) private var coordinator
+    let state: XertOwnerEditorExitState
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { coordinator?.report(state) }
+            .onChange(of: state) { coordinator?.report($0) }
+            .onDisappear { coordinator?.clear(id: state.id) }
+    }
+}
+
+private extension View {
+    func adminOwnerExitState(
+        id: UUID,
+        title: String,
+        isDirty: Bool,
+        isBusy: Bool
+    ) -> some View {
+        modifier(
+            AdminOwnerExitReportingModifier(
+                state: XertOwnerEditorExitState(
+                    id: id,
+                    title: title,
+                    isDirty: isDirty,
+                    isBusy: isBusy
+                )
+            )
+        )
+    }
+}
+
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -2017,13 +2049,32 @@ private struct AdminWorkspaceSwitcher: View {
 
 private struct AdminOwnerTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let task: XertOwnerTask
+    @State private var confirmingDiscard = false
 
     var body: some View {
         NavigationStack {
             taskDestination
+        }
+        .interactiveDismissDisabled(
+            editorExitCoordinator?.active?.isDirty == true
+                || editorExitCoordinator?.active?.isBusy == true
+        )
+        .confirmationDialog(
+            "Discard unsaved \(editorExitCoordinator?.active?.title ?? "owner changes")?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) {
+                editorExitCoordinator?.clearAll()
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The active owner task has not been saved.")
         }
     }
 
@@ -2106,7 +2157,16 @@ private struct AdminOwnerTaskSheet: View {
     @ToolbarContentBuilder
     private var closeToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Close") { dismiss() }
+            Button("Close", action: requestClose)
+                .disabled(editorExitCoordinator?.active?.isBusy == true)
+        }
+    }
+
+    private func requestClose() {
+        if editorExitCoordinator?.active?.isDirty == true {
+            confirmingDiscard = true
+        } else if editorExitCoordinator?.active?.isBusy != true {
+            dismiss()
         }
     }
 }
@@ -2818,6 +2878,7 @@ private struct AdminMemberNoticeComposer: View {
     @State private var draft = AdminMemberNoticeDraft()
     @State private var confirmingSend = false
     @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -2955,6 +3016,12 @@ private struct AdminMemberNoticeComposer: View {
                 Text("The title, message and delivery choices will be lost.")
             }
         }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "private notice for \(memberName)",
+            isDirty: isDirty,
+            isBusy: isSending
+        )
         .interactiveDismissDisabled(isDirty || isSending)
     }
 
@@ -2978,6 +3045,17 @@ private struct AdminCreditGrantView: View {
     @State private var noExpiry = false
     @State private var reason = ""
     @State private var requestID = UUID()
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var reasonFocused: Bool
+
+    private var isDirty: Bool {
+        sessions != 1
+            || validityDays != 28
+            || noExpiry
+            || !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    private var isBusy: Bool { admin.servicingMemberID != nil }
 
     var body: some View {
         NavigationStack {
@@ -2986,26 +3064,67 @@ private struct AdminCreditGrantView: View {
                     Stepper("Credits: \(sessions)", value: $sessions, in: 1...100)
                     Toggle("No expiry", isOn: $noExpiry)
                     if !noExpiry { Stepper("Valid for \(validityDays) days", value: $validityDays, in: 1...3_650) }
-                    TextField("Reason", text: $reason, axis: .vertical).lineLimit(3...6)
+                    TextField("Reason", text: $reason, axis: .vertical)
+                        .lineLimit(3...6)
+                        .focused($reasonFocused)
                     Text("Manual grants are permanently audited and idempotent.").font(.caption).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Grant to \(member.displayName)").navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: requestDismiss)
+                        .disabled(isBusy)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Grant") {
+                        reasonFocused = false
                         let id = requestID
                         Task {
                             if await admin.grantCredits(session: session, memberID: member.id, sessions: sessions,
                                                         validityDays: noExpiry ? nil : validityDays, requestID: id, note: reason) {
-                                requestID = UUID(); dismiss()
+                                requestID = UUID()
+                                XertHaptics.play(.success)
+                                dismiss()
+                            } else {
+                                XertHaptics.play(.error)
                             }
                         }
                     }
-                    .disabled(admin.servicingMemberID != nil || reason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                    .disabled(isBusy || reason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { reasonFocused = false }
                 }
             }
+        }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "manual credit grant",
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
+        .interactiveDismissDisabled(isDirty || isBusy)
+        .confirmationDialog(
+            "Discard manual credit grant?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard grant", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("No credits have been granted yet. The amount, expiry and audit reason will be lost.")
+        }
+    }
+
+    private func requestDismiss() {
+        reasonFocused = false
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            dismiss()
         }
     }
 }
@@ -3158,17 +3277,23 @@ private struct AdminClassesView: View {
 }
 
 private struct AdminClassRosterView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let operation: AdminDailyOperation
     @State private var attendance = AdminAttendanceDraft()
+    @State private var attendanceBaseline = AdminAttendanceDraft()
     @State private var confirmingRollCall = false
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
 
     private var eligible: [AdminRosterMember] { admin.classRoster.filter(\.attendanceEligible) }
     private var attendanceSummary: AdminAttendanceSummary { attendance.summary }
+    private var isDirty: Bool { attendance != attendanceBaseline }
+    private var isBusy: Bool { admin.recordingAttendanceSessionID == operation.id }
     private var canRecordAttendance: Bool {
         attendanceSummary.isComplete && operation.start_time <= Date()
-            && admin.recordingAttendanceSessionID == nil
+            && !isBusy
     }
 
     var body: some View {
@@ -3303,26 +3428,66 @@ private struct AdminClassRosterView: View {
         .task {
             await admin.loadClassRoster(session: session, classSessionID: operation.id)
             attendance = AdminAttendanceDraft(roster: admin.classRoster)
+            attendanceBaseline = attendance
         }
         .onChange(of: admin.classRoster) { roster in
             attendance.reconcile(roster: roster)
+            attendanceBaseline.reconcile(roster: roster)
         }
+        .navigationBarBackButtonHidden(isDirty)
+        .toolbar {
+            if isDirty {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: requestDismiss) {
+                        Image(systemName: "chevron.left")
+                            .frame(width: 44, height: 44)
+                    }
+                    .disabled(isBusy)
+                    .accessibilityLabel("Back")
+                    .accessibilityHint("Asks before discarding this unfinished roll call")
+                }
+            }
+        }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "roll call for \(operation.title)",
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
+        .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog("Complete this class?", isPresented: $confirmingRollCall, titleVisibility: .visible) {
             Button("Record attendance and complete class") {
                 let attended = attendance.attendedIDs
                 let noShows = attendance.noShowIDs
                 Task {
-                    _ = await admin.recordAttendance(
+                    let didRecord = await admin.recordAttendance(
                         session: session,
                         classSessionID: operation.id,
                         attendedIDs: attended,
                         noShowIDs: noShows
                     )
+                    if didRecord {
+                        attendance = AdminAttendanceDraft(roster: admin.classRoster)
+                        attendanceBaseline = attendance
+                        XertHaptics.play(.success)
+                    } else {
+                        XertHaptics.play(.error)
+                    }
                 }
             }
             Button("Review roll call", role: .cancel) {}
         } message: {
             Text("Record \(attendanceSummary.attended) present and \(attendanceSummary.noShow) no show, complete the class, and remove it from the public timetable.")
+        }
+        .confirmationDialog(
+            "Discard unfinished roll call?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard marks", role: .destructive) { dismiss() }
+            Button("Keep marking attendance", role: .cancel) {}
+        } message: {
+            Text("\(attendanceSummary.marked) attendance mark\(attendanceSummary.marked == 1 ? "" : "s") will be lost.")
         }
     }
 
@@ -3443,6 +3608,14 @@ private struct AdminClassRosterView: View {
     private func contact(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func requestDismiss() {
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            dismiss()
+        }
     }
 }
 
@@ -4026,10 +4199,12 @@ private struct AdminClassEditor: View {
         .onChange(of: draft.status) { status in
             if status != "published" { draft.publicVisible = false }
         }
-        .onAppear(perform: reportExitState)
-        .onChange(of: isDirty) { _ in reportExitState() }
-        .onChange(of: isBusy) { _ in reportExitState() }
-        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: editorTitle,
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
         .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog(
             "Discard unsaved class changes?",
@@ -4044,17 +4219,6 @@ private struct AdminClassEditor: View {
         } message: {
             Text("This class draft has not been saved.")
         }
-    }
-
-    private func reportExitState() {
-        editorExitCoordinator?.report(
-            XertOwnerEditorExitState(
-                id: exitStateID,
-                title: editorTitle,
-                isDirty: isDirty,
-                isBusy: isBusy
-            )
-        )
     }
 
     private func requestDismiss() {
@@ -4416,10 +4580,12 @@ private struct AdminAvailabilityEditor: View {
                 Button("Done") { textInputFocused = false }
             }
         }
-        .onAppear(perform: reportExitState)
-        .onChange(of: isDirty) { _ in reportExitState() }
-        .onChange(of: isBusy) { _ in reportExitState() }
-        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: editorTitle,
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
         .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog(
             "Discard unsaved availability changes?",
@@ -4452,17 +4618,6 @@ private struct AdminAvailabilityEditor: View {
             .listRowBackground(Color.xertSteel)
             .foregroundStyle(Color.xertNavy)
         }
-    }
-
-    private func reportExitState() {
-        editorExitCoordinator?.report(
-            XertOwnerEditorExitState(
-                id: exitStateID,
-                title: editorTitle,
-                isDirty: isDirty,
-                isBusy: isBusy
-            )
-        )
     }
 
     private func requestDismiss() {
@@ -4607,10 +4762,12 @@ private struct AdminBlackoutEditor: View {
                 Button("Done") { textInputFocused = false }
             }
         }
-        .onAppear(perform: reportExitState)
-        .onChange(of: isDirty) { _ in reportExitState() }
-        .onChange(of: isBusy) { _ in reportExitState() }
-        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: editorTitle,
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
         .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog(
             "Discard unsaved blackout changes?",
@@ -4625,17 +4782,6 @@ private struct AdminBlackoutEditor: View {
         } message: {
             Text("This blackout draft has not been saved.")
         }
-    }
-
-    private func reportExitState() {
-        editorExitCoordinator?.report(
-            XertOwnerEditorExitState(
-                id: exitStateID,
-                title: editorTitle,
-                isDirty: isDirty,
-                isBusy: isBusy
-            )
-        )
     }
 
     private func requestDismiss() {
@@ -9091,6 +9237,7 @@ private struct AdminProductEditor: View {
     @State private var draft: AdminProductDraft
     @State private var confirmingDiscard = false
     @State private var confirmingPriceProvision = false
+    @State private var exitStateID = UUID()
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable { case slug, name, description, price, currency, stripePrice }
@@ -9264,6 +9411,12 @@ private struct AdminProductEditor: View {
         .navigationTitle(isCreating ? "New Session Pack" : product?.name ?? "Session Pack")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("owner.productEditor.form")
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: isCreating ? "new session pack" : "session-pack changes",
+            isDirty: isDirty,
+            isBusy: isProductMutationInFlight
+        )
         .interactiveDismissDisabled(isDirty || isProductMutationInFlight)
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .toolbar {
@@ -9541,6 +9694,7 @@ private struct AdminEventEditor: View {
     private let baseline: AdminEventDraft
     @State private var draft: AdminEventDraft
     @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
 
     private var mutationAllowed: Bool {
         admin.eventCalendarIsCurrent
@@ -9548,10 +9702,11 @@ private struct AdminEventEditor: View {
             && !admin.isRefreshingEventCatalogue
     }
     private var isDirty: Bool { draft != baseline }
+    private var isBusy: Bool { admin.savingEventID != nil }
     private var canSave: Bool {
         mutationAllowed
             && isDirty
-            && admin.savingEventID == nil
+            && !isBusy
             && !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -9609,7 +9764,7 @@ private struct AdminEventEditor: View {
                 } label: {
                     HStack {
                         Spacer()
-                        if admin.savingEventID != nil { ProgressView().tint(Color.xertNavy) }
+                        if isBusy { ProgressView().tint(Color.xertNavy) }
                         Text(event == nil ? "Create event" : "Save event").fontWeight(.bold)
                         Spacer()
                     }
@@ -9627,12 +9782,18 @@ private struct AdminEventEditor: View {
             if event == nil || isDirty {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(event == nil ? "Cancel" : "Close") { requestDismiss() }
-                        .disabled(admin.savingEventID != nil)
+                        .disabled(isBusy)
                 }
             }
         }
         .navigationBarBackButtonHidden(event != nil && isDirty)
-        .interactiveDismissDisabled(isDirty || admin.savingEventID != nil)
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: event == nil ? "new event" : "event changes",
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
+        .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog("Discard event changes?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive) { dismiss() }
             Button("Keep editing", role: .cancel) {}
@@ -9970,6 +10131,7 @@ private struct AdminCoachEditor: View {
     private let baseline: AdminCoachDraft
     @State private var draft: AdminCoachDraft
     @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
 
     private var mutationAllowed: Bool {
         admin.teamDirectoryIsCurrent
@@ -9977,10 +10139,11 @@ private struct AdminCoachEditor: View {
             && !admin.isRefreshingTeamDirectory
     }
     private var isDirty: Bool { draft != baseline }
+    private var isBusy: Bool { admin.savingCoachID != nil }
     private var canSave: Bool {
         mutationAllowed
             && isDirty
-            && admin.savingCoachID == nil
+            && !isBusy
             && !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -10044,7 +10207,7 @@ private struct AdminCoachEditor: View {
                 } label: {
                     HStack {
                         Spacer()
-                        if admin.savingCoachID != nil { ProgressView().tint(Color.xertNavy) }
+                        if isBusy { ProgressView().tint(Color.xertNavy) }
                         Text(coach == nil ? "Create profile" : "Save profile").fontWeight(.bold)
                         Spacer()
                     }
@@ -10062,12 +10225,18 @@ private struct AdminCoachEditor: View {
             if coach == nil || isDirty {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(coach == nil ? "Cancel" : "Close") { requestDismiss() }
-                        .disabled(admin.savingCoachID != nil)
+                        .disabled(isBusy)
                 }
             }
         }
         .navigationBarBackButtonHidden(coach != nil && isDirty)
-        .interactiveDismissDisabled(isDirty || admin.savingCoachID != nil)
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: coach == nil ? "new team profile" : "team profile changes",
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
+        .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog("Discard team profile changes?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive) { dismiss() }
             Button("Keep editing", role: .cancel) {}
@@ -10095,6 +10264,7 @@ private struct AdminAnnouncementComposer: View {
     @State private var hasExpiry: Bool
     @State private var confirmingPublish: Bool
     @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -10253,6 +10423,12 @@ private struct AdminAnnouncementComposer: View {
                 Text("Your title, message, action and expiry edits will be lost.")
             }
         }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: announcement == nil ? "new member notice" : "member notice changes",
+            isDirty: isDirty,
+            isBusy: isBusy
+        )
         .interactiveDismissDisabled(isDirty || isBusy)
     }
 
