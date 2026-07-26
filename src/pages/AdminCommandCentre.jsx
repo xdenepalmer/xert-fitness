@@ -68,10 +68,6 @@ export default function AdminCommandCentre() {
   }, [hasUnsavedChanges]);
 
   const setSection = useCallback((nextSection, params) => {
-    if (nextSection === section) {
-      navigate(getAdminSectionPath(nextSection, params));
-      return true;
-    }
     if (hasUnsavedChanges) {
       setPendingNavigation({
         kind: 'section',
@@ -79,6 +75,10 @@ export default function AdminCommandCentre() {
         path: getAdminSectionPath(nextSection, params),
       });
       return false;
+    }
+    if (nextSection === section) {
+      navigate(getAdminSectionPath(nextSection, params));
+      return true;
     }
     setHasUnsavedChanges(false);
     setActiveSection(nextSection);
@@ -118,7 +118,7 @@ export default function AdminCommandCentre() {
       case 'members': return <LeadTable key={section} type="member" />;
       case 'trainers': return <LeadTable key={section} type="trainer" />;
       case 'partners': return <LeadTable key={section} type="partner" />;
-      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} />;
+      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;

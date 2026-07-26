@@ -1,6 +1,6 @@
 # Remaining audit findings — full evidence
 
-**56 findings. None has been adversarially verified.** They are raw output from the audit swarm; the verification pass that would have culled false positives never ran.
+**56 original findings. One is now verified and fixed; 55 remain unverified.** They are raw output from the audit swarm; the verification pass that would have culled false positives never ran.
 
 Read `../HANDOFF.md` first — it explains how to verify these and lists the false-positive patterns already observed in this codebase.
 
@@ -16,7 +16,18 @@ Each entry preserves the auditor's own `evidence` quote and proposed `fix`. **Do
 - **id:** `session-editor-prop-desync-creates-duplicate-class`
 - **severity (claimed):** critical
 - **location:** `src/components/admin/ClassCalendarAdmin.jsx:524`
-- **status:** UNVERIFIED
+- **status:** VERIFIED — FIXED
+
+**Verification result**
+
+The quoted path was accurate. A same-section Command Palette action bypassed the
+global unsaved-change guard, changed `session` from the edited record to `null`,
+and React retained the editor's one-time form state. The save branch then changed
+from update to insert while `normalizeClassSession` discarded the stale `id`.
+The fix makes editor identity follow the session, reports dirty state to the
+shared navigation guard, confirms local discard attempts, and applies the
+unsaved-change check before same-section navigation. Regression coverage is in
+`test/class-session-editor-draft-safety.test.js`.
 
 **What the auditor claims**
 

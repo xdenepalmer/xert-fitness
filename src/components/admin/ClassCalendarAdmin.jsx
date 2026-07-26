@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
@@ -11,6 +12,35 @@ const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hy
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
+const NOOP = _dirty => {};
+const EMPTY_CLASS_SESSION = {
+  class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
+  start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
+  location_zone: 'Main floor', beginner_friendly: false,
+  intensity_level: 'Moderate', status: 'draft', public_visible: false,
+  booking_mode: 'request_to_book', notes: '',
+};
+
+function classSessionEditorForm(session) {
+  if (!session?.id) return EMPTY_CLASS_SESSION;
+  return {
+    class_type: session.class_type || EMPTY_CLASS_SESSION.class_type,
+    title: session.title || '',
+    description: session.description || '',
+    coach_name: session.coach_name || '',
+    start_time: toDateTimeLocalInput(session.start_time),
+    end_time: toDateTimeLocalInput(session.end_time),
+    duration_minutes: session.duration_minutes ?? EMPTY_CLASS_SESSION.duration_minutes,
+    capacity: session.capacity ?? EMPTY_CLASS_SESSION.capacity,
+    location_zone: session.location_zone || '',
+    beginner_friendly: Boolean(session.beginner_friendly),
+    intensity_level: session.intensity_level || EMPTY_CLASS_SESSION.intensity_level,
+    status: session.status || EMPTY_CLASS_SESSION.status,
+    public_visible: Boolean(session.public_visible),
+    booking_mode: session.booking_mode || EMPTY_CLASS_SESSION.booking_mode,
+    notes: session.notes || '',
+  };
+}
 
 function classEditorStatuses(session) {
   if (!session?.id) return ['draft', 'published'];
@@ -216,22 +246,30 @@ const STATUS_COLORS = {
   completed: 'text-xert-concrete/40 border-xert-steel/30',
 };
 
-function SessionEditor({ session, blackouts, onSave, onCancel }) {
-  const [form, setForm] = useState(() => session ? {
-    ...session,
-    start_time: toDateTimeLocalInput(session.start_time),
-    end_time: toDateTimeLocalInput(session.end_time),
-  } : {
-    class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
-    start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
-    location_zone: 'Main floor', beginner_friendly: false,
-    intensity_level: 'Moderate', status: 'draft', public_visible: false,
-    booking_mode: 'request_to_book', notes: '',
-  });
+function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) {
+  const baseline = useMemo(() => classSessionEditorForm(session), [session]);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const dirty = Object.keys(EMPTY_CLASS_SESSION).some(key => form[key] !== baseline[key]);
   const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const requestCancel = useCallback(() => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onCancel();
+  }, [dirty, onCancel, saving]);
 
   const handleSave = async () => {
     const validationError = classSessionValidationError(form);
@@ -258,8 +296,11 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
-          <button type="button" onClick={onCancel} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">&#10005;</button>
+          <div>
+            <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
+            {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+          </div>
+          <button type="button" onClick={requestCancel} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">&#10005;</button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -370,7 +411,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving}
+          <button type="button" onClick={requestCancel} disabled={saving}
             className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
             Cancel
           </button>
@@ -380,6 +421,16 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           </button>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard class changes?"
+        description="Your unsaved class changes will be lost."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard draft"
+        onConfirm={onCancel}
+        busy={saving}
+      />
     </div>
   );
 }
@@ -458,7 +509,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   );
 }
 
-export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled }) {
+export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled, onDirtyChange = NOOP }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
@@ -979,10 +1030,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
       {showEditor && (
         <SessionEditor
+          key={editingSession?.id ?? 'new'}
           session={editingSession}
           blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}
           onCancel={() => setShowEditor(false)}
+          onDirtyChange={onDirtyChange}
         />
       )}
 
