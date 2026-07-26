@@ -321,6 +321,7 @@ test('older operator scripts cannot downgrade audited health reveal or waitlist 
     'booking_decision_notifications_upgrade.sql must skip replacing the waitlist-accurate notice RPC',
   );
   assert.match(bookingDecision.sql, /Waitlist place removed/);
+  assert.match(bookingDecision.sql, /pack is still live/);
   // InitPlan-safe admin qual on the decision receipt policy (same class as
   // admin_policy_scalar_subquery).
   assert.match(
@@ -332,6 +333,11 @@ test('older operator scripts cannot downgrade audited health reveal or waitlist 
   assert.ok(accurate, 'missing waitlist_skip_notice_accuracy.sql');
   assert.match(accurate.sql, /Waitlist place removed/);
   assert.match(accurate.sql, /No class credit was charged/);
+  assert.match(accurate.sql, /pack is still live/);
+  const honesty = scripts().find(entry => entry.name === 'booking_decision_notice_credit_honesty.sql');
+  assert.ok(honesty, 'missing booking_decision_notice_credit_honesty.sql');
+  assert.match(honesty.sql, /pack is still live/);
+  assert.match(honesty.sql, /booking_decision_notice_credit_honesty/);
 
   const authz = scripts().find(entry => entry.name === 'member_interest_health_reveal_authz.sql');
   assert.ok(authz, 'missing member_interest_health_reveal_authz.sql');

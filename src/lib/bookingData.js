@@ -80,9 +80,22 @@ export async function getMyCredits() {
   const userID = await currentUserID();
   if (!userID) return { total: 0, batches: [] };
   const nowIso = new Date().toISOString();
-  const { data, error } = await supabase.from('credit_batches').select('*').eq('user_id', userID).gt('remaining', 0).or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('expires_at', { ascending: true });
-  if (error) throw new Error(error.message);
-  const batches = data || [];
+  // Page past PostgREST max_rows — a truncated active-pack list silently
+  // undercounts bookable credits on Account (iOS credits paging parity).
+  const batches = await collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('credit_batches')
+      .select('*')
+      .eq('user_id', userID)
+      .gt('remaining', 0)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('expires_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
   const total = batches.reduce((sum, b) => sum + (b.remaining || 0), 0);
   return { total, batches };
 }
@@ -279,7 +292,9 @@ export async function getCoaches() {
 
 export async function getEvents() {
   const { data, error } = await supabase.from('events').select('*').eq('published', true).order('event_date', { ascending: true });
-  if (error) return XERT_2026_EVENTS;
+  // Fail closed on fetch errors — returning the seed calendar over an outage
+  // hid the failure and let members train-for events that are not in the DB.
+  if (error) throw new Error(error.message);
   return data?.length ? sortEvents(data) : XERT_2026_EVENTS;
 }
 

@@ -567,6 +567,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [promotionCandidate, setPromotionCandidate] = useState(null);
   const [skippingSessionId, setSkippingSessionId] = useState(null);
   const [skipCandidate, setSkipCandidate] = useState(null);
+  // Promote / skip are not same-paint safe from React busy state alone — a
+  // second Confirm before re-render can race two FIFO mutations + notices.
+  const waitlistDeskLockRef = useRef(false);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
   // Custom cancel dialog (not AdminConfirmDialog) — same-paint double Confirm
@@ -775,7 +778,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const handlePromoteNext = async candidate => {
-    if (promotingSessionId || skippingSessionId) return;
+    if (waitlistDeskLockRef.current || promotingSessionId || skippingSessionId) return;
+    waitlistDeskLockRef.current = true;
     setPromotingSessionId(candidate.session_id);
     try {
       // Promote + notice (+ push) must stay the success signal. A later desk
@@ -810,11 +814,13 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     } finally {
       setPromotingSessionId(null);
       setPromotionCandidate(null);
+      waitlistDeskLockRef.current = false;
     }
   };
 
   const handleSkipWaitlistHead = async candidate => {
-    if (promotingSessionId || skippingSessionId || !candidate?.next_booking_id) return;
+    if (waitlistDeskLockRef.current || promotingSessionId || skippingSessionId || !candidate?.next_booking_id) return;
+    waitlistDeskLockRef.current = true;
     setSkippingSessionId(candidate.session_id);
     try {
       // Same concurrency contract as Promote: expected id must still be waitlisted FIFO head.
@@ -857,6 +863,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     } finally {
       setSkippingSessionId(null);
       setSkipCandidate(null);
+      waitlistDeskLockRef.current = false;
     }
   };
 
@@ -1227,7 +1234,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                         </div>
                         );
                       })}
-                      <p className="font-body text-xs text-xert-concrete/40">Waitlisting, declining, or cancelling a request returns its reserved credit.</p>
+                      <p className="font-body text-xs text-xert-concrete/40">Waitlisting, declining, or cancelling a request returns its reserved credit when the pack is still live.</p>
                     </div>
                   )}
 

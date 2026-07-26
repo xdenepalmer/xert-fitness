@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726122000_class_cancel_notice_credit_honesty.sql` (**26122**). Tip
+`20260726123000_booking_decision_notice_credit_honesty.sql` (**26123**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Booking-decision notice honesty + credits/events silence (**26123** + app tip):
+  waitlist / decline / cancel private notices no longer claim an unconditional
+  credit return (Stripe-refunded packs no-op); web + iOS Account credits page
+  past PostgREST `max_rows` so later packs (and checkout-fulfillment batches)
+  cannot vanish; public Events fails closed on fetch errors instead of painting
+  the seed calendar over an outage; waitlist desk promote/skip take a
+  same-paint lock.
 - Class-cancel notice / money silence (**26122** + app tip): private class-cancel
   notices and BCC mailto no longer claim every affected member got a credit back
   (waitlist never held one; attended/no_show already consumed); web waitlist desk
@@ -226,15 +233,16 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726122000_class_cancel_notice_credit_honesty.sql` (**26122** —
+   `20260726123000_booking_decision_notice_credit_honesty.sql` (**26123** —
    full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
    `soft_launch_switch_authz` (26118*),
    `booking_credit_release_clears_batch` (26119*),
    `roll_call_stripe_refund_clears_credit_batch` (26120*),
-   `terminal_booking_clears_stale_credit_batch` (26121*), and
-   `class_cancel_notice_credit_honesty` (26122*).
+   `terminal_booking_clears_stale_credit_batch` (26121*),
+   `class_cancel_notice_credit_honesty` (26122*), and
+   `booking_decision_notice_credit_honesty` (26123*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
@@ -246,7 +254,10 @@ were **not** built.
    class raises `SESSION_FULL`. Class roster load failure toasts (not empty).
    Timetable fetch failure shows “unavailable” (not “coming soon”). Cancel a
    class with waitlisted members → private notice does not claim their credit
-   was returned. Waitlist desk shows up to 50 queued classes.
+   was returned. Waitlist desk shows up to 50 queued classes. Decline / demote
+   a credit place → private notice says credit returns when the pack is still
+   live (not an unconditional return). Events fetch outage shows an error (not
+   the seed calendar).
 
 ---
 
@@ -650,6 +661,18 @@ Migration / operator mirror:
 `supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql`
 ↔ `src/supabase/class_cancel_notice_credit_honesty.sql`. Apply through **26122**.
 
+### 42. This batch — booking-decision notice honesty + credits/events silence + promote lock
+| Area | Defect | Fix |
+|---|---|---|
+| Money honesty | Waitlist / decline / cancel private notices claimed an unconditional credit return — false when `refund_credits_to_batch` no-ops for Stripe-refunded packs | Honest “returned when the pack is still live” copy; capability `booking_decision_notice_credit_honesty` (**26123**); historical/operator re-runs keep the stronger body |
+| Silent failure (money) | Web `getMyCredits` and iOS `credits()` hit PostgREST `max_rows` without paging — later packs (and iOS checkout-fulfillment batches) could vanish | Page with `collectAdminBatches` / offset loop (iOS still returns remaining=0 for reconcile) |
+| Silent failure (public) | `getEvents` returned the seed calendar on fetch errors — Events.jsx error UI never painted and members could train-for phantom seed rows | Fail closed (`throw`); empty catalogue may still use seed |
+| Race (ops) | Waitlist desk Promote / Skip only gated on React busy state — same-paint double Confirm could race two FIFO mutations + notices | `waitlistDeskLockRef` |
+
+Migration / operator mirror:
+`supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql`
+↔ `src/supabase/booking_decision_notice_credit_honesty.sql`. Apply through **26123**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -699,7 +722,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26122)
+### Copy-paste ordered filenames (overnight catch-up through 26123)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -725,6 +748,7 @@ supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
 supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
 supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
 supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
+supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -746,7 +770,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
+  -f supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -782,6 +806,7 @@ row shows `installed = true` and `release_ready = true`.
 | 19 | `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` | `roll_call_stripe_refund_clears_credit_batch` — roll-call + Stripe refund cancel null `credit_batch_id` |
 | 20 | `20260726121000_terminal_booking_clears_stale_credit_batch.sql` | `terminal_booking_clears_stale_credit_batch` — waitlist/terminal leftovers + Stripe late-cancel FK clear |
 | 21 | `20260726122000_class_cancel_notice_credit_honesty.sql` | `class_cancel_notice_credit_honesty` — class-cancel notice does not claim waitlist/consumed places returned a credit |
+| 22 | `20260726123000_booking_decision_notice_credit_honesty.sql` | `booking_decision_notice_credit_honesty` — waitlist/decline/cancel notices do not claim an unconditional credit return |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -791,15 +816,16 @@ After applying, run `src/supabase/release_readiness_check.sql` — every row mus
 show `installed = true` and `release_ready = true`, including
 `soft_launch_switch_authz`, `booking_credit_release_clears_batch`,
 `roll_call_stripe_refund_clears_credit_batch`,
-`terminal_booking_clears_stale_credit_batch`, and
-`class_cancel_notice_credit_honesty`.
+`terminal_booking_clears_stale_credit_batch`,
+`class_cancel_notice_credit_honesty`, and
+`booking_decision_notice_credit_honesty`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726122000_class_cancel_notice_credit_honesty.sql`. Confirm readiness SQL.
+   `20260726123000_booking_decision_notice_credit_honesty.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -933,3 +959,8 @@ show `installed = true` and `release_ready = true`, including
     a class with waitlisted members → private notice + BCC mailto do not claim
     their credit was returned; waitlist desk and Members follow-ups load up to
     50 rows; web Account orders page past the old 200 cut.
+41. **Booking-decision notice honesty + credits/events silence + promote lock** —
+    Decline / demote / cancel a credit place → private notice says credit
+    returns when the pack is still live; Account credits (web + iPhone) page
+    past max_rows; Events fetch outage shows an error (not the seed calendar);
+    waitlist Promote / Skip ignore a second same-paint Confirm.

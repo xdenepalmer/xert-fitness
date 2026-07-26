@@ -215,16 +215,30 @@ final class XertAPI {
     }
 
     func credits(session auth: AuthSession, now: Date = Date()) async throws -> [CreditBatch] {
+        // Page past PostgREST max_rows. A single uncapped select silently hid
+        // later batches (incl. active credits and checkout-fulfillment rows with
+        // remaining 0 that reconcile still matches by order_id). Keep depleted
+        // unexpired packs in the result — Account filters remaining client-side.
         let timestamp = ISO8601DateFormatter.standard.string(from: now)
-        return try await restRequest(
-            path: "/rest/v1/credit_batches",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,order_id,total,remaining,expires_at"),
-                URLQueryItem(name: "or", value: "(expires_at.is.null,expires_at.gt.\(timestamp))"),
-                URLQueryItem(name: "order", value: "expires_at.asc")
-            ],
-            auth: auth
-        )
+        let pageSize = 500
+        var offset = 0
+        var batches: [CreditBatch] = []
+        while true {
+            let page: [CreditBatch] = try await restRequest(
+                path: "/rest/v1/credit_batches",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,order_id,total,remaining,expires_at"),
+                    URLQueryItem(name: "or", value: "(expires_at.is.null,expires_at.gt.\(timestamp))"),
+                    URLQueryItem(name: "order", value: "expires_at.asc.nullsfirst,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            batches.append(contentsOf: page)
+            if page.count < pageSize { return batches }
+            offset += pageSize
+        }
     }
 
     func orders(session auth: AuthSession) async throws -> [OrderItem] {

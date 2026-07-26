@@ -50,8 +50,9 @@ create policy "booking_decision_receipts_admin_read"
   using ((select public.is_admin()));
 grant select on table public.booking_decision_receipts to authenticated;
 
--- Re-run safe: waitlist_skip_notice_accuracy installs a newer notice body for
--- waitlisted→cancelled (no false credit-return claim). Keep that shape.
+-- Re-run safe: booking_decision_notice_credit_honesty / waitlist_skip_notice_accuracy
+-- install a stronger waitlist/decline/cancel body (pack-still-live honesty).
+-- Keep that shape.
 do $install_admin_set_booking_status_with_notice$
 declare
   v_def text;
@@ -62,7 +63,7 @@ begin
   where n.nspname = 'public'
     and p.proname = 'admin_set_booking_status_with_notice'
     and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text, p_request_id uuid';
-  if v_def is not null and v_def ilike '%Waitlist place removed%' then
+  if v_def is not null and v_def ilike '%pack is still live%' then
     raise notice 'keeping newer admin_set_booking_status_with_notice';
   else
     execute $fn$
@@ -150,22 +151,30 @@ begin
       when 'waitlisted' then
         v_notice_title := 'Your booking request is waitlisted';
         v_notice_body := format(
-          'Your request for %s on %s has moved to the waitlist. Your reserved credit has been returned, and XERT will let you know if a place opens.',
+          'Your request for %s on %s has moved to the waitlist. Reserved credit is returned when the pack is still live, and XERT will let you know if a place opens.',
           v_title, v_when
         );
         v_notice_tone := 'action';
       when 'declined' then
         v_notice_title := 'Booking request update';
         v_notice_body := format(
-          'Your request for %s on %s was not confirmed. Your reserved credit has been returned to your account.',
+          'Your request for %s on %s was not confirmed. Reserved credit is returned when the pack is still live.',
           v_title, v_when
         );
       when 'cancelled' then
-        v_notice_title := 'Your class booking was cancelled';
-        v_notice_body := format(
-          'XERT cancelled your place in %s on %s. Any reserved class credit has been returned to your account.',
-          v_title, v_when
-        );
+        if v_booking.status = 'waitlisted' then
+          v_notice_title := 'Waitlist place removed';
+          v_notice_body := format(
+            'XERT removed you from the waitlist for %s on %s. No class credit was charged.',
+            v_title, v_when
+          );
+        else
+          v_notice_title := 'Your class booking was cancelled';
+          v_notice_body := format(
+            'XERT cancelled your place in %s on %s. Reserved credit is returned when the pack is still live.',
+            v_title, v_when
+          );
+        end if;
     end case;
 
     insert into public.member_announcements (

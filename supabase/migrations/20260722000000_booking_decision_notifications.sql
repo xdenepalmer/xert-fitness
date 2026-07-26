@@ -62,7 +62,8 @@ begin
   where n.nspname = 'public'
     and p.proname = 'admin_set_booking_status_with_notice'
     and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text, p_request_id uuid';
-  if v_def is not null and v_def ilike '%Waitlist place removed%' then
+  if v_def is not null
+     and (v_def ilike '%pack is still live%' or v_def ilike '%Waitlist place removed%') then
     raise notice 'keeping newer admin_set_booking_status_with_notice';
   else
     execute $fn$

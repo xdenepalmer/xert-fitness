@@ -2,6 +2,28 @@
 -- admin_set_booking_status_with_notice. The generic cancelled notice claimed a
 -- reserved credit was returned, but waitlisted members never hold a credit.
 -- Tailor the private notice when the previous status was waitlisted.
+--
+-- Re-run safe: booking_decision_notice_credit_honesty installs a stronger
+-- waitlist/decline/cancel body (pack-still-live honesty). Keep that shape.
+
+do $install_admin_set_booking_status_with_notice$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status_with_notice'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text, p_request_id uuid';
+  if v_def is not null and v_def ilike '%pack is still live%' then
+    raise notice 'keeping newer admin_set_booking_status_with_notice';
+  else
+    execute $fn$
+-- Skip — no credits cancels a waitlisted head via
+-- admin_set_booking_status_with_notice. The generic cancelled notice claimed a
+-- reserved credit was returned, but waitlisted members never hold a credit.
+-- Tailor the private notice when the previous status was waitlisted.
 
 create or replace function public.admin_set_booking_status_with_notice(
   p_booking_id uuid,
@@ -148,6 +170,10 @@ revoke execute on function public.admin_set_booking_status_with_notice(uuid, tex
   from public, anon;
 grant execute on function public.admin_set_booking_status_with_notice(uuid, text, uuid)
   to authenticated;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status_with_notice$;
 
 insert into public.xert_schema_capabilities (capability)
 values ('waitlist_skip_notice_accuracy')
