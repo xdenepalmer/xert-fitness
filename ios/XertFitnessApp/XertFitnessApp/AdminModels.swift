@@ -1207,6 +1207,7 @@ enum AdminSchemaReadiness {
         "terminal_booking_clears_stale_credit_batch",
         "class_cancel_notice_credit_honesty",
         "booking_decision_notice_credit_honesty",
+        "admin_member_service_history_paging",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

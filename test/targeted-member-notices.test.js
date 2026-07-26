@@ -25,24 +25,39 @@ test('targeted member notice input is bounded and maps native actions', () => {
   assert.throws(() => normalizeTargetedMemberNotice('11111111-1111-4111-8111-111111111111', { title: 'Valid', body: 'No', expiryDays: 365 }), /messages|expiry/i);
 });
 
+test('../supabase/migrations/20260714021000_targeted_member_notices.sql keeps historical bounded list contract', () => {
+  const sql = read('../supabase/migrations/20260714021000_targeted_member_notices.sql');
+  assert.match(sql, /function public\.admin_send_member_notice\(/i);
+  assert.match(sql, /function public\.admin_list_member_notices\(p_user_id uuid\)/i);
+  assert.match(sql, /limit 50/i);
+  assert.match(sql, /values \('targeted_member_notices'\)/i);
+});
+
 for (const path of [
   '../src/supabase/targeted_member_notices_upgrade.sql',
-  '../supabase/migrations/20260714021000_targeted_member_notices.sql',
+  '../src/supabase/admin_member_service_history_paging.sql',
+  '../supabase/migrations/20260726124000_admin_member_service_history_paging.sql',
 ]) {
-  test(`${path} installs a private, transactional and bounded member-notice contract`, () => {
+  test(`${path} pages private member notices past the old hard 50 cut`, () => {
     const sql = read(path);
-    assert.match(sql, /function public\.admin_send_member_notice\(/i);
-    assert.match(sql, /if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/i);
-    assert.match(sql, /audience, source_kind, source_id[\s\S]*'targeted', 'member_direct', v_announcement_id/i);
-    assert.match(sql, /insert into public\.member_announcement_targets[\s\S]*p_user_id/i);
-    assert.match(sql, /created_by, last_changed_by[\s\S]*auth\.uid\(\), auth\.uid\(\)/i);
-    assert.match(sql, /function public\.admin_list_member_notices\(p_user_id uuid\)/i);
+    if (path.includes('targeted_member_notices')) {
+      assert.match(sql, /function public\.admin_send_member_notice\(/i);
+      assert.match(sql, /if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/i);
+      assert.match(sql, /audience, source_kind, source_id[\s\S]*'targeted', 'member_direct', v_announcement_id/i);
+      assert.match(sql, /insert into public\.member_announcement_targets[\s\S]*p_user_id/i);
+      assert.match(sql, /created_by, last_changed_by[\s\S]*auth\.uid\(\), auth\.uid\(\)/i);
+      assert.match(sql, /revoke execute on function public\.admin_send_member_notice[\s\S]*from public, anon/i);
+      assert.match(sql, /grant execute on function public\.admin_send_member_notice[\s\S]*to authenticated/i);
+      assert.match(sql, /values \('targeted_member_notices'\)/i);
+    }
+    assert.match(sql, /function public\.admin_list_member_notices\(/i);
+    assert.match(sql, /p_limit integer default 500/i);
+    assert.match(sql, /p_offset integer default 0/i);
     assert.match(sql, /left join public\.member_announcement_receipts/i);
     assert.match(sql, /left join public\.push_notification_deliveries/i);
-    assert.match(sql, /limit 50/i);
-    assert.match(sql, /revoke execute on function public\.admin_send_member_notice[\s\S]*from public, anon/i);
-    assert.match(sql, /grant execute on function public\.admin_send_member_notice[\s\S]*to authenticated/i);
-    assert.match(sql, /values \('targeted_member_notices'\)/i);
+    assert.match(sql, /limit v_limit offset v_offset/i);
+    assert.doesNotMatch(sql, /order by announcement\.published_at desc, announcement\.id desc\s*limit 50;/i);
+    assert.match(sql, /admin_member_service_history_paging/i);
   });
 }
 
@@ -52,6 +67,7 @@ test('admin member service creates the notice before requesting idempotent APNs 
   assert.match(adminData, /adminSendMemberNotice[\s\S]*rpc\('admin_send_member_notice'/);
   assert.match(adminData, /notify_targeted_announcement/);
   assert.match(adminData, /adminListMemberNotices[\s\S]*rpc\('admin_list_member_notices'/);
+  assert.match(adminData, /adminListMemberNotices[\s\S]*p_limit: pageSize[\s\S]*p_offset/);
   assert.match(adminData, /memberNoticesAvailable: notices\.available/);
   assert.match(api, /notifyTargetedAnnouncement/);
   assert.match(api, /\.in\('source_kind', \['member_direct', 'waitlist_promotion', 'booking_decision'\]\)/);

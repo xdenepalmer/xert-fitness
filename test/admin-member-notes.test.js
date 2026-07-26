@@ -27,6 +27,9 @@ test('member note validation rejects invalid identifiers, categories and body le
 test('admin member notes use dedicated RPCs and tolerate only a missing list migration', () => {
   const source = read('../src/lib/adminData.js');
   assert.match(source, /rpc\('admin_list_member_notes'/);
+  assert.match(source, /p_limit: pageSize/);
+  assert.match(source, /p_offset: \(page - 1\) \* pageSize/);
+  assert.match(source, /collectAdminBatches/);
   assert.match(source, /rpc\('admin_add_member_note'/);
   assert.match(source, /rpc\('admin_set_member_note_archived'/);
   assert.match(source, /\['42883', 'PGRST202'\]/);
@@ -46,31 +49,54 @@ test('member drawer exposes a bounded, safety-labelled archive workflow', () => 
   assert.match(source, /admin_member_notes_upgrade\.sql/);
 });
 
+test('../supabase/migrations/20260714003000_admin_member_notes.sql keeps historical bounded list contract', () => {
+  const sql = read('../supabase/migrations/20260714003000_admin_member_notes.sql');
+  assert.match(sql, /create table if not exists public\.admin_member_notes/i);
+  assert.match(sql, /admin_list_member_notes[\s\S]*limit 100/i);
+  assert.match(sql, /revoke execute on function public\.admin_list_member_notes\(uuid, boolean\) from public, anon/i);
+  assert.match(sql, /grant execute on function public\.admin_list_member_notes\(uuid, boolean\) to authenticated/i);
+  assert.match(sql, /values \('admin_member_notes'\)/i);
+});
+
 for (const path of [
   '../src/supabase/admin_cms_schema.sql',
   '../src/supabase/admin_member_notes_upgrade.sql',
-  '../supabase/migrations/20260714003000_admin_member_notes.sql',
+  '../src/supabase/admin_member_service_history_paging.sql',
+  '../supabase/migrations/20260726124000_admin_member_service_history_paging.sql',
 ]) {
-  test(`${path} keeps member notes admin-only, bounded and recoverable`, () => {
+  test(`${path} pages member notes past the old hard 100 cut`, () => {
     const sql = read(path);
-    assert.match(sql, /create table if not exists public\.admin_member_notes/i);
-    assert.match(sql, /admin_member_notes_user_id_fkey[\s\S]*on delete cascade/i);
-    assert.match(sql, /admin_member_notes_author_id_fkey[\s\S]*on delete set null/i);
-    assert.match(sql, /alter table public\.admin_member_notes enable row level security/i);
-    assert.match(sql, /revoke all on table public\.admin_member_notes from public, anon, authenticated/i);
-    assert.match(sql, /create policy "admin_member_notes_admin_read"[\s\S]*public\.is_admin\(\)/i);
-    assert.match(sql, /category in \('general', 'coaching', 'follow_up', 'billing'\)/i);
-    assert.match(sql, /char_length\(btrim\(body\)\) between 3 and 1000/i);
-    assert.match(sql, /admin_list_member_notes[\s\S]*limit 100/i);
-    assert.equal((sql.match(/if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/gi) || []).length >= 3, true);
-    for (const signature of [
-      'admin_list_member_notes\\(uuid, boolean\\)',
-      'admin_add_member_note\\(uuid, text, text\\)',
-      'admin_set_member_note_archived\\(uuid, boolean\\)'
-    ]) {
-      assert.match(sql, new RegExp(`revoke execute on function public\\.${signature} from public, anon`, 'i'));
-      assert.match(sql, new RegExp(`grant execute on function public\\.${signature} to authenticated`, 'i'));
+    if (path.includes('admin_member_notes') || path.includes('admin_cms_schema')) {
+      assert.match(sql, /create table if not exists public\.admin_member_notes/i);
+      assert.match(sql, /admin_member_notes_user_id_fkey[\s\S]*on delete cascade/i);
+      assert.match(sql, /admin_member_notes_author_id_fkey[\s\S]*on delete set null/i);
+      assert.match(sql, /alter table public\.admin_member_notes enable row level security/i);
+      assert.match(sql, /revoke all on table public\.admin_member_notes from public, anon, authenticated/i);
+      assert.match(sql, /create policy "admin_member_notes_admin_read"[\s\S]*public\.is_admin\(\)/i);
+      assert.match(sql, /category in \('general', 'coaching', 'follow_up', 'billing'\)/i);
+      assert.match(sql, /char_length\(btrim\(body\)\) between 3 and 1000/i);
+      assert.equal((sql.match(/if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/gi) || []).length >= 3, true);
+      for (const signature of [
+        'admin_add_member_note\\(uuid, text, text\\)',
+        'admin_set_member_note_archived\\(uuid, boolean\\)'
+      ]) {
+        assert.match(sql, new RegExp(`revoke execute on function public\\.${signature} from public, anon`, 'i'));
+        assert.match(sql, new RegExp(`grant execute on function public\\.${signature} to authenticated`, 'i'));
+      }
+      assert.match(sql, /values \('admin_member_notes'\)/i);
     }
-    assert.match(sql, /values \('admin_member_notes'\)/i);
+    assert.match(sql, /p_limit integer default 500/i);
+    assert.match(sql, /p_offset integer default 0/i);
+    assert.match(sql, /limit v_limit offset v_offset/i);
+    assert.doesNotMatch(sql, /admin_list_member_notes[\s\S]*limit 100;/i);
+    assert.match(
+      sql,
+      /revoke execute on function public\.admin_list_member_notes\(uuid, boolean, integer, integer\) from public, anon/i,
+    );
+    assert.match(
+      sql,
+      /grant execute on function public\.admin_list_member_notes\(uuid, boolean, integer, integer\) to authenticated/i,
+    );
+    assert.match(sql, /admin_member_service_history_paging/i);
   });
 }

@@ -485,23 +485,49 @@ final class XertAPI {
     }
 
     func adminAvailabilityBlocks(session auth: AuthSession) async throws -> [AdminAvailabilityBlock] {
-        try await restRequest(
-            path: "/rest/v1/availability_blocks",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,start_time,end_time,type,coach_name,notes,is_bookable,updated_at"),
-                URLQueryItem(name: "order", value: "start_time.asc")
-            ], auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated schedule silently hid later
+        // availability blocks from Command Centre capacity planning.
+        let pageSize = 500
+        var offset = 0
+        var blocks: [AdminAvailabilityBlock] = []
+        while true {
+            let page: [AdminAvailabilityBlock] = try await restRequest(
+                path: "/rest/v1/availability_blocks",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,start_time,end_time,type,coach_name,notes,is_bookable,updated_at"),
+                    URLQueryItem(name: "order", value: "start_time.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            blocks.append(contentsOf: page)
+            if page.count < pageSize { return blocks }
+            offset += pageSize
+        }
     }
 
     func adminBlackoutPeriods(session auth: AuthSession) async throws -> [AdminBlackoutPeriod] {
-        try await restRequest(
-            path: "/rest/v1/blackout_periods",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,start_time,end_time,affects,reason,notes,updated_at"),
-                URLQueryItem(name: "order", value: "start_time.asc")
-            ], auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated blackout list silently hid
+        // later closures from Availability and class calendar conflict UI.
+        let pageSize = 500
+        var offset = 0
+        var periods: [AdminBlackoutPeriod] = []
+        while true {
+            let page: [AdminBlackoutPeriod] = try await restRequest(
+                path: "/rest/v1/blackout_periods",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,start_time,end_time,affects,reason,notes,updated_at"),
+                    URLQueryItem(name: "order", value: "start_time.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            periods.append(contentsOf: page)
+            if page.count < pageSize { return periods }
+            offset += pageSize
+        }
     }
 
     func adminSaveAvailability(session auth: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async throws {
@@ -687,11 +713,38 @@ final class XertAPI {
     }
 
     func adminMemberNotes(session auth: AuthSession, memberID: UUID, includeArchived: Bool = true) async throws -> [AdminMemberNote] {
-        try await rpc(
-            path: "admin_list_member_notes",
-            body: AdminMemberNotesRequest(p_user_id: memberID, p_include_archived: includeArchived),
-            auth: auth
-        )
+        // Page past the old hard limit 100 — later coaching/billing notes
+        // silently vanished from the member drawer (web collectAdminBatches parity).
+        let pageSize = 500
+        var offset = 0
+        var notes: [AdminMemberNote] = []
+        while true {
+            do {
+                let page: [AdminMemberNote] = try await rpc(
+                    path: "admin_list_member_notes",
+                    body: AdminMemberNotesPageRequest(
+                        p_user_id: memberID,
+                        p_include_archived: includeArchived,
+                        p_limit: pageSize,
+                        p_offset: offset
+                    ),
+                    auth: auth
+                )
+                notes.append(contentsOf: page)
+                if page.count < pageSize { return notes }
+                offset += pageSize
+            } catch let error as APIError where offset == 0 {
+                // Rolling upgrade: older (uuid, boolean) overload with hard 100.
+                let message = error.message
+                let unavailable = message.range(of: #"admin_list_member_notes|schema cache|does not exist|PGRST202|42883"#, options: [.regularExpression, .caseInsensitive]) != nil
+                guard unavailable else { throw error }
+                return try await rpc(
+                    path: "admin_list_member_notes",
+                    body: AdminMemberNotesRequest(p_user_id: memberID, p_include_archived: includeArchived),
+                    auth: auth
+                )
+            }
+        }
     }
 
     func adminMemberActivationOverview(
@@ -1431,14 +1484,26 @@ final class XertAPI {
     }
 
     func adminEvents(session auth: AuthSession) async throws -> [AdminEvent] {
-        try await restRequest(
-            path: "/rest/v1/events",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,name,category,event_date,end_date,location,region,url,published,sort_order,updated_at"),
-                URLQueryItem(name: "order", value: "event_date.asc.nullslast,sort_order.asc")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated catalogue silently hid later
+        // events from Events desk and delete/goal warnings (web getAllEvents parity).
+        let pageSize = 500
+        var offset = 0
+        var events: [AdminEvent] = []
+        while true {
+            let page: [AdminEvent] = try await restRequest(
+                path: "/rest/v1/events",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,name,category,event_date,end_date,location,region,url,published,sort_order,updated_at"),
+                    URLQueryItem(name: "order", value: "event_date.asc.nullslast,sort_order.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            events.append(contentsOf: page)
+            if page.count < pageSize { return events }
+            offset += pageSize
+        }
     }
 
     func adminEventGoalReferences(session auth: AuthSession) async throws -> [AdminEventGoalReference] {
@@ -2409,6 +2474,12 @@ private struct AdminMemberPageRequest: Encodable {
 private struct AdminMemberNotesRequest: Encodable {
     let p_user_id: UUID
     let p_include_archived: Bool
+}
+private struct AdminMemberNotesPageRequest: Encodable {
+    let p_user_id: UUID
+    let p_include_archived: Bool
+    let p_limit: Int
+    let p_offset: Int
 }
 private struct AdminMemberIDsRequest: Encodable { let p_user_ids: [UUID] }
 private struct AdminMemberIDRequest: Encodable { let p_user_id: UUID }

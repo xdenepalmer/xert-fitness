@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726123000_booking_decision_notice_credit_honesty.sql` (**26123**). Tip
+`20260726124000_admin_member_service_history_paging.sql` (**26124**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
-were **not** built. No new migration in the latest app tip.
+were **not** built.
 
 **What was made safer overnight (plain English)**
+- Member service history + schedule/events silence (**26124** + app tip): Member
+  drawer staff notes and private notices page past the old hard 100 / 50 RPC
+  cuts so later coaching/billing notes and class-cancel / booking-decision
+  private history cannot vanish; Availability / blackout lists and Events
+  catalogue (web + iPhone) page past PostgREST `max_rows`; event seed inventory
+  pages the same way so seed re-insert cannot duplicate rows already on the
+  calendar.
 - Cancel policy honesty + announcements/PT/push silence (app-only tip after
   **26123**): Account bookings hint and Terms no longer claim an unconditional
   automatic credit return when Stripe-refunded packs no-op; web + iPhone
@@ -254,8 +261,9 @@ were **not** built. No new migration in the latest app tip.
    `booking_credit_release_clears_batch` (26119*),
    `roll_call_stripe_refund_clears_credit_batch` (26120*),
    `terminal_booking_clears_stale_credit_batch` (26121*),
-   `class_cancel_notice_credit_honesty` (26122*), and
-   `booking_decision_notice_credit_honesty` (26123*).
+   `class_cancel_notice_credit_honesty` (26122*),
+   `booking_decision_notice_credit_honesty` (26123*), and
+   `admin_member_service_history_paging` (26124*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
@@ -277,6 +285,9 @@ were **not** built. No new migration in the latest app tip.
    Announcements desk (web + iPhone) with >100 broadcast notices still lists
    every notice. Member Account with many PT requests still lists every request.
    Class cancel with many targets still APNs every recipient past max_rows.
+   Member drawer with >100 staff notes / >50 private notices still lists every
+   row. Availability / blackouts / Events with >1000 rows still list every row.
+   Seed calendar with a large existing events table does not re-insert seeds.
 
 ---
 
@@ -712,6 +723,20 @@ No new migration for this batch (app-only tip). Apply through **26123** remains 
 
 No new migration for this batch (app-only tip). Apply through **26123** remains current.
 
+### 45. This batch — member service history + schedule/events silence
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (privacy/ops) | `admin_list_member_notes` hard-`limit 100` — later coaching/billing notes vanished from the Member drawer (web + iPhone) | Paged RPC (`p_limit`/`p_offset`) + client loops; capability `admin_member_service_history_paging` (**26124**) |
+| Silent failure (privacy/ops) | `admin_list_member_notices` hard-`limit 50` — later private class-cancel / booking-decision history (and push summary) vanished | Same paged RPC + web `collectAdminBatches` |
+| Silent failure (ops) | Availability / blackout selects uncapped — later closures vanished past PostgREST `max_rows` | `collectAdminBatches` / iOS offset page at 500 |
+| Silent failure (ops) | Events catalogue + seed inventory uncapped — later events hid; truncated existing-key set could re-insert seed rows | Page `getAllEvents` / `seedXertEventCalendar` / iOS `adminEvents` |
+
+Migration / operator mirror:
+`supabase/migrations/20260726124000_admin_member_service_history_paging.sql`
+↔ `src/supabase/admin_member_service_history_paging.sql` (tip mirrors
+`admin_member_notes_upgrade` / `targeted_member_notices_upgrade` /
+`admin_cms_schema` aligned). Apply through **26124**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -761,7 +786,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26123)
+### Copy-paste ordered filenames (overnight catch-up through 26124)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -788,6 +813,7 @@ supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.s
 supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
 supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
 supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
+supabase/migrations/20260726124000_admin_member_service_history_paging.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -809,7 +835,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
+  -f supabase/migrations/20260726124000_admin_member_service_history_paging.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -846,6 +872,7 @@ row shows `installed = true` and `release_ready = true`.
 | 20 | `20260726121000_terminal_booking_clears_stale_credit_batch.sql` | `terminal_booking_clears_stale_credit_batch` — waitlist/terminal leftovers + Stripe late-cancel FK clear |
 | 21 | `20260726122000_class_cancel_notice_credit_honesty.sql` | `class_cancel_notice_credit_honesty` — class-cancel notice does not claim waitlist/consumed places returned a credit |
 | 22 | `20260726123000_booking_decision_notice_credit_honesty.sql` | `booking_decision_notice_credit_honesty` — waitlist/decline/cancel notices do not claim an unconditional credit return |
+| 23 | `20260726124000_admin_member_service_history_paging.sql` | `admin_member_service_history_paging` — member notes/notices page past hard 100 / 50 cuts |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -856,15 +883,16 @@ show `installed = true` and `release_ready = true`, including
 `soft_launch_switch_authz`, `booking_credit_release_clears_batch`,
 `roll_call_stripe_refund_clears_credit_batch`,
 `terminal_booking_clears_stale_credit_batch`,
-`class_cancel_notice_credit_honesty`, and
-`booking_decision_notice_credit_honesty`.
+`class_cancel_notice_credit_honesty`,
+`booking_decision_notice_credit_honesty`, and
+`admin_member_service_history_paging`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726123000_booking_decision_notice_credit_honesty.sql`. Confirm readiness SQL.
+   `20260726124000_admin_member_service_history_paging.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -1012,3 +1040,7 @@ show `installed = true` and `release_ready = true`, including
     desk (web + iPhone) pages past the old 100 cut; member Account PT history
     pages past max_rows; class-cancel / targeted notify page every target so
     later members are not skipped for APNs.
+44. **Member service history + schedule/events silence** — Member drawer notes /
+    private notices page past the old 100 / 50 cuts (**26124**); Availability /
+    blackouts / Events (web + iPhone) page past max_rows; event seed inventory
+    pages so seed re-insert cannot duplicate existing calendar rows.

@@ -50,7 +50,9 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     ['../src/supabase/product_commercial_terms_guard_upgrade.sql', '../supabase/migrations/20260720000000_product_commercial_terms_guard.sql'],
     ['../src/supabase/member_onboarding_upgrade.sql', '../supabase/migrations/20260721010000_member_onboarding_foundation.sql'],
     ['../src/supabase/member_activation_cockpit_upgrade.sql', '../supabase/migrations/20260721020000_member_activation_cockpit.sql'],
-    ['../src/supabase/targeted_member_notices_upgrade.sql', '../supabase/migrations/20260714021000_targeted_member_notices.sql'],
+    // targeted_member_notices operator script intentionally diverges: tip list
+    // pages past the historical hard limit 50 (admin_member_service_history_paging).
+    // Covered by targeted-member-notices.test.js + schema-capabilities.test.js.
     ['../src/supabase/waitlist_promotion_notifications_upgrade.sql', '../supabase/migrations/20260721030000_waitlist_promotion_notifications.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {

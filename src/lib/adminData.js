@@ -390,9 +390,19 @@ export async function updatePTRequestStatus(id, status, admin_notes) {
 // ─── Availability / Blackouts ─────────────────────────────────────────────────
 
 export async function getAvailabilityBlocks() {
-  const { data, error } = await supabase.from('availability_blocks').select('*').order('start_time', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated schedule silently hid later
+  // availability blocks from Availability desk and capacity planning.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('availability_blocks')
+      .select('*')
+      .order('start_time', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function createAvailabilityBlock(blockData) {
@@ -415,9 +425,19 @@ export async function deleteAvailabilityBlock(id, expectedUpdatedAt) {
 }
 
 export async function getBlackoutPeriods() {
-  const { data, error } = await supabase.from('blackout_periods').select('*').order('start_time', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated blackout list silently hid later
+  // closures from Availability and class calendar conflict checks in the UI.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('blackout_periods')
+      .select('*')
+      .order('start_time', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function createBlackoutPeriod(periodData) {
@@ -629,9 +649,19 @@ export async function deleteCoach(id, expectedUpdatedAt) {
 // ─── Events (admin CRUD) ────────────────────────────────────────────────────
 
 export async function getAllEvents() {
-  const { data, error } = await supabase.from('events').select('*').order('event_date', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated catalogue silently hid later
+  // events from Events desk, Overview readiness and delete/goal warnings.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('event_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getEventGoalCounts() {
@@ -786,14 +816,25 @@ export async function setMemberAnnouncementArchived(id, archived, expectedUpdate
 }
 
 export async function seedXertEventCalendar() {
-  const { data: existing, error: existingError } = await supabase.from('events').select('name,event_date');
-  if (existingError) throw new Error(existingError.message);
+  // Page past PostgREST max_rows — a truncated existing-key set silently
+  // re-inserted seed events that were already on the calendar.
+  const existing = await collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('events')
+      .select('name,event_date')
+      .order('event_date', { ascending: true })
+      .order('name', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 
-  const existingKeys = new Set((existing || []).map(event => `${event.name}|${event.event_date}`));
+  const existingKeys = new Set(existing.map(event => `${event.name}|${event.event_date}`));
   const missing = XERT_2026_EVENTS.filter(event => !existingKeys.has(`${event.name}|${event.event_date}`));
 
   if (missing.length === 0) {
-    return { inserted: 0, total: existing?.length || 0 };
+    return { inserted: 0, total: existing.length };
   }
 
   const payload = missing.map(event => ({
@@ -812,7 +853,7 @@ export async function seedXertEventCalendar() {
   if (error) throw new Error(error.message);
   return {
     inserted: missing.length,
-    total: (existing?.length || 0) + missing.length
+    total: existing.length + missing.length
   };
 }
 
@@ -951,15 +992,40 @@ export async function adminSetRole(userId, role) {
 
 export async function adminListMemberNotes(userId, includeArchived = false) {
   const member = normalizeMemberDirectoryQuery({ memberId: userId, pageSize: 1 });
-  const { data, error } = await supabase.rpc('admin_list_member_notes', {
-    p_user_id: member.memberId,
-    p_include_archived: Boolean(includeArchived)
-  });
-  if (!error) return { rows: data || [], available: true };
-  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
-    || /admin_list_member_notes.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
-  if (functionUnavailable) return { rows: [], available: false };
-  throw new Error(error.message);
+  const includeArchivedFlag = Boolean(includeArchived);
+  // Page past the old hard limit 100 (and PostgREST max_rows) so later
+  // coaching/billing notes cannot vanish from the member drawer.
+  try {
+    const rows = await collectAdminBatches(async (page, pageSize) => {
+      const { data, error } = await supabase.rpc('admin_list_member_notes', {
+        p_user_id: member.memberId,
+        p_include_archived: includeArchivedFlag,
+        p_limit: pageSize,
+        p_offset: (page - 1) * pageSize,
+      });
+      if (error) throw error;
+      return data || [];
+    });
+    return { rows, available: true };
+  } catch (error) {
+    const message = error?.message || '';
+    const code = error?.code;
+    const functionUnavailable = ['42883', 'PGRST202'].includes(code)
+      || /admin_list_member_notes.*(?:not found|schema cache|does not exist)/i.test(message);
+    if (functionUnavailable) {
+      // Rolling upgrade: older (uuid, boolean) overload with hard limit 100.
+      const legacy = await supabase.rpc('admin_list_member_notes', {
+        p_user_id: member.memberId,
+        p_include_archived: includeArchivedFlag,
+      });
+      if (!legacy.error) return { rows: legacy.data || [], available: true };
+      const legacyUnavailable = ['42883', 'PGRST202'].includes(legacy.error.code)
+        || /admin_list_member_notes.*(?:not found|schema cache|does not exist)/i.test(legacy.error.message || '');
+      if (legacyUnavailable) return { rows: [], available: false };
+      throw new Error(legacy.error.message);
+    }
+    throw new Error(message || 'Staff notes could not be loaded.');
+  }
 }
 
 export async function adminAddMemberNote(userId, category, body) {
@@ -984,14 +1050,37 @@ export async function adminSetMemberNoteArchived(noteId, archived) {
 
 export async function adminListMemberNotices(userId) {
   const member = normalizeMemberDirectoryQuery({ memberId: userId });
-  const { data, error } = await supabase.rpc('admin_list_member_notices', {
-    p_user_id: member.memberId,
-  });
-  const missing = error?.code === 'PGRST202'
-    || /admin_list_member_notices.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
-  if (missing) return { rows: [], available: false };
-  if (error) throw new Error(error.message);
-  return { rows: data || [], available: true };
+  // Page past the old hard limit 50 (and PostgREST max_rows) so later private
+  // class-cancel / booking-decision notices cannot vanish from the drawer.
+  try {
+    const rows = await collectAdminBatches(async (page, pageSize) => {
+      const { data, error } = await supabase.rpc('admin_list_member_notices', {
+        p_user_id: member.memberId,
+        p_limit: pageSize,
+        p_offset: (page - 1) * pageSize,
+      });
+      if (error) throw error;
+      return data || [];
+    });
+    return { rows, available: true };
+  } catch (error) {
+    const message = error?.message || '';
+    const code = error?.code;
+    const missing = code === 'PGRST202' || code === '42883'
+      || /admin_list_member_notices.*(?:not found|schema cache|does not exist)/i.test(message);
+    if (missing) {
+      // Rolling upgrade: older single-arg overload with hard limit 50.
+      const legacy = await supabase.rpc('admin_list_member_notices', {
+        p_user_id: member.memberId,
+      });
+      const legacyMissing = legacy.error?.code === 'PGRST202' || legacy.error?.code === '42883'
+        || /admin_list_member_notices.*(?:not found|schema cache|does not exist)/i.test(legacy.error?.message || '');
+      if (legacyMissing) return { rows: [], available: false };
+      if (legacy.error) throw new Error(legacy.error.message);
+      return { rows: legacy.data || [], available: true };
+    }
+    throw new Error(message || 'Private notices could not be loaded.');
+  }
 }
 
 export async function adminSendMemberNotice(userId, notice) {

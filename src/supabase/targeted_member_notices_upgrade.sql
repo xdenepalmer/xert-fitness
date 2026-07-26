@@ -55,7 +55,12 @@ begin
 end;
 $$;
 
-create or replace function public.admin_list_member_notices(p_user_id uuid)
+drop function if exists public.admin_list_member_notices(uuid);
+create function public.admin_list_member_notices(
+  p_user_id uuid,
+  p_limit integer default 500,
+  p_offset integer default 0
+)
 returns table (
   id uuid,
   title text,
@@ -74,8 +79,12 @@ returns table (
 )
 language plpgsql
 security definer
+stable
 set search_path = public, pg_temp
 as $$
+declare
+  v_limit integer := greatest(1, least(coalesce(p_limit, 500), 500));
+  v_offset integer := greatest(0, coalesce(p_offset, 0));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_user_id is null then raise exception 'MEMBER_REQUIRED'; end if;
@@ -105,15 +114,18 @@ begin
   where target.user_id = p_user_id
   group by announcement.id, receipt.read_at, receipt.dismissed_at
   order by announcement.published_at desc, announcement.id desc
-  limit 50;
+  limit v_limit offset v_offset;
 end;
 $$;
 
 revoke execute on function public.admin_send_member_notice(uuid, text, text, text, text, text, timestamptz) from public, anon;
-revoke execute on function public.admin_list_member_notices(uuid) from public, anon;
+revoke execute on function public.admin_list_member_notices(uuid, integer, integer) from public, anon;
 grant execute on function public.admin_send_member_notice(uuid, text, text, text, text, text, timestamptz) to authenticated;
-grant execute on function public.admin_list_member_notices(uuid) to authenticated;
+grant execute on function public.admin_list_member_notices(uuid, integer, integer) to authenticated;
 
 insert into public.xert_schema_capabilities (capability)
 values ('targeted_member_notices')
+on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('admin_member_service_history_paging')
 on conflict (capability) do nothing;

@@ -211,14 +211,20 @@ drop policy if exists "admin_member_notes_admin_read" on public.admin_member_not
 create policy "admin_member_notes_admin_read" on public.admin_member_notes
   for select to authenticated using (public.is_admin());
 
-create or replace function public.admin_list_member_notes(
+drop function if exists public.admin_list_member_notes(uuid, boolean);
+create function public.admin_list_member_notes(
   p_user_id uuid,
-  p_include_archived boolean default false
+  p_include_archived boolean default false,
+  p_limit integer default 500,
+  p_offset integer default 0
 )
 returns table (
   id uuid, user_id uuid, author_id uuid, author_name text, category text,
   body text, created_at timestamptz, archived_at timestamptz, archived_by uuid
 ) language plpgsql security definer stable set search_path = public as $$
+declare
+  v_limit integer := greatest(1, least(coalesce(p_limit, 500), 500));
+  v_offset integer := greatest(0, coalesce(p_offset, 0));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   if p_user_id is null then raise exception 'MEMBER_REQUIRED'; end if;
@@ -229,8 +235,8 @@ begin
   left join public.profiles a on a.id = n.author_id
   where n.user_id = p_user_id
     and (coalesce(p_include_archived, false) or n.archived_at is null)
-  order by (n.archived_at is not null), n.created_at desc
-  limit 100;
+  order by (n.archived_at is not null), n.created_at desc, n.id desc
+  limit v_limit offset v_offset;
 end; $$;
 
 create or replace function public.admin_add_member_note(
@@ -1005,7 +1011,7 @@ $install_admin_record_session_attendance$;
 revoke execute on function public.admin_list_members() from public, anon;
 revoke execute on function public.admin_search_members(text, integer) from public, anon;
 revoke execute on function public.admin_list_members_page(text, text, text, integer, integer, uuid) from public, anon;
-revoke execute on function public.admin_list_member_notes(uuid, boolean) from public, anon;
+revoke execute on function public.admin_list_member_notes(uuid, boolean, integer, integer) from public, anon;
 revoke execute on function public.admin_add_member_note(uuid, text, text) from public, anon;
 revoke execute on function public.admin_set_member_note_archived(uuid, boolean) from public, anon;
 revoke execute on function public.admin_member_follow_up_queue(integer) from public, anon;
@@ -1023,7 +1029,7 @@ revoke execute on function public.admin_record_session_attendance(uuid, uuid[], 
 grant execute on function public.admin_list_members()                    to authenticated;
 grant execute on function public.admin_search_members(text, integer)     to authenticated;
 grant execute on function public.admin_list_members_page(text, text, text, integer, integer, uuid) to authenticated;
-grant execute on function public.admin_list_member_notes(uuid, boolean) to authenticated;
+grant execute on function public.admin_list_member_notes(uuid, boolean, integer, integer) to authenticated;
 grant execute on function public.admin_add_member_note(uuid, text, text) to authenticated;
 grant execute on function public.admin_set_member_note_archived(uuid, boolean) to authenticated;
 grant execute on function public.admin_member_follow_up_queue(integer) to authenticated;
@@ -1082,6 +1088,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('booking_time_conflict_guard') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('admin_member_notes') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('admin_member_service_history_paging') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('admin_daily_operations') on conflict (capability) do nothing;
 create or replace function public.xert_public_capabilities()

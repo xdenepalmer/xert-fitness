@@ -87,7 +87,8 @@ with required (capability, migration) as (
     ('roll_call_stripe_refund_clears_credit_batch', 'src/supabase/roll_call_stripe_refund_clears_credit_batch.sql'),
     ('terminal_booking_clears_stale_credit_batch', 'src/supabase/terminal_booking_clears_stale_credit_batch.sql'),
     ('class_cancel_notice_credit_honesty', 'src/supabase/class_cancel_notice_credit_honesty.sql'),
-    ('booking_decision_notice_credit_honesty', 'src/supabase/booking_decision_notice_credit_honesty.sql')
+    ('booking_decision_notice_credit_honesty', 'src/supabase/booking_decision_notice_credit_honesty.sql'),
+    ('admin_member_service_history_paging', 'src/supabase/admin_member_service_history_paging.sql')
 ), readiness as (
   select
     required.capability,
