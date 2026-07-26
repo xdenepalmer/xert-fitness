@@ -89,8 +89,12 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
   }, [open, query]);
 
   const run = (sectionKey, params) => {
-    const navigated = onNavigate(sectionKey, params);
-    if (navigated !== false) onOpenChange(false);
+    // Always dismiss the palette before the unsaved-changes confirm mounts.
+    // Leaving ⌘K open under AdminConfirmDialog fights focus traps and, after a
+    // same-section discard, the palette would otherwise stay open forever
+    // because activeSection never changes.
+    onNavigate(sectionKey, params);
+    onOpenChange(false);
   };
 
   return (

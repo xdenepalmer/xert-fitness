@@ -49,6 +49,9 @@ export default function AdminCommandCentre() {
   const [section, setActiveSection] = useState(routeSection);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
+  // Bumped on discard so same-section CommandPalette / deep-link navigations
+  // remount the editor instead of clearing the guard while dirty state lives on.
+  const [sectionEpoch, setSectionEpoch] = useState(0);
   const canonicalPath = getAdminSectionPath(section);
   const intent = new URLSearchParams(location.search);
 
@@ -101,6 +104,7 @@ export default function AdminCommandCentre() {
     const pending = pendingNavigation;
     setPendingNavigation(null);
     setHasUnsavedChanges(false);
+    setSectionEpoch(epoch => epoch + 1);
     if (pending?.kind === 'section') {
       setActiveSection(pending.section);
       navigate(pending.path);
@@ -143,7 +147,7 @@ export default function AdminCommandCentre() {
   return (
     <>
       <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
-        <Suspense fallback={<SectionLoader />}>
+        <Suspense key={`${section}:${sectionEpoch}`} fallback={<SectionLoader />}>
           {renderSection()}
         </Suspense>
       </AdminLayout>

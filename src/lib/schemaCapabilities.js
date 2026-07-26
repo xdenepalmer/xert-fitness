@@ -75,10 +75,15 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
 });
 
 export function summarizeSchemaCapabilities(rows) {
-  const installed = new Set((rows || []).map(row => row?.capability).filter(Boolean));
-  const missing = Object.keys(REQUIRED_SCHEMA_CAPABILITIES).filter(capability => !installed.has(capability));
+  // Count only the release-contract capabilities. Extra rows in
+  // xert_schema_capabilities (legacy experiments, retired gates) must not
+  // inflate Ops Health / readiness counts past release_readiness_check.sql.
+  const present = new Set((rows || []).map(row => row?.capability).filter(Boolean));
+  const required = Object.keys(REQUIRED_SCHEMA_CAPABILITIES);
+  const installed = required.filter(capability => present.has(capability)).sort();
+  const missing = required.filter(capability => !present.has(capability));
   return {
-    installed: [...installed].sort(),
+    installed,
     missing,
     ready: missing.length === 0,
     actions: missing.map(capability => REQUIRED_SCHEMA_CAPABILITIES[capability]),

@@ -941,10 +941,17 @@ final class AdminStore: ObservableObject {
                 expectedBookingID: expectedBookingID,
                 requestID: requestID
             )
+            // Credit reserved + private notice (+ push) already happened. A desk
+            // refresh failure must still return success so the UI cannot claim
+            // the promote failed and invite a second confirm against a moved queue.
             promotionNoticeWarning = outcome.warning
-            waitlist = try await api.adminWaitlist(session: session)
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            lastUpdatedAt = Date()
+            do {
+                waitlist = try await api.adminWaitlist(session: session)
+                dailyOperations = try await api.adminDailyOperations(session: session)
+                lastUpdatedAt = Date()
+            } catch {
+                errorMessage = "The member was promoted. Reload the waitlist before the next action."
+            }
             return true
         } catch {
             let message = error.localizedDescription
@@ -1074,13 +1081,20 @@ final class AdminStore: ObservableObject {
                 attendedIDs: attendedIDs,
                 noShowIDs: noShowIDs
             )
-            let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
-            if rosterLoadGeneration == rosterGeneration {
-                classRoster = roster
-                loadedRosterSessionID = classSessionID
+            // Class is already completed (and pending request credits released).
+            // Do not report the whole roll call as failed when only the follow-up
+            // roster/ops refresh errors.
+            do {
+                let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+                if rosterLoadGeneration == rosterGeneration {
+                    classRoster = roster
+                    loadedRosterSessionID = classSessionID
+                }
+                dailyOperations = try await api.adminDailyOperations(session: session)
+                lastUpdatedAt = Date()
+            } catch {
+                errorMessage = "Attendance was saved. Reload this class roster to see the updated marks."
             }
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            lastUpdatedAt = Date()
             return true
         } catch {
             errorMessage = error.localizedDescription

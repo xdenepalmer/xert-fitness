@@ -45,6 +45,17 @@ test('admin roll call sends one bounded RPC and exposes complete attendance cont
   assert.match(classCalendar, /Clear marks/);
   assert.match(classCalendar, /disabled=\{isSavingAttendance \|\| !attendanceSummary\.complete\}/);
   assert.match(classCalendar, /'Save attendance'/);
+  assert.match(classCalendar, /attendanceSaveLockRef/);
+  assert.match(classCalendar, /if \(!attendanceSession \|\| attendanceSaveLockRef\.current \|\| isSavingAttendance\) return;/);
+  const saveHandler = classCalendar.slice(
+    classCalendar.indexOf('const saveAttendance = async'),
+    classCalendar.indexOf('const now = Date.now()'),
+  );
+  assert.match(saveHandler, /Attendance saved — refresh needed/);
+  assert.ok(
+    saveHandler.indexOf('Attendance recorded') < saveHandler.indexOf('refreshBookings'),
+    'success toast must fire before roster refresh so a refresh failure cannot look like a failed roll call',
+  );
 });
 
 test('new roll calls preserve recorded marks but leave confirmed members explicit', () => {

@@ -29,8 +29,11 @@ test('mobile admin navigation traps focus, locks scroll and restores the trigger
 test('admin navigation stays open when unsaved changes cancel a section change', () => {
   assert.match(adminLayout, /const navigated = onSectionChange\(item\.key\)/);
   assert.match(adminLayout, /if \(navigated !== false\) setSidebarOpen\(false\)/);
-  assert.match(commandPalette, /const navigated = onNavigate\(sectionKey, params\)/);
-  assert.match(commandPalette, /if \(navigated !== false\) onOpenChange\(false\)/);
+  // Palette always dismisses on select so the unsaved-changes confirm is not
+  // stacked under a live ⌘K dialog (same-section discards never change
+  // activeSection, so the old "close only when navigated" path left it open).
+  assert.match(commandPalette, /onNavigate\(sectionKey, params\);\s*onOpenChange\(false\);/);
+  assert.doesNotMatch(commandPalette, /if \(navigated !== false\) onOpenChange\(false\)/);
   assert.match(adminLayout, /setSidebarOpen\(false\);[\s\S]*setPaletteOpen\(false\);[\s\S]*\}, \[activeSection\]\)/);
   assert.match(commandCentre, /setPendingNavigation\(\{[\s\S]*kind: 'section'/);
   assert.match(commandCentre, /cancelLabel="Keep editing"/);

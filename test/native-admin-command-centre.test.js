@@ -550,6 +550,8 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.match(setBooking, /if rosterLoadGeneration == rosterGeneration/);
   assert.match(recordAttendance, /let rosterGeneration = rosterLoadGeneration/);
   assert.match(recordAttendance, /if rosterLoadGeneration == rosterGeneration/);
+  assert.match(recordAttendance, /Attendance was saved\. Reload this class roster to see the updated marks\./);
+  assert.match(recordAttendance, /return true/);
 });
 
 test('native event roster load is generation and identity scoped', async () => {

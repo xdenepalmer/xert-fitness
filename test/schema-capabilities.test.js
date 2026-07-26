@@ -20,6 +20,15 @@ test('reports the exact missing production database capabilities', () => {
   assert.equal(summarizeSchemaCapabilities(ALL_CAPABILITIES.map(capability => ({ capability }))).ready, true);
   assert.equal(summarizeSchemaCapabilities([]).ready, false);
   assert.deepEqual(summarizeSchemaCapabilities([]).missing, ALL_CAPABILITIES);
+
+  // Extra DB rows must not inflate the Ops Health count past the release contract.
+  const withUnknown = summarizeSchemaCapabilities([
+    ...ALL_CAPABILITIES.map(capability => ({ capability })),
+    { capability: 'legacy_experimental_capability' },
+  ]);
+  assert.equal(withUnknown.ready, true);
+  assert.equal(withUnknown.installed.length, ALL_CAPABILITIES.length);
+  assert.ok(!withUnknown.installed.includes('legacy_experimental_capability'));
 });
 
 // The release check is the operator's copy of the same contract. Listing them
@@ -175,54 +184,11 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
 test('Codemagic TestFlight preflight enforces every production capability', () => {
   const yaml = readFileSync(new URL('../codemagic.yaml', import.meta.url), 'utf8');
   assert.match(yaml, /Verify production service contract/);
-  assert.match(yaml, /admin_role_safety/);
-  assert.match(yaml, /audited_credit_grants/);
-  assert.match(yaml, /booking_waitlist_withdrawal/);
-  assert.match(yaml, /member_booking_switch_guard/);
-  assert.match(yaml, /member_onboarding_foundation/);
-  assert.match(yaml, /member_activation_cockpit/);
-  assert.match(yaml, /member_waitlist_join/);
-  assert.match(yaml, /waitlist_fifo_promotion/);
-  assert.match(yaml, /attendance_roll_call/);
-  assert.match(yaml, /class_session_update_guard/);
-  assert.match(yaml, /product_update_guard/);
-  assert.match(yaml, /stripe_refund_reconciliation/);
-  assert.match(yaml, /checkout_reconciliation/);
-  assert.match(yaml, /stripe_payment_fulfillment/);
-  assert.match(yaml, /guarded_payment_activation/);
-  assert.match(yaml, /payment_activation_drift_guard/);
-  assert.match(yaml, /admin_settings_singleton/);
-  assert.match(yaml, /stripe_pending_order_guard/);
-  assert.match(yaml, /stripe_order_terms_snapshot/);
-  assert.match(yaml, /stripe_webhook_ledger/);
-  assert.match(yaml, /member_announcements/);
-  assert.match(yaml, /announcement_receipts/);
-  assert.match(yaml, /announcement_actions/);
-  assert.match(yaml, /announcement_archival/);
-  assert.match(yaml, /booking_time_conflict_guard/);
-  assert.match(yaml, /admin_member_notes/);
-  assert.match(yaml, /schedule_blackout_guard/);
-  assert.match(yaml, /database_security_hardening/);
-  assert.match(yaml, /rls_policy_performance/);
-  assert.match(yaml, /request_status_audit/);
-  assert.match(yaml, /member_push_notifications/);
-  assert.match(yaml, /credit_expiry_follow_up/);
-  assert.match(yaml, /member_pt_request_tracking/);
-  assert.match(yaml, /public_form_integrity/);
-  assert.match(yaml, /lead_pipeline_audit/);
-  assert.match(yaml, /schedule_change_audit/);
-  assert.match(yaml, /content_change_audit/);
-  assert.match(yaml, /booking_lifecycle_audit/);
-  assert.match(yaml, /class_cancellation_notifications/);
-  assert.match(yaml, /admin_daily_operations/);
-  assert.match(yaml, /schedule_optimistic_locking/);
-  assert.match(yaml, /shared_admin_optimistic_locking/);
-  assert.match(yaml, /catalog_optimistic_locking/);
-  assert.match(yaml, /product_commercial_terms_guard/);
-  assert.match(yaml, /targeted_member_notices/);
-  assert.match(yaml, /waitlist_promotion_notifications/);
-  assert.match(yaml, /booking_decision_notifications/);
-  assert.match(yaml, /owner_stripe_price_provisioning/);
+  // Codemagic must import the JS release contract — a hardcoded list drifted
+  // 25 capabilities behind schemaCapabilities.js / release_readiness_check.sql.
+  assert.match(yaml, /REQUIRED_SCHEMA_CAPABILITIES/);
+  assert.match(yaml, /from ["']\.\/src\/lib\/schemaCapabilities\.js["']/);
+  assert.match(yaml, /Object\.keys\(REQUIRED_SCHEMA_CAPABILITIES\)/);
   assert.match(yaml, /\/api\/checkout/);
   assert.match(yaml, /expected HTTP 401/);
   assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
@@ -236,6 +202,20 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /\/api\/push-health/);
   assert.match(yaml, /REQUIRE_PRODUCTION_SERVICES/);
   assert.match(yaml, /TestFlight upload will continue/);
+});
+
+test('native AdminSchemaReadiness matches the web release contract', () => {
+  const models = readFileSync(
+    new URL('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift', import.meta.url),
+    'utf8',
+  );
+  const block = models.slice(
+    models.indexOf('enum AdminSchemaReadiness'),
+    models.indexOf('static func missing(from rows'),
+  );
+  const native = [...block.matchAll(/"([a-z0-9_]+)"/g)].map(match => match[1]);
+  assert.deepEqual([...new Set(native)].sort(), [...ALL_CAPABILITIES].sort());
+  assert.equal(new Set(native).size, native.length, 'no capability may be listed twice on iOS');
 });
 
 test('read-only production check reports every release capability and migration', () => {

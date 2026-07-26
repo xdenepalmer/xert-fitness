@@ -563,6 +563,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [attendanceSession, setAttendanceSession] = useState(null);
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+  const attendanceSaveLockRef = useRef(false);
 
   const refreshWaitlistOverview = async () => {
     setWaitlistOverviewLoading(true);
@@ -741,16 +742,28 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     if (promotingSessionId || skippingSessionId) return;
     setPromotingSessionId(candidate.session_id);
     try {
+      // Promote + notice (+ push) must stay the success signal. A later desk
+      // refresh failure must not report "Promotion paused" after the member
+      // already holds the place and was notified — that lie triggers a second
+      // promote attempt against a queue that has already moved.
       const result = await adminPromoteNextWaitlisted(candidate.session_id, candidate.next_booking_id);
-      await Promise.all([
-        refreshWaitlistOverview(),
-        ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
-      ]);
       const delivery = result.warning
         || (Number(result.push?.delivered || 0) > 0
           ? 'Their credit is reserved, their member notice is live, and Apple push was delivered.'
           : 'Their credit is reserved and a private notice is waiting in their member account.');
       toast({ title: 'Member promoted and notified', description: delivery });
+      try {
+        await Promise.all([
+          refreshWaitlistOverview(),
+          ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
+        ]);
+      } catch (refreshError) {
+        toast({
+          title: 'Waitlist refresh needed',
+          description: refreshError.message || 'The member was promoted. Reload the waitlist desk before the next action.',
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       toast({ title: 'Promotion paused', description: error.message, variant: 'destructive' });
     } finally {
@@ -914,8 +927,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const saveAttendance = async () => {
-    if (!attendanceSession) return;
-    if (loadedRosterSessionId !== attendanceSession.id) {
+    if (!attendanceSession || attendanceSaveLockRef.current || isSavingAttendance) return;
+    const sessionId = attendanceSession.id;
+    if (loadedRosterSessionId !== sessionId) {
       toast({ title: 'Roster changed', description: 'Reload this class roster before saving attendance.', variant: 'destructive' });
       return;
     }
@@ -928,19 +942,32 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       });
       return;
     }
+    // Lock before the await so a double-click cannot submit two roll calls —
+    // the second would re-complete an already-completed class and re-release
+    // any pending request credits that the first call already refunded.
+    attendanceSaveLockRef.current = true;
     setIsSavingAttendance(true);
     try {
-      const updated = await adminRecordSessionAttendance(attendanceSession.id, summary.entries);
+      const updated = await adminRecordSessionAttendance(sessionId, summary.entries);
       toast({
         title: 'Attendance recorded',
         description: `${updated} ${updated === 1 ? 'member' : 'members'} marked and class completed.`,
       });
       setAttendanceSession(null);
-      await refreshBookings(attendanceSession.id);
-      await load();
+      try {
+        await refreshBookings(sessionId);
+        await load();
+      } catch (refreshError) {
+        toast({
+          title: 'Attendance saved — refresh needed',
+          description: refreshError.message || 'Reload the class calendar to see the updated roster.',
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       toast({ title: 'Roll call failed', description: error.message, variant: 'destructive' });
     } finally {
+      attendanceSaveLockRef.current = false;
       setIsSavingAttendance(false);
     }
   };

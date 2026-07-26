@@ -67,9 +67,13 @@ test('release gates require guarded payment activation everywhere', async () => 
     readFile(new URL('../api/checkout.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/paymentActivation.js', import.meta.url), 'utf8'),
   ]);
-  for (const source of [capabilities, readiness, codemagic, nativeModels]) {
+  for (const source of [capabilities, readiness, nativeModels]) {
     assert.match(source, /guarded_payment_activation/);
   }
+  // Codemagic imports the JS release contract instead of hardcoding capability
+  // names (a stale list previously skipped 25 production gates including this one).
+  assert.match(codemagic, /REQUIRED_SCHEMA_CAPABILITIES/);
+  assert.match(codemagic, /schemaCapabilities\.js/);
   assert.match(runbook, /20260716010000_guarded_payment_activation\.sql/);
   assert.match(runbook, /fifteen `PASS` results/);
   assert.match(runbook, /20260716060000_payment_activation_drift_guard\.sql/);

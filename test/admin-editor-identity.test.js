@@ -51,6 +51,10 @@ test('section navigation consults the unsaved-changes guard before navigating', 
   );
   // The old same-section early-navigate branch (which bypassed the guard) is gone.
   assert.doesNotMatch(commandCentre, /if \(nextSection === section\) \{\s*navigate\(/);
+  // Discard must remount the section so a same-section CommandPalette jump
+  // cannot clear hasUnsavedChanges while the dirty editor stays mounted.
+  assert.match(commandCentre, /setSectionEpoch\(epoch => epoch \+ 1\)/);
+  assert.match(commandCentre, /<Suspense key=\{`\$\{section\}:\$\{sectionEpoch\}`\}/);
 });
 
 test('planAdminNavigation prompts on unsaved changes even for a same-section request', () => {
@@ -103,7 +107,9 @@ test('class roster refresh is generation-scoped so late class A responses cannot
   assert.match(classCalendar, /const scopedRosterFor = sessionId => \(loadedRosterSessionId === sessionId \? roster : \[\]\)/);
   assert.match(classCalendar, /const sessionRoster = scopedRosterFor\(s\.id\)/);
   assert.match(classCalendar, /loadedRosterSessionId !== session\.id/);
-  assert.match(classCalendar, /loadedRosterSessionId !== attendanceSession\.id/);
+  // saveAttendance captures sessionId before awaits so a mid-flight panel close
+  // cannot submit against a swapped attendanceSession reference.
+  assert.match(classCalendar, /const sessionId = attendanceSession\.id;\s*if \(loadedRosterSessionId !== sessionId\)/);
 });
 
 test('roster and booking status mutations skip refresh after the operator switches class', () => {

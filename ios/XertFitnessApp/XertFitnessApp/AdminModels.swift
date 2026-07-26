@@ -1154,18 +1154,21 @@ struct AdminPushHealth: Codable, Hashable {
 }
 
 enum AdminSchemaReadiness {
+    // Keep in lockstep with src/lib/schemaCapabilities.js and
+    // src/supabase/release_readiness_check.sql — Ops Health "all required
+    // capabilities" must never go green while the SQL release gate still fails.
     static let required: Set<String> = [
         "admin_role_safety", "audited_credit_grants", "booking_waitlist_withdrawal",
-        "member_booking_switch_guard",
+        "member_booking_switch_guard", "member_onboarding_foundation",
+        "member_onboarding_booking_gate", "member_activation_cockpit",
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
-        "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
-        "checkout_reconciliation", "stripe_payment_fulfillment", "guarded_payment_activation",
-        "payment_activation_drift_guard",
-        "admin_settings_singleton",
-        "stripe_pending_order_guard",
-        "stripe_order_terms_snapshot",
-        "stripe_webhook_ledger",
-        "member_announcements", "announcement_receipts",
+        "class_session_update_guard", "class_session_optimistic_locking",
+        "audit_subject_pii_redaction", "product_update_guard",
+        "stripe_refund_reconciliation", "checkout_reconciliation",
+        "stripe_payment_fulfillment", "guarded_payment_activation",
+        "payment_activation_drift_guard", "admin_settings_singleton",
+        "stripe_pending_order_guard", "stripe_order_terms_snapshot",
+        "stripe_webhook_ledger", "member_announcements", "announcement_receipts",
         "announcement_actions", "announcement_archival", "booking_time_conflict_guard",
         "admin_member_notes", "schedule_blackout_guard", "database_security_hardening",
         "rls_policy_performance", "request_status_audit", "member_push_notifications",
@@ -1173,10 +1176,20 @@ enum AdminSchemaReadiness {
         "lead_pipeline_audit", "schedule_change_audit", "content_change_audit",
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
-        "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
-        "waitlist_promotion_notifications",
-        "booking_decision_notifications",
-        "member_onboarding_foundation", "member_activation_cockpit"
+        "catalog_optimistic_locking", "product_commercial_terms_guard",
+        "targeted_member_notices", "waitlist_promotion_notifications",
+        "booking_decision_notifications", "owner_stripe_price_provisioning",
+        "public_form_staff_column_guard", "schedule_blackout_historic_edit_fix",
+        "public_enquiry_time_guard", "my_bookings_duration", "product_currency_aud_only",
+        "stripe_signature_failure_ledger", "stripe_fulfillment_deleted_member",
+        "atomic_account_deletion", "roll_call_releases_pending_requests",
+        "admin_policy_scalar_subquery", "member_history_index",
+        "cancel_booking_expired_batch_refund", "credit_batch_refund_reactivation",
+        "member_interest_health_consent", "account_deletion_public_lead_cleanup",
+        "request_notes_health_consent", "waitlist_skip_concurrency",
+        "pt_rehab_goal_health_consent", "stripe_fulfillment_deleted_email_erasure",
+        "refund_skips_stripe_refunded_batches", "public_booking_switch_gate",
+        "waitlist_skip_notice_accuracy",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

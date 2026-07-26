@@ -38,6 +38,18 @@ test('web promotion confirms the exact FIFO member and reports durable notificat
   assert.match(view, /Confirm and notify this member/);
   assert.match(view, /Their earliest-expiring credit will be reserved and a private member notice will be created/);
   assert.match(view, /Member promoted and notified/);
+  // Desk refresh must not rewrite a successful promote+notify as "Promotion paused".
+  const promoteHandler = view.slice(
+    view.indexOf('const handlePromoteNext'),
+    view.indexOf('const handleSkipWaitlistHead'),
+  );
+  assert.match(promoteHandler, /Member promoted and notified/);
+  assert.match(promoteHandler, /Waitlist refresh needed/);
+  assert.ok(
+    promoteHandler.indexOf('Member promoted and notified')
+      < promoteHandler.indexOf('refreshWaitlistOverview'),
+    'success toast must fire before the desk refresh',
+  );
 });
 
 test('native promotion carries the same expected-member, receipt and push contract', () => {
@@ -51,4 +63,15 @@ test('native promotion carries the same expected-member, receipt and push contra
   assert.match(store, /promotionNoticeWarning = outcome\.warning/);
   assert.match(view, /expectedBookingID: item\.next_booking_id/);
   assert.match(view, /creates a private member notice/);
+  const promoteFn = store.slice(
+    store.indexOf('func promoteNext('),
+    store.indexOf('func skipWaitlistHead('),
+  );
+  assert.match(promoteFn, /The member was promoted\. Reload the waitlist before the next action\./);
+  assert.match(promoteFn, /return true/);
+  assert.ok(
+    promoteFn.indexOf('promotionNoticeWarning = outcome.warning')
+      < promoteFn.indexOf('adminWaitlist'),
+    'promotion success must be recorded before the waitlist refresh',
+  );
 });
