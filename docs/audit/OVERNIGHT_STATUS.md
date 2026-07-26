@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built. No new migration in the latest app tip.
 
 **What was made safer overnight (plain English)**
+- Cancel policy honesty + announcements/PT/push silence (app-only tip after
+  **26123**): Account bookings hint and Terms no longer claim an unconditional
+  automatic credit return when Stripe-refunded packs no-op; web + iPhone
+  Announcements desk pages past the old hard 100 / max_rows cut; member Account
+  PT request history pages the same way; class-cancel / targeted notify load
+  every announcement target (and prior delivery status) past max_rows so later
+  members cannot be skipped for APNs.
 - Member cancel credit honesty + money/history silence (app-only tip after
   **26123**): Account cancel confirm/toast (web + iPhone) no longer claim an
   unconditional credit return when Stripe-refunded packs no-op; Member drawer
@@ -266,6 +273,10 @@ were **not** built. No new migration in the latest app tip.
    the seed calendar). Member cancel confirm/toast says credit returns when the
    pack is still live. Member drawer with >20 bookings still lists every place.
    iPhone PT desk / Admin Audit with >100 rows still show the full queue.
+   Account bookings hint / Terms say credit returns when the pack is still live.
+   Announcements desk (web + iPhone) with >100 broadcast notices still lists
+   every notice. Member Account with many PT requests still lists every request.
+   Class cancel with many targets still APNs every recipient past max_rows.
 
 ---
 
@@ -691,6 +702,16 @@ Migration / operator mirror:
 
 No new migration for this batch (app-only tip). Apply through **26123** remains current.
 
+### 44. This batch — cancel policy honesty + announcements/PT/push silence
+| Area | Defect | Fix |
+|---|---|---|
+| Money honesty | Account bookings list hint + Terms still said credit returns “automatically” — false when `refund_credits_to_batch` no-ops for Stripe-refunded packs | Honest “when the pack is still live” copy (`cancellationPolicyHint` + Terms) |
+| Silent failure (ops) | iPhone `adminAnnouncements` hard-`limit=100`; web `getAllMemberAnnouncements` hit PostgREST `max_rows` without paging — later broadcast notices vanished | Offset page at 500 / `collectAdminBatches` |
+| Silent failure (ops) | Member Account `private_session_requests` (web + iPhone) uncapped — later PT history truncated without warning | Page via `collectAdminBatches` / offset loop |
+| Silent failure (push) | Class-cancel / targeted notify loaded `member_announcement_targets` + prior delivery statuses in one uncapped select — later recipients could miss APNs; prior-push summary lied when truncated | Page both lists at 500 (`loadAnnouncementTargetUserIds` / `loadAnnouncementDeliveryStatuses`) |
+
+No new migration for this batch (app-only tip). Apply through **26123** remains current.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -986,3 +1007,8 @@ show `installed = true` and `release_ready = true`, including
     confirm/toast (web + iPhone) say credit returns when the pack is still live;
     Member drawer bookings page past the old 20 cut; iPhone PT desk and Admin
     Audit page past the old 100 cut.
+43. **Cancel policy honesty + announcements/PT/push silence** — Account bookings
+    hint + Terms say credit returns when the pack is still live; Announcements
+    desk (web + iPhone) pages past the old 100 cut; member Account PT history
+    pages past max_rows; class-cancel / targeted notify page every target so
+    later members are not skipped for APNs.

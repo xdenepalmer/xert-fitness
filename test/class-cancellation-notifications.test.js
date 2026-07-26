@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import adminPublishAnnouncementHandler, { summarizePreviousClassAlertPushes } from '../api/admin-publish-announcement.js';
+import adminPublishAnnouncementHandler, {
+  loadAnnouncementTargetUserIds,
+  summarizePreviousClassAlertPushes,
+} from '../api/admin-publish-announcement.js';
 import { loadSubscriptions } from '../api/apns.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -52,12 +55,15 @@ test('member RPC and direct-read policy exclude alerts targeted to another accou
 test('admin cancellation attempts bounded targeted APNs and retains contact fallback', () => {
   const flow = adminCalendar.slice(adminCalendar.indexOf('const handleCancel = async'), adminCalendar.indexOf('const handleBookingStatus'));
   assert.match(adminData, /notifyClassCancellation[\s\S]*\/api\/admin-publish-announcement[\s\S]*notify_class_cancellation/);
-  assert.match(adminData, /member_announcements'\)\.select\('\*'\)\.eq\('audience', 'all'\)/);
+  assert.match(adminData, /collectAdminBatches[\s\S]*member_announcements[\s\S]*eq\('audience', 'all'\)/);
   assert.ok(flow.indexOf('await cancelClassSession') < flow.indexOf('await notifyClassCancellation'));
   assert.match(adminCalendar, /Private in-app notice created for/);
   assert.match(adminCalendar, /Use the contact fallback below/);
   assert.match(endpoint, /member_announcement_targets/);
+  assert.match(endpoint, /loadAnnouncementTargetUserIds/);
+  assert.match(endpoint, /loadAnnouncementDeliveryStatuses/);
   assert.match(endpoint, /targetUserIds: userIds/);
+  assert.match(endpoint, /\.range\(from, from \+ pageSize - 1\)/);
   assert.match(apns, /TARGET_USER_BATCH_SIZE = 100/);
   assert.match(apns, /if \(userBatch\) query = query\.in\('user_id', userBatch\)/);
   assert.doesNotMatch(apns, /targetUserIds\.filter\(Boolean\)\)\]\.slice/);
@@ -84,7 +90,7 @@ test('delivery history is summarised when no new APNs attempt is needed', () => 
   // Class-cancel / targeted notify always call sendMemberAnnouncementPushes so
   // transient `failed` rows and newly registered devices stay retryable; history
   // is only surfaced when that call attempts nothing new.
-  assert.match(endpoint, /Number\(push\.attempted\) \|\| 0\) === 0 && \(previous \|\| \[\]\)\.length > 0/);
+  assert.match(endpoint, /Number\(push\.attempted\) \|\| 0\) === 0 && previous\.length > 0/);
   assert.match(endpoint, /sendMemberAnnouncementPushes\(\{[\s\S]*targetUserIds: userIds/);
 });
 
@@ -105,6 +111,39 @@ test('class notice endpoint authenticates before revealing server configuration'
   assert.equal(body.error, 'Not authenticated.');
   assert.match(String(body.request_id || ''), /^[0-9a-f-]{36}$/i);
   assert.equal(response.headers.get('x-request-id'), body.request_id);
+});
+
+test('class-cancel notice targets page past PostgREST max_rows', async () => {
+  const ranges = [];
+  const admin = {
+    from(table) {
+      assert.equal(table, 'member_announcement_targets');
+      const query = {
+        select() { return query; },
+        eq() { return query; },
+        order() { return query; },
+        async range(from, to) {
+          ranges.push([from, to]);
+          if (from === 0) {
+            return {
+              data: Array.from({ length: 500 }, (_, index) => ({ user_id: `member-${index}` })),
+              error: null,
+            };
+          }
+          return {
+            data: Array.from({ length: 3 }, (_, index) => ({ user_id: `member-${500 + index}` })),
+            error: null,
+          };
+        },
+      };
+      return query;
+    },
+  };
+  const userIds = await loadAnnouncementTargetUserIds(admin, '11111111-1111-4111-8111-111111111111');
+  assert.deepEqual(ranges, [[0, 499], [500, 999]]);
+  assert.equal(userIds.length, 503);
+  assert.equal(userIds[0], 'member-0');
+  assert.equal(userIds[502], 'member-502');
 });
 
 test('targeted subscription loading chunks every recipient without truncation', async () => {

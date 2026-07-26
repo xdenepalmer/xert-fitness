@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyMemberOnboarding, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, saveMyMemberOnboarding, updateMyProfile } from '@/lib/bookingData';
-import { cancellationCreditReturnMessage, cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
+import { cancellationCreditReturnMessage, cancellationMessage, cancellationPolicyHint, cancellationReturnsCredit } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
 import { summarizeMemberProgress } from '@/lib/memberProgress';
@@ -1413,7 +1413,7 @@ export default function Account() {
               ))}
               <p className="font-body text-xs flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.4)' }}>
                 <Clock className="w-3.5 h-3.5" />
-                Cancel more than 12 hours before class and your credit is returned automatically.
+                {cancellationPolicyHint()}
               </p>
             </div>
           )}

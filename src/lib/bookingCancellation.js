@@ -14,6 +14,11 @@ export function cancellationCreditReturnMessage() {
   return 'Your class credit is returned when the pack is still live.';
 }
 
+// Account bookings list hint — same Stripe-refunded pack honesty as confirm/toast.
+export function cancellationPolicyHint() {
+  return 'Cancel more than 12 hours before class and your credit is returned when the pack is still live.';
+}
+
 export function cancellationMessage(booking, now = Date.now()) {
   const className = booking.title || booking.class_type || 'this class';
   if (booking.status === 'waitlisted') {

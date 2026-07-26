@@ -67,6 +67,47 @@ export function summarizePreviousClassAlertPushes(rows = []) {
   };
 }
 
+// Page past PostgREST max_rows — a truncated target list silently skipped APNs
+// for later members on a large class cancel; delivery-status truncation lied
+// about prior push outcomes when no new attempt was needed.
+async function loadPagedAnnouncementRows(admin, table, select, announcementId, orderColumn) {
+  const pageSize = 500;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin
+      .from(table)
+      .select(select)
+      .eq('announcement_id', announcementId)
+      .order(orderColumn)
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if ((data || []).length < pageSize) return rows;
+  }
+}
+
+export async function loadAnnouncementTargetUserIds(admin, announcementId) {
+  const targets = await loadPagedAnnouncementRows(
+    admin,
+    'member_announcement_targets',
+    'user_id',
+    announcementId,
+    'user_id',
+  );
+  return [...new Set(targets.map(target => target.user_id).filter(Boolean))];
+}
+
+export async function loadAnnouncementDeliveryStatuses(admin, announcementId) {
+  const rows = await loadPagedAnnouncementRows(
+    admin,
+    'push_notification_deliveries',
+    'status',
+    announcementId,
+    'subscription_id',
+  );
+  return rows.map(row => ({ status: row.status }));
+}
+
 export async function notifyClassCancellation(admin, sessionId) {
   if (!UUID.test(sessionId)) throw new Error('CLASS_NOTICE_SESSION_INVALID');
   const { data: announcement, error: announcementError } = await admin
@@ -82,13 +123,10 @@ export async function notifyClassCancellation(admin, sessionId) {
   // a cancelled-session alert the operator already withdrew from member feeds.
   if (announcement.archived_at) throw new Error('CLASS_NOTICE_ARCHIVED');
 
-  const [{ data: targets, error: targetError }, { data: previous, error: previousError }] = await Promise.all([
-    admin.from('member_announcement_targets').select('user_id').eq('announcement_id', announcement.id),
-    admin.from('push_notification_deliveries').select('status').eq('announcement_id', announcement.id),
+  const [userIds, previous] = await Promise.all([
+    loadAnnouncementTargetUserIds(admin, announcement.id),
+    loadAnnouncementDeliveryStatuses(admin, announcement.id),
   ]);
-  if (targetError) throw targetError;
-  if (previousError) throw previousError;
-  const userIds = [...new Set((targets || []).map(target => target.user_id).filter(Boolean))];
   // Always attempt delivery: sendMemberAnnouncementPushes skips only terminal
   // subscription rows (delivered / invalid_token). A prior transient `failed`
   // row, or a device registered after the first attempt, must still be reachable.
@@ -97,7 +135,7 @@ export async function notifyClassCancellation(admin, sessionId) {
     announcement,
     targetUserIds: userIds,
   });
-  if ((Number(push.attempted) || 0) === 0 && (previous || []).length > 0) {
+  if ((Number(push.attempted) || 0) === 0 && previous.length > 0) {
     return {
       announcement_id: announcement.id,
       recipients: userIds.length,
@@ -122,18 +160,15 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
   // archived private notice cannot be re-pushed while still withdrawn in-app.
   if (announcement.archived_at) throw new Error('TARGETED_NOTICE_ARCHIVED');
 
-  const [{ data: targets, error: targetError }, { data: previous, error: previousError }] = await Promise.all([
-    admin.from('member_announcement_targets').select('user_id').eq('announcement_id', announcement.id),
-    admin.from('push_notification_deliveries').select('status').eq('announcement_id', announcement.id),
+  const [userIds, previous] = await Promise.all([
+    loadAnnouncementTargetUserIds(admin, announcement.id),
+    loadAnnouncementDeliveryStatuses(admin, announcement.id),
   ]);
-  if (targetError) throw targetError;
-  if (previousError) throw previousError;
-  const userIds = [...new Set((targets || []).map(target => target.user_id).filter(Boolean))];
   if (userIds.length !== 1) throw new Error('TARGETED_NOTICE_RECIPIENT_INVALID');
   // Same retry contract as class-cancel: do not short-circuit on any prior row.
   // Transient failures and newly registered devices must still be attempted.
   const push = await sendMemberAnnouncementPushes({ admin, announcement, targetUserIds: userIds });
-  if ((Number(push.attempted) || 0) === 0 && (previous || []).length > 0) {
+  if ((Number(push.attempted) || 0) === 0 && previous.length > 0) {
     return {
       announcement_id: announcement.id,
       recipients: 1,

@@ -21,7 +21,7 @@ const sections = [
     title: 'Bookings And Cancellations',
     content: [
       'A booking is confirmed only when the service shows it as confirmed. Some classes use request-to-book or waitlist workflows. Capacity, coaches, locations and times may change where reasonably necessary.',
-      'For confirmed credit bookings, cancellations made more than 12 hours before class return the credit automatically. Cancellations within 12 hours generally use the credit. Requested bookings return the reserved credit when cancelled. XERT may make exceptions where appropriate.'
+      'For confirmed credit bookings, cancellations made more than 12 hours before class return the credit when the pack is still live. Cancellations within 12 hours generally use the credit. Requested bookings return the reserved credit when cancelled and the pack is still live. XERT may make exceptions where appropriate.'
     ]
   },
   {
@@ -48,5 +48,5 @@ const sections = [
 ];
 
 export default function Terms() {
-  return <LegalPage eyebrow="Service Agreement" title="Terms Of Use" updated="21 July 2026" intro="These terms set clear expectations for using XERT Fitness services, booking training and managing a member account." sections={sections} />;
+  return <LegalPage eyebrow="Service Agreement" title="Terms Of Use" updated="26 July 2026" intro="These terms set clear expectations for using XERT Fitness services, booking training and managing a member account." sections={sections} />;
 }

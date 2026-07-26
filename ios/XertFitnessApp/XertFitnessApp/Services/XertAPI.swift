@@ -1178,16 +1178,27 @@ final class XertAPI {
     }
 
     func adminAnnouncements(session auth: AuthSession) async throws -> [AdminAnnouncement] {
-        try await restRequest(
-            path: "/rest/v1/member_announcements",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,expires_at,archived_at,created_at,updated_at"),
-                URLQueryItem(name: "audience", value: "eq.all"),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "limit", value: "100")
-            ],
-            auth: auth
-        )
+        // Page past the old hard limit=100 — later broadcast notices vanished
+        // from Command Centre after seed/ops growth (web collectAdminBatches parity).
+        let pageSize = 500
+        var offset = 0
+        var rows: [AdminAnnouncement] = []
+        while true {
+            let page: [AdminAnnouncement] = try await restRequest(
+                path: "/rest/v1/member_announcements",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,expires_at,archived_at,created_at,updated_at"),
+                    URLQueryItem(name: "audience", value: "eq.all"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func adminSchemaCapabilities(session auth: AuthSession) async throws -> [AdminSchemaCapability] {
@@ -1999,14 +2010,26 @@ final class XertAPI {
     }
 
     func privateSessionRequests(session auth: AuthSession) async throws -> [PrivateSessionStatusItem] {
-        try await restRequest(
-            path: "/rest/v1/private_session_requests",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at"),
-                URLQueryItem(name: "order", value: "created_at.desc")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated PT history silently hid
+        // later requests from Account (web getMyPrivateSessionRequests parity).
+        let pageSize = 500
+        var offset = 0
+        var rows: [PrivateSessionStatusItem] = []
+        while true {
+            let page: [PrivateSessionStatusItem] = try await restRequest(
+                path: "/rest/v1/private_session_requests",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func book(session auth: AuthSession, classSessionID: UUID) async throws {

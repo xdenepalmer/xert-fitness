@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   cancellationCreditReturnMessage,
   cancellationMessage,
+  cancellationPolicyHint,
   cancellationReturnsCredit,
 } from '../src/lib/bookingCancellation.js';
 
@@ -40,10 +41,19 @@ test('member cancel copy does not claim an unconditional credit return', () => {
   // must not promise the credit already landed (booking-decision notice parity).
   assert.match(cancellationCreditReturnMessage(), /pack is still live/);
   assert.doesNotMatch(cancellationCreditReturnMessage(), /has been returned/);
+  assert.match(cancellationPolicyHint(), /pack is still live/);
+  assert.doesNotMatch(cancellationPolicyHint(), /returned automatically/);
 
   const account = read('../src/pages/Account.jsx');
   assert.match(account, /cancellationCreditReturnMessage/);
+  assert.match(account, /cancellationPolicyHint/);
   assert.doesNotMatch(account, /Your class credit has been returned\./);
+  assert.doesNotMatch(account, /returned automatically/);
+
+  const terms = read('../src/pages/Terms.jsx');
+  assert.match(terms, /return the credit when the pack is still live/);
+  assert.match(terms, /return the reserved credit when cancelled and the pack is still live/);
+  assert.doesNotMatch(terms, /return the credit automatically/);
 
   const iosPolicy = read('../ios/XertFitnessApp/XertFitnessApp/BookingCancellationPolicy.swift');
   const iosAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');

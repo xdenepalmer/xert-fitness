@@ -57,7 +57,7 @@ test('admin member service creates the notice before requesting idempotent APNs 
   assert.match(api, /\.in\('source_kind', \['member_direct', 'waitlist_promotion', 'booking_decision'\]\)/);
   assert.match(api, /userIds\.length !== 1/);
   assert.match(api, /sendMemberAnnouncementPushes\(\{ admin, announcement, targetUserIds: userIds \}\)/);
-  assert.match(api, /previous \|\| \[\]\)\.length > 0/);
+  assert.match(api, /previous\.length > 0/);
   assert.match(api, /archived_at[\s\S]*TARGETED_NOTICE_ARCHIVED/);
   assert.match(api, /CLASS_NOTICE_ARCHIVED/);
 });

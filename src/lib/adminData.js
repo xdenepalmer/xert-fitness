@@ -693,17 +693,29 @@ export async function deleteEvent(id, expectedUpdatedAt) {
 // ─── Member announcements ───────────────────────────────────────────────────
 
 export async function getAllMemberAnnouncements() {
-  const [announcementResult, metricResult, pushMetricResult] = await Promise.all([
-    supabase.from('member_announcements').select('*').eq('audience', 'all').order('created_at', { ascending: false }),
+  // Page past PostgREST max_rows / the old iOS hard 100 cut — later broadcast
+  // notices silently vanished from the Announcements desk after ops growth.
+  const [announcements, metricResult, pushMetricResult] = await Promise.all([
+    collectAdminBatches(async (page, pageSize) => {
+      const from = (page - 1) * pageSize;
+      const { data, error } = await supabase
+        .from('member_announcements')
+        .select('*')
+        .eq('audience', 'all')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw new Error(error.message);
+      return data || [];
+    }),
     supabase.rpc('admin_announcement_metrics'),
     supabase.rpc('admin_announcement_push_metrics'),
   ]);
-  if (announcementResult.error) throw new Error(announcementResult.error.message);
   if (metricResult.error) throw new Error(metricResult.error.message);
   if (pushMetricResult.error) throw new Error(pushMetricResult.error.message);
   const metrics = new Map((metricResult.data || []).map(item => [item.announcement_id, item]));
   const pushMetrics = new Map((pushMetricResult.data || []).map(item => [item.announcement_id, item]));
-  return (announcementResult.data || []).map(item => ({
+  return announcements.map(item => ({
     ...item,
     read_count: Number(metrics.get(item.id)?.read_count) || 0,
     dismissed_count: Number(metrics.get(item.id)?.dismissed_count) || 0,

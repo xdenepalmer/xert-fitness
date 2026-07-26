@@ -148,13 +148,20 @@ export async function getMyBookings() {
 
 export async function getMyPrivateSessionRequests() {
   const userId = await requireCurrentUserId();
-  const { data, error } = await supabase
-    .from('private_session_requests')
-    .select('id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated PT history silently hides later
+  // requests from Account (iOS privateSessionRequests paging parity).
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('private_session_requests')
+      .select('id,status,requested_session_type,preferred_day,preferred_time,training_goal,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 const BOOKING_ERRORS = {
