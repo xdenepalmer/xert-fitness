@@ -1387,11 +1387,26 @@ final class XertAPI {
     }
 
     func adminEventGoalReferences(session auth: AuthSession) async throws -> [AdminEventGoalReference] {
-        try await restRequest(
-            path: "/rest/v1/member_event_goals",
-            queryItems: [URLQueryItem(name: "select", value: "event_id")],
-            auth: auth
-        )
+        // Page through every goal row. A single PostgREST select is capped by
+        // max_rows, which silently undercounts training groups and delete warnings.
+        let pageSize = 500
+        var offset = 0
+        var goals: [AdminEventGoalReference] = []
+        while true {
+            let page: [AdminEventGoalReference] = try await restRequest(
+                path: "/rest/v1/member_event_goals",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "event_id"),
+                    URLQueryItem(name: "order", value: "event_id.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            goals.append(contentsOf: page)
+            if page.count < pageSize { return goals }
+            offset += pageSize
+        }
     }
 
     func adminEventGoalMembers(session auth: AuthSession, eventID: UUID) async throws -> [AdminEventGoalMember] {

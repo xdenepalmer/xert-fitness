@@ -113,6 +113,7 @@ test('web checkout handoff persists exact recovery identity and clears cancelled
   assert.match(account, /nextParams\.delete\('checkout_session_id'\)/);
   assert.match(account, /commerceRequestID === commerceRequestIDRef\.current/);
   assert.match(account, /setPurchaseStatus\('delayed'\)/);
+  assert.match(account, /if \(!pending\) \{[\s\S]*setPurchaseStatus\('failed'\)/);
   assert.match(account, /Payment confirmed/);
   assert.match(account, /Check again/);
   assert.match(booking, /searchParams\.get\('purchase'\) !== 'cancelled'/);

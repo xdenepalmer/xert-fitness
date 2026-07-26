@@ -25,3 +25,14 @@ test('event training groups are exportable and the calendar admin remains usable
   assert.match(manager, /flex flex-col gap-4[\s\S]*sm:flex-row/);
   assert.match(manager, /inline-flex min-h-11[\s\S]*mailto:/);
 });
+
+test('admin event goal counts page through PostgREST instead of silently truncating', () => {
+  const webData = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
+  const nativeAPI = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8');
+
+  assert.match(webData, /export async function getEventGoalCounts\(\)[\s\S]*collectAdminBatches/);
+  assert.match(webData, /from\('member_event_goals'\)[\s\S]*\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(manager, /Training-goal counts could not be verified/);
+  assert.match(nativeAPI, /func adminEventGoalReferences[\s\S]*pageSize = 500[\s\S]*offset \+= pageSize/);
+  assert.match(nativeAPI, /path: "\/rest\/v1\/member_event_goals"[\s\S]*order", value: "event_id\.asc,id\.asc"/);
+});

@@ -355,6 +355,23 @@ export default function Account() {
       storedPending: loadPendingWebCheckout(user.id),
     });
     const commerceRequestID = ++commerceRequestIDRef.current;
+
+    const clearPurchaseReturnParams = () => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('purchase');
+      nextParams.delete('checkout_session_id');
+      setSearchParams(nextParams, { replace: true });
+    };
+
+    // Without a validated Stripe session identity, retries can never settle.
+    // Fail closed instead of looping on a permanent "delayed" state.
+    if (!pending) {
+      clearPendingWebCheckout();
+      setPurchaseStatus('failed');
+      clearPurchaseReturnParams();
+      return undefined;
+    }
+
     setPurchaseStatus('confirming');
 
     const reconcile = async () => {
@@ -374,10 +391,7 @@ export default function Account() {
           if (settlement !== 'pending') {
             clearPendingWebCheckout();
             setPurchaseStatus(settlement);
-            const nextParams = new URLSearchParams(searchParams);
-            nextParams.delete('purchase');
-            nextParams.delete('checkout_session_id');
-            setSearchParams(nextParams, { replace: true });
+            clearPurchaseReturnParams();
             return;
           }
         } catch {

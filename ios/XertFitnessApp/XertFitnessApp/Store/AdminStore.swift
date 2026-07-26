@@ -168,8 +168,10 @@ final class AdminStore: ObservableObject {
         defer { isLoading = false }
 
         async let operationsRequest = api.adminDailyOperations(session: session)
-        async let waitlistRequest = api.adminWaitlist(session: session)
-        async let followUpRequest = api.adminFollowUps(session: session)
+        // Overview "Waitlisted" sums waitlist_count from these rows — use the
+        // RPC ceiling so the metric does not collapse to the default page of 20.
+        async let waitlistRequest = api.adminWaitlist(session: session, limit: 50)
+        async let followUpRequest = api.adminFollowUps(session: session, limit: 50)
         async let activationOverviewRequest = api.adminMemberActivationOverview(session: session)
         async let activationQueueRequest = api.adminMemberActivationQueue(session: session)
         async let memberRequest = api.adminMembers(session: session)
@@ -895,7 +897,8 @@ final class AdminStore: ObservableObject {
     private func refreshBookingOperationsSnapshot(session: AuthSession) async throws {
         async let bookingRequest = api.adminBookingRequests(session: session)
         async let operationsRequest = api.adminDailyOperations(session: session)
-        async let waitlistRequest = api.adminWaitlist(session: session)
+        // Keep the Overview Waitlisted total at the RPC ceiling after desk actions.
+        async let waitlistRequest = api.adminWaitlist(session: session, limit: 50)
         let snapshot = try await (bookingRequest, operationsRequest, waitlistRequest)
         bookingRequests = snapshot.0
         dailyOperations = snapshot.1
@@ -1153,6 +1156,10 @@ final class AdminStore: ObservableObject {
                 errorMessage = "Bookings stay paused until Operations Health verifies the member booking-switch guard."
                 return false
             }
+        }
+        if draft.payments_enabled && !draft.bookings_enabled {
+            errorMessage = "Enable Bookings before opening session pack checkout. Members need class booking available when pack purchases go live."
+            return false
         }
         healthRefreshGeneration &+= 1
         launchGateUpdatedAt = nil

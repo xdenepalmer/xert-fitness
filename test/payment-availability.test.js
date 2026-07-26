@@ -73,6 +73,12 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(webAdmin, /title="Open session pack checkout\?"/);
   assert.match(webAdmin, /livePaymentSettingsRequirePause\(normalized, savedSettings\)/);
   assert.match(webAdmin, /Pause pack checkout first/);
+  assert.match(webAdmin, /paymentActivationRequiresBookings\(normalized\)/);
+  assert.match(webAdmin, /Enable bookings first/);
+  assert.match(webAdmin, /memberBookingSwitchGuardReady\(\)/);
+  assert.match(webAdmin, /Bookings stay paused/);
+  assert.match(webData, /export async function memberBookingSwitchGuardReady/);
+  assert.match(webData, /member_booking_switch_guard/);
   assert.match(webData, /PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/);
   assert.match(webData, /Pause session pack payments before changing other soft-launch controls/);
   assert.match(nativeAPI, /func adminActivatePlatformPayments/);
@@ -81,6 +87,7 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(nativeStore, /let activatingPayments = draft\.payments_enabled/);
   assert.match(nativeStore, /api\.adminActivatePlatformPayments/);
   assert.match(nativeStore, /Pause session pack payments, save that change/);
+  assert.match(nativeStore, /Enable Bookings before opening session pack checkout/);
   assert.match(nativeAdmin, /confirmationDialog\("Open session pack checkout\?"/);
   assert.match(nativeAdmin, /run every Stripe launch check on the server/);
   assert.doesNotMatch(nativeAdmin, /disabled\(admin\.commerceHealth\?\.ready != true\)/);

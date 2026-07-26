@@ -139,6 +139,7 @@ test('stale draft fails before any Stripe mutation and SQL commit stays CAS-priv
 test('web and iOS use the authenticated server action and preserve separate activation', () => {
   const webData = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
   const webView = readFileSync(new URL('../src/components/admin/ProductsManager.jsx', import.meta.url), 'utf8');
+  const commerceAPI = readFileSync(new URL('../api/admin-commerce-health.js', import.meta.url), 'utf8');
   const nativeAPI = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8');
   const nativeStore = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift', import.meta.url), 'utf8');
   const nativeView = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift', import.meta.url), 'utf8');
@@ -156,4 +157,14 @@ test('web and iOS use the authenticated server action and preserve separate acti
   assert.match(nativeStore, /guard provisioningProductPriceID == nil, savingProductID == nil/);
   assert.match(nativeView, /isProductMutationInFlight/);
   assert.match(nativeView, /stays private until you activate it separately/);
+
+  const provisionCatch = commerceAPI.slice(
+    commerceAPI.indexOf('if (productPriceProvision)'),
+    commerceAPI.indexOf("console.error('Stripe Price provisioning failed."),
+  );
+  assert.match(provisionCatch, /PRODUCT_PRICE_LOOKUP_FAILED/);
+  assert.match(provisionCatch, /Stripe price does not match the product configuration\./);
+  assert.match(provisionCatch, /Product configuration is invalid\./);
+  assert.match(provisionCatch, /StripeInvalidRequestError/);
+  assert.match(provisionCatch, /exact Price for this pack amount/);
 });

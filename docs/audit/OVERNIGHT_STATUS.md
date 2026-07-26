@@ -3,27 +3,28 @@
 ## Morning owner briefing
 
 **What was made safer overnight (plain English)**
-- Waitlist “Skip — no credits” no longer texts the member that a credit was
-  returned (they never held one). Promote still creates the private “place
-  confirmed” notice for the next credited member.
-- Class reminders on iPhone now fire at the real clock time before class, not a
-  countdown that can drift after the app refreshes.
-- Account Details shows email as locked on web and iOS, and the save path will
-  not accept an email or role change from the browser.
-- Owner overview metrics no longer let a late refresh clear another in-flight
-  load and paint stale numbers after you leave and return to the tab.
-- Soft-launch booking pause, Member Readiness gate, archived-notice push block,
-  refund drawer races, and checkout burst limits from earlier overnight batches
-  stay in place. Staff roles were **not** built.
+- Soft Launch Settings on the website now matches iPhone: bookings cannot go
+  live until the booking-switch guard is installed, and pack checkout cannot
+  open while bookings stay paused.
+- Event training-group counts no longer silently truncate after PostgREST’s
+  row cap (web + iOS), and delete warnings say so when counts cannot be verified.
+- Pack purchase confirmation fails closed when Stripe’s session identity is
+  missing, instead of looping on “taking longer than usual.”
+- iPhone Overview Waitlisted / Follow-ups use the RPC ceiling (50), including
+  after booking-desk refreshes — same class of collapse as the Members metric.
+- Earlier overnight batches (waitlist Skip notice, reminders, email lock,
+  overview race, soft-launch booking gate, readiness gate) stay in place.
+  Staff roles were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726115000_waitlist_skip_notice_accuracy.sql` (full list below).
+   `20260726115000_waitlist_skip_notice_accuracy.sql` (full list + command
+   examples below). This batch is app-only (no new SQL).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
    `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`.
-3. Smoke: Skip a no-credit waitlist head → member notice says no credit charged;
-   then Promote next → they get the confirmed-place notice/push.
+3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
+   enable bookings only when Ops Health shows the booking-switch guard.
 
 ---
 
@@ -135,6 +136,17 @@ Migration / operator mirror:
 `supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql`
 ↔ `src/supabase/waitlist_skip_notice_accuracy.sql`.
 
+### 13. This batch — soft-launch toggles, event goals, purchase confirm, overview counts
+| Area | Defect | Fix |
+|---|---|---|
+| Soft Launch Settings (web) | iOS required `member_booking_switch_guard` before enabling bookings; web did not. Payments could activate while bookings stayed paused (Ops Health “unsafe”) | Web checks capability via `xert_public_capabilities`; both surfaces block payments without bookings |
+| Events manager / goals | `getEventGoalCounts` / iOS `adminEventGoalReferences` used a single PostgREST select → silent undercount past max_rows; delete warning omitted goals when counts failed | Page with `collectAdminBatches` / offset loop; delete warns when counts unverified |
+| Pack purchase confirmation | `/account?purchase=success` without a valid Stripe session id looped on “delayed” forever | Fail closed to `failed` and clear return params when pending identity is missing |
+| Stripe Price provisioning | Lookup / catalogue mismatch / Stripe invalid-request errors fell through to a generic 500 | Map `PRODUCT_PRICE_LOOKUP_FAILED`, config mismatch, and Stripe invalid-request to operator-safe 409/500 copy |
+| iOS AdminOverview metrics | Waitlisted / Follow-ups used default RPC limit 20; booking-desk snapshot refreshed waitlist at 20 and collapsed the Overview total | Refresh + booking snapshot use `limit: 50` (RPC ceiling) |
+
+No new migration for this batch.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -142,6 +154,33 @@ Migration / operator mirror:
 Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
+
+### Production apply checklist (examples — no secrets)
+
+Prefer the Supabase SQL Editor for one-off apply, or CLI against a linked
+project. Never paste service-role keys into shell history or commits.
+
+```bash
+# Optional: link once (uses project ref from the dashboard; interactive login)
+supabase link --project-ref <YOUR_PROJECT_REF>
+
+# Apply any missing overnight migrations in timestamp order
+supabase db push
+
+# Or apply a single file when catch-up is needed
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql
+
+# Release contract — every row must be installed + release_ready
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f src/supabase/release_readiness_check.sql
+```
+
+`DATABASE_URL` is the Postgres connection string from Supabase → Project
+Settings → Database (use the pooled URI if your network requires it). Do not
+commit it. If you only have the SQL Editor, paste each missing migration file
+in timestamp order, then paste `release_readiness_check.sql` and confirm every
+row shows `installed = true` and `release_ready = true`.
 
 | # | Migration | Capability / effect |
 |---|---|---|
@@ -198,5 +237,12 @@ show `installed = true` and `release_ready = true`, including
     notice/push still fires.
 11. **Account email** — Edit Account Details: email visible and not editable;
     save only updates name/phone.
-12. **Do not** implement staff roles yet — owner/legal gates in
+12. **Soft-launch toggles** — Enable payments with bookings off → blocked on
+    web and iOS; enable bookings without booking-switch guard → blocked.
+13. **Purchase confirm** — Open `/account?purchase=success` with no
+    `checkout_session_id` (and empty local handoff) → “Checkout did not
+    complete”, not an endless delayed spinner.
+14. **iOS Waitlisted** — With >20 waitlisted sessions, Overview Waitlisted
+    reflects up to the RPC ceiling (50), including after promote/skip.
+15. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

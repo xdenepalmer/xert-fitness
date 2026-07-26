@@ -5,6 +5,8 @@ import {
   launchSettingsChanged,
   livePaymentSettingsRequirePause,
   normalizeLaunchSettings,
+  paymentActivationRequiresBookings,
+  paymentActivationRequiresBookingsMessage,
   paymentSettingsPauseRequiredMessage,
 } from '../src/lib/launchSettings.js';
 
@@ -76,4 +78,20 @@ test('live checkout freezes other soft-launch edits until payments are paused', 
     false,
   );
   assert.match(paymentSettingsPauseRequiredMessage(), /Pause session pack payments/i);
+});
+
+test('pack checkout cannot go live while class bookings stay paused', () => {
+  assert.equal(
+    paymentActivationRequiresBookings({ payments_enabled: true, bookings_enabled: false }),
+    true,
+  );
+  assert.equal(
+    paymentActivationRequiresBookings({ payments_enabled: true, bookings_enabled: true }),
+    false,
+  );
+  assert.equal(
+    paymentActivationRequiresBookings({ payments_enabled: false, bookings_enabled: false }),
+    false,
+  );
+  assert.match(paymentActivationRequiresBookingsMessage(), /Enable Bookings before opening/i);
 });

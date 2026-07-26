@@ -503,9 +503,11 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
         title="Delete calendar event?"
         description={pendingDelete ? `Delete ${pendingDelete.name} from the public event calendar?` : ''}
         warning={pendingDelete
-          ? (goalCounts[pendingDelete.id]
-              ? `${goalCounts[pendingDelete.id]} member training goal${goalCounts[pendingDelete.id] === 1 ? '' : 's'} will also be removed. This cannot be undone.`
-              : 'This cannot be undone.')
+          ? (goalLoadError
+              ? 'Training-goal counts could not be verified. Any member training goals for this event will still be removed. This cannot be undone.'
+              : goalCounts[pendingDelete.id]
+                ? `${goalCounts[pendingDelete.id]} member training goal${goalCounts[pendingDelete.id] === 1 ? '' : 's'} will also be removed. This cannot be undone.`
+                : 'This cannot be undone.')
           : ''}
         confirmLabel="Delete event"
         onConfirm={() => void handleDelete()}

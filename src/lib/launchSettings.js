@@ -66,3 +66,14 @@ export function livePaymentSettingsRequirePause(current = {}, saved = {}) {
 export function paymentSettingsPauseRequiredMessage() {
   return 'Pause session pack payments, save that change, then update the other soft-launch controls. Checkout must stay frozen while live platform settings change.';
 }
+
+// Pack checkout without class booking leaves members able to pay while Ops
+// Health marks the launch switches unsafe. Pause payments first, or enable
+// bookings in the same save before opening checkout.
+export function paymentActivationRequiresBookings(settings = {}) {
+  return settings?.payments_enabled === true && settings?.bookings_enabled !== true;
+}
+
+export function paymentActivationRequiresBookingsMessage() {
+  return 'Enable Bookings before opening session pack checkout. Members need class booking available when pack purchases go live.';
+}

@@ -31,3 +31,22 @@ test('owner Members metric uses a directory total that filtered loads cannot ove
   );
   assert.doesNotMatch(source, /var memberCount: Int \{ members\.first\?\.total_count/);
 });
+
+test('owner Waitlisted and Follow-ups metrics use the RPC ceiling instead of the default page of 20', async () => {
+  const source = await readFile(adminStoreURL, 'utf8');
+  const refresh = source.slice(
+    source.indexOf('func refresh(session: AuthSession)'),
+    source.indexOf('func refreshHealth(session: AuthSession)'),
+  );
+  const bookingSnapshot = source.slice(
+    source.indexOf('private func refreshBookingOperationsSnapshot'),
+    source.indexOf('func saveLegacyBookingNotes'),
+  );
+
+  assert.match(refresh, /adminWaitlist\(session: session, limit: 50\)/);
+  assert.match(refresh, /adminFollowUps\(session: session, limit: 50\)/);
+  assert.doesNotMatch(refresh, /adminWaitlist\(session: session\)(?!\s*,)/);
+  assert.doesNotMatch(refresh, /adminFollowUps\(session: session\)(?!\s*,)/);
+  assert.match(bookingSnapshot, /adminWaitlist\(session: session, limit: 50\)/);
+  assert.doesNotMatch(bookingSnapshot, /adminWaitlist\(session: session\)(?!\s*,)/);
+});

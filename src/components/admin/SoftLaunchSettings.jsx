@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import {
+  activateSessionPackPayments,
+  getCommerceConfigurationHealth,
+  getSoftLaunchSettings,
+  updateSoftLaunchSettings,
+  getDefaultSettings,
+  memberBookingSwitchGuardReady,
+} from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import {
   launchSettingsChanged,
   livePaymentSettingsRequirePause,
   normalizeLaunchSettings,
+  paymentActivationRequiresBookings,
+  paymentActivationRequiresBookingsMessage,
   paymentSettingsPauseRequiredMessage,
 } from '@/lib/launchSettings';
 
@@ -87,6 +96,27 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           variant: 'destructive',
         });
         return;
+      }
+      if (paymentActivationRequiresBookings(normalized)) {
+        toast({
+          title: 'Enable bookings first',
+          description: paymentActivationRequiresBookingsMessage(),
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (normalized.bookings_enabled) {
+        setSaving(true);
+        const bookingGuardReady = await memberBookingSwitchGuardReady();
+        setSaving(false);
+        if (!bookingGuardReady) {
+          toast({
+            title: 'Bookings stay paused',
+            description: 'Operations Health must verify the member booking-switch guard before bookings can go live.',
+            variant: 'destructive',
+          });
+          return;
+        }
       }
       const activatingPayments = normalized.payments_enabled && !savedSettings.payments_enabled;
       if (!activatingPayments) {

@@ -443,6 +443,17 @@ export async function getSoftLaunchSettings() {
   return data?.[0] || getDefaultSettings();
 }
 
+// Match iOS Platform Controls: bookings stay paused until Ops Health can see
+// the member booking-switch guard capability in the release contract.
+export async function memberBookingSwitchGuardReady() {
+  const { data, error } = await supabase.rpc('xert_public_capabilities');
+  if (error) {
+    if (['42883', '42P01', 'PGRST202', 'PGRST205'].includes(error.code)) return false;
+    throw new Error(error.message);
+  }
+  return (data || []).some(row => row?.capability === 'member_booking_switch_guard');
+}
+
 export function getDefaultSettings() {
   return {
     soft_launch_mode: true,
@@ -608,9 +619,20 @@ export async function getAllEvents() {
 }
 
 export async function getEventGoalCounts() {
-  const { data, error } = await supabase.from('member_event_goals').select('event_id');
-  if (error) throw new Error(error.message);
-  return (data || []).reduce((counts, goal) => {
+  // Page through every goal row. A single PostgREST select is capped by
+  // max_rows, which silently undercounts training groups and delete warnings.
+  const goals = await collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('member_event_goals')
+      .select('event_id')
+      .order('event_id', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+  return goals.reduce((counts, goal) => {
     counts[goal.event_id] = (counts[goal.event_id] || 0) + 1;
     return counts;
   }, {});

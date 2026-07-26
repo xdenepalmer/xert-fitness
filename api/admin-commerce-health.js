@@ -934,6 +934,19 @@ export default async function handler(request, response) {
       if (error.message === 'PRODUCT_PRICE_PROVISIONING_NOT_INSTALLED') {
         return json({ error: 'Install the owner Stripe Price provisioning migration. The pack remains private.' }, 503);
       }
+      if (error.message === 'PRODUCT_PRICE_LOOKUP_FAILED') {
+        return json({ error: 'This session pack could not be loaded for Stripe Price creation. Refresh pricing and try again.' }, 500);
+      }
+      if (
+        error.message === 'Stripe price does not match the product configuration.'
+        || error.message === 'Product configuration is invalid.'
+        || error?.type === 'StripeInvalidRequestError'
+        || error?.code === 'resource_missing'
+      ) {
+        return json({
+          error: 'Stripe could not prepare an exact Price for this pack amount, currency, sessions, validity, identity and mode. The pack remains private.',
+        }, 409);
+      }
       console.error('Stripe Price provisioning failed.', {
         requestId: trace.requestId,
         productId: productPriceProvision.productId,
