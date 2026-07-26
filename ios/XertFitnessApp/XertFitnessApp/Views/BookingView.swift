@@ -237,6 +237,16 @@ struct BookingView: View {
         hasKnownCreditBalance ? "\(store.creditTotal)" : "—"
     }
 
+    private var memberBookingContextIsLoading: Bool {
+        store.isSignedIn
+            && !store.unavailableDataSources.contains(.bookings)
+            && (!store.hasBootstrapped || store.isLoading)
+    }
+
+    private var memberBookingContextUnavailable: Bool {
+        store.isSignedIn && store.unavailableDataSources.contains(.bookings)
+    }
+
     private var bookingCreditStatus: String? {
         if store.unavailableDataSources.contains(.credits) {
             return hasKnownCreditBalance ? "Last known balance — pull to refresh" : "Balance unavailable — pull to refresh"
@@ -728,6 +738,36 @@ struct BookingView: View {
                 }
                 .buttonStyle(.xertGhost)
                 .accessibilityHint("Opens this booking to add it to your calendar or cancel it")
+            }
+        } else if memberBookingContextIsLoading {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(Color.xertSteel)
+                    .accessibilityHidden(true)
+                Text("Checking your booking status…")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.xertMuted)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Checking your booking status")
+        } else if memberBookingContextUnavailable {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Booking history unavailable", systemImage: "wifi.exclamationmark")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                Text("Refresh before requesting another place so XERT can check duplicates and time conflicts.")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label("Retry booking status", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.xertGhost)
+                .disabled(store.isLoading)
+                .accessibilityHint("Refreshes your bookings before another place can be requested")
             }
         } else if firstClassActivation?.matches(session.id) == true,
                   firstClassActivation?.stage == .needsCredits {

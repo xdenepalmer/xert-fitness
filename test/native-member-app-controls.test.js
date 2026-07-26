@@ -35,6 +35,17 @@ test('owner booking controls govern the native member experience and fail closed
   assert.match(booking, /Online bookings are paused/);
   assert.match(booking, /!store\.memberBookingsEnabled \|\| session\.booking_mode == "interest_only"/);
   assert.match(booking, /store\.unavailableDataSources\.contains\(\.platformSettings\)[\s\S]*Booking status unavailable/);
+  assert.match(booking, /private var memberBookingContextIsLoading: Bool \{[\s\S]*store\.isSignedIn[\s\S]*unavailableDataSources\.contains\(\.bookings\)[\s\S]*store\.hasBootstrapped \|\| store\.isLoading/);
+  assert.match(booking, /private var memberBookingContextUnavailable: Bool \{[\s\S]*store\.isSignedIn && store\.unavailableDataSources\.contains\(\.bookings\)/);
+  const sessionAction = booking.slice(
+    booking.indexOf('private func sessionAction'),
+    booking.indexOf('private func bookingActionLabel'),
+  );
+  assert.ok(sessionAction.indexOf('Manage booking') < sessionAction.indexOf('memberBookingContextIsLoading'));
+  assert.ok(sessionAction.indexOf('memberBookingContextIsLoading') < sessionAction.indexOf('memberBookingContextUnavailable'));
+  assert.ok(sessionAction.indexOf('memberBookingContextUnavailable') < sessionAction.indexOf('firstClassActivation'));
+  assert.match(sessionAction, /memberBookingContextIsLoading[\s\S]*Checking your booking status/);
+  assert.match(sessionAction, /memberBookingContextUnavailable[\s\S]*await store\.refresh\(\)[\s\S]*Retry booking status/);
   assert.match(booking, /DataAvailabilityNotice\(sources: \[\.products, \.sessions, \.platformSettings, \.credits, \.bookings\]\)/);
 
   assert.match(ownerNavigation, /case \.controls: return "Member App Controls"/);
