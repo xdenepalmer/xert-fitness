@@ -61,8 +61,11 @@ The included `Info.plist` already contains these xcconfig substitutions:
   and social links with the same optimistic locking used by the desktop manager.
   The native class desk opens live member rosters, resolves requested bookings,
   manages waitlist removals and cancellations, provides direct member contact,
-  and records complete attended/no-show roll calls atomically. Credit release,
-  capacity checks, FIFO promotion, and class completion remain server enforced.
+  records complete attended/no-show roll calls atomically, and exports a
+  timestamped launch-day CSV only from a verified roster. The export distinguishes
+  saved booking state from unsaved roll-call marks and warns owners to remove the
+  member-contact file after reconciliation. Credit release, capacity checks, FIFO
+  promotion, and class completion remain server enforced.
   A searchable full-timetable manager creates and edits class metadata, booking
   modes, capacity, visibility and delivery details; duplicates classes as future
   drafts; and uses the dedicated cancellation workflow to return credits and

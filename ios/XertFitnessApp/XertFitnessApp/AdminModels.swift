@@ -599,6 +599,62 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var activeCount: Int { requested_count + confirmed_count }
 }
 
+struct AdminClassRosterReport {
+    let operation: AdminDailyOperation
+    let members: [AdminRosterMember]
+    let attendance: AdminAttendanceDraft
+    let rosterVerifiedAt: Date
+    let generatedAt: Date
+
+    var csv: String {
+        let header = [
+            "Class", "Class start", "Coach", "Location", "Roster verified",
+            "Exported", "Member", "Email", "Phone", "Booking status",
+            "Roll call draft", "Booked"
+        ]
+        let formatter = ISO8601DateFormatter()
+        let body = members.map { member in
+            [
+                operation.title,
+                formatter.string(from: operation.start_time),
+                operation.coach_name ?? "",
+                operation.location_zone ?? "",
+                formatter.string(from: rosterVerifiedAt),
+                formatter.string(from: generatedAt),
+                member.displayName,
+                member.email ?? "",
+                member.phone ?? "",
+                member.status,
+                rollCallLabel(for: member),
+                formatter.string(from: member.booked_at)
+            ]
+            .map(Self.escape)
+            .joined(separator: ",")
+        }
+        return ([header.map(Self.escape).joined(separator: ",")] + body)
+            .joined(separator: "\n") + "\n"
+    }
+
+    private func rollCallLabel(for member: AdminRosterMember) -> String {
+        switch attendance.mark(for: member.id) {
+        case .attended: return "present"
+        case .noShow: return "no show"
+        case nil: return member.attendanceEligible ? "unmarked" : "not eligible"
+        }
+    }
+
+    private static func escape(_ value: String) -> String {
+        let trimmed = value.drop(while: { $0 == " " || $0 == "\t" || $0 == "\r" || $0 == "\n" })
+        let protected: String
+        if let first = trimmed.first, "=+-@".contains(first) {
+            protected = "'\(value)"
+        } else {
+            protected = value
+        }
+        return "\"\(protected.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
 enum AdminClassOperationalPhase: Equatable {
     case attendanceDue
     case live

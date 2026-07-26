@@ -102,6 +102,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var classRosterReadiness: [UUID: AdminMemberOnboardingSummary] = [:]
     @Published private(set) var loadedRosterSessionID: UUID?
+    @Published private(set) var loadedRosterAt: Date?
     @Published private(set) var rosterLoadErrorSessionID: UUID?
     @Published private(set) var rosterLoadErrorMessage: String?
     @Published private(set) var rosterReadinessStatusMessage: String?
@@ -1921,6 +1922,7 @@ final class AdminStore: ObservableObject {
         let canPreserveCurrent = preserveCurrent && loadedRosterSessionID == classSessionID
         if !canPreserveCurrent {
             loadedRosterSessionID = nil
+            loadedRosterAt = nil
             classRoster = []
             classRosterReadiness = [:]
         }
@@ -1934,6 +1936,7 @@ final class AdminStore: ObservableObject {
             let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
             guard rosterLoadGeneration == generation else { return false }
             loadedRosterSessionID = classSessionID
+            loadedRosterAt = Date()
             classRoster = roster
             do {
                 let summaries = try await api.adminMemberOnboardingSummaries(

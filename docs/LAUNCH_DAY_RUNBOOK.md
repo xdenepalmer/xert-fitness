@@ -33,8 +33,11 @@ the public website alone.
 8. Record the production Git SHA and the successful Codemagic iOS Verify build ID.
 9. In App Store Connect, confirm TestFlight **Beta App Description**, feedback
    email and review contact are populated before starting an external beta build.
-10. Export the launch-day class roster and store it securely for check-in continuity;
-   treat Supabase as authoritative and reconcile any offline notes after recovery.
+10. In the iOS app, open **Command Centre → Class Desk → target class**. Refresh,
+    require a current **Roster verified** timestamp, then use the share button to
+    export the class roster CSV. Store it securely for check-in continuity. The
+    **Roll call draft** column may include unsaved local marks; Supabase remains
+    authoritative. Reconcile after recovery, then delete every temporary roster copy.
 
 ## Pre-open member smoke path
 

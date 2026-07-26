@@ -5378,6 +5378,10 @@ private struct AdminClassRosterView: View {
     @State private var presentedMember: AdminMemberSummary?
     @State private var openingMemberID: UUID?
     @State private var showingAddMember = false
+    @State private var confirmingRosterExport = false
+    @State private var exportDocument: AdminClassRosterCSVDocument?
+    @State private var isExportingRoster = false
+    @State private var exportError: String?
 
     private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
     private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
@@ -5411,6 +5415,14 @@ private struct AdminClassRosterView: View {
             && assumedEnd > Date()
             && admin.addingRosterMemberID == nil
     }
+    private var canExportRoster: Bool {
+        rosterIsCurrent
+            && admin.loadedRosterAt != nil
+            && admin.loadingRosterSessionID != operation.id
+            && !loadFailed
+            && !roster.isEmpty
+            && !isBusy
+    }
     private var activeRosterMemberIDs: Set<UUID> {
         Set(roster.compactMap { member in
             ["requested", "confirmed", "waitlisted", "attended", "no_show"].contains(member.status)
@@ -5428,6 +5440,15 @@ private struct AdminClassRosterView: View {
                         .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
                     Text("\(operation.confirmed_count) confirmed · \(operation.requested_count) requested · \(operation.waitlist_count) waiting")
                         .font(.caption).foregroundStyle(Color.xertSteel)
+                    if rosterIsCurrent, let loadedAt = admin.loadedRosterAt {
+                        Label(
+                            "Roster verified \(loadedAt.formatted(date: .omitted, time: .shortened))",
+                            systemImage: "checkmark.shield.fill"
+                        )
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(loadFailed ? Color.orange : Color.green)
+                        .accessibilityIdentifier("owner.roster.verifiedAt")
+                    }
                 }
                 .listRowBackground(Color.xertInk)
             }
@@ -5675,8 +5696,38 @@ private struct AdminClassRosterView: View {
                 existingMemberIDs: activeRosterMemberIDs
             )
         }
+        .fileExporter(
+            isPresented: $isExportingRoster,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: rosterExportFilename
+        ) { result in
+            if case .failure(let error) = result {
+                exportError = error.localizedDescription
+            }
+            exportDocument = nil
+        }
+        .alert("Export failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "The class roster could not be exported.")
+        }
         .navigationBarBackButtonHidden(isDirty)
         .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    confirmingRosterExport = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(!canExportRoster)
+                .accessibilityLabel("Export verified class roster")
+                .accessibilityHint("Exports member contact details and the current roll call draft")
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     Task { await loadRoster(preserveCurrent: true) }
@@ -5734,6 +5785,16 @@ private struct AdminClassRosterView: View {
             Button("Review roll call", role: .cancel) {}
         } message: {
             Text("Record \(attendanceSummary.attended) present and \(attendanceSummary.noShow) no show, complete the class, and remove it from the public timetable. Every booking request has been resolved.")
+        }
+        .confirmationDialog(
+            "Export this verified roster?",
+            isPresented: $confirmingRosterExport,
+            titleVisibility: .visible
+        ) {
+            Button("Export roster CSV") { prepareRosterExport() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This file contains member contact details. Store it securely and delete it after class-day reconciliation. Unsaved attendance marks are labelled as a roll call draft.")
         }
         .confirmationDialog(
             "Discard unfinished roll call?",
@@ -5925,6 +5986,38 @@ private struct AdminClassRosterView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private var rosterExportFilename: String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let slug = operation.title.lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .unicodeScalars
+            .filter { allowed.contains($0) }
+            .map(String.init)
+            .joined()
+            .prefix(48)
+        let rawDay = operation.start_time.formatted(
+            .dateTime.year().month(.twoDigits).day(.twoDigits)
+        )
+        let day = rawDay.unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
+        return "xert-\(day)-\(slug)-roster"
+    }
+
+    private func prepareRosterExport() {
+        guard canExportRoster, let loadedAt = admin.loadedRosterAt else { return }
+        let report = AdminClassRosterReport(
+            operation: operation,
+            members: roster,
+            attendance: attendance,
+            rosterVerifiedAt: loadedAt,
+            generatedAt: Date()
+        )
+        exportDocument = AdminClassRosterCSVDocument(csv: report.csv)
+        isExportingRoster = true
+    }
+
     private func requestDismiss() {
         if isDirty {
             confirmingDiscard = true
@@ -5946,6 +6039,25 @@ private struct AdminClassRosterView: View {
             attendance = AdminAttendanceDraft(roster: admin.classRoster)
             attendanceBaseline = attendance
         }
+    }
+}
+
+private struct AdminClassRosterCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
     }
 }
 

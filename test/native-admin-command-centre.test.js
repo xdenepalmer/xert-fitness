@@ -1392,6 +1392,34 @@ test('native class rosters surface privacy-safe readiness and reject stale class
   assert.doesNotMatch(roster, /contact_name|contact_phone|relationship/);
 });
 
+test('native class desk exports only a verified roster with explicit privacy and draft labels', async () => {
+  const [view, models, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+  const roster = view.slice(
+    view.indexOf('private struct AdminClassRosterView'),
+    view.indexOf('private struct AdminScheduleView'),
+  );
+
+  assert.match(models, /struct AdminClassRosterReport/);
+  assert.match(models, /"Roster verified"[\s\S]*"Roll call draft"/);
+  assert.match(models, /"=\+-@"\.contains\(first\)/);
+  assert.match(store, /@Published private\(set\) var loadedRosterAt: Date\?/);
+  assert.match(store, /loadedRosterSessionID = classSessionID[\s\S]*loadedRosterAt = Date\(\)/);
+  assert.match(roster, /private var canExportRoster: Bool/);
+  assert.match(roster, /rosterIsCurrent[\s\S]*admin\.loadedRosterAt != nil/);
+  assert.match(roster, /admin\.loadingRosterSessionID != operation\.id[\s\S]*!loadFailed/);
+  assert.match(roster, /accessibilityIdentifier\("owner\.roster\.verifiedAt"\)/);
+  assert.match(roster, /accessibilityLabel\("Export verified class roster"\)/);
+  assert.match(roster, /This file contains member contact details/);
+  assert.match(roster, /Unsaved attendance marks are labelled as a roll call draft/);
+  assert.match(roster, /AdminClassRosterReport\([\s\S]*attendance: attendance/);
+  assert.match(roster, /\.fileExporter\([\s\S]*contentType: \.commaSeparatedText/);
+  assert.match(roster, /private struct AdminClassRosterCSVDocument: FileDocument/);
+});
+
 test('high-consequence owner drafts share command-centre exit protection', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const taskSheet = view.slice(

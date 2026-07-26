@@ -4087,6 +4087,69 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(draft.eligibleIDs, [secondID])
     }
 
+    func testAdminClassRosterReportExportsVerifiedRosterAndDraftAttendanceSafely() {
+        let start = Date(timeIntervalSince1970: 1_784_500_000)
+        let verified = Date(timeIntervalSince1970: 1_784_499_000)
+        let generated = Date(timeIntervalSince1970: 1_784_499_300)
+        let presentID = UUID()
+        let requestedID = UUID()
+        let present = AdminRosterMember(
+            booking_id: presentID,
+            member_id: UUID(),
+            full_name: "=2+2",
+            email: "present@example.com",
+            phone: "0400 000 001",
+            status: "confirmed",
+            booked_at: start.addingTimeInterval(-3_600)
+        )
+        let requested = AdminRosterMember(
+            booking_id: requestedID,
+            member_id: UUID(),
+            full_name: "Requested Member",
+            email: "requested@example.com",
+            phone: nil,
+            status: "requested",
+            booked_at: start.addingTimeInterval(-1_800)
+        )
+        var attendance = AdminAttendanceDraft(roster: [present, requested])
+        attendance.set(.attended, for: presentID)
+        let operation = AdminDailyOperation(
+            session_id: UUID(),
+            title: "XERT Engine",
+            class_type: "XERT Engine",
+            start_time: start,
+            end_time: start.addingTimeInterval(3_600),
+            status: "published",
+            capacity: 12,
+            coach_name: "Dene",
+            location_zone: "Main floor",
+            booking_mode: "instant_book",
+            requested_count: 1,
+            confirmed_count: 1,
+            waitlist_count: 0,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 0,
+            attendance_due: false
+        )
+
+        let csv = AdminClassRosterReport(
+            operation: operation,
+            members: [present, requested],
+            attendance: attendance,
+            rosterVerifiedAt: verified,
+            generatedAt: generated
+        ).csv
+
+        XCTAssertTrue(csv.contains("\"Roster verified\""))
+        XCTAssertTrue(csv.contains("\"Roll call draft\""))
+        XCTAssertTrue(csv.contains("\"present\""))
+        XCTAssertTrue(csv.contains("\"not eligible\""))
+        XCTAssertTrue(csv.contains("\"'=2+2\""))
+        XCTAssertFalse(csv.contains("\",\"=2+2\""))
+        XCTAssertEqual(csv.split(separator: "\n").count, 3)
+    }
+
     func testAdminClassDraftHydratesLegacyNullableMetadata() {
         let start = Date().addingTimeInterval(86_400)
         let session = AdminClassSession(
