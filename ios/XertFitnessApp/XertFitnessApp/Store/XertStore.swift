@@ -37,6 +37,7 @@ final class XertStore: ObservableObject {
     @Published var updatingEventGoalID: UUID?
     @Published var dismissingAnnouncementID: UUID?
     @Published var isDeletingAccount = false
+    @Published private(set) var isSigningOut = false
     @Published var isRequestingPrivateSession = false
     @Published var isRequestingClassInterest = false
     @Published var isSubmittingInterest = false
@@ -522,6 +523,9 @@ final class XertStore: ObservableObject {
     }
 
     func signOut() {
+        // Double-tap before the button disables can race two unregister/sign-out Tasks.
+        guard !isSigningOut else { return }
+        isSigningOut = true
         let currentSession = authSession
         let userID = currentSession?.user?.id
         let pushToken = PushDeviceTokenStore.load()
@@ -532,6 +536,7 @@ final class XertStore: ObservableObject {
         KeychainStore.clearSession()
         XertHaptics.play(.softImpact)
         Task {
+            defer { isSigningOut = false }
             await ClassReminderScheduler.shared.clearAll()
             if let currentSession {
                 if let pushToken {
@@ -555,6 +560,8 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func deleteAccount() async -> Bool {
+        // Confirmation can fire twice before isDeletingAccount disables the control.
+        guard !isDeletingAccount else { return false }
         errorMessage = nil
         isDeletingAccount = true
         defer { isDeletingAccount = false }

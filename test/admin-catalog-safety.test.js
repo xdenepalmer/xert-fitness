@@ -58,6 +58,18 @@ test('coach and event editors lock save/delete against same-paint double submits
   assert.match(events, /<EventEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
 });
 
+test('product create/save/provision lock against same-paint double submits', () => {
+  assert.match(products, /const saveLockRef = useRef\(false\)/);
+  assert.match(products, /if \(saveLockRef\.current \|\| saving \|\| provisioning\) return/);
+  assert.match(products, /saveLockRef\.current = true/);
+  assert.match(products, /const provisionLockRef = useRef\(false\)/);
+  assert.match(products, /if \(provisionLockRef\.current \|\| provisioning \|\| saving\) return/);
+  assert.match(products, /provisionLockRef\.current = true/);
+  assert.match(products, /const createLockRef = useRef\(false\)/);
+  assert.match(products, /if \(createLockRef\.current \|\| saving\) return/);
+  assert.match(products, /createLockRef\.current = true/);
+});
+
 test('all catalog editors protect drafts locally and through admin navigation', () => {
   const classCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
   const members = read('../src/components/admin/MembersManager.jsx');

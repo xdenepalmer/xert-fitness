@@ -107,6 +107,9 @@ export default function Account() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  // Disabled Delete only re-renders after paint — lock before await so a
+  // double-confirm cannot fire two delete-account API calls.
+  const deleteAccountLockRef = useRef(false);
   const [memberReadiness, setMemberReadiness] = useState(null);
   const [readinessForm, setReadinessForm] = useState(emptyReadinessForm);
   const [adultEligibilityConfirmed, setAdultEligibilityConfirmed] = useState(false);
@@ -583,6 +586,8 @@ export default function Account() {
   };
 
   const handleDeleteAccount = async () => {
+    if (deleteAccountLockRef.current || deletingAccount) return;
+    deleteAccountLockRef.current = true;
     setDeletingAccount(true);
     try {
       await deleteMyAccount(session?.access_token);
@@ -592,6 +597,7 @@ export default function Account() {
       toast({ title: 'Could not delete account', description: error.message, variant: 'destructive' });
     } finally {
       setDeletingAccount(false);
+      deleteAccountLockRef.current = false;
     }
   };
 

@@ -22,9 +22,22 @@ test('public booking switch gate migration and mirror stay aligned', async () =>
 
 test('soft-launch timetable only offers booking CTAs when bookings_enabled is true', async () => {
   const page = await read('../src/pages/SoftLaunchTimetable.jsx');
+  const footer = await read('../src/components/public/PublicFooter.jsx');
   assert.match(page, /bookingsEnabled=\{settings\.bookings_enabled === true\}/);
   assert.match(page, /settings\.bookings_enabled === true && <StickyMobileCTA/);
   assert.match(page, /settings\.bookings_enabled !== true/);
+  assert.match(page, /<PublicFooter showBookCta=\{settings\.bookings_enabled === true\}/);
+  assert.match(footer, /showBookCta = true/);
+  assert.match(footer, /Register interest/);
+});
+
+test('public /booking timetable only offers book CTAs when bookings_enabled is true', async () => {
+  const page = await read('../src/pages/Booking.jsx');
+  assert.match(page, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);
+  assert.match(page, /bookingAvailabilityLoaded && !bookingsEnabled/);
+  assert.match(page, /Online bookings are paused/);
+  assert.match(page, /isInterestOnly \|\| !bookingsEnabled/);
+  assert.match(page, /if \(!bookingsEnabled\)/);
 });
 
 test('member booking switch still gates signed-in session_bookings', async () => {

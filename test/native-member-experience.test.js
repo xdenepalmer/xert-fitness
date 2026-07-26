@@ -38,6 +38,12 @@ test('native account prioritizes member activity and fully supports keyboard and
   assert.ok(bookingIndex >= 0 && bookingIndex < detailsIndex);
   assert.ok(detailsIndex < signOutIndex);
 
+  const signOutSection = source.slice(
+    source.indexOf('private var signOutSection'),
+    source.indexOf('private var accountControlSection'),
+  );
+  assert.match(signOutSection, /\.disabled\(store\.isSigningOut \|\| store\.isDeletingAccount\)/);
+
   assert.match(source, /@AppStorage\(XertHapticPreference\.preferenceKey\)/);
   assert.match(source, /Toggle\("Haptic feedback"/);
   assert.match(source, /if enabled \{ XertHaptics\.play\(\.lightImpact\) \}/);

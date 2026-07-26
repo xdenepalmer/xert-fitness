@@ -786,6 +786,7 @@ struct AccountView: View {
             Button("Sign Out", role: .destructive) {
                 store.signOut()
             }
+            .disabled(store.isSigningOut || store.isDeletingAccount)
             .buttonStyle(.xertGhost)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))

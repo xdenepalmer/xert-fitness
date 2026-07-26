@@ -22,7 +22,7 @@ const NAV_LINKS = [
   { to: '/contact', label: 'Contact' },
 ];
 
-export default function PublicFooter() {
+export default function PublicFooter({ showBookCta = true }) {
   const contact = useSiteContent('contact', CONTACT_DEFAULTS);
   const { isAdmin } = useSupabaseAuth();
 
@@ -75,10 +75,17 @@ export default function PublicFooter() {
                 {contact.address}
               </p>
             </div>
-            <Link to="/booking"
-              className="xert-btn-primary inline-flex items-center px-5 py-3 font-display text-sm uppercase tracking-wide">
-              Book Your First Session
-            </Link>
+            {showBookCta ? (
+              <Link to="/booking"
+                className="xert-btn-primary inline-flex items-center px-5 py-3 font-display text-sm uppercase tracking-wide">
+                Book Your First Session
+              </Link>
+            ) : (
+              <a href="/#eoi"
+                className="xert-btn-ghost inline-flex items-center px-5 py-3 font-display text-sm uppercase tracking-wide">
+                Register interest
+              </a>
+            )}
           </div>
         </div>
 

@@ -20,6 +20,14 @@ test('requires an explicit destructive account deletion confirmation', () => {
   assert.equal(hasDeleteAccountConfirmation(null), false);
 });
 
+test('member account delete confirmation locks against same-paint double submits', async () => {
+  const account = await readFile(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8');
+  assert.match(account, /const deleteAccountLockRef = useRef\(false\)/);
+  assert.match(account, /if \(deleteAccountLockRef\.current \|\| deletingAccount\) return/);
+  assert.match(account, /deleteAccountLockRef\.current = true/);
+  assert.match(account, /disabled=\{deletingAccount\}[\s\S]*onClick=\{\(\) => void handleDeleteAccount\(\)\}/);
+});
+
 test('account deletion returns a fixed error string and logs the real cause behind the trace', async () => {
   // This endpoint was the only one echoing error.message verbatim.
   const source = await readFile(new URL('../api/delete-account.js', import.meta.url), 'utf8');

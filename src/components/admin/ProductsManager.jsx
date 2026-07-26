@@ -35,6 +35,10 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   const [saving, setSaving] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [confirmProvision, setConfirmProvision] = useState(false);
+  // Disabled Save only re-renders after paint — lock before await so a double-click
+  // cannot race two Stripe-aware updates (or two price provisions) on the same pack.
+  const saveLockRef = useRef(false);
+  const provisionLockRef = useRef(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const dirty = Object.keys(baseline).some(key => form[key] !== baseline[key]);
   const dirtyRef = useRef(dirty);
@@ -69,6 +73,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   }
 
   const handleSave = async () => {
+    if (saveLockRef.current || saving || provisioning) return;
     let updates;
     try {
       updates = normalizeProductAdminInput(form);
@@ -80,6 +85,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
       toast({ title: 'Pack is not ready for sale', description: activationError, variant: 'destructive' });
       return;
     }
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const saved = await updateProduct(product.id, updates, baselineProduct.updated_at);
@@ -95,10 +101,13 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
   const provisionPrice = async () => {
+    if (provisionLockRef.current || provisioning || saving) return;
+    provisionLockRef.current = true;
     setProvisioning(true);
     try {
       const saved = await provisionProductPrice(product.id, baselineProduct.updated_at, 'CREATE STRIPE PRICE');
@@ -113,6 +122,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
       toast({ title: 'Stripe Price not linked', description: error.message, variant: 'destructive' });
     } finally {
       setProvisioning(false);
+      provisionLockRef.current = false;
     }
   };
 
@@ -229,6 +239,8 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Same-paint Create pack double-click must not mint two catalogue rows.
+  const createLockRef = useRef(false);
   const set = (field, value) => setForm(current => ({ ...current, [field]: value }));
   const dirty = Object.keys(baseline).some(key => form[key] !== baseline[key]);
 
@@ -256,6 +268,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
   }, [requestClose]);
 
   const save = async () => {
+    if (createLockRef.current || saving) return;
     let product;
     try {
       product = normalizeProductCreateInput(form);
@@ -263,6 +276,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
       toast({ title: 'Check this pack', description: error.message, variant: 'destructive' });
       return;
     }
+    createLockRef.current = true;
     setSaving(true);
     try {
       const created = await createProduct(product);
@@ -273,6 +287,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
       toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      createLockRef.current = false;
     }
   };
 

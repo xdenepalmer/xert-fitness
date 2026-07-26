@@ -47,6 +47,9 @@ export default function Booking() {
   const [myBookings, setMyBookings] = useState([]);
   const [credits, setCredits] = useState(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  // Fail closed: Book CTAs stay off until launch settings confirm bookings_enabled.
+  const [bookingsEnabled, setBookingsEnabled] = useState(false);
+  const [bookingAvailabilityLoaded, setBookingAvailabilityLoaded] = useState(false);
   // Default to hidden: prices stay "Coming soon" until settings confirm otherwise.
   const [comingSoon, setComingSoon] = useState(true);
   const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
@@ -84,9 +87,13 @@ export default function Booking() {
     apply(results[0], 'Session packs', setProducts, []);
     apply(results[1], 'Timetable', setSessions, []);
     apply(results[2], 'Pack checkout', setPaymentsEnabled, false);
-    // On failure the fallback keeps pricing hidden rather than leaking amounts.
-    apply(results[3], 'Launch settings', s => setComingSoon(pricesComingSoon(s)), { prices_coming_soon: true });
+    // On failure the fallback keeps pricing hidden and bookings paused (iOS parity).
+    apply(results[3], 'Launch settings', settings => {
+      setComingSoon(pricesComingSoon(settings));
+      setBookingsEnabled(settings?.bookings_enabled === true);
+    }, { prices_coming_soon: true, bookings_enabled: false });
     setPaymentAvailabilityLoaded(true);
+    setBookingAvailabilityLoaded(true);
     if (session) {
       apply(results[4], 'Credits', setCredits, null);
       apply(results[5], 'Your bookings', setMyBookings, []);
@@ -171,6 +178,13 @@ export default function Booking() {
   };
 
   const handleBook = async (s) => {
+    if (!bookingsEnabled) {
+      toast({
+        title: 'Online bookings are paused',
+        description: 'Browse the timetable and register interest. XERT will follow up about your place.',
+      });
+      return;
+    }
     if (!session) {
       toast({ title: 'Sign in to book', description: 'Create a free account, grab a pack, and book in seconds.' });
       navigate('/login');
@@ -356,6 +370,17 @@ export default function Booking() {
             <p className="font-body text-sm mb-8" style={{ color: 'rgba(209,221,230,0.55)' }}>
               Booking uses one class credit per session. All sessions are scalable to your current level.
             </p>
+            {bookingAvailabilityLoaded && !bookingsEnabled && (
+              <div role="status" className="mb-6 flex items-start gap-3 border border-xert-steel/30 bg-xert-steel/10 p-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-xert-steel" />
+                <div>
+                  <p className="font-display text-sm uppercase text-xert-offwhite">Online bookings are paused</p>
+                  <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/60">
+                    Browse the timetable and register interest. XERT will follow up about your place.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {loading ? (
               <div role="status" className="space-y-8">
@@ -444,7 +469,7 @@ export default function Booking() {
                                 {full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
                               </span>
                             )}
-                            {isInterestOnly ? (
+                            {isInterestOnly || !bookingsEnabled ? (
                               <Link to="/timetable"
                                 className="xert-btn-ghost inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide shrink-0">
                                 Register interest

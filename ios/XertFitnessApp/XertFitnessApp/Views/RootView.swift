@@ -35,6 +35,7 @@ struct RootView: View {
             if isPrivacyLocked {
                 PrivacyLockView(
                     isUnlocking: isUnlocking,
+                    isSigningOut: store.isSigningOut,
                     errorMessage: privacyLockError,
                     onUnlock: { Task { await unlockApp() } },
                     onSignOut: signOutFromLock
@@ -2251,6 +2252,7 @@ private struct XertWorkspaceOrderEditor: View {
 
 private struct PrivacyLockView: View {
     let isUnlocking: Bool
+    let isSigningOut: Bool
     let errorMessage: String?
     let onUnlock: () -> Void
     let onSignOut: () -> Void
@@ -2292,11 +2294,11 @@ private struct PrivacyLockView: View {
                     }
                 }
                 .buttonStyle(.xertPrimary)
-                .disabled(isUnlocking)
+                .disabled(isUnlocking || isSigningOut)
 
-                Button("Sign Out", role: .destructive, action: onSignOut)
+                Button(isSigningOut ? "Signing Out…" : "Sign Out", role: .destructive, action: onSignOut)
                     .buttonStyle(.xertGhost)
-                    .disabled(isUnlocking)
+                    .disabled(isUnlocking || isSigningOut)
             }
             .frame(maxWidth: 360)
             Spacer()

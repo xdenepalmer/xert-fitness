@@ -266,7 +266,8 @@ export default function SoftLaunchTimetable() {
         </DialogContent>
       </Dialog>
 
-      <PublicFooter />
+      {/* Footer "Book" CTA also contradicts the soft-launch pause when bookings are off. */}
+      <PublicFooter showBookCta={settings.bookings_enabled === true} />
       {/* Sticky "Book" CTA contradicts the soft-launch pause when bookings are off. */}
       {settings.bookings_enabled === true && <StickyMobileCTA />}
     </div>

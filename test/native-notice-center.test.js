@@ -61,6 +61,9 @@ test('native sign-out clears local push registration and retries failed unregist
   assert.match(signOut, /clearLocalPushRegistration\(\)/);
   assert.match(store, /PushDeviceTokenStore\.clear\(\)/);
   assert.match(store, /unregisterForRemoteNotifications\(\)/);
+  assert.match(signOut, /guard !isSigningOut else \{ return \}/);
+  assert.match(signOut, /isSigningOut = true/);
+  assert.match(signOut, /defer \{ isSigningOut = false \}/);
   assert.match(signOut, /PendingPushUnregisterStore\.save\(/);
   assert.match(store, /func deleteAccount[\s\S]*clearLocalPushRegistration\(\)/);
   assert.match(store, /flushPendingPushUnregister\(\)/);
@@ -86,6 +89,7 @@ test('native sign-out and account deletion purge member-linked UserDefaults stat
   );
 
   assert.match(signOut, /purgeLocalMemberState\(userID: userID\)/);
+  assert.match(deleteAccount, /guard !isDeletingAccount else \{ return false \}/);
   assert.match(deleteAccount, /purgeLocalMemberState\(userID: userID\)/);
   assert.match(purge, /PendingCheckoutStore\.clear\(\)/);
   assert.match(purge, /ClassReminderPreference\.setEnabled\(false\)/);

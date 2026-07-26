@@ -2,7 +2,22 @@
 
 ## Morning owner briefing
 
+**Still shipping; apply through latest migration timestamp**
+`20260726115000_waitlist_skip_notice_accuracy.sql` (**26115**). This latest
+batch is **app-only** (no new SQL) — tip commit on
+`cursor/xert-audit-continuation-8c8e` after `38b5a4d` (see git log). Staff
+roles were **not** built.
+
 **What was made safer overnight (plain English)**
+- Session pack Create / Save / Stripe Price provision cannot double-fire on the
+  same paint (same lock pattern as Events / Coaches).
+- Soft Launch timetable footer + sticky Book CTAs stay off while bookings are
+  paused; public `/booking` timetable shows Register interest instead of Book /
+  waitlist when `bookings_enabled` is false (iPhone parity).
+- Member Account delete confirmation cannot double-submit the delete API (web);
+  iPhone deleteAccount ignores a second in-flight call.
+- iPhone Sign Out ignores double-tap (Account + privacy lock) so unregister /
+  remote sign-out cannot race twice.
 - Notice dismiss on web + iPhone no longer races: one dismiss at a time, and an
   earlier finish cannot clear a newer in-flight spinner.
 - Pack purchase return URLs that disagree with the local Stripe handoff fail
@@ -33,13 +48,15 @@
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
    `20260726115000_waitlist_skip_notice_accuracy.sql` (**26115** — full list +
-   command examples below). This batch is app-only (no new SQL).
+   command examples below). Latest tip is app-only (no new SQL).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
    `member_onboarding_booking_gate` (26114*) and `waitlist_skip_notice_accuracy`
    (26115*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked);
-   enable bookings only when Ops Health shows the booking-switch guard.
+   enable bookings only when Ops Health shows the booking-switch guard;
+   with bookings paused, `/timetable` footer + sticky Book stay off and
+   `/booking` class rows show Register interest.
 
 ---
 
@@ -182,6 +199,17 @@ No new migration for this batch.
 
 No new migration for this batch.
 
+### 16. This batch — pack create locks, paused booking CTAs, account delete / iOS sign-out
+| Area | Defect | Fix |
+|---|---|---|
+| ProductsManager | Create / Save / Stripe Price provision used only React `saving` state — same-paint double-click could mint two packs or race two Stripe updates | `createLockRef` / `saveLockRef` / `provisionLockRef` (Events/Coaches pattern) |
+| Soft Launch timetable | Footer still offered “Book Your First Session” while bookings were paused (sticky was already gated) | `PublicFooter showBookCta={bookings_enabled}` → Register interest when paused |
+| Public `/booking` timetable | Class rows still showed Book / waitlist CTAs when `bookings_enabled` was false (iOS already Register interest) | Fail-closed `bookingsEnabled`; paused banner; Register interest CTAs; `handleBook` refuses |
+| Member Account delete | Confirm Delete could fire twice before `deletingAccount` re-rendered | `deleteAccountLockRef` (web); iOS `deleteAccount` guards `!isDeletingAccount` |
+| iOS sign-out | Double-tap raced two unregister / remote sign-out Tasks | `isSigningOut` guard + disable Account / privacy-lock Sign Out |
+
+No new migration for this batch (app-only tip after `38b5a4d`).
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -293,3 +321,9 @@ show `installed = true` and `release_ready = true`, including
     “No consented injury notes”; drawer key resets per lead.
 20. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.
+21. **Paused booking CTAs** — With bookings off: `/timetable` footer is Register
+    interest (not Book); sticky Book hidden; `/booking` class rows are Register
+    interest with the paused banner.
+22. **Pack create / Account delete / iOS Sign Out** — Double-click Create pack
+    and Delete account confirm stay single-flight; iPhone Sign Out ignores a
+    second tap.

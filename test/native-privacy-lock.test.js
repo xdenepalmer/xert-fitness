@@ -20,7 +20,9 @@ test('native privacy lock protects signed-in tabs across app lifecycle changes',
   assert.match(root, /if isPrivacyLocked[\s\S]*PrivacyLockView[\s\S]*else \{[\s\S]*memberTabs/);
   assert.match(root, /guard phase == \.active else[\s\S]*isPrivacyUnlocked = false/);
   assert.match(root, /guard isPrivacyLocked, !isUnlocking, scenePhase == \.active/);
-  assert.match(root, /Button\("Sign Out", role: \.destructive/);
+  assert.match(root, /Button\(isSigningOut \? "Signing Out…" : "Sign Out", role: \.destructive/);
+  assert.match(root, /isSigningOut: store\.isSigningOut/);
+  assert.match(root, /\.disabled\(isUnlocking \|\| isSigningOut\)/);
   assert.ok(account.includes('"Require \\(authenticationSupport.methodName)"'));
   assert.match(account, /@AppStorage\(AppPrivacyLock\.preferenceKey\)/);
   assert.match(plist, /NSFaceIDUsageDescription/);
