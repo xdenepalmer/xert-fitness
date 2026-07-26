@@ -9353,12 +9353,33 @@ private struct AdminLeadDetailView: View {
             Section("Contact") {
                 detailRow("Name", lead.displayName)
                 if let email = nonBlank(lead.email), let url = URL(string: "mailto:\(email)") {
-                    Link(destination: url) { Label(email, systemImage: "envelope") }
+                    Link(destination: url) {
+                        Label(email, systemImage: "envelope")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
                 }
                 if let phone = nonBlank(lead.phone), let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                    Link(destination: url) { Label(phone, systemImage: "phone") }
+                    Link(destination: url) {
+                        Label(phone, systemImage: "phone")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
                 }
                 detailRow("Submitted", lead.created_at.formatted(date: .abbreviated, time: .shortened))
+                if status == "new" {
+                    Button(action: logContacted) {
+                        Label(
+                            isSaving ? "Saving contact..." : "Log contacted and save",
+                            systemImage: "checkmark.circle.fill"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
+                    .disabled(!mutationAllowed || isSaving || notes.count > 5_000)
+                    .accessibilityHint(
+                        "Moves this lead out of the new enquiry queue and saves the current owner notes"
+                    )
+                }
             }
 
             Section("Application") {
@@ -9455,6 +9476,25 @@ private struct AdminLeadDetailView: View {
             confirmingDiscard = true
         } else if !isSaving {
             dismiss()
+        }
+    }
+
+    private func logContacted() {
+        guard mutationAllowed, !isSaving, notes.count <= 5_000 else { return }
+        notesFocused = false
+        Task {
+            if await admin.saveLead(
+                session: session,
+                pipeline: pipeline,
+                lead: lead,
+                status: "contacted",
+                notes: notes
+            ) {
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
         }
     }
 

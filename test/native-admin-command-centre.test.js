@@ -374,6 +374,11 @@ test('native owner overview counts fresh lead work without downloading lead hist
   assert.match(view, /if status == "new"[\s\S]*matches\.sorted \{ \$0\.created_at < \$1\.created_at \}/);
   assert.match(view, /owner\.leads\.overdueSLA/);
   assert.match(view, /private var pipelinePicker: some View[\s\S]*dynamicTypeSize\.isAccessibilitySize[\s\S]*pickerStyle\(\.menu\)[\s\S]*pickerStyle\(\.segmented\)/);
+  assert.match(store, /refreshLeadPipelineAfterMutation[\s\S]*async let pipelineRequest = api\.adminLeads[\s\S]*async let countRequest = api\.adminLeadActionCounts/);
+  assert.match(store, /leadActionCounts = try await countRequest[\s\S]*refreshUnavailableSources\.removeAll \{ \$0 == "lead actions" \}/);
+  assert.match(store, /case \.ready:[\s\S]*operationalQueueState = \.partial\(unavailableSources: \["lead actions"\]\)/);
+  assert.match(view, /Log contacted and save[\s\S]*private func logContacted\(\)[\s\S]*status: "contacted"/);
+  assert.match(view, /mailto:[\s\S]*minHeight: 44[\s\S]*tel:[\s\S]*minHeight: 44/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {

@@ -1562,14 +1562,45 @@ final class AdminStore: ObservableObject {
         pipeline: AdminLeadPipeline,
         completedAction: String
     ) async {
+        async let pipelineRequest = api.adminLeads(session: session, pipeline: pipeline)
+        async let countRequest = api.adminLeadActionCounts(session: session)
+
         do {
-            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            leadsByPipeline[pipeline] = try await pipelineRequest
             loadedLeadPipelines.insert(pipeline)
             unavailableLeadPipelines.remove(pipeline)
             leadPipelineStatusMessage = nil
         } catch {
             unavailableLeadPipelines.insert(pipeline)
             leadPipelineStatusMessage = "\(completedAction), but the latest pipeline could not be loaded. Refresh before making another change."
+        }
+
+        do {
+            leadActionCounts = try await countRequest
+            loadedSources.insert("lead actions")
+            refreshUnavailableSources.removeAll { $0 == "lead actions" }
+            if case .partial(let unavailableSources) = operationalQueueState {
+                let remaining = unavailableSources.filter { $0 != "lead actions" }
+                operationalQueueState = remaining.isEmpty
+                    ? .ready
+                    : .partial(unavailableSources: remaining)
+            }
+        } catch {
+            if !refreshUnavailableSources.contains("lead actions") {
+                refreshUnavailableSources.append("lead actions")
+            }
+            switch operationalQueueState {
+            case .partial(let unavailableSources):
+                if !unavailableSources.contains("lead actions") {
+                    operationalQueueState = .partial(
+                        unavailableSources: unavailableSources + ["lead actions"]
+                    )
+                }
+            case .ready:
+                operationalQueueState = .partial(unavailableSources: ["lead actions"])
+            case .idle, .loading:
+                break
+            }
         }
     }
 
