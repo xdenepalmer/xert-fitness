@@ -84,7 +84,8 @@ with required (capability, migration) as (
     ('session_capacity_concurrency_guard', 'src/supabase/session_capacity_concurrency_guard.sql'),
     ('soft_launch_switch_authz', 'src/supabase/soft_launch_switch_authz.sql'),
     ('booking_credit_release_clears_batch', 'src/supabase/booking_credit_release_clears_batch.sql'),
-    ('roll_call_stripe_refund_clears_credit_batch', 'src/supabase/roll_call_stripe_refund_clears_credit_batch.sql')
+    ('roll_call_stripe_refund_clears_credit_batch', 'src/supabase/roll_call_stripe_refund_clears_credit_batch.sql'),
+    ('terminal_booking_clears_stale_credit_batch', 'src/supabase/terminal_booking_clears_stale_credit_batch.sql')
 ), readiness as (
   select
     required.capability,

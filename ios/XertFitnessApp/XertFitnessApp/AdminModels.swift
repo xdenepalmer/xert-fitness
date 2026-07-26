@@ -1204,6 +1204,7 @@ enum AdminSchemaReadiness {
         "session_capacity_concurrency_guard", "soft_launch_switch_authz",
         "booking_credit_release_clears_batch",
         "roll_call_stripe_refund_clears_credit_batch",
+        "terminal_booking_clears_stale_credit_batch",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

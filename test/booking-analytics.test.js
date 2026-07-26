@@ -5,6 +5,7 @@ import {
   bulkBookingStatusOptions,
   bookingSelectionKey,
   bookingCsvRows,
+  bookingHoldsReservedCredit,
   filterAdminBookings,
   selectedBookingKeys,
   summarizeAdminBookings,
@@ -43,6 +44,18 @@ test('exports booking identity, class, source, and credit reservation fields', (
   assert.equal(row.credit_reserved, 'Yes');
   assert.equal(row.email, 'alex@example.com');
   assert.equal(Object.hasOwn(row, 'admin_notes'), false);
+});
+
+test('credit reserved CSV matches desk badges — terminal leftovers are not reserved', () => {
+  assert.equal(bookingHoldsReservedCredit({ credit_batch_id: 'c1', status: 'requested' }), true);
+  assert.equal(bookingHoldsReservedCredit({ credit_batch_id: 'c1', status: 'cancelled' }), false);
+  assert.equal(bookingHoldsReservedCredit({ credit_batch_id: 'c1', status: 'waitlisted' }), false);
+  assert.equal(bookingHoldsReservedCredit({ credit_batch_id: null, status: 'confirmed' }), false);
+  const [cancelled] = bookingCsvRows([{
+    id: 'late-cancel', source: 'member', status: 'cancelled', full_name: 'Alex',
+    credit_batch_id: 'credit-1', createdAt: '2026-07-11T00:00:00Z',
+  }]);
+  assert.equal(cancelled.credit_reserved, 'No');
 });
 
 test('selects booking rows with collision-safe source keys', () => {

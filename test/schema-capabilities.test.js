@@ -180,6 +180,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql', 'booking_credit_release_clears_batch'],
     ['../src/supabase/roll_call_stripe_refund_clears_credit_batch.sql', 'roll_call_stripe_refund_clears_credit_batch'],
     ['../supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql', 'roll_call_stripe_refund_clears_credit_batch'],
+    ['../src/supabase/terminal_booking_clears_stale_credit_batch.sql', 'terminal_booking_clears_stale_credit_batch'],
+    ['../supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql', 'terminal_booking_clears_stale_credit_batch'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -309,6 +311,7 @@ test('read-only production check reports every release capability and migration'
     'soft_launch_switch_authz',
     'booking_credit_release_clears_batch',
     'roll_call_stripe_refund_clears_credit_batch',
+    'terminal_booking_clears_stale_credit_batch',
   ];
 
   for (const capability of capabilities) {

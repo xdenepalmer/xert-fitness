@@ -1185,8 +1185,13 @@ export async function adminSessionRoster(sessionId) {
   const { data, error } = await supabase.rpc('admin_session_roster', {
     p_session_id: sessionId
   });
-  if (error) throw new Error(error.message);
-  return data || [];
+  if (!error) return data || [];
+  // Rolling-upgrade only: missing RPC is not "empty class". Real fetch/RLS
+  // failures must surface so roll call / roster never look vacant by mistake.
+  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_session_roster.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (functionUnavailable) return [];
+  throw new Error(error.message);
 }
 
 export async function adminWaitlistOverview(limit = 20) {

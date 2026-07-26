@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` (**26120**). Tip
+`20260726121000_terminal_booking_clears_stale_credit_batch.sql` (**26121**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Terminal / waitlist leftover credit markers (**26121**): waitlist cancel/skip
+  clear leftover `credit_batch_id`; Stripe full refund also nulls the FK on
+  already-cancelled/declined/waitlisted rows that still pointed at the refunded
+  pack (late cancels). Booking ops CSV “Credit reserved” matches desk badges
+  (status-gated). Class roster refresh no longer paints an empty roster when
+  `admin_session_roster` fails; soft-launch timetable no longer shows
+  “coming soon” over a real session fetch outage.
 - Roll-call + Stripe refund clear `credit_batch_id` (**26120**): finishing a
   roll call that releases unactioned requests, and Stripe full-refund cancel of
   open requested/confirmed places, null the batch FK so cancelled rows cannot
@@ -206,21 +213,24 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` (**26120** —
+   `20260726121000_terminal_booking_clears_stale_credit_batch.sql` (**26121** —
    full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
    `soft_launch_switch_authz` (26118*),
-   `booking_credit_release_clears_batch` (26119*), and
-   `roll_call_stripe_refund_clears_credit_batch` (26120*).
+   `booking_credit_release_clears_batch` (26119*),
+   `roll_call_stripe_refund_clears_credit_batch` (26120*), and
+   `terminal_booking_clears_stale_credit_batch` (26121*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
    emergency contact writes an audit row. Demote confirmed→waitlisted clears
    `credit_batch_id`. Roll-call release of a requested place clears
    `credit_batch_id`. Stripe full refund of an open confirmed place clears
-   `credit_batch_id`. Concurrent book/confirm against a full class raises
-   `SESSION_FULL`.
+   `credit_batch_id`. Stripe full refund also clears leftover FK on a prior
+   late-cancelled place for that pack. Concurrent book/confirm against a full
+   class raises `SESSION_FULL`. Class roster load failure toasts (not empty).
+   Timetable fetch failure shows “unavailable” (not “coming soon”).
 
 ---
 
@@ -590,6 +600,18 @@ Migration / operator mirror:
 `supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql`
 ↔ `src/supabase/roll_call_stripe_refund_clears_credit_batch.sql`. Apply through **26120**.
 
+### 39. This batch — terminal credit markers, roster/timetable silent failures, CSV honesty
+| Area | Defect | Fix |
+|---|---|---|
+| Silent credit marker | Waitlist cancel/skip kept leftover `credit_batch_id`; Stripe full refund left late-cancelled rows still pointing at the refunded pack | Clear FK on waitlist terminal paths + Stripe terminal leftovers; capability `terminal_booking_clears_stale_credit_batch` (**26121**) |
+| Silent failure (ops) | Class Calendar `refreshBookings` swallowed `adminSessionRoster` errors as `[]`, so a failed RPC looked like an empty class / “roll call not ready” | Fail closed (toast); degrade to empty only when the RPC is missing |
+| Silent failure (public) | Soft-launch timetable `getClassSessions(...).catch(() => [])` painted “Timetable coming soon” over a real outage | Surface “Timetable unavailable”; settings still fail closed to defaults |
+| Ops honesty | Booking CSV `credit_reserved` was Yes whenever `credit_batch_id` was set — disagreed with desk/iOS Reserved badges after release | Status-gated via `bookingHoldsReservedCredit` (badge + CSV) |
+
+Migration / operator mirror:
+`supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql`
+↔ `src/supabase/terminal_booking_clears_stale_credit_batch.sql`. Apply through **26121**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -639,7 +661,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26120)
+### Copy-paste ordered filenames (overnight catch-up through 26121)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -663,6 +685,7 @@ supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
 supabase/migrations/20260726118000_soft_launch_switch_authz.sql
 supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
 supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
+supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -684,7 +707,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
+  -f supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -718,6 +741,7 @@ row shows `installed = true` and `release_ready = true`.
 | 17 | `20260726118000_soft_launch_switch_authz.sql` | `soft_launch_switch_authz` — payments require bookings; bookings require switch guard (DB + API) |
 | 18 | `20260726119000_booking_credit_release_clears_batch.sql` | `booking_credit_release_clears_batch` — release paths null `credit_batch_id` |
 | 19 | `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` | `roll_call_stripe_refund_clears_credit_batch` — roll-call + Stripe refund cancel null `credit_batch_id` |
+| 20 | `20260726121000_terminal_booking_clears_stale_credit_batch.sql` | `terminal_booking_clears_stale_credit_batch` — waitlist/terminal leftovers + Stripe late-cancel FK clear |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -725,15 +749,16 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`soft_launch_switch_authz`, `booking_credit_release_clears_batch`, and
-`roll_call_stripe_refund_clears_credit_batch`.
+`soft_launch_switch_authz`, `booking_credit_release_clears_batch`,
+`roll_call_stripe_refund_clears_credit_batch`, and
+`terminal_booking_clears_stale_credit_batch`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql`. Confirm readiness SQL.
+   `20260726121000_terminal_booking_clears_stale_credit_batch.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -853,3 +878,8 @@ show `installed = true` and `release_ready = true`, including
     requested/confirmed clear `credit_batch_id`; web Lead/Member Reveal ignore a
     second same-paint click; booking desk Reserved badges only for
     requested/confirmed/attended/no_show.
+38. **Terminal credit markers + roster/timetable silence + CSV honesty** — Skip /
+    cancel waitlisted clears leftover `credit_batch_id`; Stripe full refund
+    clears FK on prior late-cancelled places for that pack; class roster load
+    failure toasts instead of empty; soft-launch timetable fetch failure shows
+    unavailable (not coming soon); Booking CSV Credit reserved matches badges.

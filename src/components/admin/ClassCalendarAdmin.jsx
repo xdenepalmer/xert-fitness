@@ -661,10 +661,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const refreshBookings = async (sessionId) => {
     // Generation + session scoping: a late response for class A must not paint
     // over class B's roster, booking requests, roll call, or CSV export.
+    // Roster failures must reject (not degrade to []) so an empty desk cannot
+    // look like "nobody booked" / "roll call not ready" after a real outage.
     const generation = ++bookingsRefreshGenerationRef.current;
     const [requests, members] = await Promise.all([
       getClassBookings({ class_session_id: sessionId }),
-      adminSessionRoster(sessionId).catch(() => []),
+      adminSessionRoster(sessionId),
     ]);
     if (generation !== bookingsRefreshGenerationRef.current) {
       return { requests, members, applied: false };

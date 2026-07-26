@@ -114,20 +114,33 @@ export default function SoftLaunchTimetable() {
   const [sessions, setSessions] = useState([]);
   const [settings, setSettings] = useState(getDefaultSettings());
   const [loading, setLoading] = useState(true);
+  const [timetableError, setTimetableError] = useState('');
   const [selectedSession, setSelectedSession] = useState(null);
   const [showPTForm, setShowPTForm] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [ptSuccess, setPTSuccess] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setTimetableError('');
+    // Settings fail closed to defaults (bookings off). Session fetch must not
+    // degrade to [] — that paints "Timetable coming soon" over a real outage.
     Promise.all([
-      getClassSessions(true).catch(() => []),
+      getClassSessions(true),
       getSoftLaunchSettings().catch(() => getDefaultSettings()),
     ]).then(([s, cfg]) => {
+      if (!active) return;
       setSessions(s);
       setSettings(cfg);
       setLoading(false);
+    }).catch((error) => {
+      if (!active) return;
+      setSessions([]);
+      setTimetableError(error?.message || 'The timetable could not be loaded.');
+      setLoading(false);
     });
+    return () => { active = false; };
   }, []);
 
   return (
@@ -176,6 +189,17 @@ export default function SoftLaunchTimetable() {
             {loading ? (
               <div className="py-20 text-center">
                 <div className="w-6 h-6 border-2 border-xert-steel/30 border-t-xert-red rounded-full animate-spin mx-auto" />
+              </div>
+            ) : timetableError ? (
+              <div className="py-16 text-center border border-xert-red/30 bg-xert-red/5" role="alert">
+                <p className="font-display text-xl text-xert-offwhite uppercase mb-3">Timetable unavailable</p>
+                <p className="font-body text-sm text-xert-concrete/60 mb-8">
+                  Published classes could not be loaded right now. Refresh the page, or register interest and we will follow up.
+                </p>
+                <a href="/#eoi"
+                  className="xert-btn-primary inline-flex items-center justify-center px-8 py-3 font-display text-sm uppercase">
+                  Register interest
+                </a>
               </div>
             ) : sessions.length === 0 ? (
               <div className="py-16 text-center border border-xert-steel/20">

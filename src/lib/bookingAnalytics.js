@@ -62,6 +62,13 @@ export function bulkBookingStatusOptions(bookings) {
   return [];
 }
 
+/** Active places that still hold a reserved (or consumed-but-tracked) class credit. */
+const CREDIT_HOLDING_STATUSES = new Set(['requested', 'confirmed', 'attended', 'no_show']);
+
+export function bookingHoldsReservedCredit(booking) {
+  return Boolean(booking?.credit_batch_id) && CREDIT_HOLDING_STATUSES.has(booking?.status);
+}
+
 export function bookingCsvRows(bookings) {
   return (bookings || []).map(booking => ({
     created_at: booking.createdAt || booking.created_at || '',
@@ -74,6 +81,8 @@ export function bookingCsvRows(bookings) {
     class_start: booking.session?.start_time || '',
     coach: booking.session?.coach_name || '',
     location: booking.session?.location_zone || '',
-    credit_reserved: booking.credit_batch_id ? 'Yes' : 'No',
+    // Match desk / iOS Reserved badges: cancelled / waitlisted / declined must
+    // not export as "Credit reserved" when a leftover FK remains after release.
+    credit_reserved: bookingHoldsReservedCredit(booking) ? 'Yes' : 'No',
   }));
 }

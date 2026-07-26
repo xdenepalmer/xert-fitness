@@ -19,10 +19,7 @@ test('web audited reveals refuse same-paint double submits (iOS parity)', () => 
   assert.match(members, /emergencyRevealLockRef\.current = true/);
 
   // Cancelled / waitlisted leftovers must not keep a "Credit reserved" badge.
-  assert.match(
-    bookingOps,
-    /\['requested', 'confirmed', 'attended', 'no_show'\]\.includes\(b\.status\)/,
-  );
+  assert.match(bookingOps, /bookingHoldsReservedCredit\(b\)/);
   assert.match(
     iosBooking,
     /\["requested", "confirmed", "attended", "no_show"\]\.contains\(booking\.status\)/,

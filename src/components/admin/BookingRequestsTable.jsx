@@ -9,7 +9,7 @@ import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
 import { describeTargetedMemberNoticePush } from '@/lib/memberAnnouncements';
-import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
+import { bookingCsvRows, bookingHoldsReservedCredit, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
@@ -334,9 +334,7 @@ export default function BookingRequestsTable() {
                     <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
                       {b.source === 'member' ? 'Member credit booking' : 'Enquiry form'}
                     </span>
-                    {b.source === 'member'
-                      && b.credit_batch_id
-                      && ['requested', 'confirmed', 'attended', 'no_show'].includes(b.status) && (
+                    {b.source === 'member' && bookingHoldsReservedCredit(b) && (
                       <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
                         Credit reserved
                       </span>
