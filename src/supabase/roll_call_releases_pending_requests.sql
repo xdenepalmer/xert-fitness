@@ -1,6 +1,9 @@
 -- Returns the credit held by a booking request nobody ever actioned.
 -- Operator re-run copy: restores remaining AND reactivates expired packs via
 -- the shared helper. Historical migration 20260726017000_* is unchanged.
+--
+-- Re-run safe: do not replace a newer refund helper / attendance body that
+-- already skips Stripe-refunded packs (fulfillment_erasure tip).
 
 create or replace function public.credit_batch_expires_at_after_refund(
   p_expires_at timestamptz,
@@ -18,6 +21,20 @@ as $$
   end;
 $$;
 
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -43,12 +60,32 @@ begin
      );
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
   from public, anon, authenticated;
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+do $install_admin_record_session_attendance$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_record_session_attendance'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid, p_attended_ids uuid[], p_no_show_ids uuid[]';
+  if v_def is not null
+     and v_def ilike '%status = ''requested''%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_record_session_attendance';
+  else
+    execute $fn$
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
   p_attended_ids uuid[],
@@ -138,6 +175,10 @@ begin
 
   return v_updated_count;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_record_session_attendance$;
 
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
@@ -146,4 +187,3 @@ insert into public.xert_schema_capabilities (capability)
 values ('roll_call_releases_pending_requests') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('credit_batch_refund_reactivation') on conflict (capability) do nothing;
-

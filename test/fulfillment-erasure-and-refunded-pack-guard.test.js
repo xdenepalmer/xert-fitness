@@ -73,3 +73,16 @@ test('capability markers are registered for release readiness', async () => {
   assert.match(text, /values \('stripe_fulfillment_deleted_email_erasure'\)/);
   assert.match(text, /values \('refund_skips_stripe_refunded_batches'\)/);
 });
+
+test('operator / migration re-runs skip-if-newer for money/privacy RPCs', async () => {
+  const text = await executableBody(MIGRATION);
+  for (const notice of [
+    /keeping newer refund_credits_to_batch/,
+    /keeping newer fulfill_stripe_checkout/,
+    /keeping newer admin_record_session_attendance/,
+    /keeping newer admin_cancel_class_session/,
+  ]) {
+    assert.match(text, notice);
+  }
+  assert.match(text, /p_anchor timestamp with time zone/);
+});

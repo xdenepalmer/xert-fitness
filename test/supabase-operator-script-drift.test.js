@@ -415,6 +415,28 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
         /p_anchor timestamp with time zone/,
       ],
     },
+    {
+      name: 'roll_call_releases_pending_requests.sql',
+      notice: /keeping newer admin_record_session_attendance/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /status = 'requested'/,
+        /o\.status = 'refunded'/,
+        /p_anchor timestamp with time zone/,
+      ],
+    },
+    {
+      name: 'fulfillment_erasure_and_refunded_pack_guard.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+        /user_id is null then null/,
+        /o\.status = 'refunded'/,
+        /p_anchor timestamp with time zone/,
+      ],
+    },
   ];
 
   for (const { name, notice, mustMatch } of guarded) {
@@ -475,6 +497,28 @@ test('historical money migrations skip-if-newer so re-runs cannot strip refunded
       name: '20260716040000_stripe_order_terms_snapshot.sql',
       notice: /keeping newer fulfill_stripe_checkout/,
       bootstrapWeak: /v_order\.user_id is distinct from p_user_id/,
+    },
+    {
+      name: '20260726016000_atomic_account_deletion.sql',
+      notice: /keeping newer delete_member_account/,
+      bootstrapWeak: /delete from auth\.users where id = p_user_id/,
+      mustMatch: [/redact_audit_subject_pii|member_interest/],
+    },
+    {
+      name: '20260726105000_audit_subject_pii_redaction.sql',
+      notice: /keeping newer delete_member_account/,
+      bootstrapWeak: /perform public\.redact_audit_subject_pii/,
+      mustMatch: [/member_interest/],
+    },
+    {
+      name: '20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+        /user_id is null then null/,
+      ],
     },
   ];
 

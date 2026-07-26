@@ -489,6 +489,44 @@ test('overnight money/privacy skip-if-newer markers stay locked for operator re-
       notices: [/keeping newer fulfill_stripe_checkout/],
       shapes: [/p_credit_validity_days integer/],
     },
+    {
+      path: '../src/supabase/roll_call_releases_pending_requests.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_record_session_attendance/,
+      ],
+      shapes: [/o\.status = 'refunded'/, /status = 'requested'/],
+    },
+    {
+      path: '../src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer fulfill_stripe_checkout/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/user_id is null then null/, /o\.status = 'refunded'/],
+    },
+    {
+      path: '../supabase/migrations/20260726016000_atomic_account_deletion.sql',
+      notices: [/keeping newer delete_member_account/],
+      shapes: [/redact_audit_subject_pii|member_interest/],
+    },
+    {
+      path: '../supabase/migrations/20260726105000_audit_subject_pii_redaction.sql',
+      notices: [/keeping newer delete_member_account/],
+      shapes: [/member_interest/],
+    },
+    {
+      path: '../supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql',
+      notices: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer fulfill_stripe_checkout/,
+        /keeping newer admin_record_session_attendance/,
+        /keeping newer admin_cancel_class_session/,
+      ],
+      shapes: [/user_id is null then null/],
+    },
   ];
 
   for (const { path, notices, shapes } of markers) {

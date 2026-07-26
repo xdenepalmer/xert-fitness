@@ -24,6 +24,9 @@ test('upgrade keeps redaction guards and skips replacing a newer delete_member_a
   assert.match(body, /keeping newer delete_member_account/);
   assert.match(body, /member_interest/);
   assert.match(migration, /perform public\.redact_audit_subject_pii\(v_email\)/);
+  // Historical migration re-run must not strip public-lead cleanup.
+  assert.match(stripComments(migration), /keeping newer delete_member_account/);
+  assert.match(stripComments(migration), /member_interest/);
 });
 
 test('guards keep SET NULL and add a narrow subject-PII nulling allowance', () => {

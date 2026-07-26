@@ -8,6 +8,11 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Privacy deletion re-runs: historical `260160` atomic delete and `261050`
+  audit-subject redaction now skip-if-newer so they cannot strip
+  `delete_member_account` public-lead cleanup (`member_interest` / trainer /
+  partner). Money tip `261120` / `fulfillment_erasure` + Ops Health
+  `roll_call_releases` skip-if-newer on refund/fulfill/attendance/class-cancel.
 - Historical money/privacy migration re-runs: `260800` cancel, `260000` class
   cancel, `261060` cancel/status, `261070` fulfill, and `160400` terms-snapshot
   fulfill now skip-if-newer so they cannot restore inline `remaining+1`, strip
@@ -506,6 +511,56 @@ No new migration for this batch (operator tip). Apply through **26116** remains 
 
 No new migration for this batch (historical tip). Apply through **26116** remains current.
 
+### 35. This batch — deletion / fulfillment / roll-call re-run downgrades
+| Area | Defect | Fix |
+|---|---|---|
+| Historical migration re-run (privacy) | `260160` / `261050` still replaced `delete_member_account` without public-lead cleanup | Skip-if-newer (`keeping newer delete_member_account` when redact / `member_interest` present) |
+| Operator SQL drift (money) | Ops Health `roll_call_releases_pending_requests` unconditionally replaced refund helper + attendance | Skip-if-newer on both (`keeping newer refund_credits_to_batch` / `admin_record_session_attendance`) |
+| Operator + tip migration (money/privacy) | `fulfillment_erasure_and_refunded_pack_guard` (261120 + mirror) unconditionally replaced refund / fulfill / attendance / class-cancel | Skip-if-newer on all four (`keeping newer…`) |
+
+No new migration timestamp for this batch (operator + historical tip). Apply through **26116** remains current.
+
+---
+
+## Operator re-run safety (skip-if-newer inventory)
+
+Scripts that raise `keeping newer…` / `keeping audited…` so a later Ops Health
+or SQL Editor re-run cannot restore a weaker money/privacy body. Prefer the
+`src/supabase/` mirror named in Ops Health / `schemaCapabilities.js` over
+historical migrations when repairing.
+
+### Money / credits / Stripe fulfill
+| Script | Skip notices (keep when live body already has the strong markers) |
+|---|---|
+| `src/supabase/cancel_booking_expired_batch_refund.sql` | `keeping newer cancel_booking` |
+| `src/supabase/credit_batch_refund_reactivation.sql` | refund helper, `cancel_booking`, `admin_set_booking_status`, attendance, class-cancel |
+| `src/supabase/class_cancellation_credit_refund_fix.sql` | refund helper, class-cancel |
+| `src/supabase/stripe_fulfillment_deleted_member_fix.sql` | `keeping newer fulfill_stripe_checkout` |
+| `src/supabase/stripe_payment_fulfillment_upgrade.sql` | `keeping newer fulfill_stripe_checkout` |
+| `src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql` | refund helper, fulfill, attendance, class-cancel |
+| `src/supabase/booking_modes_upgrade.sql` | refund helper, cancel, status, class-cancel |
+| `src/supabase/admin_cms_schema.sql` | refund helper, status, attendance, class-cancel |
+| `src/supabase/attendance_roll_call_upgrade.sql` | `keeping newer admin_record_session_attendance` |
+| `src/supabase/roll_call_releases_pending_requests.sql` | refund helper, attendance |
+| `src/supabase/roll_call_correction_double_credit_fix.sql` | refund helper, cancel, status |
+| `src/supabase/waitlist_fifo_promotion_upgrade.sql` | `keeping newer admin_set_booking_status` |
+| Historical: `260000`, `260030`, `260170`, `260800`, `261060`, `261070`, `160400`, `261120` | matching money RPC notices (bootstrap weak bodies retained) |
+
+### Privacy / deletion / health reveal / waitlist notices
+| Script | Skip notices |
+|---|---|
+| `src/supabase/atomic_account_deletion.sql` | `keeping newer delete_member_account` |
+| `src/supabase/audit_subject_pii_redaction_upgrade.sql` | `keeping newer delete_member_account` |
+| Historical: `260160`, `261050` | `keeping newer delete_member_account` |
+| `src/supabase/request_notes_health_consent.sql` (+ `261090`) | `keeping audited admin_reveal_member_interest_health` |
+| `src/supabase/booking_decision_notifications_upgrade.sql` (+ `220000`) | `keeping newer admin_set_booking_status_with_notice` |
+
+**Diminishing returns:** further skip-if-newer on tip mirrors that already *are*
+the strong body adds little beyond what drift/overnight tests already pin.
+Next high-value work is outside operator re-run (product features after owner
+gates, or a fresh money/privacy bug found by Postgres repro — not more wrap
+layers).
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -701,3 +756,7 @@ show `installed = true` and `release_ready = true`, including
     older public-form migrations keeps bookings_enabled + notes WITH CHECK;
     re-running booking-decision / waitlist FIFO migrations keeps Skip notice
     accuracy and helper refunds.
+34. **Deletion / fulfillment / roll-call re-runs** — Re-run `260160` / `261050`
+    keeps lead-cleanup `delete_member_account`; re-run
+    `roll_call_releases_pending_requests` / `fulfillment_erasure` keeps
+    Stripe-refunded pack skips and deleted-buyer email erasure.

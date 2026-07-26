@@ -150,6 +150,21 @@ grant execute on function public.admin_redact_audit_subject_pii(text)
   to authenticated, service_role;
 
 -- Account deletion must de-identify audit rows while the email is still known.
+-- Re-run safe: do not replace a newer delete_member_account body (public lead cleanup).
+do $install_delete_member_account$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'delete_member_account'
+    and pg_get_function_identity_arguments(p.oid) = 'p_user_id uuid';
+  if v_def is not null and (v_def ilike '%member_interest%') then
+    raise notice 'keeping newer delete_member_account';
+  else
+    execute $fn$
 create or replace function public.delete_member_account(p_user_id uuid)
 returns void
 language plpgsql
@@ -191,6 +206,10 @@ begin
 end;
 $$;
 
+$fn$;
+  end if;
+end;
+$install_delete_member_account$;
 revoke execute on function public.delete_member_account(uuid) from public, anon, authenticated;
 grant execute on function public.delete_member_account(uuid) to service_role;
 

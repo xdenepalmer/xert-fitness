@@ -13,7 +13,24 @@
 --    admin_cancel_class_session or roll-call release then restored credits onto
 --    a pack the member had already been paid back for. Skip refunds when the
 --    batch's order is refunded (manual grants with null order_id still refund).
+--
+-- Re-run safe: keep bodies that already erase deleted-buyer email and skip
+-- Stripe-refunded packs on refund / roll-call / class-cancel paths.
 
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -22,7 +39,7 @@ create or replace function public.refund_credits_to_batch(
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 begin
   if p_batch_id is null or p_count is null or p_count <= 0 then
     return;
@@ -38,11 +55,29 @@ begin
           and o.status = 'refunded'
      );
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+do $install_fulfill_stripe_checkout$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'fulfill_stripe_checkout'
+    and pg_get_function_identity_arguments(p.oid) = 'p_checkout_session_id text, p_user_id uuid, p_product_id uuid, p_email text, p_amount_cents integer, p_currency text, p_payment_intent_id text, p_paid_at timestamp with time zone, p_credit_total integer, p_credit_validity_days integer';
+  if v_def is not null and v_def ilike '%user_id is null then null%' then
+    raise notice 'keeping newer fulfill_stripe_checkout';
+  else
+    execute $fn$
 create or replace function public.fulfill_stripe_checkout(
   p_checkout_session_id text,
   p_user_id uuid,
@@ -59,7 +94,7 @@ returns table(fulfilled_order_id uuid, final_status text, credit_created boolean
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $body$
 declare
   v_order public.orders%rowtype;
   v_credit_rows integer := 0;
@@ -138,7 +173,11 @@ begin
 
   return query select v_order.id, v_order.status, v_credit_rows = 1;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_fulfill_stripe_checkout$;
 
 revoke execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
@@ -147,12 +186,28 @@ grant execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
 ) to service_role;
 
+do $install_admin_record_session_attendance$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_record_session_attendance'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid, p_attended_ids uuid[], p_no_show_ids uuid[]';
+  if v_def is not null
+     and v_def ilike '%status = ''requested''%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_record_session_attendance';
+  else
+    execute $fn$
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
   p_attended_ids uuid[],
   p_no_show_ids uuid[]
 )
-returns integer language plpgsql security definer set search_path = public as $$
+returns integer language plpgsql security definer set search_path = public as $body$
 declare
   v_session_status text;
   v_start_time timestamptz;
@@ -235,17 +290,38 @@ begin
    where id = p_session_id;
 
   return v_updated_count;
-end; $$;
+end; $body$;
+$fn$;
+  end if;
+end;
+$install_admin_record_session_attendance$;
 
 revoke execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) from public, anon;
 grant execute on function public.admin_record_session_attendance(uuid, uuid[], uuid[]) to authenticated;
 
+do $install_admin_cancel_class_session$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_cancel_class_session'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid';
+  if v_def is not null
+     and v_def ilike '%attended%'
+     and v_def ilike '%no_show%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_cancel_class_session';
+  else
+    execute $fn$
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 declare
   v_status text;
   v_start timestamptz;
@@ -316,7 +392,11 @@ begin
 
   return v_cancelled_count + v_enquiry_cancelled_count;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_cancel_class_session$;
 
 revoke all on function public.admin_cancel_class_session(uuid) from public, anon;
 grant execute on function public.admin_cancel_class_session(uuid) to authenticated;
