@@ -31,6 +31,8 @@ test('native checkout reuses an attempt after API failure and clears it after ha
   assert.match(booking, /checkoutAttemptIDs\[product\.id\] \?\? UUID\(\)/);
   assert.match(booking, /checkoutURL\([\s\S]*for: product,[\s\S]*attemptID: checkoutAttemptID,[\s\S]*activationSessionID:/);
   assert.match(booking, /if let url[\s\S]*checkoutAttemptIDs\[product\.id\] = nil[\s\S]*checkoutBrowser\.start/);
+  // A poisoned Stripe idempotency key (expired session replay) needs a fresh attempt.
+  assert.match(booking, /checkout attempt expired[\s\S]*checkoutAttemptIDs\[product\.id\] = nil/);
 });
 
 test('native checkout stays inside a trusted authenticated browser session', () => {

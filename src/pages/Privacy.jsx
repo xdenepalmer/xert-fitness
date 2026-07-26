@@ -14,9 +14,9 @@ const sections = [
   {
     title: 'Sensitive And Health Information',
     content: [
-      'Under Australian privacy law, health information is sensitive information. Optional free-text about injuries or physical limitations on the member interest form, and optional notes on PT or class booking requests that may describe injuries or medical limitations, are treated as health information.',
-      'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox on that form. Contact-only consent is not enough. You can leave injuries or notes blank and still submit.',
-      'Member-interest injury details are not shown in admin lead lists, bulk lead CSV exports or campaign analytics. Authorised XERT administrators can open a deliberate reveal on an individual lead when consent was given, so they can follow up safely. PT and class booking notes you consent to share are available to authorised administrators in those request queues for the same purpose.'
+      'Under Australian privacy law, health information is sensitive information. Optional free-text about injuries or physical limitations on the member interest form, optional notes on PT or class booking requests that may describe injuries or medical limitations, and choosing the PT training goal "Rehab / return to fitness" are treated as health information.',
+      'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox on that form. Contact-only consent is not enough. You can leave injuries or notes blank, and choose a non-rehab training goal, and still submit.',
+      'Member-interest injury details are not shown in admin lead lists, bulk lead CSV exports or campaign analytics. Authorised XERT administrators can open a deliberate reveal on an individual lead when consent was given, so they can follow up safely. PT and class booking notes you consent to share, and a consented rehab training goal, are available to authorised administrators in those request queues for the same purpose.'
     ]
   },
   {

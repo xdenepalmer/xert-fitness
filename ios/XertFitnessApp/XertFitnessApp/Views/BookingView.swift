@@ -355,6 +355,11 @@ struct BookingView: View {
                                 }
                             } else {
                                 checkoutProductID = nil
+                                // A poisoned Stripe idempotency key cannot recover until
+                                // the next tap mints a fresh attempt id.
+                                if store.errorMessage?.contains("checkout attempt expired") == true {
+                                    checkoutAttemptIDs[product.id] = nil
+                                }
                             }
                         }
                     } label: {
@@ -923,6 +928,7 @@ private struct PrivateSessionRequestView: View {
     @State private var trainingGoal = ""
     @State private var experienceLevel = ""
     @State private var notes = ""
+    @State private var healthInfoConsent = false
     @State private var consentsToContact = false
     @State private var validationMessage: String?
     @State private var submitted = false
@@ -937,6 +943,10 @@ private struct PrivateSessionRequestView: View {
     private let times = ["Early morning (5-8am)", "Morning (8-11am)", "Lunch (11am-1pm)", "Afternoon (1-5pm)", "After work (5-7pm)", "Evening (7pm+)", "Flexible"]
     private let goals = ["Strength", "Conditioning", "Weight loss / body composition", "Rehab / return to fitness", "Event preparation", "Sport performance", "General health"]
     private let experience = ["Complete beginner", "Some experience", "Regular trainer", "Advanced"]
+    private var needsHealthConsent: Bool {
+        !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || trainingGoal == PrivateSessionRequest.rehabTrainingGoal
+    }
 
     init(initialName: String, initialEmail: String, initialPhone: String) {
         _fullName = State(initialValue: initialName)
@@ -1058,6 +1068,12 @@ private struct PrivateSessionRequestView: View {
                 ForEach(goals, id: \.self) { Text($0).tag($0) }
             }
             .foregroundStyle(Color.xertOffWhite)
+            .onChange(of: trainingGoal) { newValue in
+                if newValue != PrivateSessionRequest.rehabTrainingGoal
+                    && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    healthInfoConsent = false
+                }
+            }
             Picker("Experience", selection: $experienceLevel) {
                 Text("Choose a level").tag("")
                 ForEach(experience, id: \.self) { Text($0).tag($0) }
@@ -1067,6 +1083,23 @@ private struct PrivateSessionRequestView: View {
                 .lineLimit(2...5)
                 .focused($focusedField, equals: .notes)
                 .foregroundStyle(Color.xertOffWhite)
+                .onChange(of: notes) { newValue in
+                    if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && trainingGoal != PrivateSessionRequest.rehabTrainingGoal {
+                        healthInfoConsent = false
+                    }
+                }
+            if needsHealthConsent {
+                Toggle(
+                    trainingGoal == PrivateSessionRequest.rehabTrainingGoal
+                        && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "I consent to XERT collecting health information implied by selecting Rehab / return to fitness so coaches can follow up safely."
+                        : "I consent to XERT collecting health information in these notes (for example injuries or medical limitations) so coaches can follow up safely.",
+                    isOn: $healthInfoConsent
+                )
+                .tint(.xertSteel)
+                .foregroundStyle(Color.xertOffWhite)
+            }
         } header: {
             Text("Training").xertEyebrow()
         }
@@ -1116,6 +1149,13 @@ private struct PrivateSessionRequestView: View {
             validationMessage = "Consent to contact is required."
             return
         }
+        if needsHealthConsent && !healthInfoConsent {
+            validationMessage = trainingGoal == PrivateSessionRequest.rehabTrainingGoal
+                && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Consent to collect health information is required when selecting Rehab / return to fitness."
+                : "Consent to collect health information is required when sharing notes about injuries or limitations."
+            return
+        }
         do {
             let request = try PrivateSessionRequest(
                 fullName: fullName,
@@ -1126,7 +1166,8 @@ private struct PrivateSessionRequestView: View {
                 preferredTime: preferredTime,
                 trainingGoal: trainingGoal,
                 experienceLevel: experienceLevel,
-                notes: notes
+                notes: notes,
+                healthInfoConsent: healthInfoConsent
             )
             Task {
                 let succeeded = await store.requestPrivateSession(request)
@@ -1164,6 +1205,7 @@ private struct ClassInterestRequestView: View {
     @State private var phone: String
     @State private var trainingLevel = ""
     @State private var notes = ""
+    @State private var healthInfoConsent = false
     @State private var consentsToContact = false
     @State private var validationMessage: String?
     @State private var submitted = false
@@ -1174,6 +1216,9 @@ private struct ClassInterestRequestView: View {
     }
 
     private let trainingLevels = ["New / beginner", "Some gym experience", "Regular trainer", "Advanced"]
+    private var needsHealthConsent: Bool {
+        !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     init(session: ClassSession, initialName: String, initialEmail: String, initialPhone: String) {
         self.session = session
@@ -1298,6 +1343,19 @@ private struct ClassInterestRequestView: View {
                 .lineLimit(2...5)
                 .focused($focusedField, equals: .notes)
                 .foregroundStyle(Color.xertOffWhite)
+                .onChange(of: notes) { newValue in
+                    if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        healthInfoConsent = false
+                    }
+                }
+            if needsHealthConsent {
+                Toggle(
+                    "I consent to XERT collecting health information in these notes (for example injuries or medical limitations) so coaches can follow up safely.",
+                    isOn: $healthInfoConsent
+                )
+                .tint(.xertSteel)
+                .foregroundStyle(Color.xertOffWhite)
+            }
         } header: {
             Text("Training").xertEyebrow()
         }
@@ -1347,6 +1405,10 @@ private struct ClassInterestRequestView: View {
             validationMessage = "Consent to contact is required."
             return
         }
+        if needsHealthConsent && !healthInfoConsent {
+            validationMessage = "Consent to collect health information is required when sharing notes about injuries or limitations."
+            return
+        }
         do {
             let request = try ClassInterestRequest(
                 sessionID: session.id,
@@ -1354,7 +1416,8 @@ private struct ClassInterestRequestView: View {
                 email: email,
                 phone: phone,
                 trainingLevel: trainingLevel,
-                notes: notes
+                notes: notes,
+                healthInfoConsent: healthInfoConsent
             )
             Task {
                 let succeeded = await store.requestClassInterest(request)

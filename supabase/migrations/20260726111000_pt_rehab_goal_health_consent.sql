@@ -1,41 +1,8 @@
--- Keeps staff-only columns out of an anonymous public form submission.
---
--- The five public_insert_* policies constrain only the workflow state and the
--- consent flag:
---
---   with check (status = 'new' and consent_to_contact is true)
---
--- Everything else on the row is whatever the client sent, and anon holds a
--- table-level INSERT grant with no column list. admin_notes is the staff
--- servicing note the lead and request queues render verbatim, so an
--- unauthenticated submission could plant text that reads as though a colleague
--- wrote it. It arrives with no author and no audit trail either: the lead and
--- request audit triggers fire `after update of status, admin_notes`, so a value
--- that arrives on the INSERT is never recorded as a change.
---
--- Reproduced against PostgreSQL 16 using the policy text from this repo. As the
--- anon role, an insert carrying status='requested', consent_to_contact=true and
--- admin_notes='Verified paid in cash - comp 10 sessions' succeeded and the row
--- was created with that note; a control insert with status='confirmed' was
--- refused, so RLS was active and simply did not cover the column. After the
--- change the same attack is refused and an ordinary submission still succeeds.
---
--- These five policies were previously written out by hand in five different
--- scripts, four of which the README tells operators to re-run. Hardening only
--- the newest copy would leave the others able to undo it, so the definition
--- moves into one function every script can call. install_public_form_insert_
--- policies() is now the only place a public form insert policy is created.
---
--- The staff-column clause is added per table only where the column exists,
--- because the five lead and request tables predate this repo's SQL and were
--- created through the Supabase dashboard. Later guards (finished-class enquiry
--- time, member-interest health consent) are emitted conditionally for the same
--- reason, so re-running this file cannot strip them.
-
-create table if not exists public.xert_schema_capabilities (
-  capability text primary key,
-  installed_at timestamptz not null default now()
-);
+-- Privacy: selecting the PT training goal "Rehab / return to fitness" discloses
+-- health-related status. Require the same health_info_consent gate already used
+-- for free-text notes, so a public insert cannot store that goal without
+-- APP 3.3 consent. Extends install_public_form_insert_policies without changing
+-- owner, session, or staff-column guards.
 
 create or replace function public.install_public_form_insert_policies()
 returns void
@@ -181,4 +148,5 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 select public.install_public_form_insert_policies();
 
 insert into public.xert_schema_capabilities (capability)
-values ('public_form_staff_column_guard') on conflict (capability) do nothing;
+values ('pt_rehab_goal_health_consent')
+on conflict (capability) do nothing;

@@ -716,6 +716,10 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     setUpdatingBookingId(bookingId);
     try {
       const result = await adminSetBookingStatus(bookingId, status);
+      // If the operator opened another class while this mutation was in flight,
+      // refreshing the original session would steal loadedRosterSessionId and
+      // blank the roster they are looking at.
+      if (expandedBookings !== sessionId) return;
       await refreshBookings(sessionId);
       if (result?.notice_created) {
         toast({
@@ -857,6 +861,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     setUpdatingBookingId(id);
     try {
       await updateBookingStatus(id, status);
+      if (expandedBookings !== sessionId) return;
       await refreshBookings(sessionId);
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });

@@ -69,7 +69,8 @@ with required (capability, migration) as (
     ('audit_subject_pii_redaction', 'supabase/migrations/20260726105000_audit_subject_pii_redaction.sql'),
     ('account_deletion_public_lead_cleanup', 'supabase/migrations/20260726108000_account_deletion_public_lead_cleanup.sql'),
     ('request_notes_health_consent', 'supabase/migrations/20260726109000_request_notes_health_consent.sql'),
-    ('waitlist_skip_concurrency', 'supabase/migrations/20260726110000_waitlist_skip_concurrency.sql')
+    ('waitlist_skip_concurrency', 'supabase/migrations/20260726110000_waitlist_skip_concurrency.sql'),
+    ('pt_rehab_goal_health_consent', 'supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql')
 ), readiness as (
   select
     required.capability,

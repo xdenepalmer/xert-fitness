@@ -106,6 +106,19 @@ test('class roster refresh is generation-scoped so late class A responses cannot
   assert.match(classCalendar, /loadedRosterSessionId !== attendanceSession\.id/);
 });
 
+test('roster and booking status mutations skip refresh after the operator switches class', () => {
+  const rosterHandler = classCalendar.slice(
+    classCalendar.indexOf('const handleRosterStatus'),
+    classCalendar.indexOf('const handlePromoteNext'),
+  );
+  const bookingHandler = classCalendar.slice(
+    classCalendar.indexOf('const handleBookingStatus'),
+    classCalendar.indexOf('const scopedRosterFor'),
+  );
+  assert.match(rosterHandler, /if \(expandedBookings !== sessionId\) return;/);
+  assert.match(bookingHandler, /if \(expandedBookings !== sessionId\) return;/);
+});
+
 test('the dialog layer yields the Tab cycle when focus leaves the workspace', () => {
   const layer = readSource('../src/lib/adminDialogLayer.js');
   assert.match(layer, /if \(!shouldManageDialogTab\(workspace, document\.activeElement\)\) return;/);

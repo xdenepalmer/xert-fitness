@@ -53,5 +53,6 @@ test('web checkout sends a fresh stable attempt identifier with the purchase req
   assert.match(checkout, /getOrCreateCheckoutAttemptID\(productSlug\)/);
   assert.match(checkout, /checkout_attempt_id: checkoutAttemptID/);
   assert.match(checkout, /clearCheckoutAttemptID\(productSlug\)/);
+  assert.match(checkout, /CHECKOUT_ATTEMPT_STALE/);
   assert.equal((checkout.match(/fetch\('\/api\/checkout'/g) || []).length, 1);
 });

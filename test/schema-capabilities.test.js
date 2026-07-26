@@ -144,6 +144,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260721030000_waitlist_promotion_notifications.sql', 'waitlist_promotion_notifications'],
     ['../src/supabase/waitlist_skip_concurrency_upgrade.sql', 'waitlist_skip_concurrency'],
     ['../supabase/migrations/20260726110000_waitlist_skip_concurrency.sql', 'waitlist_skip_concurrency'],
+    ['../src/supabase/pt_rehab_goal_health_consent.sql', 'pt_rehab_goal_health_consent'],
+    ['../supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql', 'pt_rehab_goal_health_consent'],
     ['../src/supabase/booking_decision_notifications_upgrade.sql', 'booking_decision_notifications'],
     ['../supabase/migrations/20260722000000_booking_decision_notifications.sql', 'booking_decision_notifications'],
     ['../supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql', 'owner_stripe_price_provisioning'],
@@ -296,6 +298,7 @@ test('read-only production check reports every release capability and migration'
     'account_deletion_public_lead_cleanup',
     'request_notes_health_consent',
     'waitlist_skip_concurrency',
+    'pt_rehab_goal_health_consent',
   ];
 
   for (const capability of capabilities) {

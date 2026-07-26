@@ -1079,6 +1079,8 @@ struct CheckoutResponse: Codable {
 }
 
 struct PrivateSessionRequest: Encodable, Equatable {
+    static let rehabTrainingGoal = "Rehab / return to fitness"
+
     let full_name: String
     let email: String
     let phone: String
@@ -1088,6 +1090,7 @@ struct PrivateSessionRequest: Encodable, Equatable {
     let training_goal: String?
     let experience_level: String?
     let notes: String?
+    let health_info_consent: Bool
     let consent_to_contact: Bool
     let status: String
 
@@ -1100,18 +1103,28 @@ struct PrivateSessionRequest: Encodable, Equatable {
         preferredTime: String = "",
         trainingGoal: String = "",
         experienceLevel: String = "",
-        notes: String = ""
+        notes: String = "",
+        healthInfoConsent: Bool = false
     ) throws {
         let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedType = sessionType.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedNotes = notes.trimmedNilIfEmpty
+        let normalizedGoal = trainingGoal.trimmedNilIfEmpty
+        let needsHealthConsent = normalizedNotes != nil
+            || normalizedGoal == Self.rehabTrainingGoal
         guard !normalizedName.isEmpty else { throw APIError(message: "Enter your full name.") }
         guard normalizedEmail.contains("@"), normalizedEmail.contains(".") else {
             throw APIError(message: "Enter a valid email address.")
         }
         guard !normalizedPhone.isEmpty else { throw APIError(message: "Enter your mobile number.") }
         guard !normalizedType.isEmpty else { throw APIError(message: "Choose a session type.") }
+        if needsHealthConsent && !healthInfoConsent {
+            throw APIError(message: normalizedGoal == Self.rehabTrainingGoal && normalizedNotes == nil
+                ? "Consent to collect health information is required when selecting Rehab / return to fitness."
+                : "Consent to collect health information is required when sharing notes about injuries or limitations.")
+        }
 
         full_name = normalizedName
         self.email = normalizedEmail
@@ -1119,9 +1132,10 @@ struct PrivateSessionRequest: Encodable, Equatable {
         requested_session_type = normalizedType
         preferred_day = preferredDay.trimmedNilIfEmpty
         preferred_time = preferredTime.trimmedNilIfEmpty
-        training_goal = trainingGoal.trimmedNilIfEmpty
+        training_goal = normalizedGoal
         experience_level = experienceLevel.trimmedNilIfEmpty
-        self.notes = notes.trimmedNilIfEmpty
+        self.notes = normalizedNotes
+        health_info_consent = needsHealthConsent ? healthInfoConsent : false
         consent_to_contact = true
         status = "requested"
     }
@@ -1134,6 +1148,7 @@ struct ClassInterestRequest: Encodable, Equatable {
     let phone: String
     let training_level: String?
     let notes: String?
+    let health_info_consent: Bool
     let consent_to_contact: Bool
     let status: String
 
@@ -1143,23 +1158,29 @@ struct ClassInterestRequest: Encodable, Equatable {
         email: String,
         phone: String,
         trainingLevel: String = "",
-        notes: String = ""
+        notes: String = "",
+        healthInfoConsent: Bool = false
     ) throws {
         let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedNotes = notes.trimmedNilIfEmpty
         guard !normalizedName.isEmpty else { throw APIError(message: "Enter your full name.") }
         guard normalizedEmail.contains("@"), normalizedEmail.contains(".") else {
             throw APIError(message: "Enter a valid email address.")
         }
         guard !normalizedPhone.isEmpty else { throw APIError(message: "Enter your mobile number.") }
+        if normalizedNotes != nil && !healthInfoConsent {
+            throw APIError(message: "Consent to collect health information is required when sharing notes about injuries or limitations.")
+        }
 
         class_session_id = sessionID
         full_name = normalizedName
         self.email = normalizedEmail
         self.phone = normalizedPhone
         training_level = trainingLevel.trimmedNilIfEmpty
-        self.notes = notes.trimmedNilIfEmpty
+        self.notes = normalizedNotes
+        health_info_consent = normalizedNotes == nil ? false : healthInfoConsent
         consent_to_contact = true
         status = "requested"
     }

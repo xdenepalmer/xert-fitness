@@ -210,10 +210,21 @@ test('every install_public_form_insert_policies definition gates PT/booking note
   for (const { name, sql } of definers) {
     assert.match(
       sql,
-      /class_bookings',\s*'private_session_requests'/,
-      `${name} replaces install_public_form_insert_policies without the PT/booking notes health-consent guard`,
+      /private_session_requests/,
+      `${name} replaces install_public_form_insert_policies without the PT notes health-consent guard`,
+    );
+    assert.match(
+      sql,
+      /class_bookings/,
+      `${name} replaces install_public_form_insert_policies without the booking notes health-consent guard`,
     );
     assert.match(sql, /coalesce\(btrim\(notes\), ''\) = ''/);
+    assert.match(
+      sql,
+      /Rehab \/ return to fitness/,
+      `${name} replaces install_public_form_insert_policies without the PT rehab-goal health-consent guard, `
+        + 'so re-running it would accept that goal without APP 3.3 consent',
+    );
   }
 });
 
@@ -280,6 +291,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     'account_deletion_public_lead_cleanup.sql',
     'request_notes_health_consent.sql',
     'waitlist_skip_concurrency_upgrade.sql',
+    'pt_rehab_goal_health_consent.sql',
   ]) {
     assert.match(
       readme,
@@ -287,14 +299,14 @@ test('README operator apply order includes the newest Ops Health migrations', ()
       `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
     );
   }
-  // Fresh + already-deployed apply sequences both end with waitlist skip.
+  // Fresh + already-deployed apply sequences both end with the rehab-goal consent fix.
   assert.match(
     readme,
-    /request_notes_health_consent\.sql` and\n`waitlist_skip_concurrency_upgrade\.sql`\. This/,
+    /waitlist_skip_concurrency_upgrade\.sql` and\n`pt_rehab_goal_health_consent\.sql`\. This/,
   );
   assert.match(
     readme,
-    /request_notes_health_consent\.sql` and\n`waitlist_skip_concurrency_upgrade\.sql`\. The/,
+    /waitlist_skip_concurrency_upgrade\.sql` and\n`pt_rehab_goal_health_consent\.sql`\. The/,
   );
 });
 

@@ -7,6 +7,7 @@ import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
 const TIMES = ['Early morning (5–8am)', 'Morning (8–11am)', 'Lunch (11am–1pm)', 'Afternoon (1–5pm)', 'After work (5–7pm)', 'Evening (7pm+)', 'Flexible'];
 const GOALS = ['Strength', 'Conditioning', 'Weight loss / body composition', 'Rehab / return to fitness', 'Event preparation', 'Sport performance', 'General health'];
+const REHAB_TRAINING_GOAL = 'Rehab / return to fitness';
 const EXPERIENCE = ['Complete beginner', 'Some experience', 'Regular trainer', 'Advanced'];
 
 function FieldLabel({ children, required = false, htmlFor = undefined }) {
@@ -34,6 +35,8 @@ export default function PTRequestForm({ onSuccess }) {
     consent_to_contact: false, company_website: '',
   });
   const hasHealthNotes = Boolean(form.notes.trim());
+  const hasRehabGoal = form.training_goal === REHAB_TRAINING_GOAL;
+  const needsHealthConsent = hasHealthNotes || hasRehabGoal;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,8 +57,12 @@ export default function PTRequestForm({ onSuccess }) {
     if (!form.email.trim() || !form.email.includes('@')) { setError('Valid email is required.'); return; }
     if (!form.phone.trim()) { setError('Phone is required.'); return; }
     if (!form.requested_session_type) { setError('Please select a session type.'); return; }
-    if (hasHealthNotes && !form.health_info_consent) {
-      setError('Consent to collect health information is required when you share notes about injuries or limitations.');
+    if (needsHealthConsent && !form.health_info_consent) {
+      setError(
+        hasRehabGoal && !hasHealthNotes
+          ? 'Consent to collect health information is required when selecting Rehab / return to fitness.'
+          : 'Consent to collect health information is required when you share notes about injuries or limitations.',
+      );
       return;
     }
     if (!form.consent_to_contact) { setError('Consent to contact is required.'); return; }
@@ -121,7 +128,16 @@ export default function PTRequestForm({ onSuccess }) {
         <legend className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">Training goal</legend>
         <div className="flex flex-wrap gap-2">
           {GOALS.map(g => (
-            <button type="button" key={g} onClick={() => set('training_goal', g)}
+            <button
+              type="button"
+              key={g}
+              onClick={() => setForm(f => ({
+                ...f,
+                training_goal: g,
+                health_info_consent: (g === REHAB_TRAINING_GOAL || f.notes.trim())
+                  ? f.health_info_consent
+                  : false,
+              }))}
               aria-pressed={form.training_goal === g}
               className={`px-3 py-2 text-sm font-body border transition-all ${form.training_goal === g ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {g}
@@ -161,7 +177,7 @@ export default function PTRequestForm({ onSuccess }) {
           placeholder="Anything you'd like the coach to know (optional)"
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none"
         />
-        {hasHealthNotes && (
+        {needsHealthConsent && (
           <div className="mt-3">
             <FormCheckbox
               name="health_info_consent"
@@ -169,7 +185,9 @@ export default function PTRequestForm({ onSuccess }) {
               onChange={checked => set('health_info_consent', checked)}
               required
             >
-              I consent to XERT collecting health information in these notes (for example injuries or medical limitations) so coaches can follow up safely. I understand I can leave notes blank.
+              {hasRehabGoal && !hasHealthNotes
+                ? 'I consent to XERT collecting health information implied by selecting Rehab / return to fitness so coaches can follow up safely. I understand I can choose another goal instead.'
+                : 'I consent to XERT collecting health information in these notes (for example injuries or medical limitations) so coaches can follow up safely. I understand I can leave notes blank.'}
             </FormCheckbox>
           </div>
         )}

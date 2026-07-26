@@ -58,16 +58,24 @@ export async function submitPartnerInterest(formData) {
   return { success: true };
 }
 
+const REHAB_TRAINING_GOAL = 'Rehab / return to fitness';
+
 function withRequestHealthConsent(formData) {
   const notes = String(formData.notes || '').trim();
+  const rehabGoal = String(formData.training_goal || '').trim() === REHAB_TRAINING_GOAL;
+  const needsHealthConsent = Boolean(notes) || rehabGoal;
   const healthInfoConsent = Boolean(formData.health_info_consent);
-  if (notes && !healthInfoConsent) {
-    throw new Error('Consent to collect health information is required when sharing notes about injuries or limitations.');
+  if (needsHealthConsent && !healthInfoConsent) {
+    throw new Error(
+      rehabGoal && !notes
+        ? 'Consent to collect health information is required when selecting Rehab / return to fitness.'
+        : 'Consent to collect health information is required when sharing notes about injuries or limitations.',
+    );
   }
   return {
     ...stripHoneypot(formData),
     notes: notes || null,
-    health_info_consent: notes ? healthInfoConsent : false,
+    health_info_consent: needsHealthConsent ? healthInfoConsent : false,
     status: 'requested',
   };
 }

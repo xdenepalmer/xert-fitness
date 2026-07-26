@@ -95,7 +95,33 @@ begin
         or health_info_consent is true
       )
       $health$;
-    elsif v_table in ('class_bookings', 'private_session_requests')
+    elsif v_table = 'private_session_requests'
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'notes'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'training_goal'
+      )
+    then
+      v_health := $health$
+      and (
+        (
+          coalesce(btrim(notes), '') = ''
+          and coalesce(btrim(training_goal), '') is distinct from 'Rehab / return to fitness'
+        )
+        or health_info_consent is true
+      )
+      $health$;
+    elsif v_table = 'class_bookings'
       and exists (
         select 1 from information_schema.columns
         where table_schema = 'public' and table_name = v_table

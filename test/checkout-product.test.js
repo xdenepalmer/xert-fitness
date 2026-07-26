@@ -537,10 +537,23 @@ test('checkout never exposes raw provider errors to members', async () => {
     status: 503,
     message: 'Checkout could not be recorded. No payment was taken; please try again.',
   });
+  assert.deepEqual(publicCheckoutFailure({ code: 'CHECKOUT_ATTEMPT_STALE' }), {
+    status: 409,
+    code: 'CHECKOUT_ATTEMPT_STALE',
+    message: 'That checkout attempt expired. Please try again.',
+  });
 
   const source = await readFile(new URL('../api/checkout.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /json\(\{ error: e\.message/);
-  assert.match(source, /return json\(\{ error: failure\.message \}, failure\.status\)/);
+  assert.match(source, /failure\.code \? \{ error: failure\.message, code: failure\.code \}/);
+  // Recording failure must leave the Stripe session open so the same attempt id
+  // can finish the pending-order write on retry via Stripe idempotency replay.
+  const recordingCatch = source.slice(
+    source.indexOf('Pending checkout order could not be saved.'),
+    source.indexOf('return json({ url: checkoutURL, checkout_session_id: session.id });'),
+  );
+  assert.doesNotMatch(recordingCatch, /sessions\.expire/);
+  assert.match(source, /CHECKOUT_ATTEMPT_STALE/);
 });
 
 test('accepts only an active one-time Stripe price matching the configured pack', () => {

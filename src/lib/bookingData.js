@@ -50,6 +50,11 @@ export async function startCheckout(productSlug) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    // A poisoned Stripe idempotency key (expired session replay) cannot recover
+    // until the client mints a new attempt id.
+    if (body?.code === 'CHECKOUT_ATTEMPT_STALE') {
+      clearCheckoutAttemptID(productSlug);
+    }
     throw new Error(apiErrorMessage(body, 'Could not start checkout. Please try again.'));
   }
   const { url, checkout_session_id: checkoutSessionID } = await res.json();

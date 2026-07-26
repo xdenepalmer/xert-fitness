@@ -243,6 +243,8 @@ The Supabase schema is defined in:
 - `src/supabase/waitlist_skip_concurrency_upgrade.sql` — makes waitlist skip
   claim the head row under row locks so two admins cannot promote different
   members for the same freed place
+- `src/supabase/pt_rehab_goal_health_consent.sql` — requires health-information
+  consent when a public PT request selects the Rehab / return to fitness goal
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -287,8 +289,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `class_session_optimistic_locking_upgrade.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
 `account_deletion_public_lead_cleanup.sql`,
-`request_notes_health_consent.sql` and
-`waitlist_skip_concurrency_upgrade.sql`. This
+`request_notes_health_consent.sql`,
+`waitlist_skip_concurrency_upgrade.sql` and
+`pt_rehab_goal_health_consent.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -341,8 +344,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `class_session_optimistic_locking_upgrade.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
 `account_deletion_public_lead_cleanup.sql`,
-`request_notes_health_consent.sql` and
-`waitlist_skip_concurrency_upgrade.sql`. The
+`request_notes_health_consent.sql`,
+`waitlist_skip_concurrency_upgrade.sql` and
+`pt_rehab_goal_health_consent.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

@@ -1928,8 +1928,34 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(request.phone, "0400 123 456")
         XCTAssertEqual(request.preferred_day, "Flexible")
         XCTAssertNil(request.notes)
+        XCTAssertFalse(request.health_info_consent)
         XCTAssertTrue(request.consent_to_contact)
         XCTAssertEqual(request.status, "requested")
+    }
+
+    func testPrivateSessionRequestRequiresHealthConsentForNotesAndRehabGoal() {
+        XCTAssertThrowsError(try PrivateSessionRequest(
+            fullName: "Alex",
+            email: "alex@example.com",
+            phone: "0400 123 456",
+            sessionType: "Intro assessment",
+            notes: "Recovering from knee surgery"
+        ))
+        XCTAssertThrowsError(try PrivateSessionRequest(
+            fullName: "Alex",
+            email: "alex@example.com",
+            phone: "0400 123 456",
+            sessionType: "Intro assessment",
+            trainingGoal: PrivateSessionRequest.rehabTrainingGoal
+        ))
+        XCTAssertNoThrow(try PrivateSessionRequest(
+            fullName: "Alex",
+            email: "alex@example.com",
+            phone: "0400 123 456",
+            sessionType: "Intro assessment",
+            trainingGoal: PrivateSessionRequest.rehabTrainingGoal,
+            healthInfoConsent: true
+        ))
     }
 
     func testPrivateSessionRequestRejectsInvalidRequiredFields() {
@@ -1955,7 +1981,8 @@ final class ModelsTests: XCTestCase {
             email: " ALEX@EXAMPLE.COM ",
             phone: " 0400 123 456 ",
             trainingLevel: "Some gym experience",
-            notes: "  Knee history  "
+            notes: "  Knee history  ",
+            healthInfoConsent: true
         )
 
         XCTAssertEqual(request.class_session_id, sessionID)
@@ -1964,8 +1991,19 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(request.phone, "0400 123 456")
         XCTAssertEqual(request.training_level, "Some gym experience")
         XCTAssertEqual(request.notes, "Knee history")
+        XCTAssertTrue(request.health_info_consent)
         XCTAssertTrue(request.consent_to_contact)
         XCTAssertEqual(request.status, "requested")
+    }
+
+    func testClassInterestRequestRejectsNotesWithoutHealthConsent() {
+        XCTAssertThrowsError(try ClassInterestRequest(
+            sessionID: UUID(),
+            fullName: "Alex",
+            email: "alex@example.com",
+            phone: "0400 123 456",
+            notes: "Knee history"
+        ))
     }
 
     func testClassInterestRequestRejectsMissingContactDetails() {

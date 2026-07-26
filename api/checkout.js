@@ -38,6 +38,7 @@ const PAYMENT_ACTIVATION_DRIFT_CAPABILITY = 'payment_activation_drift_guard';
 const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
+const CHECKOUT_ATTEMPT_STALE = 'CHECKOUT_ATTEMPT_STALE';
 const CHECKOUT_CONTRACT_VERSION = 'receipt_terms_v1';
 // Fulfilment (stripe-webhook.js and fulfill_stripe_checkout) hard-requires AUD.
 // Committing a charge in any other currency takes the member's money and can
@@ -297,6 +298,13 @@ export function publicCheckoutFailure(error) {
     return {
       status: 503,
       message: 'Checkout could not be recorded. No payment was taken; please try again.',
+    };
+  }
+  if (error?.code === CHECKOUT_ATTEMPT_STALE) {
+    return {
+      status: 409,
+      code: CHECKOUT_ATTEMPT_STALE,
+      message: 'That checkout attempt expired. Please try again.',
     };
   }
   return {
@@ -781,8 +789,15 @@ export default async function handler(request, response) {
         checkoutAttemptID,
       });
     } catch (error) {
+      // Idempotency can replay a session we previously expired. Tell the client
+      // to mint a fresh attempt id instead of looping on the dead key.
       await stripe.checkout.sessions.expire(session.id).catch(() => {});
-      throw error;
+      const staleError = /** @type {Error & { code?: string }} */ (
+        new Error('Checkout attempt is no longer usable.')
+      );
+      staleError.code = CHECKOUT_ATTEMPT_STALE;
+      staleError.cause = error;
+      throw staleError;
     }
 
     try {
@@ -792,8 +807,12 @@ export default async function handler(request, response) {
           onConflict: 'stripe_checkout_session_id',
         });
       if (pendingOrderError) throw pendingOrderError;
-    } catch {
-      await stripe.checkout.sessions.expire(session.id).catch(() => {});
+    } catch (error) {
+      if (error?.code === CHECKOUT_ATTEMPT_STALE) throw error;
+      // Keep the Stripe session open. The client never received the URL, so the
+      // member cannot pay an unrecorded order. A retry with the same attempt id
+      // reuses Stripe's idempotent response and can finish the pending-order write.
+      // Expiring here poisoned every retry for the attempt's full 20-minute TTL.
       const recordingError = /** @type {Error & { code?: string }} */ (
         new Error('Pending checkout order could not be saved.')
       );
@@ -811,6 +830,9 @@ export default async function handler(request, response) {
       type: String(e?.type || ''),
       stripeRequestId: String(e?.requestId || ''),
     });
-    return json({ error: failure.message }, failure.status);
+    return json(
+      failure.code ? { error: failure.message, code: failure.code } : { error: failure.message },
+      failure.status,
+    );
   }
 }
