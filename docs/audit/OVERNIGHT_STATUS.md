@@ -8,6 +8,12 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Public About / Contact / Coaches / Events / Training Guide / App landing Book
+  CTAs, footers and sticky Book now fail closed to Register interest while
+  bookings are paused (Home / timetable parity). iPhone Home hero matches
+  Explore About: Register interest when `memberBookingsEnabled` is false.
+  Member Account profile Save and public Events “Train for this” refuse
+  same-paint double submits.
 - Public `/booking` Buy pack / Book class refuse same-paint double submits and
   freeze every other pack/class CTA while one checkout or booking is in flight
   (iPhone `bookingSessionID` parity) so two Stripe sessions or two credit
@@ -336,6 +342,16 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 24. This batch — marketing Book CTAs, iOS Home hero, profile/goal locks
+| Area | Defect | Fix |
+|---|---|---|
+| Public About / Contact / Coaches / Events / Training Guide / App | Home + timetable gated Book CTAs on `bookings_enabled`; these pages still offered Book / sticky Book + footer Book while bookings were paused | Fail-closed `bookingsEnabled`; Register interest / `#eoi`; sticky + footer Book only when bookings on |
+| iOS Home hero | Explore About already said Register interest when paused; `NativeHomeHero` always said Book | `bookingsEnabled: store.memberBookingsEnabled` → Register interest label |
+| Account profile Save | Only React `savingProfile` — same-paint double Save could fire two `updateMyProfile` writes | `profileSaveLockRef` (readiness / cancel parity) |
+| Public Events goals | Train for this used only `savingGoalId` and left sibling goal buttons live — same-paint double add/remove | `goalLockRef` + disable every goal CTA while one save is in flight |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -493,3 +509,8 @@ show `installed = true` and `release_ready = true`, including
     `/booking` stays single-flight and freezes sibling CTAs; Account cancel
     booking and admin Cancel class ignore a second same-paint Confirm; Members
     / PT CSV stay off while loading and refuse double download.
+27. **Marketing Book CTAs + profile/goal locks** — With bookings off: About /
+    Contact / Coaches / Events / Training Guide / App show Register interest
+    (not Book) and hide sticky Book; iPhone Home hero says Register interest;
+    Account Save details and Events Train for this ignore a second same-paint
+    submit.

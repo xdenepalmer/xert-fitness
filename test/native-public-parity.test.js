@@ -29,6 +29,8 @@ test('native Explore mirrors public CMS, team, training and acquisition workflow
   assert.match(explore, /memberBookingsEnabled/);
   assert.match(explore, /Register interest/);
   assert.match(home, /content: store\.publicContent\(for: \.hero\)/);
+  assert.match(home, /bookingsEnabled: store\.memberBookingsEnabled/);
+  assert.match(home, /Register interest/);
   assert.match(home, /content\.photos[\s\S]*compactMap[\s\S]*publicPhotoURL/);
   assert.match(booking, /store\.publicContent\(for: \.booking\)\.intro/);
   assert.match(store, /func submitInterest\(kind: NativeInterestKind/);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Mail, MapPin, Phone, Instagram } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
@@ -7,6 +7,7 @@ import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import PageHeader from '@/components/public/PageHeader';
 import { useSiteContent } from '@/lib/siteContent';
 import { CONTACT_DEFAULTS, HERO_DEFAULTS, HERO_PHOTOS } from '@/lib/contentDefaults';
+import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 const KINGAROY_MAP_EMBED = 'https://www.openstreetmap.org/export/embed.html?bbox=151.8100%2C-26.5550%2C151.8700%2C-26.5050&layer=mapnik';
 const KINGAROY_MAP_LINK = 'https://www.openstreetmap.org/#map=14/-26.5309/151.8400';
@@ -15,6 +16,15 @@ export default function Contact() {
   const content = useSiteContent('contact', CONTACT_DEFAULTS);
   const heroContent = useSiteContent('hero', HERO_DEFAULTS);
   const galleryPhotos = (heroContent.photos?.length ? heroContent.photos : HERO_PHOTOS).slice(0, 3);
+  const [settings, setSettings] = useState(getDefaultSettings());
+  // Fail closed: Book CTAs stay off until launch settings confirm bookings_enabled
+  // (Home / Soft Launch timetable parity).
+  const bookingsEnabled = settings.bookings_enabled === true;
+
+  useEffect(() => {
+    getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
@@ -110,15 +120,22 @@ export default function Contact() {
         </div>
 
         <div className="mt-12 pt-8" style={{ borderTop: '1px solid rgba(123,167,188,0.12)' }}>
-          <Link to="/booking"
-            className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide">
-            Book Your First Session
-          </Link>
+          {bookingsEnabled ? (
+            <Link to="/booking"
+              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide">
+              Book Your First Session
+            </Link>
+          ) : (
+            <Link to="/#eoi"
+              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide">
+              Register interest
+            </Link>
+          )}
         </div>
         </div>
       </main>
-      <PublicFooter />
-      <StickyMobileCTA />
+      <PublicFooter showBookCta={bookingsEnabled} />
+      {bookingsEnabled && <StickyMobileCTA />}
     </div>
   );
 }

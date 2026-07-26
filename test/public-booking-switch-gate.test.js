@@ -46,6 +46,27 @@ test('public Home only offers booking CTAs when bookings_enabled is true', async
   assert.match(hero, /\/#eoi/);
 });
 
+test('public marketing pages only offer booking CTAs when bookings_enabled is true', async () => {
+  const pages = await Promise.all([
+    read('../src/pages/About.jsx'),
+    read('../src/pages/Contact.jsx'),
+    read('../src/pages/Coaches.jsx'),
+    read('../src/pages/Events.jsx'),
+    read('../src/pages/TrainingGuide.jsx'),
+    read('../src/pages/AppLanding.jsx'),
+  ]);
+  for (const page of pages) {
+    assert.match(page, /const bookingsEnabled = settings\.bookings_enabled === true/);
+    assert.match(page, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
+    assert.match(page, /bookingsEnabled && <StickyMobileCTA/);
+  }
+  const [about, contact, coaches, events] = pages;
+  for (const page of [about, contact, coaches, events]) {
+    assert.match(page, /Register interest/);
+    assert.match(page, /\/#eoi/);
+  }
+});
+
 test('public /booking timetable only offers book CTAs when bookings_enabled is true', async () => {
   const page = await read('../src/pages/Booking.jsx');
   assert.match(page, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);

@@ -6,6 +6,7 @@ import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import PageHeader from '@/components/public/PageHeader';
 import Skeleton from '@/components/public/Skeleton';
 import { getCoaches } from '@/lib/bookingData';
+import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 const CATEGORY_LABELS = {
   coach: 'Coaching Team',
@@ -88,12 +89,20 @@ export default function Coaches() {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [settings, setSettings] = useState(getDefaultSettings());
+  // Fail closed: Book CTAs stay off until launch settings confirm bookings_enabled
+  // (Home / Soft Launch timetable parity).
+  const bookingsEnabled = settings.bookings_enabled === true;
 
   useEffect(() => {
     getCoaches()
       .then(setCoaches)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
   }, []);
 
   const groups = useMemo(() => {
@@ -164,18 +173,27 @@ export default function Coaches() {
           </div>
 
           <div className="mt-8 pt-8 border-t" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
-            <a
-              href="/booking"
-              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
-            >
-              Train With Us
-            </a>
+            {bookingsEnabled ? (
+              <a
+                href="/booking"
+                className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
+              >
+                Train With Us
+              </a>
+            ) : (
+              <a
+                href="/#eoi"
+                className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
+              >
+                Register interest
+              </a>
+            )}
           </div>
         </div>
       </main>
 
-      <PublicFooter />
-      <StickyMobileCTA />
+      <PublicFooter showBookCta={bookingsEnabled} />
+      {bookingsEnabled && <StickyMobileCTA />}
     </div>
   );
 }

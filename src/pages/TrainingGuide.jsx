@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 const sections = [
   {
@@ -27,6 +28,14 @@ const sections = [
 ];
 
 export default function TrainingGuide() {
+  const [settings, setSettings] = useState(getDefaultSettings());
+  // Fail closed: sticky Book CTA stays off until bookings_enabled (Home parity).
+  const bookingsEnabled = settings.bookings_enabled === true;
+
+  useEffect(() => {
+    getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
       <PublicNav />
@@ -61,8 +70,8 @@ export default function TrainingGuide() {
           </a>
         </div>
       </main>
-      <PublicFooter />
-      <StickyMobileCTA />
+      <PublicFooter showBookCta={bookingsEnabled} />
+      {bookingsEnabled && <StickyMobileCTA />}
     </div>
   );
 }

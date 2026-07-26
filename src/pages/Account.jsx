@@ -113,6 +113,9 @@ export default function Account() {
   // Disabled Delete only re-renders after paint — lock before await so a
   // double-confirm cannot fire two delete-account API calls.
   const deleteAccountLockRef = useRef(false);
+  // Same-paint double Save can fire two profile updates before `savingProfile`
+  // re-renders (readinessSavingRef / cancelBookingLockRef parity).
+  const profileSaveLockRef = useRef(false);
   const [memberReadiness, setMemberReadiness] = useState(null);
   const [readinessForm, setReadinessForm] = useState(emptyReadinessForm);
   const [adultEligibilityConfirmed, setAdultEligibilityConfirmed] = useState(false);
@@ -457,6 +460,8 @@ export default function Account() {
 
   const handleProfileSave = async event => {
     event.preventDefault();
+    if (profileSaveLockRef.current || savingProfile) return;
+    profileSaveLockRef.current = true;
     setSavingProfile(true);
     try {
       await updateMyProfile({
@@ -476,6 +481,7 @@ export default function Account() {
       });
     } finally {
       setSavingProfile(false);
+      profileSaveLockRef.current = false;
     }
   };
 

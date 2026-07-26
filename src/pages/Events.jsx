@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, CalendarPlus, ExternalLink, MapPin, Target, Trophy } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
@@ -7,6 +7,7 @@ import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import PageHeader from '@/components/public/PageHeader';
 import Skeleton from '@/components/public/Skeleton';
 import { addMyEventGoal, getEvents, getMyEventGoals, removeMyEventGoal } from '@/lib/bookingData';
+import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { downloadEventIcs, formatEventRange, getEventState, groupEventsByMonth, sortEvents } from '@/lib/eventCalendar';
@@ -26,12 +27,23 @@ export default function Events() {
   const [showPast, setShowPast] = useState(false);
   const [goalEventIds, setGoalEventIds] = useState(() => new Set());
   const [savingGoalId, setSavingGoalId] = useState(null);
+  // Same-paint double-tap on Train for this can mint two add/remove goal RPCs
+  // before `savingGoalId` re-renders (Account cancel / LeadTable lock parity).
+  const goalLockRef = useRef(false);
+  const [settings, setSettings] = useState(getDefaultSettings());
+  // Fail closed: Book CTAs stay off until launch settings confirm bookings_enabled
+  // (Home / Soft Launch timetable parity).
+  const bookingsEnabled = settings.bookings_enabled === true;
 
   useEffect(() => {
     getEvents()
       .then(setEvents)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -62,9 +74,10 @@ export default function Events() {
       navigate('/login');
       return;
     }
-    if (!canTrackEventGoal(event)) return;
+    if (!canTrackEventGoal(event) || goalLockRef.current || savingGoalId) return;
     const eventId = event.id;
     const alreadySelected = goalEventIds.has(eventId);
+    goalLockRef.current = true;
     setSavingGoalId(eventId);
     try {
       if (alreadySelected) {
@@ -90,6 +103,7 @@ export default function Events() {
       });
     } finally {
       setSavingGoalId(null);
+      goalLockRef.current = false;
     }
   };
 
@@ -326,8 +340,8 @@ export default function Events() {
                               <button
                                 type="button"
                                 aria-pressed={selectedGoal}
-                                disabled={savingGoalId === ev.id}
-                                onClick={() => handleGoalToggle(ev)}
+                                disabled={savingGoalId !== null}
+                                onClick={() => void handleGoalToggle(ev)}
                                 className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider disabled:opacity-50"
                                 style={{
                                   color: selectedGoal ? '#D1DDE6' : '#7BA7BC'
@@ -351,18 +365,26 @@ export default function Events() {
             <div className="flex items-center gap-3">
               <CalendarDays className="w-5 h-5" style={{ color: '#7BA7BC' }} />
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.7)' }}>
-                Training toward one of these? Book a session and prepare with structured coaching.
+                {bookingsEnabled
+                  ? 'Training toward one of these? Book a session and prepare with structured coaching.'
+                  : 'Training toward one of these? Register interest and XERT will follow up when class spots open.'}
               </p>
             </div>
-            <a href="/booking" className="xert-btn-primary inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
-              Book A Session
-            </a>
+            {bookingsEnabled ? (
+              <a href="/booking" className="xert-btn-primary inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
+                Book A Session
+              </a>
+            ) : (
+              <a href="/#eoi" className="xert-btn-primary inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
+                Register interest
+              </a>
+            )}
           </div>
         </div>
       </main>
 
-      <PublicFooter />
-      <StickyMobileCTA />
+      <PublicFooter showBookCta={bookingsEnabled} />
+      {bookingsEnabled && <StickyMobileCTA />}
     </div>
   );
 }

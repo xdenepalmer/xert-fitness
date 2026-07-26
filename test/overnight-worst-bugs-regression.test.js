@@ -267,9 +267,40 @@ test('soft-launch public booking gate keeps class_bookings inserts behind bookin
   assert.match(home, /bookingsEnabled && <StickyMobileCTA/);
   assert.match(home, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
 
+  for (const path of [
+    '../src/pages/About.jsx',
+    '../src/pages/Contact.jsx',
+    '../src/pages/Coaches.jsx',
+    '../src/pages/Events.jsx',
+    '../src/pages/TrainingGuide.jsx',
+    '../src/pages/AppLanding.jsx',
+  ]) {
+    const page = read(path);
+    assert.match(page, /const bookingsEnabled = settings\.bookings_enabled === true/);
+    assert.match(page, /bookingsEnabled && <StickyMobileCTA/);
+    assert.match(page, /<PublicFooter showBookCta=\{bookingsEnabled\}/);
+  }
+
   const booking = read('../src/pages/Booking.jsx');
   assert.match(booking, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);
   assert.match(booking, /if \(!bookingsEnabled\)/);
+
+  const iosHome = read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift');
+  assert.match(iosHome, /bookingsEnabled: store\.memberBookingsEnabled/);
+  assert.match(iosHome, /Register interest/);
+});
+
+test('account profile save and public event goals refuse same-paint double submits', () => {
+  const account = read('../src/pages/Account.jsx');
+  assert.match(account, /const profileSaveLockRef = useRef\(false\)/);
+  assert.match(account, /if \(profileSaveLockRef\.current \|\| savingProfile\) return/);
+  assert.match(account, /profileSaveLockRef\.current = true/);
+
+  const events = read('../src/pages/Events.jsx');
+  assert.match(events, /const goalLockRef = useRef\(false\)/);
+  assert.match(events, /goalLockRef\.current \|\| savingGoalId/);
+  assert.match(events, /goalLockRef\.current = true/);
+  assert.match(events, /disabled=\{savingGoalId !== null\}/);
 });
 
 test('member onboarding booking gate fails closed before session_bookings insert', () => {

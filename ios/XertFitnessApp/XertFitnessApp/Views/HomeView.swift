@@ -21,6 +21,7 @@ struct HomeView: View {
                         NativeHomeHero(
                             content: store.publicContent(for: .hero),
                             isSignedIn: store.isSignedIn,
+                            bookingsEnabled: store.memberBookingsEnabled,
                             noticeCount: store.announcements.count,
                             topSafeAreaInset: viewport.safeAreaInsets.top,
                             onBook: { onNavigate(.booking) },
@@ -992,6 +993,9 @@ private struct NativeHomeHero: View {
     @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
     let content: AdminSiteContentData
     let isSignedIn: Bool
+    // Fail closed with store default false until soft-launch settings load
+    // (Explore About / web Home parity).
+    let bookingsEnabled: Bool
     let noticeCount: Int
     let topSafeAreaInset: CGFloat
     let onBook: () -> Void
@@ -1210,7 +1214,9 @@ private struct NativeHomeHero: View {
     @ViewBuilder
     private var heroActions: some View {
         Button(action: onBook) {
-            Text(isSignedIn ? "Book A Class" : "Book Your First Session")
+            Text(bookingsEnabled
+                 ? (isSignedIn ? "Book A Class" : "Book Your First Session")
+                 : "Register interest")
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }

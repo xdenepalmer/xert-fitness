@@ -19,6 +19,8 @@ test('native home opens with the photographic XERT website hero language', async
   assert.match(home, /Structured functional fitness coaching designed for strength/);
   assert.match(home, /Booking-based semi-private classes · Kingaroy QLD/);
   assert.match(home, /Book Your First Session/);
+  assert.match(home, /bookingsEnabled: store\.memberBookingsEnabled/);
+  assert.match(home, /Register interest/);
   assert.match(home, /View Event Calendar/);
   assert.match(home, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
   assert.match(home, /@State private var photoIndex = 0/);
