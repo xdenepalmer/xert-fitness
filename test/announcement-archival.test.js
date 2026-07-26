@@ -4,10 +4,12 @@ import test from 'node:test';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('linked migration exactly installs the canonical announcement archive contract', () => {
+test('reusable archive setup retains targeted notice access protection', () => {
   const source = read('../src/supabase/announcement_archival_upgrade.sql').replace(/\r\n/g, '\n');
   const migration = read('../supabase/migrations/20260714010000_announcement_archival.sql').replace(/\r\n/g, '\n');
-  assert.equal(migration, source);
+  assert.notEqual(migration, source);
+  assert.match(source, /do \$announcement_policy\$/i);
+  assert.match(source, /audience = 'targeted'[\s\S]*target\.user_id = \(select auth\.uid\(\)\)/i);
 });
 
 for (const path of [
