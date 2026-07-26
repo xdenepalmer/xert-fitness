@@ -1207,6 +1207,63 @@ private struct XertNavigationDock: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // One-tap owner entry. Burying this in a long-press menu made the
+            // command centre unreachable for day-to-day use on iPhone.
+            if isAdmin {
+                Button {
+                    onOpenAdmin(ownerPulse.priority?.workspace)
+                } label: {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Image(systemName: "waveform.path.ecg.rectangle")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.xertSteel)
+                            XertOwnerNavigationPulseBadge(pulse: ownerPulse)
+                                .offset(x: 15, y: -10)
+                        }
+                        Text("Owner Command Centre")
+                            .font(XertTheme.displayFont(size: 16, relativeTo: .headline))
+                            .textCase(.uppercase)
+                            .tracking(1.2)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Spacer()
+                        Text(ownerPulse.priority?.compactLabel ?? ownerPulse.shortStatus)
+                            .font(.caption2.weight(.bold))
+                            .textCase(.uppercase)
+                            .tracking(1.1)
+                            .foregroundStyle(Color.xertSteel)
+                        Image(systemName: "chevron.up")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .frame(minHeight: 38)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.xertDeep, Color.xertInk.opacity(0.94)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.xertSteel.opacity(0.32), lineWidth: 1)
+                }
+                .padding(.bottom, 7)
+                .accessibilityLabel("Owner Command Centre")
+                .accessibilityHint(ownerAccessibilityHint)
+                .accessibilityValue(ownerPulse.accessibilityLabel)
+                .accessibilityIdentifier("xert-navigation-owner")
+                .contextMenu { ownerWorkspaceMenu }
+            }
+
             taskStrip
 
             HStack(spacing: 0) {
@@ -1349,6 +1406,17 @@ private struct XertNavigationDock: View {
 
     private var compactUtilitiesMenu: some View {
         Menu {
+            if isAdmin {
+                if let priority = ownerPulse.priority {
+                    Button { onOpenAdmin(priority.workspace) } label: {
+                        Label(priority.actionTitle, systemImage: priority.workspace.icon)
+                    }
+                }
+                Button { onOpenAdmin(nil) } label: {
+                    Label("Owner Command Centre", systemImage: XertOwnerWorkspace.overview.icon)
+                }
+                Divider()
+            }
             if let nextRoute {
                 Button(action: onReturnNext) {
                     Label("Forward to \(nextRoute.navigationTitle)", systemImage: "arrow.uturn.forward")
@@ -1521,6 +1589,23 @@ private struct XertNavigationDock: View {
             Button { onOpenAdmin(nil) } label: {
                 Label("Owner Command Centre", systemImage: XertOwnerWorkspace.overview.icon)
             }
+        }
+    }
+
+    private var ownerAccessibilityHint: String {
+        ownerPulse.priority.map { "\($0.actionTitle) in the protected Owner Command Centre" }
+            ?? "Opens protected gym operations and platform controls"
+    }
+
+    @ViewBuilder
+    private var ownerWorkspaceMenu: some View {
+        if let priority = ownerPulse.priority {
+            Button { onOpenAdmin(priority.workspace) } label: {
+                Label(priority.actionTitle, systemImage: priority.workspace.icon)
+            }
+        }
+        Button { onOpenAdmin(nil) } label: {
+            Label("Open owner overview", systemImage: XertOwnerWorkspace.overview.icon)
         }
     }
 
