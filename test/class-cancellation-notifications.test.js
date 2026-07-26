@@ -78,6 +78,12 @@ test('delivery retries do not send a second push after an audited attempt', () =
   assert.match(endpoint, /if \(\(previous \|\| \[\]\)\.length > 0\)/);
 });
 
+test('announcement publishing logs 500s behind a request id for operators', () => {
+  assert.match(endpoint, /createRequestTrace\(response\)/);
+  assert.match(endpoint, /console\.error\('Announcement publishing failed\.'[\s\S]*requestId: trace\.requestId/);
+  assert.match(endpoint, /console\.error\('Class cancellation push delivery failed\.'[\s\S]*requestId: trace\.requestId/);
+});
+
 test('class notice endpoint authenticates before revealing server configuration', async () => {
   const response = await adminPublishAnnouncementHandler({
     method: 'POST',
@@ -85,7 +91,10 @@ test('class notice endpoint authenticates before revealing server configuration'
     body: { action: 'notify_class_cancellation' },
   });
   assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), { error: 'Not authenticated.' });
+  const body = await response.json();
+  assert.equal(body.error, 'Not authenticated.');
+  assert.match(String(body.request_id || ''), /^[0-9a-f-]{36}$/i);
+  assert.equal(response.headers.get('x-request-id'), body.request_id);
 });
 
 test('targeted subscription loading chunks every recipient without truncation', async () => {

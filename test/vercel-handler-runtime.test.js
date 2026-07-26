@@ -65,7 +65,16 @@ for (const [name, handler, method] of [
     assert.equal(response.completed, true);
     assert.equal(response.statusCode, 405);
     assert.match(String(response.body?.error || response.body), /Method not allowed/);
-    if (['checkout', 'commerce health', 'Stripe webhook', 'admin refund', 'admin order reconciliation'].includes(name)) {
+    if ([
+      'checkout',
+      'commerce health',
+      'Stripe webhook',
+      'admin refund',
+      'admin order reconciliation',
+      'push subscription',
+      'admin announcement publishing',
+      'admin push health',
+    ].includes(name)) {
       assert.match(response.headers['x-request-id'], /^[0-9a-f-]{36}$/i);
       if (typeof response.body === 'object') {
         assert.equal(response.body.request_id, response.headers['x-request-id']);

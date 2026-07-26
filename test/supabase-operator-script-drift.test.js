@@ -217,6 +217,36 @@ test('every install_public_form_insert_policies definition gates PT/booking note
   }
 });
 
+test('operator RLS scripts keep admin policy quals as InitPlan-safe scalar subqueries', () => {
+  // 20260726018000 wraps admin_all_* / admin_settings / availability / blackout
+  // policies as `(select public.is_admin())` so Postgres evaluates them once per
+  // statement. rls_policies.sql and rls_hardening.sql recreate those same
+  // policies; a bare `public.is_admin()` here reintroduces per-row profile
+  // lookups on every badge count and lead scan when either file is re-run.
+  const barePolicyQual = /(?:using|with check)\s*\(\s*public\.is_admin\s*\(\s*\)\s*\)/i;
+  const wrappedPolicyQual = /(?:using|with check)\s*\(\s*\(\s*select\s+public\.is_admin\s*\(\s*\)\s*\)\s*\)/i;
+  let checked = 0;
+
+  for (const name of ['rls_policies.sql', 'rls_hardening.sql']) {
+    const script = scripts().find(entry => entry.name === name);
+    assert.ok(script, `missing operator script ${name}`);
+    assert.match(
+      script.sql,
+      wrappedPolicyQual,
+      `${name} must recreate admin policies with (select public.is_admin())`,
+    );
+    assert.doesNotMatch(
+      script.sql,
+      barePolicyQual,
+      `${name} still installs a bare public.is_admin() policy qual, so re-running `
+        + 'it undoes admin_policy_scalar_subquery InitPlan caching',
+    );
+    checked += 1;
+  }
+
+  assert.equal(checked, 2);
+});
+
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {
   const superseded = [
     {

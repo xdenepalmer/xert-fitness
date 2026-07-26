@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,7 +32,8 @@ export function normalizePushSubscription(body) {
 }
 
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Push registration is not configured.' }, 500);
 
@@ -92,6 +93,10 @@ export default async function handler(request, response) {
     if (['PUSH_ACTION_INVALID', 'PUSH_TOKEN_INVALID', 'PUSH_ENVIRONMENT_INVALID'].includes(error.message)) {
       return json({ error: 'Push subscription is invalid.' }, 400);
     }
+    console.error('Push subscription update failed.', {
+      requestId: trace.requestId,
+      code: String(error?.code || error?.message || 'UNEXPECTED_PUSH_SUBSCRIPTION_ERROR'),
+    });
     return json({ error: 'Push subscription could not be updated.' }, 500);
   }
 }

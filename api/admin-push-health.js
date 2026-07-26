@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { inspectAPNsEnvironment } from './apns.js';
-import { requestHeader, sendJson } from './http.js';
+import { createRequestTrace, requestHeader } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -39,7 +39,8 @@ export function summarizePushOperations(results, environment = process.env) {
 }
 
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
   const authHeader = requestHeader(request, 'authorization');
@@ -70,7 +71,11 @@ export default async function handler(request, response) {
       admin.from('push_notification_deliveries').select('status,reason,attempted_at').order('attempted_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
     return json(summarizePushOperations(results));
-  } catch {
+  } catch (error) {
+    console.error('Admin push health failed.', {
+      requestId: trace.requestId,
+      code: String(error?.code || error?.message || 'UNEXPECTED_PUSH_HEALTH_ERROR'),
+    });
     return json({ error: 'Push operations health could not be loaded.' }, 500);
   }
 }

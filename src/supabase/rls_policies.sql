@@ -97,25 +97,25 @@ end;
 $$;
 
 create policy "admin_all_member_interest" on public.member_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- trainer_interest ----------------------------------------------------------
 alter table public.trainer_interest enable row level security;
 drop policy if exists "admin_all_trainer_interest" on public.trainer_interest;
 create policy "admin_all_trainer_interest" on public.trainer_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- partner_interest ----------------------------------------------------------
 alter table public.partner_interest enable row level security;
 drop policy if exists "admin_all_partner_interest" on public.partner_interest;
 create policy "admin_all_partner_interest" on public.partner_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- class_bookings (legacy request-to-book) -------------------------------------
 alter table public.class_bookings enable row level security;
 drop policy if exists "admin_all_class_bookings" on public.class_bookings;
 create policy "admin_all_class_bookings" on public.class_bookings
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- private_session_requests --------------------------------------------------
 alter table public.private_session_requests
@@ -123,7 +123,7 @@ alter table public.private_session_requests
 alter table public.private_session_requests enable row level security;
 drop policy if exists "admin_all_private_session_requests" on public.private_session_requests;
 create policy "admin_all_private_session_requests" on public.private_session_requests
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- ── class_sessions ──────────────────────────────────────────────────────────
 -- The public site shows published, publicly-visible classes (getClassSessions
@@ -137,7 +137,7 @@ create policy "public_read_published_class_sessions" on public.class_sessions
   for select to anon, authenticated
   using (public_visible = true and status = 'published');
 create policy "admin_all_class_sessions" on public.class_sessions
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- ── admin_settings ──────────────────────────────────────────────────────────
 -- The public Home page reads soft-launch settings (countdown, banner, etc.),
@@ -151,9 +151,9 @@ drop policy if exists "admin_insert_admin_settings" on public.admin_settings;
 create policy "public_read_admin_settings" on public.admin_settings
   for select to anon, authenticated using (true);
 create policy "admin_update_admin_settings" on public.admin_settings
-  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admin_insert_admin_settings" on public.admin_settings
-  for insert to authenticated with check (public.is_admin());
+  for insert to authenticated with check ((select public.is_admin()));
 
 -- ============================================================================
 -- Done. After running:

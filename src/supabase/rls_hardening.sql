@@ -8,9 +8,10 @@
 -- constrained to their trusted initial status and required contact consent.
 --
 -- Requires booking_schema.sql (public.is_admin()) to be applied first.
--- Idempotent — safe to re-run. rls_policies.sql has since been rewritten to
--- these same is_admin()-gated policies, so re-running either file is safe;
--- this file remains the canonical hardening pass (it also covers profiles).
+-- Idempotent — safe to re-run. Admin policy quals use (select public.is_admin())
+-- so a re-run keeps the InitPlan-safe shape from admin_policy_scalar_subquery
+-- instead of reintroducing per-row is_admin() lookups. This file remains the
+-- canonical hardening pass (it also covers profiles).
 -- ============================================================================
 
 -- ── Lead / request tables: guarded public INSERT + role-gated admin access ──
@@ -65,34 +66,34 @@ $$;
 -- member_interest
 drop policy if exists "admin_all_member_interest" on public.member_interest;
 create policy "admin_all_member_interest" on public.member_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- trainer_interest
 drop policy if exists "admin_all_trainer_interest" on public.trainer_interest;
 create policy "admin_all_trainer_interest" on public.trainer_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- partner_interest
 drop policy if exists "admin_all_partner_interest" on public.partner_interest;
 create policy "admin_all_partner_interest" on public.partner_interest
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- class_bookings (legacy request-to-book)
 drop policy if exists "admin_all_class_bookings" on public.class_bookings;
 create policy "admin_all_class_bookings" on public.class_bookings
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- private_session_requests
 alter table public.private_session_requests
   add column if not exists user_id uuid references auth.users(id) on delete set null default auth.uid();
 drop policy if exists "admin_all_private_session_requests" on public.private_session_requests;
 create policy "admin_all_private_session_requests" on public.private_session_requests
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- ── class_sessions: public read of published stays; writes admin-only ───────
 drop policy if exists "admin_all_class_sessions" on public.class_sessions;
 create policy "admin_all_class_sessions" on public.class_sessions
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- ── profiles: members can update contact details, never their own authority ─
 -- RLS controls row ownership; this trigger protects privileged columns from a
@@ -136,20 +137,20 @@ drop policy if exists "profiles_insert_self" on public.profiles;
 drop policy if exists "admin_update_admin_settings" on public.admin_settings;
 drop policy if exists "admin_insert_admin_settings" on public.admin_settings;
 create policy "admin_update_admin_settings" on public.admin_settings
-  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admin_insert_admin_settings" on public.admin_settings
-  for insert to authenticated with check (public.is_admin());
+  for insert to authenticated with check ((select public.is_admin()));
 
 -- ── availability_blocks / blackout_periods: admin-only entirely ─────────────
 drop policy if exists "admin_all_availability_blocks" on public.availability_blocks;
 drop policy if exists "admins_manage_availability_blocks" on public.availability_blocks;
 create policy "admins_manage_availability_blocks" on public.availability_blocks
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 drop policy if exists "admin_all_blackout_periods" on public.blackout_periods;
 drop policy if exists "admins_manage_blackout_periods" on public.blackout_periods;
 create policy "admins_manage_blackout_periods" on public.blackout_periods
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  for all to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- ============================================================================
 -- Done. Verify with:

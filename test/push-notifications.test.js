@@ -186,6 +186,12 @@ test('push registration refuses to rebind a device still enabled for another mem
   assert.ok(MAX_ENABLED_PUSH_SUBSCRIPTIONS >= 1);
 });
 
+test('push subscription failures log behind a request id instead of returning a silent 500', () => {
+  const endpoint = read('../api/push-subscription.js');
+  assert.match(endpoint, /createRequestTrace\(response\)/);
+  assert.match(endpoint, /console\.error\('Push subscription update failed\.'[\s\S]*requestId: trace\.requestId/);
+});
+
 test('member announcement pushes fail closed for a targeted notice without recipients', async () => {
   // A broadcast (no recipient list) is only safe for an 'all'
   // audience; a targeted notice reaching this path would hit every device.

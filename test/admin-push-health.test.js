@@ -76,5 +76,12 @@ test('admin push health authenticates before reporting server configuration', as
   const response = responseRecorder();
   await adminPushHealthHandler({ method: 'GET', headers: {} }, response);
   assert.equal(response.statusCode, 401);
-  assert.deepEqual(response.body, { error: 'Not authenticated.' });
+  assert.equal(response.body.error, 'Not authenticated.');
+  assert.match(String(response.body.request_id || ''), /^[0-9a-f-]{36}$/i);
+});
+
+test('admin push health logs unexpected failures behind a request id', async () => {
+  const endpoint = await readFile(new URL('../api/admin-push-health.js', import.meta.url), 'utf8');
+  assert.match(endpoint, /createRequestTrace\(response\)/);
+  assert.match(endpoint, /console\.error\('Admin push health failed\.'[\s\S]*requestId: trace\.requestId/);
 });

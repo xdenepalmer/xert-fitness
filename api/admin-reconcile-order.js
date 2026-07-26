@@ -17,6 +17,17 @@ export function normalizeReconciliationRequest(body) {
   return { orderId };
 }
 
+/**
+ * orders.user_id is ON DELETE SET NULL. After account deletion the Stripe
+ * metadata still carries the original buyer id while the local row is NULL.
+ * Webhook fulfilment already tolerates that; admin reconcile must too, or a
+ * paid-but-unsettled order for a deleted member can never be recovered.
+ */
+export function orderBuyerMatchesStripe(orderUserId, stripeUserId) {
+  if (orderUserId == null) return Boolean(stripeUserId);
+  return orderUserId === stripeUserId;
+}
+
 export function assertFulfillmentMatchesOrder(order, fulfillment) {
   const paidOrder = fulfillment?.order;
   const credit = fulfillment?.credit;
@@ -24,7 +35,7 @@ export function assertFulfillmentMatchesOrder(order, fulfillment) {
   if (order.status === 'refunded') throw new Error('ORDER_ALREADY_REFUNDED');
   if (
     paidOrder.stripe_checkout_session_id !== order.stripe_checkout_session_id
-    || paidOrder.user_id !== order.user_id
+    || !orderBuyerMatchesStripe(order.user_id, paidOrder.user_id)
     || paidOrder.product_id !== order.product_id
     || Number(paidOrder.amount_cents) !== Number(order.amount_cents)
     || String(paidOrder.currency || '').toLowerCase() !== String(order.currency || '').toLowerCase()
@@ -42,7 +53,7 @@ export function assertCheckoutMatchesOrder(order, checkout) {
     !checkout
     || checkout.id !== order.stripe_checkout_session_id
     || checkout.mode !== 'payment'
-    || metadata.user_id !== order.user_id
+    || !orderBuyerMatchesStripe(order.user_id, metadata.user_id)
     || metadata.product_id !== order.product_id
     || Number(checkout.amount_total) !== Number(order.amount_cents)
     || String(checkout.currency || '').toLowerCase() !== String(order.currency || '').toLowerCase()

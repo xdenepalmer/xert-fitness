@@ -5,6 +5,7 @@ import {
   assertCheckoutMatchesOrder,
   assertFulfillmentMatchesOrder,
   normalizeReconciliationRequest,
+  orderBuyerMatchesStripe,
   reconcileCheckoutOrder,
 } from '../api/admin-reconcile-order.js';
 
@@ -71,6 +72,33 @@ test('Stripe fulfilment must match the complete pending order identity', () => {
       /PAYMENT_ORDER_MISMATCH/,
     );
   }
+});
+
+test('deleted-buyer orders still reconcile when Stripe keeps the original user id', () => {
+  // Account deletion nulls orders.user_id; Stripe metadata still names the buyer.
+  // Rejecting that pair stranded paid recoveries that webhook fulfilment already settles.
+  assert.equal(orderBuyerMatchesStripe(null, USER_ID), true);
+  assert.equal(orderBuyerMatchesStripe(USER_ID, USER_ID), true);
+  assert.equal(orderBuyerMatchesStripe(USER_ID, 'other-member'), false);
+  assert.equal(orderBuyerMatchesStripe(null, null), false);
+
+  const deletedBuyerOrder = { ...order, user_id: null };
+  const fulfillment = {
+    order: {
+      stripe_checkout_session_id: 'cs_xert', user_id: USER_ID, product_id: PRODUCT_ID,
+      amount_cents: 4800, currency: 'aud',
+    },
+    credit: { total: 4, validity_days: 28 },
+  };
+  assert.doesNotThrow(() => assertFulfillmentMatchesOrder(deletedBuyerOrder, fulfillment));
+  assert.doesNotThrow(() => assertCheckoutMatchesOrder(deletedBuyerOrder, checkout));
+  assert.throws(
+    () => assertFulfillmentMatchesOrder(
+      deletedBuyerOrder,
+      { ...fulfillment, order: { ...fulfillment.order, user_id: null } },
+    ),
+    /PAYMENT_ORDER_MISMATCH/,
+  );
 });
 
 test('expired checkout cleanup requires the complete pending order identity', () => {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import { sendMemberAnnouncementPushes } from './apns.js';
 
 export const config = { maxDuration: 60 };
@@ -126,7 +126,8 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
 }
 
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   const authHeader = requestHeader(request, 'authorization');
@@ -205,8 +206,24 @@ export default async function handler(request, response) {
     if (error.message === 'TARGETED_NOTICE_NOT_FOUND') return json({ error: 'Private member notice not found.' }, 404);
     if (error.message === 'TARGETED_NOTICE_RECIPIENT_INVALID') return json({ error: 'Private member notice recipient is invalid.' }, 409);
     if (error.message?.startsWith('ANNOUNCEMENT_')) return json({ error: 'Announcement details are invalid.' }, 400);
-    if (error.message?.startsWith('CLASS_NOTICE_')) return json({ error: 'The cancellation notice was saved, but push delivery could not be completed.' }, 500);
-    if (error.message?.startsWith('TARGETED_NOTICE_')) return json({ error: 'The private notice was saved, but push delivery could not be completed.' }, 500);
+    if (error.message?.startsWith('CLASS_NOTICE_')) {
+      console.error('Class cancellation push delivery failed.', {
+        requestId: trace.requestId,
+        code: String(error?.code || error?.message || 'CLASS_NOTICE_DELIVERY_FAILED'),
+      });
+      return json({ error: 'The cancellation notice was saved, but push delivery could not be completed.' }, 500);
+    }
+    if (error.message?.startsWith('TARGETED_NOTICE_')) {
+      console.error('Targeted notice push delivery failed.', {
+        requestId: trace.requestId,
+        code: String(error?.code || error?.message || 'TARGETED_NOTICE_DELIVERY_FAILED'),
+      });
+      return json({ error: 'The private notice was saved, but push delivery could not be completed.' }, 500);
+    }
+    console.error('Announcement publishing failed.', {
+      requestId: trace.requestId,
+      code: String(error?.code || error?.message || 'UNEXPECTED_ANNOUNCEMENT_ERROR'),
+    });
     return json({ error: 'Announcement could not be published.' }, 500);
   }
 }
