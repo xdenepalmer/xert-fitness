@@ -245,11 +245,60 @@ export function stripeIncidentResolution(errorCode) {
   return null;
 }
 
+function isMissingSignatureFailureLedger(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code)
+    || /stripe_webhook_signature_failures.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
+/**
+ * A broken signing secret rejects every delivery before the ledger is touched,
+ * so it is invisible to the ledger-derived signals. Count durable signature
+ * rejections and detect paid orders that arrived with no newer ledger row, so
+ * "no webhooks at all" is distinguishable from "no traffic". Both
+ * probes degrade to a safe zero when their objects are not installed yet.
+ */
+async function inspectWebhookDeliveryGaps(admin, now, since) {
+  const [signatureResult, newestLedgerResult] = await Promise.all([
+    admin
+      .from('stripe_webhook_signature_failures')
+      .select('id', { count: 'exact', head: true })
+      .gte('received_at', since),
+    admin
+      .from('stripe_webhook_events')
+      .select('last_received_at')
+      .order('last_received_at', { ascending: false })
+      .limit(1),
+  ]);
+  const signatureInstalled = !(signatureResult?.error && isMissingSignatureFailureLedger(signatureResult.error));
+  const signatureFailures = signatureResult?.error ? 0 : (signatureResult?.count || 0);
+  const newestLedgerAt = newestLedgerResult?.error
+    ? null
+    : (newestLedgerResult?.data?.[0]?.last_received_at || null);
+
+  let paidOrdersQuery = admin
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'paid');
+  if (newestLedgerAt) paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
+  const paidOrdersResult = await paidOrdersQuery;
+  const paidBeyondLedger = paidOrdersResult?.error ? 0 : (paidOrdersResult?.count || 0);
+
+  return {
+    signatureInstalled,
+    signatureFailures,
+    deliveryGap: paidBeyondLedger > 0,
+  };
+}
+
 export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const staleBefore = now.getTime() - 10 * 60 * 1000;
   const fields = 'event_id,event_type,status,attempts,order_id,last_received_at,last_error_code';
-  const [recentResult, reviewResult] = await Promise.all([
+  // The checkout kill switch counts failed and stale-processing rows with no
+  // time bound, so the operator view must surface the same rows regardless of
+  // age. A 24-hour-only view left an aged failure blocking every checkout while
+  // showing an empty incident list and no event id to retry.
+  const [recentResult, failedResult, processingResult] = await Promise.all([
     admin
       .from('stripe_webhook_events')
       .select(fields)
@@ -260,11 +309,16 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       .from('stripe_webhook_events')
       .select(fields)
       .eq('status', 'failed')
-      .in('last_error_code', STRIPE_OPERATOR_REVIEW_CODES)
       .order('last_received_at', { ascending: false })
-      .limit(100),
+      .limit(200),
+    admin
+      .from('stripe_webhook_events')
+      .select(fields)
+      .eq('status', 'processing')
+      .order('last_received_at', { ascending: false })
+      .limit(200),
   ]);
-  if (recentResult.error || reviewResult.error) {
+  if (recentResult.error || failedResult.error || processingResult.error) {
     return {
       ready: false, available: false, received: 0, failed: 0,
       stale_processing: 0, retries: 0, incidents: [],
@@ -272,20 +326,18 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     };
   }
   const rows = recentResult.data || [];
-  const reviewRows = reviewResult.data || [];
-  const incidentRows = [...reviewRows, ...rows].filter((row, index, all) => (
-    all.findIndex(candidate => candidate.event_id === row.event_id) === index
-  ));
-  const failed = incidentRows.filter(row => row.status === 'failed').length;
-  const staleProcessing = rows.filter(row => (
+  const rawFailed = failedResult.data || [];
+  const rawProcessing = processingResult.data || [];
+  const failedRows = rawFailed.filter(row => row.status === 'failed');
+  const staleRows = rawProcessing.filter(row => (
     row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore
-  )).length;
+  ));
+  const failed = failedRows.length;
+  const staleProcessing = staleRows.length;
   const retries = rows.reduce((total, row) => total + Math.max(0, Number(row.attempts || 0) - 1), 0);
-  const incidents = incidentRows
-    .filter(row => (
-      row.status === 'failed'
-      || (row.status === 'processing' && Date.parse(row.last_received_at) < staleBefore)
-    ))
+  const incidents = [...failedRows, ...staleRows]
+    .filter((row, index, all) => all.findIndex(candidate => candidate.event_id === row.event_id) === index)
+    .sort((left, right) => (Date.parse(right.last_received_at) || 0) - (Date.parse(left.last_received_at) || 0))
     .slice(0, 10)
     .map(row => {
       const errorCode = row.status === 'failed'
@@ -303,31 +355,38 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
         ...(resolution ? { resolution } : {}),
       };
     });
+  const { signatureFailures, deliveryGap } = await inspectWebhookDeliveryGaps(admin, now, since);
   const recentTruncated = rows.length === 500;
-  const reviewTruncated = reviewRows.length === 100;
-  const truncated = recentTruncated || reviewTruncated;
-  const ready = failed === 0 && staleProcessing === 0 && !truncated;
+  const failedTruncated = rawFailed.length === 200;
+  const processingTruncated = rawProcessing.length === 200;
+  const truncated = recentTruncated || failedTruncated || processingTruncated;
+  const ready = failed === 0 && staleProcessing === 0
+    && signatureFailures === 0 && !deliveryGap && !truncated;
   return {
     ready,
     available: true,
     received: rows.length,
     failed,
     stale_processing: staleProcessing,
+    signature_failures: signatureFailures,
+    delivery_gap: deliveryGap,
     retries,
     incidents,
-    issue: reviewTruncated
-      ? 'The unresolved Stripe operator review queue reached its safety limit.'
-      : recentTruncated
-        ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
-      : failed > 0
-        ? `${failed} Stripe webhook deliver${failed === 1 ? 'y has' : 'ies have'} an unresolved failure.`
-        : staleProcessing > 0
-          ? `${staleProcessing} Stripe webhook deliver${staleProcessing === 1 ? 'y is' : 'ies are'} still processing.`
-          : null,
+    issue: truncated
+      ? 'Stripe webhook delivery history reached its safety limit. Resolve the listed incidents and refresh.'
+      : signatureFailures > 0
+        ? `${signatureFailures} Stripe webhook deliver${signatureFailures === 1 ? 'y was' : 'ies were'} rejected for an invalid signature. Verify STRIPE_WEBHOOK_SECRET.`
+        : deliveryGap
+          ? 'Paid orders exist with no matching Stripe webhook delivery. Verify the Stripe webhook endpoint and signing secret.'
+          : failed > 0
+            ? `${failed} Stripe webhook deliver${failed === 1 ? 'y has' : 'ies have'} an unresolved failure.`
+            : staleProcessing > 0
+              ? `${staleProcessing} Stripe webhook deliver${staleProcessing === 1 ? 'y is' : 'ies are'} still processing.`
+              : null,
   };
 }
 
-export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient }) {
+export async function inspectCommerceHealth({ admin, products, environment: runtimeEnvironment = process.env, stripe: stripeClient = null }) {
   const activeProducts = products || [];
   const environment = inspectCommerceEnvironment(runtimeEnvironment);
   const [
@@ -521,7 +580,7 @@ export async function retryStripeWebhookEvent(admin, stripe, retry, {
   ) {
     throw new Error('STRIPE_RETRY_IDENTITY_MISMATCH');
   }
-  return processStripeEvent(admin, event, { secretKey, receivedAt: now });
+  return processStripeEvent(admin, event, { secretKey, receivedAt: now, stripe });
 }
 
 export default async function handler(request, response) {

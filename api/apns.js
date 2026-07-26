@@ -119,6 +119,25 @@ export async function loadSubscriptions(admin, targetUserIds = null) {
   return rows;
 }
 
+export async function loadDeliveredSubscriptionIds(admin, announcementId) {
+  const ids = new Set();
+  const pageSize = 500;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin
+      .from('push_notification_deliveries')
+      .select('subscription_id')
+      .eq('announcement_id', announcementId)
+      .order('subscription_id')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    for (const row of data || []) {
+      if (row.subscription_id) ids.add(row.subscription_id);
+    }
+    if ((data || []).length < pageSize) break;
+  }
+  return ids;
+}
+
 async function saveDeliveryResults(admin, announcementId, results) {
   const deliveries = results.map(result => ({
     announcement_id: announcementId,
@@ -140,31 +159,48 @@ async function saveDeliveryResults(admin, announcementId, results) {
 }
 
 export async function sendMemberAnnouncementPushes({ admin, announcement, targetUserIds = null, environment = process.env }) {
+  // Fail closed: a broadcast (no explicit recipient list) is only ever safe for
+  // an 'all' audience. A targeted notice that reaches this path without its
+  // recipients would be pushed to every enrolled device.
+  if (targetUserIds === null && announcement?.audience !== 'all') {
+    throw new Error('ANNOUNCEMENT_PUSH_TARGETING_REQUIRED');
+  }
   const config = inspectAPNsEnvironment(environment);
   if (!config.ready) return { configured: false, missing: config.missing, attempted: 0, delivered: 0, failed: 0 };
   const subscriptions = await loadSubscriptions(admin, targetUserIds);
   if (subscriptions.length === 0) return { configured: true, attempted: 0, delivered: 0, failed: 0 };
+  // Resend is driven by delivery rows, not published_at: only devices without a
+  // delivery row for this notice are sent to, so re-publishing completes an
+  // interrupted fan-out without re-notifying the whole base.
+  const alreadyDelivered = await loadDeliveredSubscriptionIds(admin, announcement.id);
+  const pending = subscriptions.filter(subscription => !alreadyDelivered.has(subscription.id));
+  if (pending.length === 0) {
+    return { configured: true, attempted: 0, delivered: 0, failed: 0, skipped: subscriptions.length };
+  }
   const providerToken = createAPNsProviderToken(config);
   const results = [];
 
   for (const targetEnvironment of ['production', 'sandbox']) {
-    const targets = subscriptions.filter(subscription => subscription.environment === targetEnvironment);
+    const targets = pending.filter(subscription => subscription.environment === targetEnvironment);
     if (targets.length === 0) continue;
     const client = http2.connect(apnsHost(targetEnvironment));
     client.on('error', () => {});
     try {
       for (let index = 0; index < targets.length; index += DELIVERY_BATCH_SIZE) {
-        results.push(...await Promise.all(
+        const batch = await Promise.all(
           targets.slice(index, index + DELIVERY_BATCH_SIZE)
             .map(subscription => sendNotification(client, subscription, announcement, config, providerToken))
-        ));
+        );
+        results.push(...batch);
+        // Persist each batch as it completes so a 60s function timeout mid-loop
+        // keeps what was already sent instead of discarding every delivery row.
+        await saveDeliveryResults(admin, announcement.id, batch);
       }
     } finally {
       client.close();
     }
   }
 
-  await saveDeliveryResults(admin, announcement.id, results);
   const delivered = results.filter(result => result.status === 'delivered').length;
   return {
     configured: true,

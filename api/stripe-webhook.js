@@ -5,6 +5,7 @@ import {
   stripeModeForSecret,
 } from '../src/lib/commerceRuntime.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
+import { matchingFullRefundForOrder } from './admin-refund-order.js';
 
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
@@ -50,6 +51,41 @@ export function webhookRequestIssue({ contentType, signature, rawBody }) {
     return { status: 413, message: 'Webhook body is too large.' };
   }
   return null;
+}
+
+export function isMissingSignatureFailureLedger(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code)
+    || /stripe_webhook_signature_failures.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
+export function webhookSignatureFailureReason(error) {
+  for (const candidate of [error?.code, error?.type, error?.name, error?.message]) {
+    const value = String(candidate || '').trim();
+    if (value.length > 0) return value.slice(0, 200);
+  }
+  return 'SIGNATURE_VERIFICATION_FAILED';
+}
+
+/**
+ * A rejected signature returns 400 before the ledger is touched, so a broken
+ * signing secret was previously invisible to every health signal and silently
+ * stopped all fulfilment. Record it durably, but never let a
+ * not-yet-installed ledger turn the rejection into a 500 that Stripe retries.
+ */
+export async function recordWebhookSignatureFailure(admin, { reason, receivedAt = new Date() }) {
+  try {
+    const { error } = await admin
+      .from('stripe_webhook_signature_failures')
+      .insert({ reason, received_at: receivedAt.toISOString() });
+    if (error && !isMissingSignatureFailureLedger(error)) {
+      console.warn('Stripe webhook signature failure could not be recorded.', {
+        code: String(error.code || ''),
+      });
+    }
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export function webhookSigningSecrets(environment = {}) {
@@ -186,6 +222,30 @@ export function checkoutFulfillmentForSession(checkout, now = new Date()) {
   };
 }
 
+// Webhook charge payloads cannot expand the refunds sub-list, so a genuine full
+// refund often arrives with no inline refund object. This sentinel tells the
+// processor to fetch the refund from Stripe rather than fail the event, which
+// otherwise left the order 'paid' and blocked all checkout.
+export const STRIPE_REFUND_LOOKUP_REQUIRED = Symbol('STRIPE_REFUND_LOOKUP_REQUIRED');
+
+function stripeChargePaymentIntentId(charge) {
+  return typeof charge?.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge?.payment_intent?.id;
+}
+
+function stripeRefundReconciliationPayload({ event, charge, paymentIntentId, refund, now }) {
+  return {
+    p_refund_id: refund.id,
+    p_event_id: event.id,
+    p_payment_intent_id: paymentIntentId,
+    p_charge_id: charge.id,
+    p_amount_cents: charge.amount_refunded,
+    p_currency: charge.currency,
+    p_refunded_at: new Date((refund.created || event.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString(),
+  };
+}
+
 export function stripeRefundForEvent(event, now = new Date()) {
   if (event?.type !== 'charge.refunded') return null;
   const charge = event.data?.object;
@@ -193,13 +253,13 @@ export function stripeRefundForEvent(event, now = new Date()) {
   if (!hasXertCheckoutIdentity(metadata)) return null;
   const operatorReview = stripeOperatorReviewForEvent(event);
   if (operatorReview) {
-    const error = new Error('A partial XERT refund requires operator review.');
+    const error = /** @type {Error & { code?: string }} */ (
+      new Error('A partial XERT refund requires operator review.')
+    );
     error.code = operatorReview.errorCode;
     throw error;
   }
-  const paymentIntentId = typeof charge?.payment_intent === 'string'
-    ? charge.payment_intent
-    : charge?.payment_intent?.id;
+  const paymentIntentId = stripeChargePaymentIntentId(charge);
   const refunds = charge?.refunds?.data || [];
   const refund = refunds
     .filter(item => item?.status === 'succeeded')
@@ -210,20 +270,35 @@ export function stripeRefundForEvent(event, now = new Date()) {
   if (
     !event.id || !charge?.id
     || !Number.isSafeInteger(charge.amount) || charge.amount <= 0
-    || !paymentIntentId || !refund?.id
+    || !paymentIntentId
     || !/^[a-z]{3}$/i.test(String(charge.currency || ''))
   ) {
     throw new Error('Full refund data is incomplete or invalid.');
   }
-  return {
-    p_refund_id: refund.id,
-    p_event_id: event.id,
-    p_payment_intent_id: paymentIntentId,
-    p_charge_id: charge.id,
-    p_amount_cents: charge.amount_refunded,
-    p_currency: charge.currency,
-    p_refunded_at: new Date((refund.created || event.created || Math.floor(now.getTime() / 1000)) * 1000).toISOString(),
-  };
+  if (!refund?.id) return STRIPE_REFUND_LOOKUP_REQUIRED;
+  return stripeRefundReconciliationPayload({ event, charge, paymentIntentId, refund, now });
+}
+
+/**
+ * Resolves the succeeded full refund from Stripe when the webhook charge payload
+ * carried no expandable refunds sub-list. Reuses the admin refund matcher so the
+ * automatic and manual refund paths agree on which refund settles the charge.
+ */
+export async function lookupStripeRefundForEvent(event, stripe, now = new Date()) {
+  const charge = event.data?.object;
+  const paymentIntentId = stripeChargePaymentIntentId(charge);
+  if (!paymentIntentId) throw new Error('Full refund data is incomplete or invalid.');
+  const refunds = await stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 });
+  const refund = matchingFullRefundForOrder(
+    refunds,
+    { amount_cents: charge.amount_refunded, currency: charge.currency },
+    { id: paymentIntentId },
+    { id: charge.id },
+  );
+  if (!refund?.id || refund.status !== 'succeeded') {
+    throw new Error('Full refund data is incomplete or invalid.');
+  }
+  return stripeRefundReconciliationPayload({ event, charge, paymentIntentId, refund, now });
 }
 
 export function stripeOperatorReviewForEvent(event) {
@@ -409,6 +484,7 @@ export async function persistCheckoutFailure(admin, failure) {
 export async function processStripeEvent(admin, event, {
   secretKey = process.env.STRIPE_SECRET_KEY,
   receivedAt = new Date(),
+  stripe = null,
 } = {}) {
   let ledgerStarted = false;
   try {
@@ -443,7 +519,11 @@ export async function processStripeEvent(admin, event, {
       await recordStripeOperatorReview(admin, event, operatorReview);
       return { duplicate: false, requiresReview: true, handled: true, orderId: null };
     }
-    const refund = stripeRefundForEvent(event);
+    let refund = stripeRefundForEvent(event, receivedAt);
+    if (refund === STRIPE_REFUND_LOOKUP_REQUIRED) {
+      if (!stripe) throw new Error('A Stripe client is required to reconcile this refund.');
+      refund = await lookupStripeRefundForEvent(event, stripe, receivedAt);
+    }
     if (refund) {
       const settlement = await persistStripeRefund(admin, refund);
       handled = true;
@@ -509,11 +589,12 @@ export default async function handler(request, response) {
       type: String(e?.type || ''),
       code: String(e?.code || ''),
     });
+    await recordWebhookSignatureFailure(admin, { reason: webhookSignatureFailureReason(e) });
     return text('Invalid webhook signature.', 400);
   }
 
   try {
-    const result = await processStripeEvent(admin, event);
+    const result = await processStripeEvent(admin, event, { stripe });
     return json({
       received: true,
       ...(result.duplicate ? { duplicate: true } : {}),

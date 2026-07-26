@@ -9,7 +9,15 @@ import {
 } from '../api/apns.js';
 import { normalizeAnnouncementPublish } from '../api/admin-publish-announcement.js';
 import { inspectPushEnvironment } from '../api/push-health.js';
-import { normalizePushSubscription } from '../api/push-subscription.js';
+import {
+  normalizePushSubscription,
+  pushRegistrationRebindBlocked,
+  MAX_ENABLED_PUSH_SUBSCRIPTIONS,
+} from '../api/push-subscription.js';
+import {
+  loadDeliveredSubscriptionIds,
+  sendMemberAnnouncementPushes,
+} from '../api/apns.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -63,6 +71,84 @@ test('push registration accepts only APNs tokens and explicit environments', () 
   });
   assert.throws(() => normalizePushSubscription({ device_token: 'not-a-token', environment: 'production' }), /PUSH_TOKEN_INVALID/);
   assert.throws(() => normalizePushSubscription({ device_token: 'ab'.repeat(32), environment: 'preview' }), /PUSH_ENVIRONMENT_INVALID/);
+});
+
+test('push registration refuses to rebind a device still enabled for another member', () => {
+  // A leaked device token must not silently rebind, which would
+  // silence the current owner and redirect the caller's notices to their device.
+  assert.equal(pushRegistrationRebindBlocked({ user_id: 'victim', enabled: true }, 'attacker'), true);
+  // A device released by its previous owner (or disabled by APNs) is a genuine
+  // handoff and may be rebound.
+  assert.equal(pushRegistrationRebindBlocked({ user_id: 'victim', enabled: false }, 'attacker'), false);
+  // The same member re-registering their own device is always allowed.
+  assert.equal(pushRegistrationRebindBlocked({ user_id: 'owner', enabled: true }, 'owner'), false);
+  assert.equal(pushRegistrationRebindBlocked(null, 'owner'), false);
+  assert.ok(MAX_ENABLED_PUSH_SUBSCRIPTIONS >= 1);
+});
+
+test('member announcement pushes fail closed for a targeted notice without recipients', async () => {
+  // A broadcast (no recipient list) is only safe for an 'all'
+  // audience; a targeted notice reaching this path would hit every device.
+  await assert.rejects(
+    () => sendMemberAnnouncementPushes({ admin: {}, announcement: { id: 'a1', audience: 'targeted' } }),
+    /ANNOUNCEMENT_PUSH_TARGETING_REQUIRED/,
+  );
+  await assert.rejects(
+    () => sendMemberAnnouncementPushes({ admin: {}, announcement: { id: 'a1' } }),
+    /ANNOUNCEMENT_PUSH_TARGETING_REQUIRED/,
+  );
+  const broadcast = await sendMemberAnnouncementPushes({
+    admin: {}, announcement: { id: 'a1', audience: 'all' }, environment: {},
+  });
+  assert.equal(broadcast.configured, false);
+});
+
+test('resend only targets devices without a delivery row for the notice', async () => {
+  const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const apnsEnv = {
+    APNS_KEY_ID: 'KEY123', APNS_TEAM_ID: 'TEAM123', APNS_BUNDLE_ID: 'com.xertfitness.app',
+    APNS_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  };
+  const subs = [
+    { id: 'sub-1', user_id: 'm1', device_token: 'a'.repeat(64), environment: 'production' },
+    { id: 'sub-2', user_id: 'm2', device_token: 'b'.repeat(64), environment: 'production' },
+  ];
+  const admin = deliveredRows => ({
+    from(table) {
+      if (table === 'push_subscriptions') {
+        let served = false;
+        const query = {
+          select() { return query; }, eq() { return query; }, in() { return query; }, order() { return query; },
+          async range() { const data = served ? [] : subs; served = true; return { data, error: null }; },
+        };
+        return query;
+      }
+      if (table === 'push_notification_deliveries') {
+        let served = false;
+        const query = {
+          select() { return query; }, eq() { return query; }, order() { return query; },
+          async range() { const data = served ? [] : deliveredRows; served = true; return { data, error: null }; },
+        };
+        return query;
+      }
+      throw new Error(`unexpected table ${table}`);
+    },
+  });
+
+  assert.deepEqual(
+    [...await loadDeliveredSubscriptionIds(admin([{ subscription_id: 'sub-1' }]), 'ann-1')],
+    ['sub-1'],
+  );
+
+  // Every device already has a delivery row, so a resend sends
+  // nothing and never opens an APNs connection instead of re-notifying the base.
+  const result = await sendMemberAnnouncementPushes({
+    admin: admin([{ subscription_id: 'sub-1' }, { subscription_id: 'sub-2' }]),
+    announcement: { id: 'ann-1', audience: 'all', title: 'Hi', body: 'There' },
+    environment: apnsEnv,
+  });
+  assert.equal(result.attempted, 0);
+  assert.equal(result.skipped, 2);
 });
 
 test('admin publishing rejects unsafe actions and expired notices', () => {

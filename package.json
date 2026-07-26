@@ -19,8 +19,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc -p ./jsconfig.json",
-    "typecheck:api": "tsc -p ./tsconfig.api.json",
+    "typecheck": "tsc -p ./jsconfig.json && tsc -p ./tsconfig.api.json",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -522,7 +522,6 @@ test('reuses only the current same-platform pack snapshot from an open unpaid Ch
 });
 
 test('builds and verifies the complete Stripe Checkout handoff contract', () => {
-  const now = Date.parse('2026-07-17T00:00:00Z');
   const user = { id: 'member-xert', email: 'member@example.com' };
   const product = { id: 'product-xert', slug: 'starter-4', ...validProduct };
   const lineItem = { price: 'price_XERT4800', quantity: 1 };
@@ -539,7 +538,6 @@ test('builds and verifies the complete Stripe Checkout handoff contract', () => 
     returnURLs,
     receiptDetails,
     checkoutAttemptID,
-    now,
   });
 
   assert.equal(parameters.mode, 'payment');
@@ -547,7 +545,9 @@ test('builds and verifies the complete Stripe Checkout handoff contract', () => 
   assert.equal(parameters.customer_email, user.email);
   assert.equal(parameters.client_reference_id, user.id);
   assert.deepEqual(parameters.line_items, [lineItem]);
-  assert.equal(parameters.expires_at, Math.floor(now / 1000) + 35 * 60);
+  // The stable checkout idempotency key requires a byte-identical request body
+  // on every retry, so no wall-clock expiry may be embedded.
+  assert.equal('expires_at' in parameters, false);
   assert.equal(parameters.custom_text.submit.message, receiptDetails.terms);
   assert.equal(parameters.payment_intent_data.receipt_email, user.email);
   assert.equal(
@@ -610,9 +610,33 @@ test('rejects invalid pricing, credits, expiry, and currency before Checkout', (
     { ...validProduct, sessions_count: 0 },
     { ...validProduct, validity_days: 0 },
     { ...validProduct, currency: 'australian-dollars' },
+    // Fulfilment hard-requires AUD, so a valid-looking 3-letter non-AUD currency
+    // must be refused before money is committed. These passed the
+    // old /^[a-z]{3}$/i check and charged the member for credits never granted.
+    { ...validProduct, currency: 'nzd' },
+    { ...validProduct, currency: 'usd' },
+    { ...validProduct, currency: 'USD' },
   ]) {
     assert.throws(() => assertCheckoutProduct(product), /configuration is invalid/i);
   }
+  assert.doesNotThrow(() => assertCheckoutProduct({ ...validProduct, currency: 'AUD' }));
+});
+
+test('checkout session parameters are byte-stable for a fixed idempotency key', () => {
+  const user = { id: 'member-xert', email: 'member@example.com' };
+  const product = { id: 'product-xert', slug: 'starter-4', ...validProduct };
+  const lineItem = { price: 'price_XERT4800', quantity: 1 };
+  const returnURLs = {
+    success: 'https://xert-fitness.vercel.app/account?purchase=success&checkout_session_id={CHECKOUT_SESSION_ID}',
+    cancel: 'https://xert-fitness.vercel.app/booking?purchase=cancelled',
+  };
+  const receiptDetails = checkoutReceiptDetails(user, product);
+  const build = () => buildCheckoutSessionParameters({
+    user, product, lineItem, returnTarget: 'web', returnURLs, receiptDetails, checkoutAttemptID,
+  });
+  // A stable idempotency key only replays Stripe's saved session when the body
+  // is identical, so two builds must be deep-equal.
+  assert.deepEqual(build(), build());
 });
 
 test('records a member-bound pending order before handing off to Stripe', async () => {

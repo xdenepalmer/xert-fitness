@@ -15,6 +15,8 @@ import {
   recordStripeOperatorReview,
   finishStripeWebhookEvent,
   stripeRefundForEvent,
+  lookupStripeRefundForEvent,
+  STRIPE_REFUND_LOOKUP_REQUIRED,
   stripeDisputeReviewForEvent,
   stripeOperatorReviewForEvent,
   stripeModeForSecret,
@@ -23,6 +25,9 @@ import {
   validStripeSignatureHeader,
   webhookSigningSecrets,
   webhookRequestIssue,
+  recordWebhookSignatureFailure,
+  webhookSignatureFailureReason,
+  isMissingSignatureFailureLedger,
 } from '../api/stripe-webhook.js';
 
 const NOW = new Date('2026-07-12T00:00:00.000Z');
@@ -151,10 +156,47 @@ test('webhook signing rotation remains bounded and rejects when every secret fai
   assert.deepEqual(calls, ['whsec_current', 'whsec_previous']);
 });
 
+test('rejected webhook signatures are recorded durably and degrade when the ledger is absent', async () => {
+  // A signature rejection returns 400 before the ledger is touched,
+  // so a broken signing secret was invisible. It must be recorded durably.
+  const inserted = [];
+  const recordingAdmin = {
+    from(table) {
+      assert.equal(table, 'stripe_webhook_signature_failures');
+      return { async insert(row) { inserted.push(row); return { error: null }; } };
+    },
+  };
+  const recorded = await recordWebhookSignatureFailure(recordingAdmin, {
+    reason: 'signature mismatch', receivedAt: NOW,
+  });
+  assert.equal(recorded, true);
+  assert.deepEqual(inserted, [{ reason: 'signature mismatch', received_at: NOW.toISOString() }]);
+
+  // A not-yet-installed ledger must not turn the 400 rejection into a retryable
+  // 500, so recording degrades to false without throwing.
+  const rolloutAdmin = {
+    from() {
+      return {
+        async insert() {
+          return { error: { code: 'PGRST205', message: 'stripe_webhook_signature_failures not found in schema cache' } };
+        },
+      };
+    },
+  };
+  assert.equal(isMissingSignatureFailureLedger({ code: 'PGRST205' }), true);
+  assert.equal(await recordWebhookSignatureFailure(rolloutAdmin, { reason: 'x', receivedAt: NOW }), false);
+
+  assert.equal(webhookSignatureFailureReason({ type: 'StripeSignatureVerificationError' }), 'StripeSignatureVerificationError');
+  assert.equal(webhookSignatureFailureReason({ message: 'y'.repeat(400) }).length, 200);
+  assert.equal(webhookSignatureFailureReason({}), 'SIGNATURE_VERIFICATION_FAILED');
+});
+
 test('webhook public failures never echo Stripe or database exception messages', async () => {
   const source = await readFile(new URL('../api/stripe-webhook.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /signature verification failed: \$\{e\.message\}/);
   assert.doesNotMatch(source, /Handler error: \$\{e\.message\}/);
+  // The rejection path must record the failure before returning the 400.
+  assert.match(source, /recordWebhookSignatureFailure\(admin, \{ reason: webhookSignatureFailureReason\(e\) \}\)[\s\S]*return text\('Invalid webhook signature\.', 400\)/);
   assert.match(source, /return text\('Invalid webhook signature\.', 400\)/);
   assert.match(source, /return text\('Webhook processing failed\.', 500\)/);
   assert.match(source, /Webhook service is unavailable\.[\s\S]*503/);
@@ -438,10 +480,53 @@ test('reconciles full refunds and escalates partial refunds for operator review'
     ...event,
     data: { object: { ...event.data.object, refunded: false } },
   }, NOW), /status is incomplete or invalid/i);
-  assert.throws(() => stripeRefundForEvent({
+  // A webhook charge payload cannot expand its refunds sub-list, so an empty
+  // list must defer to a Stripe lookup rather than fail the event.
+  // The previous assertion here locked in the throw that stranded 'paid' orders
+  // and jammed the store-wide checkout kill switch.
+  assert.equal(stripeRefundForEvent({
     ...event,
     data: { object: { ...event.data.object, refunds: { data: [] } } },
-  }, NOW), /data is incomplete or invalid/i);
+  }, NOW), STRIPE_REFUND_LOOKUP_REQUIRED);
+  assert.equal(stripeRefundForEvent({
+    ...event,
+    data: { object: { ...event.data.object, refunds: undefined } },
+  }, NOW), STRIPE_REFUND_LOOKUP_REQUIRED);
+});
+
+test('reconciles a full refund fetched from Stripe when the webhook omits the refunds list', async () => {
+  const event = {
+    id: 'evt_refund_lookup', type: 'charge.refunded', created: 1783814400,
+    data: { object: {
+      id: 'ch_xert', payment_intent: 'pi_test_xert', amount: 4800,
+      amount_refunded: 4800, currency: 'aud', refunded: true,
+      metadata: { xert_checkout_attempt_id: 'E8C03884-4C1B-4A96-97C1-B0A33F2095B3' },
+    } },
+  };
+  assert.equal(stripeRefundForEvent(event, NOW), STRIPE_REFUND_LOOKUP_REQUIRED);
+  const listed = [];
+  const stripe = {
+    refunds: {
+      async list(params) {
+        listed.push(params);
+        return { data: [
+          { id: 're_partial_fail', status: 'failed', payment_intent: 'pi_test_xert', charge: 'ch_xert', amount: 4800, currency: 'aud', created: 1783814500 },
+          { id: 're_full', status: 'succeeded', payment_intent: 'pi_test_xert', charge: 'ch_xert', amount: 4800, currency: 'aud', created: 1783814400 },
+        ] };
+      },
+    },
+  };
+  const payload = await lookupStripeRefundForEvent(event, stripe, NOW);
+  assert.deepEqual(listed, [{ payment_intent: 'pi_test_xert', limit: 100 }]);
+  assert.equal(payload.p_refund_id, 're_full');
+  assert.equal(payload.p_amount_cents, 4800);
+  assert.equal(payload.p_payment_intent_id, 'pi_test_xert');
+  await assert.rejects(
+    () => lookupStripeRefundForEvent(event, {
+      refunds: { async list() { return { data: [] }; } },
+    }, NOW),
+    /incomplete or invalid/i,
+  );
 });
 
 test('links an exceptional Stripe event to its XERT order without exposing member data', async () => {

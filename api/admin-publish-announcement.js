@@ -13,6 +13,11 @@ function clean(value) {
   return String(value || '').trim();
 }
 
+function announcementPushFailureReason(error) {
+  const raw = String(error?.code || error?.message || 'ANNOUNCEMENT_PUSH_FAILED').trim();
+  return raw.slice(0, 200) || 'ANNOUNCEMENT_PUSH_FAILED';
+}
+
 export function normalizeAnnouncementPublish(body, now = new Date()) {
   const id = clean(body?.id) || null;
   const expectedUpdatedAt = clean(body?.expected_updated_at) || null;
@@ -160,10 +165,16 @@ export default async function handler(request, response) {
 
     let existing = null;
     if (publish.id) {
-      const result = await admin.from('member_announcements').select('id,published_at,archived_at,updated_at').eq('id', publish.id).maybeSingle();
+      const result = await admin.from('member_announcements').select('id,audience,published_at,archived_at,updated_at').eq('id', publish.id).maybeSingle();
       if (result.error) throw result.error;
       if (!result.data) return json({ error: 'Announcement not found.' }, 404);
       existing = result.data;
+    }
+    // Targeted notices have their own publish/resend workflows. The generic
+    // publish path broadcasts, so it must refuse a stored targeted row rather
+    // than push a private notice to every enrolled device.
+    if (existing && existing.audience !== 'all') {
+      return json({ error: 'This notice is targeted and cannot be published as a broadcast.' }, 409);
     }
     if (existing?.archived_at) return json({ error: 'Restore this announcement before publishing it.' }, 409);
     const publishedAt = existing?.published_at || new Date().toISOString();
@@ -176,13 +187,15 @@ export default async function handler(request, response) {
       return json({ error: 'This announcement changed since you opened it. Refresh the admin view and review the latest version.' }, 409);
     }
 
+    // Resend is idempotent per device: sendMemberAnnouncementPushes only sends to
+    // subscriptions with no delivery row for this notice, so re-publishing a
+    // broadcast completes a fan-out that a prior 60s timeout cut short instead of
+    // being suppressed by published_at.
     let push = { configured: true, attempted: 0, delivered: 0, failed: 0 };
-    if (!existing?.published_at) {
-      try {
-        push = await sendMemberAnnouncementPushes({ admin, announcement: result.data });
-      } catch {
-        push = { configured: true, attempted: 0, delivered: 0, failed: 1 };
-      }
+    try {
+      push = await sendMemberAnnouncementPushes({ admin, announcement: result.data });
+    } catch (error) {
+      push = { configured: true, attempted: 0, delivered: 0, failed: 1, reason: announcementPushFailureReason(error) };
     }
     return json({ announcement: result.data, push });
   } catch (error) {

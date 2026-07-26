@@ -22,7 +22,7 @@ const commandCentre = readSource('../src/pages/AdminCommandCentre.jsx');
 const authContext = readSource('../src/lib/SupabaseAuthContext.jsx');
 const contentManager = readSource('../src/components/admin/ContentManager.jsx');
 
-test('Finding 1: the class editor is remounted per subject and refuses to clobber an open editor', () => {
+test('the class editor is remounted per subject and refuses to clobber an open editor', () => {
   // The editor's identity follows its subject, so switching from editing an
   // existing class to a create intent remounts it with a fresh empty form
   // instead of reusing the edited record on the create branch.
@@ -31,16 +31,16 @@ test('Finding 1: the class editor is remounted per subject and refuses to clobbe
   assert.match(classCalendar, /initialAction !== 'create'\) return;\s*if \(showEditor\) \{/);
 });
 
-test('Finding 32: per-member roster and booking status selects carry an accessible name', () => {
+test('per-member roster and booking status selects carry an accessible name', () => {
   assert.match(classCalendar, /<select value=\{r\.status\}[\s\S]*?aria-label=\{`Roster status for \$\{r\.full_name/);
   assert.match(classCalendar, /<select value=\{b\.status\}[\s\S]*?aria-label=\{`Booking request status for \$\{b\.full_name/);
 });
 
-test('Finding 8a: the event editor is remounted per subject', () => {
+test('the event editor is remounted per subject', () => {
   assert.match(events, /<EventEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
 });
 
-test('Finding 8b: section navigation consults the unsaved-changes guard before navigating', () => {
+test('section navigation consults the unsaved-changes guard before navigating', () => {
   assert.match(commandCentre, /export function planAdminNavigation/);
   assert.match(commandCentre, /if \(hasUnsavedChanges\) return \{ prompt: true, switchedSection: false \};/);
   // setSection must run the plan (which prompts on unsaved changes) before it
@@ -53,7 +53,7 @@ test('Finding 8b: section navigation consults the unsaved-changes guard before n
   assert.doesNotMatch(commandCentre, /if \(nextSection === section\) \{\s*navigate\(/);
 });
 
-test('Finding 8b: planAdminNavigation prompts on unsaved changes even for a same-section request', () => {
+test('planAdminNavigation prompts on unsaved changes even for a same-section request', () => {
   // The pure decision lives in a JSX module (not importable under node --test),
   // so its behaviour is asserted from source; the shape below fails on the old
   // ordering where a same-section request navigated before the guard ran.
@@ -63,7 +63,7 @@ test('Finding 8b: planAdminNavigation prompts on unsaved changes even for a same
   );
 });
 
-test('Finding 9: the member drawer is keyed per member and its detail fetch is guarded', () => {
+test('the member drawer is keyed per member and its detail fetch is guarded', () => {
   assert.match(members, /<MemberDrawer\s+key=\{viewing\.id\}/);
   assert.match(
     members,
@@ -71,7 +71,7 @@ test('Finding 9: the member drawer is keyed per member and its detail fetch is g
   );
 });
 
-test('Finding 35: the dialog layer yields the Tab cycle when focus leaves the workspace', () => {
+test('the dialog layer yields the Tab cycle when focus leaves the workspace', () => {
   const layer = readSource('../src/lib/adminDialogLayer.js');
   assert.match(layer, /if \(!shouldManageDialogTab\(workspace, document\.activeElement\)\) return;/);
 
@@ -84,7 +84,7 @@ test('Finding 35: the dialog layer yields the Tab cycle when focus leaves the wo
   assert.equal(shouldManageDialogTab(null, {}), false);
 });
 
-test('Finding 39: CMS drafts are scoped to the signed-in admin and swept on sign-out', () => {
+test('CMS drafts are scoped to the signed-in admin and swept on sign-out', () => {
   assert.match(contentManager, /readSiteContentDraft\(window\.localStorage, userId, section\.key\)/);
   assert.match(contentManager, /writeSiteContentDraft\(window\.localStorage, userId, section\.key, data\)/);
   assert.match(contentManager, /userId=\{user\?\.id\}/);

@@ -39,6 +39,10 @@ const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89a
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
 const CHECKOUT_CONTRACT_VERSION = 'receipt_terms_v1';
+// Fulfilment (stripe-webhook.js and fulfill_stripe_checkout) hard-requires AUD.
+// Committing a charge in any other currency takes the member's money and can
+// never grant credits, so the checkout and health paths must reject it up front.
+export const SUPPORTED_CHECKOUT_CURRENCY = 'aud';
 
 export { stripeModeForSecret };
 
@@ -257,13 +261,13 @@ function isPositiveInteger(value) {
  * roll out, so malformed admin data never reaches Stripe or credit fulfilment.
  */
 export function assertCheckoutProduct(product) {
-  const currency = String(product?.currency || 'aud');
+  const currency = String(product?.currency || SUPPORTED_CHECKOUT_CURRENCY).toLowerCase();
   if (
     !product ||
     !isPositiveInteger(product.price_cents) ||
     !isPositiveInteger(product.sessions_count) ||
     !isPositiveInteger(product.validity_days) ||
-    !/^[a-z]{3}$/i.test(currency)
+    currency !== SUPPORTED_CHECKOUT_CURRENCY
   ) {
     throw new Error('Product configuration is invalid.');
   }
@@ -354,7 +358,6 @@ export function buildCheckoutSessionParameters({
   returnURLs,
   receiptDetails,
   checkoutAttemptID,
-  now = Date.now(),
 }) {
   assertCheckoutProduct(product);
   const attemptID = normalizeCheckoutAttemptID(checkoutAttemptID);
@@ -383,12 +386,8 @@ export function buildCheckoutSessionParameters({
       throw new Error('Checkout return URL must use HTTP or HTTPS.');
     }
   }
-  const nowMilliseconds = Number(now);
-  if (!Number.isFinite(nowMilliseconds) || nowMilliseconds < 0) {
-    throw new Error('Checkout session time is invalid.');
-  }
 
-  return {
+  return /** @type {import('stripe').Stripe.Checkout.SessionCreateParams} */ ({
     mode: 'payment',
     customer_creation: 'if_required',
     origin_context: returnTarget === 'ios' ? 'mobile_app' : 'web',
@@ -398,9 +397,10 @@ export function buildCheckoutSessionParameters({
     client_reference_id: user.id,
     success_url: returnURLs.success,
     cancel_url: returnURLs.cancel,
-    // Stripe accepts 30 minutes to 24 hours. Five minutes of margin protects
-    // against transit time and clock skew at the lower boundary.
-    expires_at: Math.floor(nowMilliseconds / 1000) + 35 * 60,
+    // No wall-clock field may appear here: the idempotency key is stable across
+    // client retries, so Stripe only replays the saved session when the request
+    // body is byte-identical. A per-second expires_at broke every genuine retry.
+    // Stripe's default session lifetime plus XERT's reuse window bound the session.
     custom_text: {
       submit: { message: receiptDetails.terms },
     },
@@ -425,7 +425,7 @@ export function buildCheckoutSessionParameters({
       checkout_contract: receiptDetails.contractVersion,
       checkout_attempt_id: attemptID,
     },
-  };
+  });
 }
 
 export function verifiedCreatedCheckoutURL(checkout, user, product, options = {}) {
@@ -729,7 +729,9 @@ export default async function handler(request, response) {
       if (pendingOrderError) throw pendingOrderError;
     } catch {
       await stripe.checkout.sessions.expire(session.id).catch(() => {});
-      const recordingError = new Error('Pending checkout order could not be saved.');
+      const recordingError = /** @type {Error & { code?: string }} */ (
+        new Error('Pending checkout order could not be saved.')
+      );
       recordingError.code = CHECKOUT_RECORDING_FAILED;
       throw recordingError;
     }

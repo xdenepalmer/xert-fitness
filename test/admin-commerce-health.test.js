@@ -91,6 +91,23 @@ function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
         };
         return query;
       }
+      if (table === 'stripe_webhook_signature_failures') {
+        const query = {
+          select() { return query; },
+          gte() { return query; },
+          then(resolve) { return resolve({ data: null, count: options.signatureFailures || 0, error: options.signatureFailureError || null }); },
+        };
+        return query;
+      }
+      if (table === 'orders') {
+        const query = {
+          select() { return query; },
+          eq() { return query; },
+          gt() { return query; },
+          then(resolve) { return resolve({ data: null, count: options.paidBeyondLedger || 0, error: options.ordersError || null }); },
+        };
+        return query;
+      }
       if (table === 'admin_settings') {
         const query = {
           select() { return query; },
@@ -405,7 +422,8 @@ test('webhook delivery health reports retries, failures and stalled processing',
   ]), now);
   assert.deepEqual(healthy, {
     ready: true, available: true, received: 2, failed: 0,
-    stale_processing: 0, retries: 1, incidents: [], issue: null,
+    stale_processing: 0, signature_failures: 0, delivery_gap: false,
+    retries: 1, incidents: [], issue: null,
   });
 
   const unhealthy = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [
@@ -444,6 +462,40 @@ test('webhook delivery health reports retries, failures and stalled processing',
   assert.equal(bounded.incidents[0].error_code.length, 120);
 });
 
+test('rejected webhook signatures fail delivery health even with an empty ledger', async () => {
+  const now = new Date('2026-07-16T06:00:00.000Z');
+  const rejected = await inspectWebhookDeliveryHealth(
+    capabilityAdmin(new Set(), [], { signatureFailures: 3 }),
+    now,
+  );
+  assert.equal(rejected.signature_failures, 3);
+  assert.equal(rejected.ready, false);
+  assert.match(rejected.issue, /invalid signature[\s\S]*STRIPE_WEBHOOK_SECRET/);
+});
+
+test('paid orders with no matching webhook delivery fail delivery health', async () => {
+  const now = new Date('2026-07-16T06:00:00.000Z');
+  const gapped = await inspectWebhookDeliveryHealth(
+    capabilityAdmin(new Set(), [], { paidBeyondLedger: 2 }),
+    now,
+  );
+  assert.equal(gapped.delivery_gap, true);
+  assert.equal(gapped.ready, false);
+  assert.match(gapped.issue, /Paid orders exist with no matching Stripe webhook/);
+});
+
+test('delivery health stays ready when the signature ledger is not installed yet', async () => {
+  const now = new Date('2026-07-16T06:00:00.000Z');
+  const rolling = await inspectWebhookDeliveryHealth(
+    capabilityAdmin(new Set(), [], {
+      signatureFailureError: { code: 'PGRST205', message: 'stripe_webhook_signature_failures not found in schema cache' },
+    }),
+    now,
+  );
+  assert.equal(rolling.signature_failures, 0);
+  assert.equal(rolling.ready, true);
+});
+
 test('partial-refund incidents give owners a concrete recovery instruction', async () => {
   assert.match(stripeIncidentResolution('PARTIAL_REFUND_REQUIRES_REVIEW'), /adjust or revoke the member credits/i);
   assert.equal(stripeIncidentResolution('DATABASE_TIMEOUT'), null);
@@ -463,11 +515,17 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
     order_id: null, last_received_at: '2026-07-10T05:59:00.000Z',
     last_error_code: 'PARTIAL_REFUND_REQUIRES_REVIEW',
   };
-  let queryNumber = 0;
+  let webhookQueryNumber = 0;
   const admin = {
-    from() {
-      queryNumber += 1;
-      const rows = queryNumber === 1 ? [] : [oldReview];
+    from(table) {
+      if (table === 'stripe_webhook_signature_failures') {
+        return { select() { return this; }, gte() { return this; }, then(resolve) { return resolve({ data: null, count: 0, error: null }); } };
+      }
+      if (table === 'orders') {
+        return { select() { return this; }, eq() { return this; }, gt() { return this; }, then(resolve) { return resolve({ data: null, count: 0, error: null }); } };
+      }
+      webhookQueryNumber += 1;
+      const rows = webhookQueryNumber === 1 ? [] : [oldReview];
       const query = {
         select() { return query; }, gte() { return query; }, eq() { return query; },
         in() { return query; }, order() { return query; },
@@ -811,7 +869,13 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(source, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
   assert.match(source, /if \(reviewResolution\)[\s\S]*resolveStripeOperatorReview\(admin, reviewResolution\)[\s\S]*actorId: user\.id/);
   assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.eq\('last_error_code', review\.errorCode\)/);
-  assert.match(source, /\.in\('last_error_code', STRIPE_OPERATOR_REVIEW_CODES\)/);
+  // Delivery health surfaces unresolved rows regardless of age and
+  // error code. The previous .in('last_error_code', STRIPE_OPERATOR_REVIEW_CODES)
+  // rescue query only rescued operator-review incidents, so an aged generic
+  // fulfilment failure jammed checkout while showing an empty incident list.
+  assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*?\.limit\(200\)/);
+  assert.match(source, /\.eq\('status', 'processing'\)[\s\S]*?\.limit\(200\)/);
+  assert.doesNotMatch(source, /\.in\('last_error_code', STRIPE_OPERATOR_REVIEW_CODES\)/);
   assert.match(source, /createClient\(SUPABASE_URL, SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /global: \{ headers: \{ Authorization: `Bearer \$\{token\}` \} \}/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);

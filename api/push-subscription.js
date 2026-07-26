@@ -3,6 +3,23 @@ import { requestHeader, requestJson, sendJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const MAX_ENABLED_PUSH_SUBSCRIPTIONS = 10;
+
+/**
+ * A device token is proof of possession only for the app install that Apple
+ * issued it to, but it can leak. Refuse to rebind a token that another member
+ * is still actively receiving pushes on: a silent rebind would
+ * silence that member and redirect the caller's private notices to their
+ * device. A row disabled by the previous owner (logout/unregister) or by APNs
+ * invalid-token feedback is a genuine handoff, so rebinding it is allowed.
+ */
+export function pushRegistrationRebindBlocked(existingRow, callerUserId) {
+  return Boolean(
+    existingRow
+    && existingRow.user_id !== callerUserId
+    && existingRow.enabled === true
+  );
+}
 
 export function normalizePushSubscription(body) {
   const action = String(body?.action || 'register').trim().toLowerCase();
@@ -37,6 +54,29 @@ export default async function handler(request, response) {
         .eq('environment', subscription.environment);
       if (error) throw error;
       return json({ registered: false });
+    }
+
+    const { data: existing, error: lookupError } = await admin
+      .from('push_subscriptions')
+      .select('user_id,enabled')
+      .eq('device_token', subscription.deviceToken)
+      .eq('environment', subscription.environment)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (pushRegistrationRebindBlocked(existing, user.id)) {
+      return json({ error: 'This device is already registered to another member.' }, 409);
+    }
+
+    if (existing?.user_id !== user.id) {
+      const { count, error: countError } = await admin
+        .from('push_subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('enabled', true);
+      if (countError) throw countError;
+      if ((count || 0) >= MAX_ENABLED_PUSH_SUBSCRIPTIONS) {
+        return json({ error: 'This account has reached its notification device limit.' }, 409);
+      }
     }
 
     const { error } = await admin.from('push_subscriptions').upsert({

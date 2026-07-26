@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from './http.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -14,7 +14,23 @@ export function isMissingPTTrackingColumn(error) {
   );
 }
 
-export async function deleteMemberAccount(admin, userId) {
+export function isMissingClassBookingsTable(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code)
+    || /class_bookings.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
+export function isMissingAccountDeletionRoutine(error) {
+  return ['42883', 'PGRST202'].includes(error?.code)
+    || /delete_member_account.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
+/**
+ * Rollout-only fallback used until the atomic routine ships. These are separate
+ * round trips with no transaction, so it is reached only when the durable
+ * routine is absent. The auth deletion runs last because orders and PT requests
+ * are `on delete set null` and could no longer be matched by user_id after it.
+ */
+export async function deleteMemberAccountLegacy(admin, userId, email) {
   const { error: orderError } = await admin
     .from('orders')
     .update({ email: null })
@@ -33,12 +49,38 @@ export async function deleteMemberAccount(admin, userId) {
     throw ptRequestError;
   }
 
+  // Legacy public enquiry table with no user_id column: match on the member's
+  // normalised email. Absent installs are tolerated so deletion still proceeds.
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (normalizedEmail) {
+    const { error: bookingError } = await admin
+      .from('class_bookings')
+      .delete()
+      .ilike('email', normalizedEmail);
+    if (bookingError && !isMissingClassBookingsTable(bookingError)) {
+      throw bookingError;
+    }
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) throw deleteError;
 }
 
+/**
+ * Deletes a member atomically through a single service-role transaction so a
+ * mid-way failure cannot leave the account partly destroyed.
+ * Until that routine is installed, a non-atomic fallback preserves deletion.
+ */
+export async function deleteMemberAccount(admin, userId, email) {
+  const { error } = await admin.rpc('delete_member_account', { p_user_id: userId });
+  if (!error) return;
+  if (!isMissingAccountDeletionRoutine(error)) throw error;
+  await deleteMemberAccountLegacy(admin, userId, email);
+}
+
 export default async function handler(request, response) {
-  const json = (body, status = 200) => sendJson(response, body, status);
+  const trace = createRequestTrace(response);
+  const { json } = trace;
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured.' }, 500);
 
@@ -61,9 +103,14 @@ export default async function handler(request, response) {
     } = await admin.auth.getUser(token);
     if (userError || !user) return json({ error: 'Invalid or expired session.' }, 401);
 
-    await deleteMemberAccount(admin, user.id);
+    await deleteMemberAccount(admin, user.id, user.email);
     return json({ deleted: true });
   } catch (error) {
-    return json({ error: error.message || 'Could not delete account.' }, 500);
+    // Callers get a fixed string; the upstream code stays behind the trace id.
+    console.error('Account deletion failed.', {
+      requestId: trace.requestId,
+      code: String(error?.code || error?.name || 'UNEXPECTED_DELETE_ERROR'),
+    });
+    return json({ error: 'Could not delete account. Please try again.' }, 500);
   }
 }
