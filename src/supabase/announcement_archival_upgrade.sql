@@ -221,18 +221,75 @@ end;
 $$;
 
 drop policy if exists "member_announcements_select_live_or_admin" on public.member_announcements;
-create policy "member_announcements_select_live_or_admin"
-  on public.member_announcements for select
-  to authenticated
-  using (
-    (select public.is_admin())
-    or (
-      archived_at is null
-      and published_at is not null
-      and published_at <= now()
-      and (expires_at is null or expires_at > now())
-    )
-  );
+do $announcement_policy$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) and to_regclass('public.member_announcement_targets') is not null then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin"
+        on public.member_announcements for select
+        to authenticated
+        using (
+          (select public.is_admin())
+          or (
+            archived_at is null
+            and published_at is not null
+            and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and (
+              audience = 'all'
+              or (
+                audience = 'targeted'
+                and exists (
+                  select 1
+                  from public.member_announcement_targets target
+                  where target.announcement_id = member_announcements.id
+                    and target.user_id = (select auth.uid())
+                )
+              )
+            )
+          )
+        );
+    $policy$;
+  elsif exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin"
+        on public.member_announcements for select
+        to authenticated
+        using (
+          (select public.is_admin())
+          or (
+            archived_at is null
+            and published_at is not null
+            and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and audience = 'all'
+          )
+        );
+    $policy$;
+  else
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin"
+        on public.member_announcements for select
+        to authenticated
+        using (
+          (select public.is_admin())
+          or (
+            archived_at is null
+            and published_at is not null
+            and published_at <= now()
+            and (expires_at is null or expires_at > now())
+          )
+        );
+    $policy$;
+  end if;
+end;
+$announcement_policy$;
 
 alter table public.member_announcement_admin_events enable row level security;
 drop policy if exists "member_announcement_admin_events_admin_read" on public.member_announcement_admin_events;

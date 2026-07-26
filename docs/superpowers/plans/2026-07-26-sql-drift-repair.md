@@ -4,7 +4,7 @@
 
 **Goal:** Ensure private notices and member email protection survive both new migrations and repeat runs of the documented database setup.
 
-**Architecture:** A forward-only migration restores the safe database state for deployed projects. The reusable setup files are updated to match it, and one regression test checks every definition that can otherwise reintroduce the older behaviour.
+**Architecture:** A forward-only migration restores the safe database state for deployed projects. The reusable setup files choose the enhanced rule only after its required tables and columns exist, preserving first-time setup order while preventing a later re-run from downgrading protection. One regression test checks every definition that can otherwise reintroduce the older behaviour.
 
 **Tech Stack:** PostgreSQL 16, Supabase RLS, Node.js test runner.
 
@@ -13,6 +13,7 @@
 - Do not edit an already-applied migration.
 - Add the forward migration and its matching reusable SQL file.
 - Preserve the existing announcement timing, expiry, archival, administrator, identity, role, and creation-date checks.
+- The reusable files must still run before the private-notice tables and profile email column exist.
 - Verify the RLS rule and the profile trigger against local PostgreSQL before committing.
 
 ---
@@ -53,7 +54,9 @@ Expected: Both assertions fail because the reusable notice policies omit recipie
 
 - [ ] **Step 3: Update the reusable definitions**
 
-Add the following recipient restriction inside the live-notice branch of both reusable policies:
+Replace both reusable policy definitions with a conditional SQL block. When the
+`audience` column and target table both exist, it installs the following
+recipient restriction inside the live-notice branch:
 
 ```sql
 and (
@@ -70,13 +73,19 @@ and (
 )
 ```
 
-Add the following check after the role check in the booking schema's profile-write guard:
+When the profile email column exists, the reusable profile guard must include
+the following check after the role check:
 
 ```sql
 if new.email is distinct from old.email then
   raise exception 'PROFILE_EMAIL_MANAGED_BY_AUTH';
 end if;
 ```
+
+When the column does not exist, it must retain the existing guard without that
+check. When `audience` exists but the target table does not, the notice policy
+must fail closed by allowing only `audience = 'all'`; it must never fall back to
+showing targeted notices to every member.
 
 - [ ] **Step 4: Run the focused test to verify it passes**
 
@@ -87,7 +96,7 @@ Expected: PASS with two tests and no failures.
 ### Task 2: Restore the protections on deployed databases
 
 **Files:**
-- Create: `supabase/migrations/20260726004000_sql_drift_repair.sql`
+- Create: `supabase/migrations/20260726070214_sql_drift_repair.sql`
 - Create: `src/supabase/sql_drift_repair.sql`
 - Modify: `README.md`
 - Test: `test/sql-drift-repair.test.js`
@@ -117,7 +126,7 @@ Expected: FAIL because neither repair file exists.
 
 Run: `supabase migration new sql_drift_repair`
 
-Expected: a newly created migration file under `supabase/migrations/`; rename only if the generated timestamp differs from `20260726004000`.
+Expected: a newly created migration file under `supabase/migrations/`.
 
 Put this complete idempotent repair in the generated migration and copy it unchanged to `src/supabase/sql_drift_repair.sql`:
 
@@ -193,7 +202,7 @@ Expected: PASS with three tests and no failures.
 ### Task 3: Prove the database behaviour and run project checks
 
 **Files:**
-- Verify: `supabase/migrations/20260726004000_sql_drift_repair.sql`
+- Verify: `supabase/migrations/20260726070214_sql_drift_repair.sql`
 - Verify: `src/supabase/sql_drift_repair.sql`
 - Verify: `test/sql-drift-repair.test.js`
 
@@ -248,7 +257,7 @@ Expected: all tests pass, lint and type checking are clean, and the production b
 Run:
 
 ```bash
-git add README.md src/supabase/booking_schema.sql src/supabase/announcement_archival_upgrade.sql src/supabase/sql_drift_repair.sql supabase/migrations/20260726004000_sql_drift_repair.sql test/sql-drift-repair.test.js
+git add README.md src/supabase/booking_schema.sql src/supabase/announcement_archival_upgrade.sql src/supabase/sql_drift_repair.sql supabase/migrations/20260726070214_sql_drift_repair.sql test/sql-drift-repair.test.js
 git commit -m "Prevent reusable SQL setup from weakening member protections"
 git push -u origin cursor/repair-sql-drift-c73d
 ```

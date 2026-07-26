@@ -172,6 +172,8 @@ The Supabase schema is defined in:
   order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
+- `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
+  files from exposing private member notices or weakening member email protection
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -194,6 +196,7 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`sql_drift_repair.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
@@ -224,6 +227,7 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`sql_drift_repair.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
 `admin_settings_singleton_upgrade.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
