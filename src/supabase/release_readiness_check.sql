@@ -63,7 +63,8 @@ with required (capability, migration) as (
     ('admin_policy_scalar_subquery', 'supabase/migrations/20260726018000_admin_policy_scalar_subquery.sql'),
     ('member_history_index', 'supabase/migrations/20260726019000_member_history_index.sql'),
     ('cancel_booking_expired_batch_refund', 'supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql'),
-    ('member_interest_health_consent', 'supabase/migrations/20260726103000_member_interest_health_consent.sql')
+    ('member_interest_health_consent', 'supabase/migrations/20260726103000_member_interest_health_consent.sql'),
+    ('audit_subject_pii_redaction', 'supabase/migrations/20260726105000_audit_subject_pii_redaction.sql')
 ), readiness as (
   select
     required.capability,

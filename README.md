@@ -195,6 +195,9 @@ The Supabase schema is defined in:
 - `src/supabase/audit_immutability_account_deletion_fix.sql` — lets an account with audit
   history actually be deleted, by allowing the referential `on delete set null` update
   through the five audit-immutability triggers while still blocking any content change
+- `src/supabase/audit_subject_pii_redaction_upgrade.sql` — lets service-role / admin
+  redact name, email and staff notes on lead and request audit rows for erasure
+  requests, without weakening the general immutability guard
 - `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
   order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
@@ -261,8 +264,9 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
-`member_interest_health_consent.sql` and
-`class_session_optimistic_locking_upgrade.sql`. This
+`member_interest_health_consent.sql`,
+`class_session_optimistic_locking_upgrade.sql` and
+`audit_subject_pii_redaction_upgrade.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -306,8 +310,9 @@ fixes in filename order: `public_form_staff_column_guard.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
-`member_interest_health_consent.sql` and
-`class_session_optimistic_locking_upgrade.sql`. The
+`member_interest_health_consent.sql`,
+`class_session_optimistic_locking_upgrade.sql` and
+`audit_subject_pii_redaction_upgrade.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

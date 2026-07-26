@@ -27,6 +27,14 @@ test('native refreshes coalesce and reject results from an earlier account gener
   assert.match(refresh, /dataRefreshVersion\.snapshot/);
   assert.match(store, /guard canApplyMemberState\(memberVersion, session: authSession\) && canApplyRefresh\(refreshVersion\)/);
 
+  const canApplyMemberState = store.slice(
+    store.indexOf('private func canApplyMemberState'),
+    store.indexOf('private func beginMemberOnboardingRead'),
+  );
+  assert.match(canApplyMemberState, /current\.user\?\.id/);
+  assert.match(canApplyMemberState, /session\.user\?\.id/);
+  assert.doesNotMatch(canApplyMemberState, /access_token/);
+
   assert.match(transition, /memberStateVersion\.invalidate\(\)/);
   assert.match(transition, /dataRefreshVersion\.invalidate\(\)/);
   assert.match(transition, /dataRefreshTask\?\.cancel\(\)/);

@@ -549,7 +549,7 @@ Extend the 20260714007000 treatment with a follow-up migration that drops and re
 - **id:** `immutable-audit-pii-no-erasure-path`
 - **severity (claimed):** high
 - **location:** `supabase/migrations/20260714011000_lead_pipeline_audit.sql:41`
-- **status:** OPEN — Audit immutability triggers still block correction/erasure of subject PII and staff notes in audit tables; account deletion no longer fails, but APP 12/13 path is unresolved.
+- **status:** FIXED — Guards allow narrow subject PII/notes nulling; `admin_redact_audit_subject_pii` for service-role/admin; `delete_member_account` redacts before auth delete (`20260726105000_audit_subject_pii_redaction.sql`).
 
 **What the auditor claims**
 
@@ -903,7 +903,7 @@ Clear and scope the roster: set `classRoster = []` and store `loadedRosterSessio
 - **id:** `member-count-reads-filtered-total`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift:85`
-- **status:** OPEN — `resolveOwnerTask(.member:)` still inserts a filtered `adminMember` row at `members[0]`, so `memberCount` can collapse to 1.
+- **status:** FIXED — `memberDirectoryTotalCount` is only written by unfiltered directory loads; search/`resolveOwnerTask` leave the Overview Members metric alone (`AdminStore.swift`).
 
 **What the auditor claims**
 
@@ -969,7 +969,7 @@ Make sign-out fail closed locally even when the network call fails: call `PushDe
 - **id:** `token-rotation-treated-as-account-change`
 - **severity (claimed):** medium
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:897`
-- **status:** OPEN — `canApplyMemberState` still compares `access_token`, so a mid-flight token refresh can abort post-mutation UI updates.
+- **status:** FIXED — `canApplyMemberState` compares stable `user.id` (falls back to `memberStateVersion` when user is absent); token refresh no longer aborts post-mutation UI (`XertStore.swift`, working tree).
 
 **What the auditor claims**
 
@@ -1027,7 +1027,7 @@ Widen `include` to `["src/**/*.{js,jsx}", "src/vite-env.d.ts"]` and add a second
 - **id:** `admin-badge-effect-refires-on-every-navigation`
 - **severity (claimed):** medium
 - **location:** `src/components/admin/AdminLayout.jsx:200`
-- **status:** OPEN — Badge-count `useEffect` in `AdminLayout.jsx` still lists `activeSection` in its dependency array despite not reading it.
+- **status:** FIXED — Badge-count effect mounts once with `[]`; 15s freshness guard no longer reset on sidebar navigation (`AdminLayout.jsx`).
 
 **What the auditor claims**
 
@@ -1610,7 +1610,7 @@ Return a fixed public string ({ error: 'Could not delete account.' }, 500) and l
 - **id:** `request-text-reserialises-body-for-hmac`
 - **severity (claimed):** low
 - **location:** `api/http.js:29`
-- **status:** OPEN — `requestText` still falls back to `JSON.stringify(request.body)` for non-string bodies; webhook HMAC still depends on the stream/raw path.
+- **status:** FIXED — `requestText` returns exact bytes or throws `REQUEST_BODY_ALREADY_PARSED`; Next `bodyParser` config removed from Stripe webhook (`api/http.js`, `api/stripe-webhook.js`).
 
 **What the auditor claims**
 
@@ -1672,7 +1672,7 @@ Add `{ ignores: ["dist/**", "node_modules/**", "coverage/**"] }` as the first el
 - **id:** `eventkit-full-access-over-request`
 - **severity (claimed):** low
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Services/EventCalendarWriter.swift:124`
-- **status:** OPEN — `EventCalendarWriter` still calls `requestFullAccessToEvents()` on iOS 17+; Info.plist still declares full-access usage.
+- **status:** FIXED — iOS 17+ requests write-only calendar access; EventKit read/dedupe removed; Info.plist declares `NSCalendarsWriteOnlyAccessUsageDescription` (`EventCalendarWriter.swift`, working tree).
 
 **What the auditor claims**
 
@@ -1709,7 +1709,7 @@ Request `requestWriteOnlyAccessToEvents()` on iOS 17+ and add `NSCalendarsWriteO
 - **id:** `account-deletion-leaves-local-member-state`
 - **severity (claimed):** low
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift:433`
-- **status:** OPEN — Push token/preference cleared on sign-out/delete, but `PendingCheckoutStore`, navigation pins and admin scene storage are still not purged.
+- **status:** FIXED — `purgeLocalMemberState` clears pending checkout, reminder preference, nav pins/order, owner pins and CMS drafts on sign-out/delete; RootView resets admin `@SceneStorage` (`XertStore.swift`, `RootView.swift`, working tree).
 
 **What the auditor claims**
 

@@ -523,9 +523,11 @@ final class XertStore: ObservableObject {
 
     func signOut() {
         let currentSession = authSession
+        let userID = currentSession?.user?.id
         let pushToken = PushDeviceTokenStore.load()
         // Fail closed locally even when the network unregister cannot complete.
         clearLocalPushRegistration()
+        purgeLocalMemberState(userID: userID)
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
         XertHaptics.play(.softImpact)
@@ -558,6 +560,7 @@ final class XertStore: ObservableObject {
         defer { isDeletingAccount = false }
         do {
             let authSession = try await validAuthSession()
+            let userID = authSession.user?.id
             let pushToken = PushDeviceTokenStore.load()
             if let pushToken {
                 do {
@@ -577,6 +580,7 @@ final class XertStore: ObservableObject {
             // Account deletion cascades push_subscriptions; no retry needed.
             PendingPushUnregisterStore.clear()
             clearLocalPushRegistration()
+            purgeLocalMemberState(userID: userID)
             replaceAuthSession(with: nil)
             KeychainStore.clearSession()
             await ClassReminderScheduler.shared.clearAll()
@@ -886,6 +890,21 @@ final class XertStore: ObservableObject {
         memberPushEnabled = false
         PushDeviceTokenStore.clear()
         UIApplication.shared.unregisterForRemoteNotifications()
+    }
+
+    /// Clears UserDefaults / preference residue keyed to the departing member.
+    /// Push registration is cleared separately via `clearLocalPushRegistration()`.
+    private func purgeLocalMemberState(userID: UUID?) {
+        PendingCheckoutStore.clear()
+        ClassReminderPreference.setEnabled(false)
+        classRemindersEnabled = false
+        classReminderSyncState = .off
+        if let userID {
+            XertPinnedWorkspaceStore.clear(for: userID)
+            XertWorkspaceOrderStore.clear(for: userID)
+            XertOwnerWorkspacePinsStore.clear(for: userID)
+        }
+        AdminSiteContentDraftStore.clearAll()
     }
 
     private func flushPendingPushUnregister() async {
@@ -1364,7 +1383,14 @@ final class XertStore: ObservableObject {
 
     private func canApplyMemberState(_ version: Int, session: AuthSession?) -> Bool {
         guard memberStateVersion.isCurrent(version), !Task.isCancelled, let session else { return false }
-        return authSession?.access_token == session.access_token
+        guard let current = authSession else { return false }
+        // Compare stable account identity. Access tokens rotate (refresh / APNs sync)
+        // without changing the signed-in member; memberStateVersion already covers
+        // sign-in / sign-out / account switch via replaceAuthSession.
+        if let currentUserID = current.user?.id, let sessionUserID = session.user?.id {
+            return currentUserID == sessionUserID
+        }
+        return true
     }
 
     private func beginMemberOnboardingRead() -> Int? {

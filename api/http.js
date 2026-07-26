@@ -21,18 +21,28 @@ export async function requestJson(request) {
   return request.json();
 }
 
+/**
+ * Exact request bytes for HMAC verification (Stripe webhooks).
+ * Never re-serialises a parsed object — that bytes≠signed-payload bug would
+ * reject every delivery. Prefers Buffer when the runtime already buffered
+ * the body; otherwise reads the stream. Throws if a helper already parsed
+ * JSON onto request.body (bodyParser:false is Next.js-only and is not relied on).
+ */
 export async function requestText(request) {
-  if (request.body !== undefined) {
-    if (typeof request.body === 'string' || Buffer.isBuffer(request.body)) {
-      return request.body.toString();
-    }
-    return JSON.stringify(request.body);
+  if (request.body !== undefined && request.body !== null) {
+    if (Buffer.isBuffer(request.body)) return request.body;
+    if (typeof request.body === 'string') return request.body;
+    if (request.body instanceof Uint8Array) return Buffer.from(request.body);
+    throw new Error('REQUEST_BODY_ALREADY_PARSED');
+  }
+  if (typeof request.arrayBuffer === 'function') {
+    return Buffer.from(await request.arrayBuffer());
   }
   if (typeof request.text === 'function') return request.text();
 
   const chunks = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
 export function sendJson(response, body, status = 200) {

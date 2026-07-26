@@ -9,8 +9,10 @@ import { matchingFullRefundForOrder } from './admin-refund-order.js';
 
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
-
-export const config = { api: { bodyParser: false } };
+//
+// Raw body bytes come from api/http.js requestText — never from a re-serialised
+// JSON object. This is a Vite/Vercel Node function, not a Next.js API route, so
+// Next-only body-parser opt-outs are neither exported nor relied on here.
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,7 +47,9 @@ export function webhookRequestIssue({ contentType, signature, rawBody }) {
   if (!validStripeSignatureHeader(signature)) {
     return { status: 400, message: 'Invalid webhook signature.' };
   }
-  const bodyBytes = Buffer.byteLength(String(rawBody || ''), 'utf8');
+  const bodyBytes = Buffer.isBuffer(rawBody) || rawBody instanceof Uint8Array
+    ? rawBody.byteLength
+    : Buffer.byteLength(String(rawBody || ''), 'utf8');
   if (bodyBytes === 0) return { status: 400, message: 'Webhook body is required.' };
   if (bodyBytes > MAX_WEBHOOK_BODY_BYTES) {
     return { status: 413, message: 'Webhook body is too large.' };
@@ -560,7 +564,18 @@ export default async function handler(request, response) {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   const signature = requestHeader(request, 'stripe-signature');
-  const rawBody = await requestText(request);
+  let rawBody;
+  try {
+    rawBody = await requestText(request);
+  } catch (error) {
+    if (error?.message === 'REQUEST_BODY_ALREADY_PARSED') {
+      console.error('Stripe webhook body was pre-parsed; exact bytes unavailable for HMAC.', {
+        requestId: trace.requestId,
+      });
+      return text('Webhook body is unavailable for signature verification.', 500);
+    }
+    throw error;
+  }
   const requestIssue = webhookRequestIssue({
     contentType: requestHeader(request, 'content-type'),
     signature,

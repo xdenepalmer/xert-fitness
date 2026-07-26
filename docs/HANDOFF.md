@@ -8,9 +8,6 @@ is still open, and the traps that already cost time.
   the SQL-drift repair PR and the audit continuation commits)
 - **Baseline expectation:** `npm ci` then `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run build` — keep these green before finishing work
-- **Working tree may contain uncommitted parallel-agent fixes** (iOS refresh /
-  checkout / roster / privacy / cancel-booking / health consent). Do not assume
-  they are committed until `git status` is clean.
 - **Do not open a pull request unless the user asks.**
 
 ---
@@ -61,7 +58,7 @@ group of findings, not per finding). Wide fan-out hits session/concurrency caps.
 The original handoff claimed the 56-item audit queue was never verified. That is
 **stale**. Most findings have been verified against code (and many against
 PostgreSQL 16) and marked **FIXED** in `docs/audit/remaining-findings.md`.
-**49 FIXED / 7 OPEN** as of this update.
+**56 FIXED / 0 OPEN** as of this update.
 
 ### Themes from commits on this branch (after merge with main)
 
@@ -102,29 +99,18 @@ Parallel agents also changed (verify with `git status` / `git diff`):
 - Owner Command Centre nav restored as a visible one-tap entry on iPhone/iPad
 
 These map to findings **5, 6, 7, 10, 26, 28, 36, 41** (and nav UX outside the
-numbered queue). Commit them before treating them as shipped.
+numbered queue). Later commits also closed **16, 27, 29, 31, 49, 51, 52**.
 
 ---
 
 ## 2. What is still outstanding
 
-### 2a. Audit queue — 7 still open
+### 2a. Audit queue — closed
 
 Full evidence remains in **`docs/audit/remaining-findings.md`** (auditor quotes
-kept; **status** lines are authoritative). Open items:
-
-| # | Severity (claimed) | Why still open |
-|---|---|---|
-| 16 | high | Audit tables still store name/email/staff notes behind immutability triggers with no correction/erasure path (APP 12/13) |
-| 27 | medium | Owner `memberCount` still reads `total_count` from `members[0]`; `resolveOwnerTask` inserts a filtered member at index 0 |
-| 29 | medium | `canApplyMemberState` still compares `access_token`, so token refresh aborts post-mutation UI |
-| 31 | medium | `AdminLayout` badge refresh effect still depends on `activeSection` without reading it |
-| 49 | low | `requestText` still `JSON.stringify`s a parsed body — risky for Stripe HMAC if a runtime pre-parses |
-| 51 | low | Calendar integration still requests full event access on iOS 17+ |
-| 52 | low | Sign-out/delete clear push state, but pending checkout / nav pins / admin scene storage are not fully purged |
-
-Do not re-open FIXED findings without new evidence. If unsure, grep the fix
-location named in `remaining-findings.md` before changing status again.
+kept; **status** lines are authoritative). All **56** findings are marked
+**FIXED**. Do not re-open a FIXED finding without new evidence. If unsure, grep
+the fix location named in the status line before changing status again.
 
 #### How to verify one properly (still the right method)
 
@@ -233,7 +219,7 @@ Do not re-litigate these without reason:
 ## 4. Suggested order of work
 
 1. **Commit or discard the working-tree parallel fixes**, then re-run lint/tests/build.
-2. **Close the 8 open findings** (§2a), highest severity first (16, then 27/29/31/33).
+2. **Close the 4 open findings** (§2a), highest severity first (16, then 27/31/49).
 3. **Write the staff/role model spec (§3).** Unblocks three XL features.
 4. **Run the completeness critic (§2c).**
 5. Only then start implementing any of specs 01–06, in the phase order in

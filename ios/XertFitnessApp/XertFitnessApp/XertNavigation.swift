@@ -459,6 +459,10 @@ enum XertWorkspaceOrderStore {
         return normalized
     }
 
+    static func clear(for userID: UUID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey(for: userID))
+    }
+
     static func normalized(_ destinations: [XertPrimaryDestination]) -> [XertPrimaryDestination] {
         var seen = Set<XertPrimaryDestination>()
         let uniqueKnown = destinations.filter { seen.insert($0).inserted }
@@ -516,6 +520,10 @@ enum XertPinnedWorkspaceStore {
         }
         save(routes, for: userID, defaults: defaults)
         return routes
+    }
+
+    static func clear(for userID: UUID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey(for: userID))
     }
 
     private static func save(

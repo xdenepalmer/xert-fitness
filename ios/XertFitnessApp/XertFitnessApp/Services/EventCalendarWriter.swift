@@ -55,17 +55,6 @@ enum EventCalendarWriter {
             throw EventCalendarWriterError.missingDate
         }
 
-        let predicate = store.predicateForEvents(
-            withStart: start,
-            end: end,
-            calendars: [calendar]
-        )
-        if store.events(matching: predicate).contains(where: {
-            $0.title == item.name && $0.isAllDay && $0.startDate == start && $0.endDate == end
-        }) {
-            return .alreadyExists
-        }
-
         let event = EKEvent(eventStore: store)
         event.calendar = calendar
         event.title = item.name
@@ -90,19 +79,6 @@ enum EventCalendarWriter {
 
         let start = booking.start_time
         let end = BookingCalendarPlanner.endDate(for: booking)
-        let predicate = store.predicateForEvents(
-            withStart: start.addingTimeInterval(-60),
-            end: end.addingTimeInterval(60),
-            calendars: [calendar]
-        )
-        if store.events(matching: predicate).contains(where: {
-            $0.title == booking.title
-                && !$0.isAllDay
-                && abs($0.startDate.timeIntervalSince(start)) < 1
-                && abs($0.endDate.timeIntervalSince(end)) < 1
-        }) {
-            return .alreadyExists
-        }
 
         let event = EKEvent(eventStore: store)
         event.calendar = calendar
@@ -121,7 +97,8 @@ enum EventCalendarWriter {
 
     private static func requestAccess(using store: EKEventStore) async -> Bool {
         if #available(iOS 17.0, *) {
-            return (try? await store.requestFullAccessToEvents()) ?? false
+            // Write-only is enough to create events; full read access is not required.
+            return (try? await store.requestWriteOnlyAccessToEvents()) ?? false
         }
 
         return await withCheckedContinuation { continuation in

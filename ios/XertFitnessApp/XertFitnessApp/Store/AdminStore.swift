@@ -16,6 +16,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var activationOverview: AdminMemberActivationOverview?
     @Published private(set) var activationQueue: [AdminMemberActivationItem] = []
     @Published private(set) var members: [AdminMemberSummary] = []
+    /// Unfiltered directory total from the last full members load. Filtered
+    /// search rows and single-record inserts carry `total_count` for their
+    /// result set only — never overwrite this from those paths.
+    @Published private(set) var memberDirectoryTotalCount: Int = 0
     @Published private(set) var memberNotes: [AdminMemberNote] = []
     @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
     @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
@@ -102,7 +106,9 @@ final class AdminStore: ObservableObject {
     private var healthRefreshGeneration: UInt = 0
     private var rosterLoadGeneration: UInt = 0
 
-    var memberCount: Int { members.first?.total_count ?? members.count }
+    var memberCount: Int {
+        memberDirectoryTotalCount > 0 ? memberDirectoryTotalCount : members.count
+    }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
     var waitingMembers: Int { waitlist.reduce(0) { $0 + $1.waitlist_count } }
     var attendanceDue: Int { dailyOperations.filter(\.attendance_due).count }
@@ -141,6 +147,15 @@ final class AdminStore: ObservableObject {
 
     private func healthSourceIsCurrent(_ source: String) -> Bool {
         loadedSources.contains(source) && !refreshUnavailableSources.contains(source)
+    }
+
+    /// Replace the in-memory member list. Only unfiltered directory loads may
+    /// refresh `memberDirectoryTotalCount` — filtered search and single-record
+    /// inserts leave the Overview "Members" metric alone.
+    private func replaceMembers(_ rows: [AdminMemberSummary], updatesDirectoryTotal: Bool) {
+        members = rows
+        guard updatesDirectoryTotal else { return }
+        memberDirectoryTotalCount = rows.first?.total_count ?? rows.count
     }
 
     func refresh(session: AuthSession) async {
@@ -191,15 +206,18 @@ final class AdminStore: ObservableObject {
             successfulSources.insert("activation actions")
             loadedSource = true
         } catch { failures.append("activation actions"); queueFailures.append("activation actions") }
-        do { members = try await memberRequest; successfulSources.insert("members"); loadedSource = true }
-        catch {
+        do {
+            replaceMembers(try await memberRequest, updatesDirectoryTotal: true)
+            successfulSources.insert("members")
+            loadedSource = true
+        } catch {
             // The member directory and server-backed health endpoints are the
             // most likely reads to meet a cold connection on first open. Retry
             // them once before presenting partial data, but never retry a stale
             // foreground refresh or a cancelled Command Centre task.
             if !loadedSources.contains("members"), !Task.isCancelled {
                 do {
-                    members = try await api.adminMembers(session: session)
+                    replaceMembers(try await api.adminMembers(session: session), updatesDirectoryTotal: true)
                     successfulSources.insert("members")
                     loadedSource = true
                 } catch { failures.append("members") }
@@ -387,7 +405,11 @@ final class AdminStore: ObservableObject {
         isSearchingMembers = true
         defer { isSearchingMembers = false }
         do {
-            members = try await api.adminMembers(session: session, search: query)
+            let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            replaceMembers(
+                try await api.adminMembers(session: session, search: query),
+                updatesDirectoryTotal: normalized.isEmpty
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -586,7 +608,7 @@ final class AdminStore: ObservableObject {
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             _ = try await api.adminGrantCredits(session: session, memberID: memberID, sessions: sessions, validityDays: validityDays, requestID: requestID, note: note)
-            members = try await api.adminMembers(session: session)
+            replaceMembers(try await api.adminMembers(session: session), updatesDirectoryTotal: true)
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
@@ -596,7 +618,7 @@ final class AdminStore: ObservableObject {
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             try await api.adminSetRole(session: session, memberID: memberID, role: role)
-            members = try await api.adminMembers(session: session)
+            replaceMembers(try await api.adminMembers(session: session), updatesDirectoryTotal: true)
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }

@@ -160,6 +160,8 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   }, []);
 
   // Keep attention counts current without polling while the admin tab is hidden.
+  // Mount once for the admin shell lifetime — section changes must not reset
+  // lastRefreshAt / requestInFlight or they bypass the 15s freshness guard.
   useEffect(() => {
     let active = true;
     let requestInFlight = false;
@@ -197,7 +199,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [activeSection]);
+  }, []);
 
   const activeLabel = ALL_ITEMS.find(n => n.key === activeSection)?.label || 'Command Centre';
   const initials = (profile?.full_name || user?.email || 'A')

@@ -363,6 +363,10 @@ enum XertOwnerWorkspacePinsStore {
         return workspaces
     }
 
+    static func clear(for userID: UUID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: storageKey(for: userID))
+    }
+
     private static func save(
         _ workspaces: [XertOwnerWorkspace],
         for userID: UUID,

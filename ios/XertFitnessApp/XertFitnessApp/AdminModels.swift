@@ -938,6 +938,12 @@ enum AdminSiteContentDraftStore {
     static func clear(_ section: AdminSiteContentSection, defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: prefix + section.rawValue)
     }
+
+    static func clearAll(defaults: UserDefaults = .standard) {
+        for section in AdminSiteContentSection.allCases {
+            clear(section, defaults: defaults)
+        }
+    }
 }
 
 struct AdminBookingSession: Codable, Hashable {

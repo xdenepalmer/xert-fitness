@@ -55,3 +55,37 @@ test('native sign-out clears local push registration and retries failed unregist
   assert.match(store, /restoreMemberPushRegistration[\s\S]*await flushPendingPushUnregister\(\)/);
   assert.match(swiftTests, /PendingPushUnregisterStore\.save\(pending, defaults: defaults\)/);
 });
+
+test('native sign-out and account deletion purge member-linked UserDefaults state', () => {
+  const store = read('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift');
+  const root = read('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift');
+  const navigation = read('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift');
+  const ownerNavigation = read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift');
+  const adminModels = read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift');
+  const signOut = store.slice(store.indexOf('func signOut()'), store.indexOf('func deleteAccount'));
+  const deleteAccount = store.slice(store.indexOf('func deleteAccount()'), store.indexOf('func book('));
+  const purge = store.slice(
+    store.indexOf('private func purgeLocalMemberState'),
+    store.indexOf('private func flushPendingPushUnregister'),
+  );
+  const resetNavigation = root.slice(
+    root.indexOf('private func resetMemberNavigationAfterSignOut'),
+    root.indexOf('private func requireSignInForClass'),
+  );
+
+  assert.match(signOut, /purgeLocalMemberState\(userID: userID\)/);
+  assert.match(deleteAccount, /purgeLocalMemberState\(userID: userID\)/);
+  assert.match(purge, /PendingCheckoutStore\.clear\(\)/);
+  assert.match(purge, /ClassReminderPreference\.setEnabled\(false\)/);
+  assert.match(purge, /XertPinnedWorkspaceStore\.clear\(for: userID\)/);
+  assert.match(purge, /XertWorkspaceOrderStore\.clear\(for: userID\)/);
+  assert.match(purge, /XertOwnerWorkspacePinsStore\.clear\(for: userID\)/);
+  assert.match(purge, /AdminSiteContentDraftStore\.clearAll\(\)/);
+  assert.match(navigation, /enum XertPinnedWorkspaceStore[\s\S]*static func clear\(for userID: UUID/);
+  assert.match(navigation, /enum XertWorkspaceOrderStore[\s\S]*static func clear\(for userID: UUID/);
+  assert.match(ownerNavigation, /enum XertOwnerWorkspacePinsStore[\s\S]*static func clear\(for userID: UUID/);
+  assert.match(adminModels, /static func clearAll\(defaults: UserDefaults/);
+  assert.match(resetNavigation, /restoredAdminWorkspaceHistory = ""/);
+  assert.match(resetNavigation, /restoredAdminNavigationUserID = ""/);
+  assert.match(resetNavigation, /restoredAdminRecentWorkspaces = ""/);
+});
