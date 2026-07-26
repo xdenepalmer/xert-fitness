@@ -14,6 +14,7 @@ import {
   normalizeCheckoutAttemptID,
   normalizeCheckoutRequest,
   pendingOrderForCheckout,
+  inspectWebhookDeliveryGaps,
   paymentFulfillmentDeliveryIsHealthy,
   paymentFulfillmentIsReady,
   paymentActivationDriftGuardIsReady,
@@ -204,8 +205,16 @@ function paymentDeliveryAdmin({
               calls.push(['eq', field, value]);
               return query;
             },
+            is(field, value) {
+              calls.push(['is', field, value]);
+              return query;
+            },
             gt(field, value) {
               calls.push(['gt', field, value]);
+              return query;
+            },
+            gte(field, value) {
+              calls.push(['gte', field, value]);
               return query;
             },
             then(resolve) {
@@ -311,6 +320,19 @@ test('checkout pauses when Operations Health would mark signature or delivery ga
       message: 'stripe_webhook_signature_failures not found in schema cache',
     },
   }).admin, now), true);
+
+  const withLedger = paymentDeliveryAdmin({ paidBeyondLedger: 1 });
+  await inspectWebhookDeliveryGaps(withLedger.admin, now);
+  assert.ok(withLedger.calls.some(([method, field, value]) => (
+    method === 'is' && field === 'reconciled_at' && value === null
+  )));
+  assert.ok(withLedger.calls.some(([method, field]) => method === 'gt' && field === 'paid_at'));
+
+  const emptyLedger = paymentDeliveryAdmin({ newestLedgerAt: null, paidBeyondLedger: 0 });
+  const emptyGaps = await inspectWebhookDeliveryGaps(emptyLedger.admin, now);
+  assert.equal(emptyGaps.deliveryGap, false);
+  assert.ok(emptyLedger.calls.some(([method, field]) => method === 'gte' && field === 'paid_at'));
+  assert.ok(!emptyLedger.calls.some(([method, field]) => method === 'gt' && field === 'paid_at'));
 });
 
 test('checkout delivery circuit breaker fails closed on uncertain ledger health', async () => {

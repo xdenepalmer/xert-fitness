@@ -123,7 +123,9 @@ function capabilityAdmin(capabilities, webhookRows = [], options = {}) {
         const query = {
           select() { return query; },
           eq() { return query; },
+          is() { return query; },
           gt() { return query; },
+          gte() { return query; },
           then(resolve) { return resolve({ data: null, count: options.paidBeyondLedger || 0, error: options.ordersError || null }); },
         };
         return query;
@@ -665,7 +667,14 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
         return { select() { return this; }, gte() { return this; }, then(resolve) { return resolve({ data: null, count: 0, error: null }); } };
       }
       if (table === 'orders') {
-        return { select() { return this; }, eq() { return this; }, gt() { return this; }, then(resolve) { return resolve({ data: null, count: 0, error: null }); } };
+        return {
+          select() { return this; },
+          eq() { return this; },
+          is() { return this; },
+          gt() { return this; },
+          gte() { return this; },
+          then(resolve) { return resolve({ data: null, count: 0, error: null }); },
+        };
       }
       webhookQueryNumber += 1;
       const rows = webhookQueryNumber === 1 ? [] : [oldReview];

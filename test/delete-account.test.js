@@ -193,7 +193,7 @@ test('rollout fallback proceeds through PT rollout gaps but rejects unrelated fa
       }
       return {
         delete: () => ({
-          eq: async (column, value) => (
+          eq: async (column, _value) => (
             column === 'user_id' ? { error: ptError } : { error: null }
           ),
         }),

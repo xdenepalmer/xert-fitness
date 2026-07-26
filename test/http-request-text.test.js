@@ -35,4 +35,8 @@ test('stripe webhook does not rely on Next.js bodyParser config', () => {
   assert.doesNotMatch(http, /JSON\.stringify\(request\.body\)/);
   assert.match(webhook, /REQUEST_BODY_ALREADY_PARSED/);
   assert.match(webhook, /requestText\(request\)/);
+  assert.match(
+    webhook,
+    /REQUEST_BODY_ALREADY_PARSED[\s\S]*recordWebhookSignatureFailure\([\s\S]*REQUEST_BODY_ALREADY_PARSED/,
+  );
 });

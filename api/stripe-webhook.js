@@ -572,6 +572,9 @@ export default async function handler(request, response) {
       console.error('Stripe webhook body was pre-parsed; exact bytes unavailable for HMAC.', {
         requestId: trace.requestId,
       });
+      // Same durable incident path as signature rejection so Ops Health and the
+      // checkout kill-switch can see "webhooks arriving but unverifiable".
+      await recordWebhookSignatureFailure(admin, { reason: 'REQUEST_BODY_ALREADY_PARSED' });
       return text('Webhook body is unavailable for signature verification.', 500);
     }
     throw error;

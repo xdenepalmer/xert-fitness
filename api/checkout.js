@@ -139,6 +139,11 @@ function isMissingSignatureFailureLedger(error) {
  * rejections (invisible to the event ledger) and paid orders newer than the
  * newest ledger row ("no webhooks at all"). Missing signature-ledger schema
  * degrades to zero so rolling upgrades do not pause checkout.
+ *
+ * Admin reconcile writes reconciled_at without a ledger event, so those
+ * recovered orders must not count as a delivery gap. An empty ledger only
+ * looks at the same 24h window as signature failures — historical paid rows
+ * alone must not pause the store forever.
  */
 export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
   const nowTime = now instanceof Date ? now.getTime() : Number.NaN;
@@ -166,8 +171,14 @@ export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
   let paidOrdersQuery = admin
     .from('orders')
     .select('id', { count: 'exact', head: true })
-    .eq('status', 'paid');
-  if (newestLedgerAt) paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
+    .eq('status', 'paid')
+    .is('reconciled_at', null);
+  if (newestLedgerAt) {
+    paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
+  } else {
+    // Empty ledger: only recent unreconciled paid orders signal a live gap.
+    paidOrdersQuery = paidOrdersQuery.gte('paid_at', since);
+  }
   const paidOrdersResult = await paidOrdersQuery;
   const paidBeyondLedger = paidOrdersResult?.error ? 0 : (paidOrdersResult?.count || 0);
 
