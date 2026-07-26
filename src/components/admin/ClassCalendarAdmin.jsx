@@ -3,7 +3,7 @@ import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Ma
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
+import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
@@ -217,22 +217,28 @@ const STATUS_COLORS = {
   completed: 'text-xert-concrete/40 border-xert-steel/30',
 };
 
-function SessionEditor({ session, blackouts, onSave, onCancel }) {
-  const [form, setForm] = useState(() => session ? {
-    ...session,
-    start_time: toDateTimeLocalInput(session.start_time),
-    end_time: toDateTimeLocalInput(session.end_time),
-  } : {
-    class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
-    start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
-    location_zone: 'Main floor', beginner_friendly: false,
-    intensity_level: 'Moderate', status: 'draft', public_visible: false,
-    booking_mode: 'request_to_book', notes: '',
-  });
+function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) {
+  const [form, setForm] = useState(() => classSessionEditorForm(session));
   const [saving, setSaving] = useState(false);
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+  const isDirty = classSessionEditorIsDirty(form, session);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
+  const requestCancel = () => {
+    if (saving) return;
+    if (isDirty) {
+      setShowDiscardConfirmation(true);
+      return;
+    }
+    onCancel();
+  };
 
   const handleSave = async () => {
     const validationError = classSessionValidationError(form);
@@ -247,6 +253,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
       } else {
         await createClassSession(form);
       }
+      onDirtyChange?.(false);
       onSave();
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
@@ -256,13 +263,14 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
+    <>
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
+        <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="flex max-h-[100dvh] w-full max-w-2xl flex-col border border-xert-steel/20 bg-xert-ink sm:max-h-[90vh]">
+        <div className="flex shrink-0 items-center justify-between border-b border-xert-steel/20 p-5 sm:p-6">
           <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
-          <button type="button" onClick={onCancel} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">&#10005;</button>
+          <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl disabled:opacity-40">&#10005;</button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="class-type" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class type</label>
@@ -370,8 +378,8 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
               className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
           </div>
         </div>
-        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving}
+        <div className="flex shrink-0 gap-3 border-t border-xert-steel/20 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6">
+          <button type="button" onClick={requestCancel} disabled={saving}
             className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
             Cancel
           </button>
@@ -381,7 +389,21 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+      <AdminConfirmDialog
+        open={showDiscardConfirmation}
+        onOpenChange={setShowDiscardConfirmation}
+        title="Discard unsaved class changes?"
+        description="This class draft has changes that have not been saved."
+        warning="Discarding will permanently remove the edits made in this class editor."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={() => {
+          onDirtyChange?.(false);
+          onCancel();
+        }}
+      />
+    </>
   );
 }
 
@@ -459,7 +481,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   );
 }
 
-export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled }) {
+export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled, onDirtyChange }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
@@ -1006,10 +1028,15 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
       {showEditor && (
         <SessionEditor
+          key={editingSession?.id || 'new-class'}
           session={editingSession}
           blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}
-          onCancel={() => setShowEditor(false)}
+          onCancel={() => {
+            setShowEditor(false);
+            setEditingSession(null);
+          }}
+          onDirtyChange={onDirtyChange}
         />
       )}
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutPeriodMutationError, blackoutsOverlappingSession, classSessionUpdateRpcError, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
+import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutPeriodMutationError, blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionUpdateRpcError, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
 
 test('normalizes explicit availability and blackout payloads', () => {
   const block = normalizeAvailabilityBlock({
@@ -76,6 +76,7 @@ test('round-trips stored timestamps through a datetime-local editor value', () =
   const editorValue = toDateTimeLocalInput(iso);
   assert.match(editorValue, /^\d{4}-\d{2}-\d{2}T\d{2}:35$/);
   assert.equal(new Date(editorValue).getTime(), Date.parse(iso));
+  assert.equal(toDateTimeLocalInput(null), '');
   assert.equal(toDateTimeLocalInput('not-a-date'), '');
 });
 
@@ -95,6 +96,38 @@ test('hydrates editable scheduling forms without carrying database metadata', ()
   assert.equal(blackout.notes, 'Equipment install');
   assert.equal('id' in block, false);
   assert.equal('id' in blackout, false);
+});
+
+test('class editor drafts are canonical and cannot carry edited values into create mode', () => {
+  const stored = {
+    id: 'published-class',
+    class_type: 'XERT Strength',
+    title: 'Strength Block',
+    description: null,
+    coach_name: 'Byron',
+    start_time: '2026-08-01T08:00:00.000Z',
+    end_time: null,
+    duration_minutes: 60,
+    capacity: 8,
+    location_zone: 'Main floor',
+    beginner_friendly: false,
+    intensity_level: 'High',
+    status: 'published',
+    public_visible: true,
+    booking_mode: 'instant_book',
+    notes: null,
+  };
+  const editDraft = classSessionEditorForm(stored);
+  const createDraft = classSessionEditorForm();
+
+  assert.equal(editDraft.description, '');
+  assert.equal(editDraft.end_time, '');
+  assert.equal('id' in editDraft, false);
+  assert.equal(classSessionEditorIsDirty(editDraft, stored), false);
+  assert.equal(classSessionEditorIsDirty({ ...editDraft, capacity: 10 }, stored), true);
+  assert.equal(createDraft.title, '');
+  assert.equal(createDraft.status, 'draft');
+  assert.notEqual(createDraft.title, editDraft.title);
 });
 
 test('rejects unsafe published class data before it reaches the timetable', () => {

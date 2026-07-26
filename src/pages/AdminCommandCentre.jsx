@@ -68,23 +68,33 @@ export default function AdminCommandCentre() {
   }, [hasUnsavedChanges]);
 
   const setSection = useCallback((nextSection, params) => {
+    const nextPath = getAdminSectionPath(nextSection, params);
     if (nextSection === section) {
-      navigate(getAdminSectionPath(nextSection, params));
+      const currentPath = `${location.pathname}${location.search}`;
+      if (hasUnsavedChanges && nextPath !== currentPath) {
+        setPendingNavigation({
+          kind: 'section',
+          section: nextSection,
+          path: nextPath,
+        });
+        return false;
+      }
+      navigate(nextPath);
       return true;
     }
     if (hasUnsavedChanges) {
       setPendingNavigation({
         kind: 'section',
         section: nextSection,
-        path: getAdminSectionPath(nextSection, params),
+        path: nextPath,
       });
       return false;
     }
     setHasUnsavedChanges(false);
     setActiveSection(nextSection);
-    navigate(getAdminSectionPath(nextSection, params));
+    navigate(nextPath);
     return true;
-  }, [hasUnsavedChanges, navigate, section]);
+  }, [hasUnsavedChanges, location.pathname, location.search, navigate, section]);
 
   const confirmLeaveAdmin = useCallback(action => {
     if (!hasUnsavedChanges) return true;
@@ -118,7 +128,7 @@ export default function AdminCommandCentre() {
       case 'members': return <LeadTable key={section} type="member" />;
       case 'trainers': return <LeadTable key={section} type="trainer" />;
       case 'partners': return <LeadTable key={section} type="partner" />;
-      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} />;
+      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;

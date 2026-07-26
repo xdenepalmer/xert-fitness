@@ -31,10 +31,41 @@ function optionalText(value) {
 }
 
 export function toDateTimeLocalInput(value) {
+  if (value === null || value === undefined || value === '') return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const pad = number => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function classSessionEditorForm(session = {}) {
+  const numberOrDefault = (value, fallback) => {
+    if (value === null || value === undefined || value === '') return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+  return {
+    class_type: String(session.class_type || 'XERT Foundation'),
+    title: String(session.title || ''),
+    description: String(session.description || ''),
+    coach_name: String(session.coach_name || ''),
+    start_time: toDateTimeLocalInput(session.start_time),
+    end_time: toDateTimeLocalInput(session.end_time),
+    duration_minutes: numberOrDefault(session.duration_minutes, 60),
+    capacity: numberOrDefault(session.capacity, 8),
+    location_zone: String(session.location_zone || 'Main floor'),
+    beginner_friendly: Boolean(session.beginner_friendly),
+    intensity_level: String(session.intensity_level || 'Moderate'),
+    status: String(session.status || 'draft'),
+    public_visible: Boolean(session.public_visible),
+    booking_mode: String(session.booking_mode || 'request_to_book'),
+    notes: String(session.notes || ''),
+  };
+}
+
+export function classSessionEditorIsDirty(form, session) {
+  return JSON.stringify(classSessionEditorForm(form))
+    !== JSON.stringify(classSessionEditorForm(session));
 }
 
 export function availabilityBlockEditorForm(block = {}) {
