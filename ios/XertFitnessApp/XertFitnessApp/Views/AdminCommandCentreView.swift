@@ -10168,12 +10168,21 @@ private struct AdminAnnouncementDetailView: View {
         admin.isMutatingAnnouncements
     }
 
+    private var currentAnnouncement: AdminAnnouncement {
+        admin.announcements.first(where: { $0.id == announcement.id }) ?? announcement
+    }
+
+    private var deliveryMetrics: AdminAnnouncementDeliveryMetrics? {
+        admin.announcementDeliveryMetrics[currentAnnouncement.id]
+    }
+
     var body: some View {
         List {
             if !noticesAreCurrent {
                 Section {
                     Label(
-                        "Refresh the notice before changing member visibility.",
+                        admin.announcementLoadErrorMessage
+                            ?? "Refresh the notice before changing member visibility.",
                         systemImage: "wifi.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -10207,30 +10216,30 @@ private struct AdminAnnouncementDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             noticeStatus
                             Spacer(minLength: 8)
-                            Text(announcement.tone.uppercased())
+                            Text(currentAnnouncement.tone.uppercased())
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(Color.xertPale.opacity(0.5))
                         }
                         VStack(alignment: .leading, spacing: 7) {
                             noticeStatus
-                            Text(announcement.tone.uppercased())
+                            Text(currentAnnouncement.tone.uppercased())
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(Color.xertPale.opacity(0.5))
                         }
                     }
 
-                    Text(announcement.title)
+                    Text(currentAnnouncement.title)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(Color.xertOffWhite)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(announcement.body)
+                    Text(currentAnnouncement.body)
                         .font(.body)
                         .foregroundStyle(Color.xertPale.opacity(0.78))
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let label = announcement.cta_label,
-                       let url = announcement.cta_url {
+                    if let label = currentAnnouncement.cta_label,
+                       let url = currentAnnouncement.cta_url {
                         Label("\(label) · \(url)", systemImage: "arrow.up.forward.app")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.xertSteel)
@@ -10244,13 +10253,13 @@ private struct AdminAnnouncementDetailView: View {
             Section("Lifecycle") {
                 detailRow(
                     "Created",
-                    value: announcement.created_at.formatted(
+                    value: currentAnnouncement.created_at.formatted(
                         date: .abbreviated,
                         time: .shortened
                     ),
                     icon: "clock"
                 )
-                if let firstPublished = announcement.first_published_at {
+                if let firstPublished = currentAnnouncement.first_published_at {
                     detailRow(
                         "First published",
                         value: firstPublished.formatted(
@@ -10260,7 +10269,7 @@ private struct AdminAnnouncementDetailView: View {
                         icon: "paperplane"
                     )
                 }
-                if let expiry = announcement.expires_at {
+                if let expiry = currentAnnouncement.expires_at {
                     detailRow(
                         "Expires",
                         value: expiry.formatted(date: .abbreviated, time: .shortened),
@@ -10270,8 +10279,65 @@ private struct AdminAnnouncementDetailView: View {
             }
             .listRowBackground(Color.xertInk)
 
+            if currentAnnouncement.wasPublished {
+                Section("Member reach") {
+                    if let metrics = deliveryMetrics {
+                        detailRow(
+                            "Opened",
+                            value: metrics.readCount.formatted(),
+                            icon: "eye"
+                        )
+                        detailRow(
+                            "Dismissed",
+                            value: metrics.dismissedCount.formatted(),
+                            icon: "xmark.circle"
+                        )
+                        detailRow(
+                            "Push attempted",
+                            value: metrics.pushAttemptedCount.formatted(),
+                            icon: "paperplane"
+                        )
+                        detailRow(
+                            "Push delivered",
+                            value: metrics.pushDeliveredCount.formatted(),
+                            icon: "iphone.radiowaves.left.and.right"
+                        )
+                        if metrics.pushFailedCount > 0 {
+                            detailRow(
+                                "Push failed",
+                                value: metrics.pushFailedCount.formatted(),
+                                icon: "exclamationmark.triangle"
+                            )
+                        }
+                        if let attemptedAt = metrics.pushLastAttemptedAt {
+                            detailRow(
+                                "Last push attempt",
+                                value: attemptedAt.formatted(date: .abbreviated, time: .shortened),
+                                icon: "clock.arrow.circlepath"
+                            )
+                        }
+                    } else {
+                        Label(
+                            admin.announcementDeliveryStatusMessage
+                                ?? "No delivery attempts have been recorded for this notice.",
+                            systemImage: admin.announcementDeliveryStatusMessage == nil
+                                ? "iphone.slash"
+                                : "wifi.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(
+                            admin.announcementDeliveryStatusMessage == nil
+                                ? Color.xertPale.opacity(0.62)
+                                : Color.orange
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
             Section("Actions") {
-                if announcement.archived_at == nil {
+                if currentAnnouncement.archived_at == nil {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 10) { primaryActions }
                         VStack(spacing: 10) { primaryActions }
@@ -10281,22 +10347,22 @@ private struct AdminAnnouncementDetailView: View {
                     )
                 }
 
-                if announcement.archived_at != nil {
+                if currentAnnouncement.archived_at != nil {
                     Button {
-                        confirm(.restore(announcement))
+                        confirm(.restore(currentAnnouncement))
                     } label: {
                         Label("Restore as draft", systemImage: "archivebox")
                     }
-                } else if announcement.wasPublished {
+                } else if currentAnnouncement.wasPublished {
                     Button {
-                        confirm(.archive(announcement))
+                        confirm(.archive(currentAnnouncement))
                     } label: {
                         Label("Archive with delivery history", systemImage: "archivebox")
                     }
                     .foregroundStyle(Color.orange)
                 } else {
                     Button(role: .destructive) {
-                        confirm(.delete(announcement))
+                        confirm(.delete(currentAnnouncement))
                     } label: {
                         Label("Delete unpublished draft", systemImage: "trash")
                     }
@@ -10375,15 +10441,15 @@ private struct AdminAnnouncementDetailView: View {
 
     private var noticeStatus: some View {
         Label(
-            announcement.stateLabel.uppercased(),
-            systemImage: announcement.published_at == nil ? "eye.slash" : "eye.fill"
+            currentAnnouncement.stateLabel.uppercased(),
+            systemImage: currentAnnouncement.published_at == nil ? "eye.slash" : "eye.fill"
         )
         .font(.caption.weight(.black))
         .foregroundStyle(stateColour)
     }
 
     private var stateColour: Color {
-        switch announcement.stateLabel {
+        switch currentAnnouncement.stateLabel {
         case "Live": return .green
         case "Expired", "Archived": return .orange
         case "Scheduled": return Color.xertSteel
@@ -10393,9 +10459,9 @@ private struct AdminAnnouncementDetailView: View {
 
     @ViewBuilder
     private var primaryActions: some View {
-        if announcement.archived_at == nil {
+        if currentAnnouncement.archived_at == nil {
             Button {
-                editor = .init(announcement: announcement)
+                editor = .init(announcement: currentAnnouncement)
             } label: {
                 Label("Edit notice", systemImage: "pencil")
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -10405,10 +10471,10 @@ private struct AdminAnnouncementDetailView: View {
             .disabled(isBusy || !noticesAreCurrent)
             .accessibilityIdentifier("owner.notice.edit")
 
-            if announcement.published_at == nil {
+            if currentAnnouncement.published_at == nil {
                 Button {
                     editor = .init(
-                        announcement: announcement,
+                        announcement: currentAnnouncement,
                         publishesOnOpen: true
                     )
                 } label: {
@@ -10422,7 +10488,7 @@ private struct AdminAnnouncementDetailView: View {
                 .accessibilityIdentifier("owner.notice.reviewPublish")
             } else {
                 Button {
-                    confirm(.unpublish(announcement))
+                    confirm(.unpublish(currentAnnouncement))
                 } label: {
                     Label("Unpublish now", systemImage: "eye.slash.fill")
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -10527,9 +10593,10 @@ private struct AdminCommunicationsView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {
                         Label(
-                            admin.loadedSources.contains("member notices")
-                                ? "Showing the last notice snapshot. Refresh before publishing or changing visibility."
-                                : "Member notices are unavailable. Refresh before managing communications.",
+                            admin.announcementLoadErrorMessage
+                                ?? (admin.loadedSources.contains("member notices")
+                                    ? "Showing the last notice snapshot. Refresh before publishing or changing visibility."
+                                    : "Member notices are unavailable. Refresh before managing communications."),
                             systemImage: "wifi.exclamationmark"
                         )
                         .font(.caption.weight(.semibold))
@@ -10550,8 +10617,17 @@ private struct AdminCommunicationsView: View {
                     Label(status, systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.green)
-                        .listRowBackground(Color.green.opacity(0.08))
                 }
+                .listRowBackground(Color.green.opacity(0.08))
+            }
+            if let warning = admin.announcementDeliveryStatusMessage {
+                Section {
+                    Label(warning, systemImage: "chart.bar.xaxis")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .listRowBackground(Color.orange.opacity(0.08))
             }
 
             if admin.announcements.isEmpty {
@@ -10643,8 +10719,21 @@ private struct AdminCommunicationsView: View {
                             .foregroundStyle(Color.xertSteel)
                             .lineLimit(2)
                     }
+                    if notice.wasPublished,
+                       let metrics = admin.announcementDeliveryMetrics[notice.id] {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                deliveryMetricItems(metrics)
+                            }
+                            VStack(alignment: .leading, spacing: 5) {
+                                deliveryMetricItems(metrics)
+                            }
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                    }
                 }
-                .disabled(!mutationAllowed)
+                .disabled(!noticesAreCurrent)
                 .foregroundStyle(Color.xertOffWhite)
                 .padding(.vertical, 7)
                 .contentShape(Rectangle())
@@ -10663,9 +10752,13 @@ private struct AdminCommunicationsView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button { refreshNotices() } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if admin.isRefreshingAnnouncements {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
-                .disabled(admin.isMutatingAnnouncements)
+                .disabled(admin.isMutatingAnnouncements || admin.isRefreshingAnnouncements)
                 .accessibilityLabel("Refresh member notices")
                 Button { editor = .init(announcement: nil) } label: {
                     Image(systemName: "plus")
@@ -10749,6 +10842,16 @@ private struct AdminCommunicationsView: View {
         case "Expired", "Archived": return .orange
         case "Scheduled": return Color.xertSteel
         default: return Color.xertPale.opacity(0.55)
+        }
+    }
+
+    @ViewBuilder
+    private func deliveryMetricItems(_ metrics: AdminAnnouncementDeliveryMetrics) -> some View {
+        Label("\(metrics.readCount) opened", systemImage: "eye")
+        Label("\(metrics.pushDeliveredCount) pushed", systemImage: "iphone.radiowaves.left.and.right")
+        if metrics.pushFailedCount > 0 {
+            Label("\(metrics.pushFailedCount) failed", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Color.orange)
         }
     }
 

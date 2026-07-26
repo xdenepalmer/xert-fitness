@@ -362,11 +362,15 @@ test('native member communications supports a safe complete notice lifecycle', a
   ]);
 
   assert.match(models, /struct AdminAnnouncementDraft: Equatable/);
+  assert.match(models, /struct AdminAnnouncementDeliveryMetrics: Hashable/);
+  assert.match(models, /var pushAttemptedCount: Int/);
   assert.match(models, /published_at > now \{ return "Scheduled" \}/);
   assert.match(models, /Action label and destination must be provided together/);
   assert.match(models, /url\.scheme\?\.lowercased\(\) == "https"/);
   assert.match(api, /func adminSaveAnnouncement/);
   assert.match(api, /func adminAnnouncement\(session auth: AuthSession, id: UUID\)/);
+  assert.match(api, /func adminAnnouncementReceiptMetrics[\s\S]*path: "admin_announcement_metrics"/);
+  assert.match(api, /func adminAnnouncementPushMetrics[\s\S]*path: "admin_announcement_push_metrics"/);
   assert.match(api, /This member notice is no longer available to your administrator account/);
   assert.match(api, /func adminUnpublishAnnouncement/);
   assert.match(api, /func adminSetAnnouncementArchived/);
@@ -377,6 +381,16 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.match(store, /Refresh Member Notices before changing communications/);
   assert.match(store, /mergeAnnouncement\(outcome\.announcement\)/);
   assert.match(store, /No enabled iOS devices were registered/);
+  assert.match(store, /@Published private\(set\) var announcementDeliveryMetrics: \[UUID: AdminAnnouncementDeliveryMetrics\]/);
+  assert.match(store, /async let receiptRequest = api\.adminAnnouncementReceiptMetrics/);
+  assert.match(store, /async let pushRequest = api\.adminAnnouncementPushMetrics/);
+  assert.match(store, /async let announcementReceiptMetricsRequest = api\.adminAnnouncementReceiptMetrics/);
+  assert.match(store, /async let announcementPushMetricsRequest = api\.adminAnnouncementPushMetrics/);
+  assert.match(store, /guard !isMutatingAnnouncements, !isRefreshingAnnouncements else \{ return \}/);
+  assert.match(store, /private func setAnnouncementDeliveryMetrics/);
+  assert.match(store, /announcementDeliveryStatusMessage = "Delivery evidence is temporarily unavailable/);
+  assert.match(store, /announcementLoadErrorMessage = "Member notices could not refresh/);
+  assert.match(store, /private func markAnnouncementsCurrent\(\)[\s\S]*announcementLoadErrorMessage = nil/);
 
   const exactDetail = view.slice(
     view.indexOf('private struct AdminAnnouncementDetailView'),
@@ -384,13 +398,17 @@ test('native member communications supports a safe complete notice lifecycle', a
   );
   assert.match(exactDetail, /admin\.loadedSources\.contains\("member notices"\)/);
   assert.match(exactDetail, /!admin\.refreshUnavailableSources\.contains\("member notices"\)/);
+  assert.match(exactDetail, /private var currentAnnouncement: AdminAnnouncement \{[\s\S]*admin\.announcements\.first\(where: \{ \$0\.id == announcement\.id \}\) \?\? announcement/);
   assert.match(exactDetail, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(exactDetail, /Label\("Unpublish now", systemImage: "eye\.slash\.fill"\)/);
-  assert.match(exactDetail, /confirm\(\.unpublish\(announcement\)\)/);
+  assert.match(exactDetail, /confirm\(\.unpublish\(currentAnnouncement\)\)/);
   assert.match(exactDetail, /Label\("Review & publish", systemImage: "paperplane\.fill"\)/);
-  assert.match(exactDetail, /confirm\(\.archive\(announcement\)\)/);
-  assert.match(exactDetail, /confirm\(\.restore\(announcement\)\)/);
-  assert.match(exactDetail, /confirm\(\.delete\(announcement\)\)/);
+  assert.match(exactDetail, /confirm\(\.archive\(currentAnnouncement\)\)/);
+  assert.match(exactDetail, /confirm\(\.restore\(currentAnnouncement\)\)/);
+  assert.match(exactDetail, /confirm\(\.delete\(currentAnnouncement\)\)/);
+  assert.match(exactDetail, /Section\("Member reach"\)/);
+  assert.match(exactDetail, /"Push delivered"[\s\S]*metrics\.pushDeliveredCount/);
+  assert.match(exactDetail, /No delivery attempts have been recorded for this notice/);
   assert.match(exactDetail, /owner\.notice\.detail/);
   assert.match(exactDetail, /owner\.notice\.unpublish/);
 
@@ -400,11 +418,15 @@ test('native member communications supports a safe complete notice lifecycle', a
   );
   assert.match(communications, /AdminAnnouncementStatusStrip/);
   assert.match(communications, /Showing the last notice snapshot/);
+  assert.match(communications, /admin\.announcementLoadErrorMessage/);
   assert.match(communications, /Label\("Review and publish", systemImage: "paperplane"\)/);
   assert.match(communications, /Label\("Unpublish", systemImage: "eye\.slash"\)/);
   assert.match(communications, /Label\("Archive", systemImage: "archivebox"\)/);
   assert.match(communications, /Label\("Delete draft", systemImage: "trash"\)/);
   assert.match(communications, /\.refreshable \{ await admin\.refreshAnnouncements\(session: session\) \}/);
+  assert.match(communications, /deliveryMetricItems\(metrics\)/);
+  assert.match(communications, /\.disabled\(!noticesAreCurrent\)/);
+  assert.doesNotMatch(communications, /\.disabled\(!mutationAllowed\)/);
 
   const composer = view.slice(
     view.indexOf('private struct AdminAnnouncementComposer'),

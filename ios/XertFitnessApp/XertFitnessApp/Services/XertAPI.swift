@@ -1368,6 +1368,26 @@ final class XertAPI {
         return rows[0]
     }
 
+    func adminAnnouncementReceiptMetrics(
+        session auth: AuthSession
+    ) async throws -> [AdminAnnouncementReceiptMetrics] {
+        try await rpc(
+            path: "admin_announcement_metrics",
+            body: EmptyBody(),
+            auth: auth
+        )
+    }
+
+    func adminAnnouncementPushMetrics(
+        session auth: AuthSession
+    ) async throws -> [AdminAnnouncementPushMetrics] {
+        try await rpc(
+            path: "admin_announcement_push_metrics",
+            body: EmptyBody(),
+            auth: auth
+        )
+    }
+
     func adminSaveAnnouncement(
         session auth: AuthSession,
         announcement: AdminAnnouncement?,

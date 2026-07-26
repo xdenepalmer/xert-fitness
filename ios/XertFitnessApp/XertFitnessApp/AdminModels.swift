@@ -2421,6 +2421,32 @@ struct AdminAnnouncementPublishOutcome: Codable, Hashable {
     let push: AdminAnnouncementPushSummary
 }
 
+struct AdminAnnouncementReceiptMetrics: Codable, Hashable {
+    let announcement_id: UUID
+    let read_count: Int
+    let dismissed_count: Int
+}
+
+struct AdminAnnouncementPushMetrics: Codable, Hashable {
+    let announcement_id: UUID
+    let delivered_count: Int
+    let failed_count: Int
+    let invalid_token_count: Int
+    let last_attempted_at: Date?
+}
+
+struct AdminAnnouncementDeliveryMetrics: Hashable {
+    var readCount = 0
+    var dismissedCount = 0
+    var pushDeliveredCount = 0
+    var pushFailedCount = 0
+    var pushLastAttemptedAt: Date?
+
+    var pushAttemptedCount: Int {
+        pushDeliveredCount + pushFailedCount
+    }
+}
+
 private extension String {
     var nilIfBlank: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)

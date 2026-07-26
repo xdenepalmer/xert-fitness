@@ -79,6 +79,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var settings: AdminPlatformSettings?
     @Published private(set) var ptRequests: [AdminPTRequest] = []
     @Published private(set) var announcements: [AdminAnnouncement] = []
+    @Published private(set) var announcementDeliveryMetrics: [UUID: AdminAnnouncementDeliveryMetrics] = [:]
+    @Published private(set) var announcementDeliveryStatusMessage: String?
     @Published private(set) var schemaCapabilities: [AdminSchemaCapability] = []
     @Published private(set) var commerceHealth: AdminCommerceHealth?
     @Published private(set) var resolvingStripeIncidentID: String?
@@ -127,8 +129,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var bulkUpdatingPTRequestIDs: Set<UUID> = []
     @Published private(set) var isPublishingAnnouncement = false
+    @Published private(set) var isRefreshingAnnouncements = false
     @Published private(set) var announcementMutationID: UUID?
     @Published private(set) var announcementStatusMessage: String?
+    @Published private(set) var announcementLoadErrorMessage: String?
     @Published private(set) var savingProductID: UUID?
     @Published private(set) var provisioningProductPriceID: UUID?
     @Published private(set) var savingEventID: UUID?
@@ -288,6 +292,8 @@ final class AdminStore: ObservableObject {
         async let settingsRequest = api.adminPlatformSettings(session: session)
         async let ptRequest = api.adminPTRequests(session: session)
         async let announcementRequest = api.adminAnnouncements(session: session)
+        async let announcementReceiptMetricsRequest = api.adminAnnouncementReceiptMetrics(session: session)
+        async let announcementPushMetricsRequest = api.adminAnnouncementPushMetrics(session: session)
         async let capabilitiesRequest = api.adminSchemaCapabilities(session: session)
         async let commerceRequest = api.adminCommerceHealth(session: session)
         async let pushRequest = api.adminPushHealth(session: session)
@@ -347,8 +353,20 @@ final class AdminStore: ObservableObject {
             loadedSource = true
         }
         catch { failures.append("PT requests"); queueFailures.append("PT requests") }
-        do { announcements = try await announcementRequest; successfulSources.insert("member notices"); loadedSource = true }
+        do {
+            announcements = try await announcementRequest
+            announcementLoadErrorMessage = nil
+            successfulSources.insert("member notices")
+            loadedSource = true
+        }
         catch { failures.append("member notices") }
+        do {
+            let receiptRows = try await announcementReceiptMetricsRequest
+            let pushRows = try await announcementPushMetricsRequest
+            setAnnouncementDeliveryMetrics(receiptRows: receiptRows, pushRows: pushRows)
+        } catch {
+            announcementDeliveryStatusMessage = "Delivery evidence is temporarily unavailable. Existing counts may be out of date."
+        }
         do { schemaCapabilities = try await capabilitiesRequest; successfulSources.insert("schema health"); loadedSource = true }
         catch { failures.append("schema health") }
         do { commerceHealth = try await commerceRequest; successfulSources.insert("Stripe health"); loadedSource = true }
@@ -2219,16 +2237,20 @@ final class AdminStore: ObservableObject {
     }
 
     func refreshAnnouncements(session: AuthSession) async {
-        guard !isMutatingAnnouncements else { return }
+        guard !isMutatingAnnouncements, !isRefreshingAnnouncements else { return }
+        isRefreshingAnnouncements = true
+        defer { isRefreshingAnnouncements = false }
         do {
             announcements = try await api.adminAnnouncements(session: session)
             markAnnouncementsCurrent()
             announcementStatusMessage = nil
+            await refreshAnnouncementDeliveryMetrics(session: session)
         } catch {
             if !refreshUnavailableSources.contains("member notices") {
                 refreshUnavailableSources.append("member notices")
             }
-            errorMessage = error.localizedDescription
+            announcementStatusMessage = nil
+            announcementLoadErrorMessage = "Member notices could not refresh. The last loaded snapshot remains read-only."
         }
     }
 
@@ -2282,6 +2304,7 @@ final class AdminStore: ObservableObject {
                     ? "\(push.delivered) device notification\(push.delivered == 1 ? "" : "s") delivered\(push.failed > 0 ? "; \(push.failed) failed" : "")."
                     : "Notice is live. No enabled iOS devices were registered."
                 : "Notice is live. APNs delivery is not configured."
+            await refreshAnnouncementDeliveryMetrics(session: session)
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -2373,7 +2396,41 @@ final class AdminStore: ObservableObject {
     private func markAnnouncementsCurrent() {
         loadedSources.insert("member notices")
         refreshUnavailableSources.removeAll { $0 == "member notices" }
+        announcementLoadErrorMessage = nil
         lastUpdatedAt = Date()
+    }
+
+    private func refreshAnnouncementDeliveryMetrics(session: AuthSession) async {
+        do {
+            async let receiptRequest = api.adminAnnouncementReceiptMetrics(session: session)
+            async let pushRequest = api.adminAnnouncementPushMetrics(session: session)
+            let (receiptRows, pushRows) = try await (receiptRequest, pushRequest)
+            setAnnouncementDeliveryMetrics(receiptRows: receiptRows, pushRows: pushRows)
+        } catch {
+            announcementDeliveryStatusMessage = "Delivery evidence is temporarily unavailable. Existing counts may be out of date."
+        }
+    }
+
+    private func setAnnouncementDeliveryMetrics(
+        receiptRows: [AdminAnnouncementReceiptMetrics],
+        pushRows: [AdminAnnouncementPushMetrics]
+    ) {
+        var merged: [UUID: AdminAnnouncementDeliveryMetrics] = [:]
+        for row in receiptRows {
+            merged[row.announcement_id] = AdminAnnouncementDeliveryMetrics(
+                readCount: row.read_count,
+                dismissedCount: row.dismissed_count
+            )
+        }
+        for row in pushRows {
+            var metrics = merged[row.announcement_id] ?? AdminAnnouncementDeliveryMetrics()
+            metrics.pushDeliveredCount = row.delivered_count
+            metrics.pushFailedCount = row.failed_count + row.invalid_token_count
+            metrics.pushLastAttemptedAt = row.last_attempted_at
+            merged[row.announcement_id] = metrics
+        }
+        announcementDeliveryMetrics = merged
+        announcementDeliveryStatusMessage = nil
     }
 
     func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {
