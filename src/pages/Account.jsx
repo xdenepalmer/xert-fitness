@@ -116,6 +116,10 @@ export default function Account() {
   // Same-paint double Save can fire two profile updates before `savingProfile`
   // re-renders (readinessSavingRef / cancelBookingLockRef parity).
   const profileSaveLockRef = useRef(false);
+  // Same-paint Remove goal can fire two remove RPCs before `removingGoalId` re-renders
+  // (Events Train-for-this / iOS updatingEventGoalID parity).
+  const goalRemoveLockRef = useRef(false);
+  const [removingGoalId, setRemovingGoalId] = useState(null);
   const [memberReadiness, setMemberReadiness] = useState(null);
   const [readinessForm, setReadinessForm] = useState(emptyReadinessForm);
   const [adultEligibilityConfirmed, setAdultEligibilityConfirmed] = useState(false);
@@ -580,9 +584,13 @@ export default function Account() {
   };
 
   const handleRemoveEventGoal = async goal => {
+    if (goalRemoveLockRef.current || removingGoalId) return;
+    const eventId = goal.event_id;
+    goalRemoveLockRef.current = true;
+    setRemovingGoalId(eventId);
     try {
-      await removeMyEventGoal(goal.event_id);
-      setEventGoals(current => current.filter(item => item.event_id !== goal.event_id));
+      await removeMyEventGoal(eventId);
+      setEventGoals(current => current.filter(item => item.event_id !== eventId));
       toast({
         title: 'Training goal removed',
         description: `${goal.events?.name || 'This event'} has been removed from your account.`
@@ -593,6 +601,9 @@ export default function Account() {
         description: e.message,
         variant: 'destructive'
       });
+    } finally {
+      setRemovingGoalId(null);
+      goalRemoveLockRef.current = false;
     }
   };
 
@@ -1212,14 +1223,16 @@ export default function Account() {
                       </p>
                     </div>
                     <button
-                      onClick={() => handleRemoveEventGoal(goal)}
-                      className="font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors"
+                      type="button"
+                      onClick={() => void handleRemoveEventGoal(goal)}
+                      disabled={Boolean(removingGoalId)}
+                      className="font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-40"
                       style={{
                         borderColor: 'rgba(123,167,188,0.28)',
                         color: 'rgba(209,221,230,0.65)'
                       }}
                     >
-                      Remove goal
+                      {removingGoalId === goal.event_id ? 'Removing…' : 'Remove goal'}
                     </button>
                   </div>
                 );

@@ -33,6 +33,8 @@ test('web event training-group roster is generation and identity scoped before r
   assert.match(manager, /const scopedMembers = rosterReady \? members : \[\]/);
   assert.match(manager, /Roster not ready/);
   assert.match(manager, /seedLockRef/);
+  assert.match(manager, /const exportLockRef = useRef\(false\)/);
+  assert.match(manager, /if \(exportLockRef\.current \|\| exporting\) return/);
 });
 
 test('admin event goal counts page through PostgREST instead of silently truncating', () => {

@@ -8,6 +8,11 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Booking Operations CSV, class roster CSV and event training-group CSV match
+  LeadTable / Members / PT: no same-paint double download and booking CSV stays
+  off while the desk is loading. Class Calendar Dupe refuses same-paint double
+  creates. Member Account Remove goal and iPhone Account Save details refuse
+  same-paint double submits (Events / web profile parity).
 - Public About / Contact / Coaches / Events / Training Guide / App landing Book
   CTAs, footers and sticky Book now fail closed to Register interest while
   bookings are paused (Home / timetable parity). iPhone Home hero matches
@@ -352,6 +357,18 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 25. This batch — booking/roster CSV PII locks, class Dupe, Account goal remove / iOS profile
+| Area | Defect | Fix |
+|---|---|---|
+| Booking Operations CSV | Export stayed enabled during desk load and had no same-paint lock — name/email/phone could download twice or against a mid-refresh filter | `exportLockRef` + `disabled` while `loading` (LeadTable / Members / PT parity) |
+| Class Calendar roster CSV | Export had no lock — same-paint double click downloaded member PII twice | `rosterExportLockRef` + freeze while exporting |
+| Event training-group CSV | Same PII double-download hole as class roster | `exportLockRef` in `TrainingRosterDialog` |
+| Class Calendar Dupe | Only React `duplicatingSessionId` — same-paint double Dupe could mint two draft classes | `duplicateLockRef` |
+| Account Remove goal | No lock — same-paint double remove (Events / iOS already locked) | `goalRemoveLockRef` + disable sibling Remove CTAs |
+| iOS Account Save details | `updateProfile` set `isSavingProfile` without guarding an in-flight save | `guard !isSavingProfile` (web `profileSaveLockRef` parity) |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -514,3 +531,7 @@ show `installed = true` and `release_ready = true`, including
     (not Book) and hide sticky Book; iPhone Home hero says Register interest;
     Account Save details and Events Train for this ignore a second same-paint
     submit.
+28. **Booking/roster CSV + Dupe + goal remove** — Booking Operations / class
+    roster / event training-group CSV refuse double download (booking CSV off
+    while loading); class Dupe and Account Remove goal ignore a second
+    same-paint submit; iPhone Account Save details ignores a second Task.

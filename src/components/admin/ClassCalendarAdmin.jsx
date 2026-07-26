@@ -574,6 +574,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const cancelClassLockRef = useRef(false);
   const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
   const [duplicatingSessionId, setDuplicatingSessionId] = useState(null);
+  // Same-paint Dupe can mint two draft classes before `duplicatingSessionId` re-renders.
+  const duplicateLockRef = useRef(false);
+  // Class roster CSV is PII — refuse same-paint double download (LeadTable parity).
+  const rosterExportLockRef = useRef(false);
+  const [exportingRosterSessionId, setExportingRosterSessionId] = useState(null);
   const [attendanceSession, setAttendanceSession] = useState(null);
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
@@ -857,13 +862,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const handleDuplicate = async (session) => {
-    if (duplicatingSessionId) return;
+    if (duplicateLockRef.current || duplicatingSessionId) return;
+    duplicateLockRef.current = true;
     setDuplicatingSessionId(session.id);
     try {
       await duplicateClassSession(session);
       await load();
     } catch (e) { toast({ title: 'Duplicate failed', description: e.message, variant: 'destructive' }); }
-    finally { setDuplicatingSessionId(null); }
+    finally {
+      setDuplicatingSessionId(null);
+      duplicateLockRef.current = false;
+    }
   };
 
   const handleCancel = async () => {
@@ -942,32 +951,40 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const attendanceRoster = attendanceSession ? scopedRosterFor(attendanceSession.id) : [];
 
   const exportRoster = (session) => {
+    if (rosterExportLockRef.current || exportingRosterSessionId) return;
     const scopedRoster = scopedRosterFor(session.id);
     if (loadedRosterSessionId !== session.id) {
       toast({ title: 'Roster not ready', description: 'Open this class roster again before exporting.', variant: 'destructive' });
       return;
     }
-    downloadCsv(
-      rosterExportFilename(session),
-      scopedRoster.map(member => ({
-        class_title: session.title || 'XERT class',
-        class_starts_at: session.start_time ? new Date(session.start_time).toLocaleString('en-AU') : '',
-        name: member.full_name || '',
-        email: member.email || '',
-        phone: member.phone || '',
-        status: member.status,
-        booked_at: member.booked_at ? new Date(member.booked_at).toLocaleString('en-AU') : '',
-      })),
-      [
-        { key: 'class_title', label: 'Class' },
-        { key: 'class_starts_at', label: 'Class starts' },
-        { key: 'name', label: 'Member' },
-        { key: 'email', label: 'Email' },
-        { key: 'phone', label: 'Mobile' },
-        { key: 'status', label: 'Booking status' },
-        { key: 'booked_at', label: 'Booked at' },
-      ]
-    );
+    rosterExportLockRef.current = true;
+    setExportingRosterSessionId(session.id);
+    try {
+      downloadCsv(
+        rosterExportFilename(session),
+        scopedRoster.map(member => ({
+          class_title: session.title || 'XERT class',
+          class_starts_at: session.start_time ? new Date(session.start_time).toLocaleString('en-AU') : '',
+          name: member.full_name || '',
+          email: member.email || '',
+          phone: member.phone || '',
+          status: member.status,
+          booked_at: member.booked_at ? new Date(member.booked_at).toLocaleString('en-AU') : '',
+        })),
+        [
+          { key: 'class_title', label: 'Class' },
+          { key: 'class_starts_at', label: 'Class starts' },
+          { key: 'name', label: 'Member' },
+          { key: 'email', label: 'Email' },
+          { key: 'phone', label: 'Mobile' },
+          { key: 'status', label: 'Booking status' },
+          { key: 'booked_at', label: 'Booked at' },
+        ],
+      );
+    } finally {
+      setExportingRosterSessionId(null);
+      rosterExportLockRef.current = false;
+    }
   };
 
   const openAttendance = (session) => {
@@ -1174,10 +1191,13 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                           Take attendance
                         </button>
                       )}
-                      <button onClick={() => exportRoster(s)} disabled={sessionRoster.length === 0}
-                        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
+                      <button
+                        onClick={() => exportRoster(s)}
+                        disabled={sessionRoster.length === 0 || Boolean(exportingRosterSessionId)}
+                        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40"
+                      >
                         <Download className="w-3.5 h-3.5" />
-                        Export roster
+                        {exportingRosterSessionId === s.id ? 'Exporting…' : 'Export roster'}
                       </button>
                     </div>
                   </div>

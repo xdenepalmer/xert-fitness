@@ -45,6 +45,10 @@ export default function BookingRequestsTable() {
   // before `updatingKey` re-renders. PT desk already uses updateLockRef.
   const updateLockRef = useRef(false);
   const notesLockRef = useRef(false);
+  // Booking ops CSV is PII — refuse same-paint double download and export while
+  // the desk is still loading (LeadTable / Members / PT parity).
+  const exportLockRef = useRef(false);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -214,24 +218,40 @@ export default function BookingRequestsTable() {
     }
   };
 
+  const handleExport = () => {
+    if (exportLockRef.current || exporting || loading || filteredBookings.length === 0) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    try {
+      downloadCsv(
+        `xert-bookings-${new Date().toISOString().slice(0, 10)}.csv`,
+        bookingCsvRows(filteredBookings),
+        [
+          { key: 'created_at', label: 'Requested' }, { key: 'source', label: 'Source' },
+          { key: 'status', label: 'Status' }, { key: 'name', label: 'Name' },
+          { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+          { key: 'class', label: 'Class' }, { key: 'class_start', label: 'Class start' },
+          { key: 'coach', label: 'Coach' }, { key: 'location', label: 'Location' },
+          { key: 'credit_reserved', label: 'Credit reserved' },
+        ],
+      );
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Booking Operations</h2>
-        <button type="button" onClick={() => downloadCsv(
-          `xert-bookings-${new Date().toISOString().slice(0, 10)}.csv`,
-          bookingCsvRows(filteredBookings),
-          [
-            { key: 'created_at', label: 'Requested' }, { key: 'source', label: 'Source' },
-            { key: 'status', label: 'Status' }, { key: 'name', label: 'Name' },
-            { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-            { key: 'class', label: 'Class' }, { key: 'class_start', label: 'Class start' },
-            { key: 'coach', label: 'Coach' }, { key: 'location', label: 'Location' },
-            { key: 'credit_reserved', label: 'Credit reserved' },
-          ]
-        )} disabled={filteredBookings.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
-          <Download className="w-3.5 h-3.5" /> CSV
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={filteredBookings.length === 0 || exporting || loading}
+          className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40"
+        >
+          <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
         </button>
       </div>
 

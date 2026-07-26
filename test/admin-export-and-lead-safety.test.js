@@ -47,6 +47,43 @@ test('Members and PT request CSV exports lock against same-paint double download
   assert.match(pt, /disabled=\{total === 0 \|\| exporting \|\| loading\}/);
 });
 
+test('Booking ops, class roster and event training-group CSVs lock against same-paint PII downloads', async () => {
+  const [bookings, calendar, events] = await Promise.all([
+    read('../src/components/admin/BookingRequestsTable.jsx'),
+    read('../src/components/admin/ClassCalendarAdmin.jsx'),
+    read('../src/components/admin/EventsManager.jsx'),
+  ]);
+  assert.match(bookings, /const exportLockRef = useRef\(false\)/);
+  assert.match(bookings, /if \(exportLockRef\.current \|\| exporting \|\| loading \|\| filteredBookings\.length === 0\) return/);
+  assert.match(bookings, /exportLockRef\.current = true/);
+  assert.match(bookings, /disabled=\{filteredBookings\.length === 0 \|\| exporting \|\| loading\}/);
+
+  assert.match(calendar, /const rosterExportLockRef = useRef\(false\)/);
+  assert.match(calendar, /if \(rosterExportLockRef\.current \|\| exportingRosterSessionId\) return/);
+  assert.match(calendar, /rosterExportLockRef\.current = true/);
+  assert.match(calendar, /disabled=\{sessionRoster\.length === 0 \|\| Boolean\(exportingRosterSessionId\)\}/);
+
+  const rosterDialog = events.slice(
+    events.indexOf('function TrainingRosterDialog'),
+    events.indexOf('export default function EventsManager'),
+  );
+  assert.match(rosterDialog, /const exportLockRef = useRef\(false\)/);
+  assert.match(rosterDialog, /if \(exportLockRef\.current \|\| exporting\) return/);
+  assert.match(rosterDialog, /exportLockRef\.current = true/);
+  assert.match(rosterDialog, /disabled=\{exporting\}/);
+});
+
+test('class calendar Dupe refuses same-paint double creates', async () => {
+  const calendar = await read('../src/components/admin/ClassCalendarAdmin.jsx');
+  assert.match(calendar, /const duplicateLockRef = useRef\(false\)/);
+  const dupe = calendar.slice(
+    calendar.indexOf('const handleDuplicate'),
+    calendar.indexOf('const handleCancel'),
+  );
+  assert.match(dupe, /if \(duplicateLockRef\.current \|\| duplicatingSessionId\) return/);
+  assert.match(dupe, /duplicateLockRef\.current = true/);
+});
+
 test('native platform settings freeze edits while payment-activation confirm is open', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const platform = view.slice(

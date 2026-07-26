@@ -174,6 +174,10 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
 }
 
 function TrainingRosterDialog({ event, members, loading, error, rosterReady, onClose }) {
+  // Training-group CSV is PII — refuse same-paint double download (LeadTable / booking inbox parity).
+  const exportLockRef = useRef(false);
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     const closeOnEscape = keyboardEvent => {
       if (keyboardEvent.key === 'Escape') onClose();
@@ -187,26 +191,34 @@ function TrainingRosterDialog({ event, members, loading, error, rosterReady, onC
   const scopedMembers = rosterReady ? members : [];
 
   const exportRoster = () => {
+    if (exportLockRef.current || exporting) return;
     if (!rosterReady) {
       toast({ title: 'Roster not ready', description: 'Open this training group again before exporting.', variant: 'destructive' });
       return;
     }
-    const eventSlug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'event';
-    downloadCsv(
-      `xert-${eventSlug}-training-group.csv`,
-      scopedMembers.map(member => ({
-        name: member.full_name || '',
-        email: member.email || '',
-        phone: member.phone || '',
-        selected_at: member.selected_at || '',
-      })),
-      [
-        { key: 'name', label: 'Member' },
-        { key: 'email', label: 'Email' },
-        { key: 'phone', label: 'Phone' },
-        { key: 'selected_at', label: 'Joined training group' },
-      ],
-    );
+    exportLockRef.current = true;
+    setExporting(true);
+    try {
+      const eventSlug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'event';
+      downloadCsv(
+        `xert-${eventSlug}-training-group.csv`,
+        scopedMembers.map(member => ({
+          name: member.full_name || '',
+          email: member.email || '',
+          phone: member.phone || '',
+          selected_at: member.selected_at || '',
+        })),
+        [
+          { key: 'name', label: 'Member' },
+          { key: 'email', label: 'Email' },
+          { key: 'phone', label: 'Phone' },
+          { key: 'selected_at', label: 'Joined training group' },
+        ],
+      );
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
   };
 
   return (
@@ -220,8 +232,13 @@ function TrainingRosterDialog({ event, members, loading, error, rosterReady, onC
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!loading && !error && rosterReady && scopedMembers.length > 0 && (
-              <button type="button" onClick={exportRoster} className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase text-xert-steel transition-colors hover:border-xert-steel">
-                <Download className="h-3.5 w-3.5" /> CSV
+              <button
+                type="button"
+                onClick={exportRoster}
+                disabled={exporting}
+                className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
               </button>
             )}
             <button type="button" onClick={onClose} autoFocus aria-label="Close training group" title="Close" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/40 transition-colors hover:text-xert-offwhite">

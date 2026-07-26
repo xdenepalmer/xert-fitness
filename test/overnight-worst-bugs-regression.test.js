@@ -295,12 +295,23 @@ test('account profile save and public event goals refuse same-paint double submi
   assert.match(account, /const profileSaveLockRef = useRef\(false\)/);
   assert.match(account, /if \(profileSaveLockRef\.current \|\| savingProfile\) return/);
   assert.match(account, /profileSaveLockRef\.current = true/);
+  assert.match(account, /const goalRemoveLockRef = useRef\(false\)/);
+  assert.match(account, /if \(goalRemoveLockRef\.current \|\| removingGoalId\) return/);
+  assert.match(account, /goalRemoveLockRef\.current = true/);
+  assert.match(account, /disabled=\{Boolean\(removingGoalId\)\}/);
 
   const events = read('../src/pages/Events.jsx');
   assert.match(events, /const goalLockRef = useRef\(false\)/);
   assert.match(events, /goalLockRef\.current \|\| savingGoalId/);
   assert.match(events, /goalLockRef\.current = true/);
   assert.match(events, /disabled=\{savingGoalId !== null\}/);
+
+  const iosStore = read('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift');
+  const updateProfile = iosStore.slice(
+    iosStore.indexOf('func updateProfile(fullName:'),
+    iosStore.indexOf('func clearMemberOnboardingError'),
+  );
+  assert.match(updateProfile, /guard !isSavingProfile else \{ return false \}/);
 });
 
 test('member onboarding booking gate fails closed before session_bookings insert', () => {

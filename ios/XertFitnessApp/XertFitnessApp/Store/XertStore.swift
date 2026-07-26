@@ -1228,6 +1228,9 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func updateProfile(fullName: String, phone: String) async -> Bool {
+        // Same-paint double Save can schedule two Tasks before `isSavingProfile`
+        // re-renders the Account button (web profileSaveLockRef parity).
+        guard !isSavingProfile else { return false }
         let memberVersion = memberStateVersion.snapshot
         isSavingProfile = true
         defer {
