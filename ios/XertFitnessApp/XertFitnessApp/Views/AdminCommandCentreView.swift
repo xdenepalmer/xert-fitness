@@ -831,6 +831,42 @@ struct AdminCommandCentreView: View {
         }
         .xertScreenBackground()
         .refreshable { await admin.refresh(session: session) }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if horizontalSizeClass == .compact {
+                ownerRunNextDock
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ownerRunNextDock: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let freshness = AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: admin.hasCompletedRefresh,
+                updatedAt: admin.operationalUpdatedAt,
+                isRefreshing: admin.isRefreshingOperations,
+                hasUnavailableSources: admin.operationalQueueHasUnavailableSources,
+                now: context.date
+            )
+            let priority = operationalPriorities.first
+
+            if freshness == .current,
+               admin.operationalQueueState == .ready,
+               let priority {
+                AdminOwnerRunNextBar(
+                    priority: priority,
+                    isRefreshing: admin.isLoading || admin.isRefreshingOperations,
+                    onOpen: { openOwnerRouteWithFeedback(priority.route) },
+                    onRefresh: refreshOperationalPulse
+                )
+            } else if priority != nil || admin.operationalQueueState != .ready {
+                AdminOwnerRunNextRefreshBar(
+                    freshness: freshness,
+                    isRefreshing: admin.isLoading || admin.isRefreshingOperations,
+                    onRefresh: refreshOperationalPulse
+                )
+            }
+        }
     }
 
     private var accessDenied: some View {
@@ -14465,6 +14501,138 @@ private struct AdminPriorityAction: Identifiable {
     }
 
     var id: String { "\(route.restorationValue):\(title)" }
+}
+
+private struct AdminOwnerRunNextBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let priority: AdminPriorityAction
+    let isRefreshing: Bool
+    let onOpen: () -> Void
+    let onRefresh: () -> Void
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 6) {
+                    runNextButton
+                    refreshButton(showsLabel: true)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    runNextButton
+                    refreshButton(showsLabel: false)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.xertInk.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.xertSteel.opacity(0.28)).frame(height: 1)
+        }
+        .accessibilityIdentifier("owner.runNextDock")
+    }
+
+    private var runNextButton: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 10) {
+                Image(systemName: priority.icon)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(priority.isCritical ? Color.red : Color.xertSteel)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(priority.isCritical ? "RUN CRITICAL NEXT" : "RUN NEXT")
+                        .font(.system(size: 9, weight: .black))
+                        .tracking(1.1)
+                        .foregroundStyle(priority.isCritical ? Color.red : Color.xertSteel)
+                    Text("\(priority.title) · \(priority.count)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .minimumScaleFactor(0.78)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.xertSteel)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(priority.isCritical ? "Critical. " : "")Run next: \(priority.title), \(priority.count)"
+        )
+        .accessibilityHint(priority.actionTitle)
+    }
+
+    private func refreshButton(showsLabel: Bool) -> some View {
+        Button(action: onRefresh) {
+            Group {
+                if isRefreshing {
+                    ProgressView().tint(Color.xertSteel)
+                } else if showsLabel {
+                    Label("Refresh queues", systemImage: "arrow.clockwise")
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .frame(
+                maxWidth: showsLabel ? .infinity : nil,
+                minHeight: 44
+            )
+            .frame(width: showsLabel ? nil : 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .foregroundStyle(Color.xertSteel)
+        .accessibilityLabel(isRefreshing ? "Refreshing operational queues" : "Refresh operational queues")
+    }
+}
+
+private struct AdminOwnerRunNextRefreshBar: View {
+    let freshness: AdminOperationalFreshness
+    let isRefreshing: Bool
+    let onRefresh: () -> Void
+
+    var body: some View {
+        Button(action: onRefresh) {
+            HStack(spacing: 10) {
+                Image(systemName: freshness == .unavailable
+                    ? "wifi.exclamationmark"
+                    : "arrow.clockwise")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isRefreshing ? "UPDATING OPERATIONS" : "REFRESH TO RUN NEXT")
+                        .font(.system(size: 9, weight: .black))
+                        .tracking(1.1)
+                    Text("Actions unlock only from a current complete snapshot")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                if isRefreshing {
+                    ProgressView().tint(Color.xertSteel)
+                }
+            }
+            .foregroundStyle(Color.xertSteel)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .background(Color.xertInk.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.xertSteel.opacity(0.28)).frame(height: 1)
+        }
+        .accessibilityLabel(
+            isRefreshing ? "Updating operational queues" : "Refresh operational queues to run the next action"
+        )
+        .accessibilityHint("Prevents acting from stale or incomplete owner data")
+        .accessibilityIdentifier("owner.runNextDock.refresh")
+    }
 }
 
 private struct AdminPriorityRow: View {

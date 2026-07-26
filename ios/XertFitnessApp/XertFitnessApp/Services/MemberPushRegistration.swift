@@ -66,6 +66,14 @@ enum MemberPushRegistration {
         UIApplication.shared.registerForRemoteNotifications()
         return true
     }
+
+    @MainActor
+    static func stopReceivingPrivateNotices() {
+        UIApplication.shared.unregisterForRemoteNotifications()
+        let center = UNUserNotificationCenter.current()
+        center.removeAllDeliveredNotifications()
+        Task { try? await center.setBadgeCount(0) }
+    }
 }
 
 extension Notification.Name {

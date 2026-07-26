@@ -510,6 +510,7 @@ final class XertStore: ObservableObject {
         let currentSession = authSession
         let currentUserID = currentSession?.user?.id ?? profile?.id
         let pushToken = PushDeviceTokenStore.load()
+        MemberPushRegistration.stopReceivingPrivateNotices()
         clearLocalMemberState(for: currentUserID)
         replaceAuthSession(with: nil)
         KeychainStore.clearSession()
@@ -532,6 +533,7 @@ final class XertStore: ObservableObject {
             let authSession = try await validAuthSession()
             let currentUserID = authSession.user?.id ?? profile?.id
             try await api.deleteAccount(session: authSession)
+            MemberPushRegistration.stopReceivingPrivateNotices()
             clearLocalMemberState(for: currentUserID)
             replaceAuthSession(with: nil)
             KeychainStore.clearSession()

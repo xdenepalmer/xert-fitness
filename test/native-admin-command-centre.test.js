@@ -4,6 +4,29 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
+test('compact owner overview keeps one freshness-gated run-next action above phone chrome', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const dashboard = view.slice(
+    view.indexOf('private func dashboard('),
+    view.indexOf('private var accessDenied'),
+  );
+  const runNext = view.slice(
+    view.indexOf('private struct AdminOwnerRunNextBar'),
+    view.indexOf('private struct AdminPriorityRow'),
+  );
+
+  assert.match(dashboard, /\.safeAreaInset\(edge: \.bottom, spacing: 0\)/);
+  assert.match(dashboard, /horizontalSizeClass == \.compact[\s\S]*ownerRunNextDock/);
+  assert.match(dashboard, /freshness == \.current/);
+  assert.match(dashboard, /admin\.operationalQueueState == \.ready/);
+  assert.match(dashboard, /operationalPriorities\.first/);
+  assert.match(runNext, /RUN CRITICAL NEXT/);
+  assert.match(runNext, /dynamicTypeSize\.isAccessibilitySize[\s\S]*refreshButton\(showsLabel: true\)/);
+  assert.match(runNext, /frame\(width: showsLabel \? nil : 44\)/);
+  assert.match(runNext, /owner\.runNextDock/);
+  assert.match(runNext, /Actions unlock only from a current complete snapshot/);
+});
+
 test('native member directory has complete server-backed operator controls', async () => {
   const [api, store, models, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
