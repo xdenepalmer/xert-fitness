@@ -18,9 +18,14 @@ test('native privacy lock protects signed-in tabs across app lifecycle changes',
   assert.match(service, /localizedCancelTitle = "Keep Locked"/);
   assert.match(service, /isSignedIn && isEnabled && !isUnlocked/);
   assert.match(service, /requiresOwnerProtection[\s\S]*isAdmin && !isEnabled/);
-  assert.match(root, /if isPrivacyLocked[\s\S]*PrivacyLockView[\s\S]*else \{[\s\S]*memberTabs/);
+  assert.match(root, /ZStack \{[\s\S]*memberTabs[\s\S]*if isPrivacyLocked \{[\s\S]*PrivacyLockView/);
   assert.match(root, /guard phase == \.active else[\s\S]*isPrivacyUnlocked = false/);
-  assert.match(root, /if showingAdminCommandCentre \{[\s\S]*pendingOwnerNavigation = XertOwnerRoute\(workspace: workspace\)[\s\S]*showingAdminCommandCentre = false/);
+  const sceneHandler = root.match(
+    /private func handleScenePhase\(_ phase: ScenePhase\) \{[\s\S]*?\n    \}/,
+  )?.[0] ?? '';
+  assert.doesNotMatch(sceneHandler, /showingAdminCommandCentre = false/);
+  assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)[\s\S]*AdminCommandCentreView[\s\S]*if isPrivacyLocked \{[\s\S]*PrivacyLockView/);
+  assert.match(root, /private var protectsOwnerTools: Bool \{[\s\S]*showingAdminCommandCentre \|\| pendingOwnerNavigation != nil/);
   assert.match(root, /private func authorizeAndOpenOwnerRoute[\s\S]*DeviceAuthenticator\.support\(\)[\s\S]*privacyLockEnabled = true/);
   assert.match(root, /isPrivacyUnlocked = true[\s\S]*resumePendingOwnerNavigation\(\)/);
   assert.match(root, /protectsOwnerTools[\s\S]*protected owner operations/);

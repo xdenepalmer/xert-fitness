@@ -4148,7 +4148,8 @@ private struct AdminMemberDetailView: View {
     }
 
     var body: some View {
-        List {
+        ScrollViewReader { proxy in
+            List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(current.displayName).xertDisplay(25).foregroundStyle(Color.xertOffWhite)
@@ -4278,6 +4279,7 @@ private struct AdminMemberDetailView: View {
                 }
                 .disabled(!memberRecordMutationsAllowed || noteBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
             }
+            .id("owner.member.staffNote")
             .listRowBackground(Color.xertInk)
 
             Section("Staff timeline") {
@@ -4322,102 +4324,174 @@ private struct AdminMemberDetailView: View {
                 }
             }
             .listRowBackground(Color.xertInk)
-        }
-        .scrollContentBackground(.hidden).background(Color.xertNavy)
-        .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
-        .scrollDismissesKeyboard(.interactively)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close", action: requestDismiss)
-                    .disabled(isBusy)
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task {
-                        await admin.loadMemberDetail(
-                            session: session,
-                            memberID: current.id,
-                            preserveCurrent: true
-                        )
-                    }
-                } label: {
-                    if memberRecordIsRefreshing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
+            .scrollContentBackground(.hidden).background(Color.xertNavy)
+            .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !noteFocused {
+                    memberActionDock {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            proxy.scrollTo("owner.member.staffNote", anchor: .center)
+                        }
+                        noteFocused = true
                     }
                 }
-                .disabled(memberRecordIsRefreshing || isBusy)
-                .accessibilityLabel("Refresh member record")
             }
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { noteFocused = false }
-            }
-        }
-        .task(id: current.id) {
-            await admin.loadMemberDetail(session: session, memberID: current.id)
-        }
-        .refreshable {
-            await admin.loadMemberDetail(
-                session: session,
-                memberID: current.id,
-                preserveCurrent: true
-            )
-        }
-        .onDisappear { admin.clearMemberDetail(memberID: current.id) }
-        .adminOwnerExitState(
-            id: exitStateID,
-            title: "staff note for \(current.displayName)",
-            isDirty: hasNoteDraft,
-            isBusy: isBusy
-        )
-        .interactiveDismissDisabled(hasNoteDraft || isBusy)
-        .sheet(isPresented: $showingGrant) {
-            AdminCreditGrantView(admin: admin, session: session, member: current)
-        }
-        .sheet(isPresented: $showingNoticeComposer) {
-            AdminMemberNoticeComposer(
-                memberName: current.displayName,
-                isSending: admin.sendingMemberNoticeID == current.id,
-                onSend: { draft in
-                    Task {
-                        if await admin.sendMemberNotice(
-                            session: session,
-                            memberID: current.id,
-                            draft: draft
-                        ) {
-                            showingNoticeComposer = false
-                            XertHaptics.play(admin.memberNoticeStatusIsWarning ? .warning : .success)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", action: requestDismiss)
+                        .disabled(isBusy)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task {
+                            await admin.loadMemberDetail(
+                                session: session,
+                                memberID: current.id,
+                                preserveCurrent: true
+                            )
+                        }
+                    } label: {
+                        if memberRecordIsRefreshing {
+                            ProgressView()
                         } else {
-                            XertHaptics.play(.error)
+                            Image(systemName: "arrow.clockwise")
                         }
                     }
+                    .disabled(memberRecordIsRefreshing || isBusy)
+                    .accessibilityLabel("Refresh member record")
                 }
-            )
-        }
-        .confirmationDialog(
-            pendingRole == "admin" ? "Grant administrator access?" : "Remove administrator access?",
-            isPresented: Binding(get: { pendingRole != nil }, set: { if !$0 { pendingRole = nil } }),
-            presenting: pendingRole
-        ) { role in
-            Button(role == "admin" ? "Promote to administrator" : "Remove administrator", role: role == "member" ? .destructive : nil) {
-                Task { _ = await admin.setMemberRole(session: session, memberID: current.id, role: role); pendingRole = nil }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { noteFocused = false }
+                }
             }
-            Button("Cancel", role: .cancel) { pendingRole = nil }
-        } message: { role in
-            Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
+            .task(id: current.id) {
+                await admin.loadMemberDetail(session: session, memberID: current.id)
+            }
+            .refreshable {
+                await admin.loadMemberDetail(
+                    session: session,
+                    memberID: current.id,
+                    preserveCurrent: true
+                )
+            }
+            .onDisappear { admin.clearMemberDetail(memberID: current.id) }
+            .adminOwnerExitState(
+                id: exitStateID,
+                title: "staff note for \(current.displayName)",
+                isDirty: hasNoteDraft,
+                isBusy: isBusy
+            )
+            .interactiveDismissDisabled(hasNoteDraft || isBusy)
+            .sheet(isPresented: $showingGrant) {
+                AdminCreditGrantView(admin: admin, session: session, member: current)
+            }
+            .sheet(isPresented: $showingNoticeComposer) {
+                AdminMemberNoticeComposer(
+                    memberName: current.displayName,
+                    isSending: admin.sendingMemberNoticeID == current.id,
+                    onSend: { draft in
+                        Task {
+                            if await admin.sendMemberNotice(
+                                session: session,
+                                memberID: current.id,
+                                draft: draft
+                            ) {
+                                showingNoticeComposer = false
+                                XertHaptics.play(admin.memberNoticeStatusIsWarning ? .warning : .success)
+                            } else {
+                                XertHaptics.play(.error)
+                            }
+                        }
+                    }
+                )
+            }
+            .confirmationDialog(
+                pendingRole == "admin" ? "Grant administrator access?" : "Remove administrator access?",
+                isPresented: Binding(get: { pendingRole != nil }, set: { if !$0 { pendingRole = nil } }),
+                presenting: pendingRole
+            ) { role in
+                Button(role == "admin" ? "Promote to administrator" : "Remove administrator", role: role == "member" ? .destructive : nil) {
+                    Task { _ = await admin.setMemberRole(session: session, memberID: current.id, role: role); pendingRole = nil }
+                }
+                Button("Cancel", role: .cancel) { pendingRole = nil }
+            } message: { role in
+                Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
+            }
+            .confirmationDialog(
+                "Discard staff note?",
+                isPresented: $confirmingDiscardNote,
+                titleVisibility: .visible
+            ) {
+                Button("Discard note", role: .destructive) { dismiss() }
+                Button("Keep writing", role: .cancel) {}
+            } message: {
+                Text("The unsaved note for \(current.displayName) will be lost.")
+            }
         }
-        .confirmationDialog(
-            "Discard staff note?",
-            isPresented: $confirmingDiscardNote,
-            titleVisibility: .visible
-        ) {
-            Button("Discard note", role: .destructive) { dismiss() }
-            Button("Keep writing", role: .cancel) {}
-        } message: {
-            Text("The unsaved note for \(current.displayName) will be lost.")
+    }
+
+    private func memberActionDock(onAddNote: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            Divider().overlay(Color.xertSteel.opacity(0.22))
+            HStack(spacing: 8) {
+                memberActionDockButton(
+                    title: "Notice",
+                    icon: "bell.badge",
+                    accessibilityHint: "Compose a private notice for \(current.displayName)",
+                    isDisabled: !memberRecordMutationsAllowed || admin.sendingMemberNoticeID != nil
+                ) {
+                    showingNoticeComposer = true
+                    XertHaptics.play(.lightImpact)
+                }
+                memberActionDockButton(
+                    title: "Credits",
+                    icon: "ticket",
+                    accessibilityHint: "Grant class credits to \(current.displayName)",
+                    isDisabled: !memberRecordMutationsAllowed
+                ) {
+                    showingGrant = true
+                    XertHaptics.play(.lightImpact)
+                }
+                memberActionDockButton(
+                    title: "Staff note",
+                    icon: "note.text.badge.plus",
+                    accessibilityHint: "Scroll to the staff note editor",
+                    isDisabled: false,
+                    action: onAddNote
+                )
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
         }
+        .background(.ultraThinMaterial)
+        .accessibilityIdentifier("owner.member.actionDock")
+    }
+
+    private func memberActionDockButton(
+        title: String,
+        icon: String,
+        accessibilityHint: String,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.body.weight(.semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(isDisabled ? Color.xertPale.opacity(0.36) : Color.xertSteel)
+        .disabled(isDisabled)
+        .accessibilityLabel(title)
+        .accessibilityHint(accessibilityHint)
     }
 
     private func requestDismiss() {

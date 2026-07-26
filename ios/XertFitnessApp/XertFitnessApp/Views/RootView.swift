@@ -38,17 +38,19 @@ struct RootView: View {
     @State private var memberWorkspaceOrder = XertPrimaryDestination.dockOrder
 
     var body: some View {
-        Group {
+        ZStack {
+            memberTabs
+                .allowsHitTesting(!isPrivacyLocked)
+                .accessibilityHidden(isPrivacyLocked)
             if isPrivacyLocked {
                 PrivacyLockView(
                     isUnlocking: isUnlocking,
                     errorMessage: privacyLockError,
-                    protectsOwnerTools: pendingOwnerNavigation != nil,
+                    protectsOwnerTools: protectsOwnerTools,
                     onUnlock: { Task { await unlockApp() } },
                     onSignOut: signOutFromLock
                 )
-            } else {
-                memberTabs
+                .zIndex(10)
             }
         }
         .focusedSceneValue(\.xertNavigationCommandContext, navigationCommandContext)
@@ -244,14 +246,29 @@ struct RootView: View {
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
             if store.profile?.isAdmin == true {
-                AdminCommandCentreView(
-                    requestedRoute: requestedAdminRoute,
-                    onClose: {
-                        showingAdminCommandCentre = false
-                        requestedAdminRoute = nil
+                ZStack {
+                    AdminCommandCentreView(
+                        requestedRoute: requestedAdminRoute,
+                        onClose: {
+                            showingAdminCommandCentre = false
+                            requestedAdminRoute = nil
+                        }
+                    )
+                        .environmentObject(store)
+                        .allowsHitTesting(!isPrivacyLocked)
+                        .accessibilityHidden(isPrivacyLocked)
+
+                    if isPrivacyLocked {
+                        PrivacyLockView(
+                            isUnlocking: isUnlocking,
+                            errorMessage: privacyLockError,
+                            protectsOwnerTools: true,
+                            onUnlock: { Task { await unlockApp() } },
+                            onSignOut: signOutFromLock
+                        )
+                        .zIndex(10)
                     }
-                )
-                    .environmentObject(store)
+                }
             }
         }
         .sheet(isPresented: $showingNavigationCommands, onDismiss: completeCommandDismissal) {
@@ -632,6 +649,10 @@ struct RootView: View {
         )
     }
 
+    private var protectsOwnerTools: Bool {
+        showingAdminCommandCentre || pendingOwnerNavigation != nil
+    }
+
     private var shouldAdvertiseCurrentRoute: Bool {
         XertRouteUserActivity.shouldAdvertise(
             route: navigation.route,
@@ -642,12 +663,6 @@ struct RootView: View {
 
     private func handleScenePhase(_ phase: ScenePhase) {
         guard phase == .active else {
-            if showingAdminCommandCentre {
-                let workspace = XertOwnerWorkspace(rawValue: restoredAdminWorkspace) ?? .overview
-                pendingOwnerNavigation = XertOwnerRoute(workspace: workspace)
-                showingAdminCommandCentre = false
-                requestedAdminRoute = nil
-            }
             if store.isSignedIn, privacyLockEnabled {
                 isPrivacyUnlocked = false
             }
@@ -693,9 +708,9 @@ struct RootView: View {
 
         do {
             try await DeviceAuthenticator.authenticate(
-                reason: pendingOwnerNavigation == nil
-                    ? "Unlock your XERT member account, bookings and purchase history."
-                    : "Unlock the XERT Owner Command Centre and protected member operations."
+                reason: protectsOwnerTools
+                    ? "Unlock the XERT Owner Command Centre and protected member operations."
+                    : "Unlock your XERT member account, bookings and purchase history."
             )
             guard scenePhase == .active, store.isSignedIn, privacyLockEnabled else { return }
             isPrivacyUnlocked = true
