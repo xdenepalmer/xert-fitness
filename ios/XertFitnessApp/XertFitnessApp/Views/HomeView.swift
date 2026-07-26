@@ -984,6 +984,7 @@ private struct MemberLaunchGuideCard: View {
 
 private struct NativeHomeHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var photoIndex = 0
     @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -1065,23 +1066,7 @@ private struct NativeHomeHero: View {
                     }
 
                     if heroPhotoURLs.count > 1 {
-                        HStack(spacing: 0) {
-                            ForEach(heroPhotoURLs.indices, id: \.self) { index in
-                                Button {
-                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.45)) {
-                                        photoIndex = index
-                                    }
-                                } label: {
-                                    Circle()
-                                        .fill(index == photoIndex ? Color.xertSteel : Color.xertPale.opacity(0.32))
-                                        .frame(width: index == photoIndex ? 8 : 6, height: index == photoIndex ? 8 : 6)
-                                        .frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Show training photo \(index + 1) of \(heroPhotoURLs.count)")
-                                .accessibilityAddTraits(index == photoIndex ? .isSelected : [])
-                            }
-                        }
+                        heroCarouselControls
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 8)
                     }
@@ -1103,13 +1088,15 @@ private struct NativeHomeHero: View {
                         .font(XertTheme.displayFont(size: 64, relativeTo: .largeTitle))
                         .textCase(.uppercase)
                         .foregroundStyle(Color.xertOffWhite)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                         .minimumScaleFactor(0.58)
-                    .padding(.top, 10)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 10)
 
                     Text(content.subheading ?? "Structured functional fitness coaching designed for strength, conditioning, movement quality and long-term performance.")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.xertPale)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 6 : 3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 10)
 
@@ -1131,6 +1118,7 @@ private struct NativeHomeHero: View {
                             .font(.caption2.weight(.semibold))
                             .textCase(.uppercase)
                             .foregroundStyle(Color.xertSteel)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 14)
@@ -1153,6 +1141,67 @@ private struct NativeHomeHero: View {
                 photoIndex = (photoIndex + 1) % heroPhotoURLs.count
             }
         }
+    }
+
+    @ViewBuilder
+    private var heroCarouselControls: some View {
+        if heroPhotoURLs.count <= 5 {
+            HStack(spacing: 0) {
+                ForEach(heroPhotoURLs.indices, id: \.self) { index in
+                    Button {
+                        selectPhoto(index)
+                    } label: {
+                        Circle()
+                            .fill(index == visiblePhotoIndex ? Color.xertSteel : Color.xertPale.opacity(0.32))
+                            .frame(width: index == visiblePhotoIndex ? 8 : 6, height: index == visiblePhotoIndex ? 8 : 6)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show training photo \(index + 1) of \(heroPhotoURLs.count)")
+                    .accessibilityAddTraits(index == visiblePhotoIndex ? .isSelected : [])
+                }
+            }
+        } else {
+            HStack(spacing: 4) {
+                Button {
+                    selectPhoto(visiblePhotoIndex - 1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Previous training photo")
+
+                Text("\(visiblePhotoIndex + 1) of \(heroPhotoURLs.count)")
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.xertPale)
+                    .frame(minWidth: 58)
+                    .accessibilityLabel("Training photo \(visiblePhotoIndex + 1) of \(heroPhotoURLs.count)")
+
+                Button {
+                    selectPhoto(visiblePhotoIndex + 1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Next training photo")
+            }
+            .background(Color.xertInk.opacity(0.72))
+            .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+        }
+    }
+
+    private func selectPhoto(_ requestedIndex: Int) {
+        guard !heroPhotoURLs.isEmpty else { return }
+        let normalizedIndex = (requestedIndex % heroPhotoURLs.count + heroPhotoURLs.count) % heroPhotoURLs.count
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.45)) {
+            photoIndex = normalizedIndex
+        }
+        XertHaptics.play(.selection)
     }
 
     @ViewBuilder
@@ -1182,8 +1231,12 @@ private struct NativeHomeHero: View {
     }
 
     private var currentHeroPhotoURL: URL? {
-        guard heroPhotoURLs.indices.contains(photoIndex) else { return heroPhotoURLs.first }
-        return heroPhotoURLs[photoIndex]
+        guard !heroPhotoURLs.isEmpty else { return nil }
+        return heroPhotoURLs[visiblePhotoIndex]
+    }
+
+    private var visiblePhotoIndex: Int {
+        heroPhotoURLs.indices.contains(photoIndex) ? photoIndex : 0
     }
 
     private var carouselTaskID: String {
