@@ -58,7 +58,26 @@ enum ClassReminderLeadTime: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum ClassReminderSyncState: Equatable {
+    case off
+    case scheduled(Int)
+    case noEligibleBookings
+    case permissionDenied
+    case failed(scheduled: Int)
+
+    var scheduledCount: Int {
+        switch self {
+        case .scheduled(let count), .failed(let count): return count
+        case .off, .noEligibleBookings, .permissionDenied: return 0
+        }
+    }
+}
+
 enum ClassReminderPlanner {
+    /// Leave capacity for other app notifications under iOS's pending-request
+    /// limit while keeping the member's nearest confirmed classes actionable.
+    static let maximumScheduledReminders = 32
+
     static func reminderDate(
         for startTime: Date,
         leadTime: ClassReminderLeadTime = .twoHours,
@@ -73,10 +92,12 @@ enum ClassReminderPlanner {
         leadTime: ClassReminderLeadTime = .twoHours,
         now: Date = Date()
     ) -> [BookingItem] {
-        bookings.filter {
+        Array(bookings.filter {
             $0.status == "confirmed"
                 && reminderDate(for: $0.start_time, leadTime: leadTime, now: now) != nil
         }
+        .sorted { $0.start_time < $1.start_time }
+        .prefix(maximumScheduledReminders))
     }
 }
 
@@ -85,11 +106,12 @@ actor ClassReminderScheduler {
 
     private let center = UNUserNotificationCenter.current()
 
+    @discardableResult
     func sync(
         bookings: [BookingItem],
         leadTime: ClassReminderLeadTime = .twoHours,
         now: Date = Date()
-    ) async {
+    ) async -> ClassReminderSyncState {
         let reminderBookings = ClassReminderPlanner.reminderBookings(
             from: bookings,
             leadTime: leadTime,
@@ -97,8 +119,11 @@ actor ClassReminderScheduler {
         )
         await clearManagedReminders()
 
-        guard !reminderBookings.isEmpty else { return }
-        guard await isAuthorizedForReminders() else { return }
+        guard await isAuthorizedForReminders() else { return .permissionDenied }
+        guard !reminderBookings.isEmpty else { return .noEligibleBookings }
+
+        var scheduledCount = 0
+        var failedCount = 0
 
         for booking in reminderBookings {
             guard let reminderDate = ClassReminderPlanner.reminderDate(
@@ -113,6 +138,8 @@ actor ClassReminderScheduler {
             content.title = "XERT class reminder"
             content.body = "\(booking.title) starts in \(leadTime.notificationLead)."
             content.sound = .default
+            content.categoryIdentifier = XertNotificationCategories.classReminder
+            content.threadIdentifier = "xert-class-reminders"
             content.userInfo = [ClassReminderNotification.bookingIDKey: booking.booking_id.uuidString]
 
             let trigger = UNTimeIntervalNotificationTrigger(
@@ -124,8 +151,15 @@ actor ClassReminderScheduler {
                 content: content,
                 trigger: trigger
             )
-            try? await center.add(request)
+            do {
+                try await center.add(request)
+                scheduledCount += 1
+            } catch {
+                failedCount += 1
+            }
         }
+
+        return failedCount == 0 ? .scheduled(scheduledCount) : .failed(scheduled: scheduledCount)
     }
 
     func clearAll() async {
@@ -142,7 +176,7 @@ actor ClassReminderScheduler {
         bookings: [BookingItem],
         leadTime: ClassReminderLeadTime = .twoHours,
         now: Date = Date()
-    ) async -> Bool {
+    ) async -> ClassReminderSyncState {
         let settings = await center.notificationSettings()
         let authorized: Bool
         switch settings.authorizationStatus {
@@ -155,9 +189,8 @@ actor ClassReminderScheduler {
         @unknown default:
             authorized = false
         }
-        guard authorized else { return false }
-        await sync(bookings: bookings, leadTime: leadTime, now: now)
-        return true
+        guard authorized else { return .permissionDenied }
+        return await sync(bookings: bookings, leadTime: leadTime, now: now)
     }
 
     private func isAuthorizedForReminders() async -> Bool {

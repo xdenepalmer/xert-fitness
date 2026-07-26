@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import adminCommerceHealthHandler, {
+  activateVerifiedProduct,
   activateSessionPackPayments,
   inspectCommerceEnvironment,
   inspectCommerceHealth,
@@ -11,6 +12,7 @@ import adminCommerceHealthHandler, {
   inspectStripeWebhookEndpoints,
   inspectWebhookDeliveryHealth,
   normalizePaymentActivationRequest,
+  normalizeProductActivationRequest,
   normalizeStripeRetryRequest,
   normalizeStripeReviewResolutionRequest,
   retryStripeWebhookEvent,
@@ -55,6 +57,24 @@ const validActivationBody = {
     payments_enabled: true,
     announcement_banner_text: '  Packs are live  ',
     announcement_banner_enabled: true,
+  },
+};
+
+const validProductActivationBody = {
+  action: 'activate_product',
+  product_id: validProduct.id,
+  expected_updated_at: '2026-07-20T03:00:00.000Z',
+  product: {
+    name: 'Starter 4',
+    description: 'Four coached sessions',
+    price_cents: 4800,
+    currency: 'AUD',
+    sessions_count: 4,
+    validity_days: 28,
+    stripe_price_id: 'price_STARTER4',
+    featured: true,
+    active: true,
+    sort_order: 10,
   },
 };
 
@@ -228,6 +248,129 @@ test('payment activation accepts only a confirmed bounded platform snapshot', ()
       /INVALID_PAYMENT_ACTIVATION/,
     );
   }
+});
+
+test('product activation accepts only a bounded active catalogue snapshot', () => {
+  const normalized = normalizeProductActivationRequest(validProductActivationBody);
+  assert.equal(normalized.productId, validProduct.id);
+  assert.equal(normalized.updates.currency, 'aud');
+  assert.equal(normalized.updates.active, true);
+
+  for (const product of [
+    { ...validProductActivationBody.product, active: false },
+    { ...validProductActivationBody.product, price_cents: 2_147_483_648 },
+    { ...validProductActivationBody.product, sessions_count: 1_001 },
+    { ...validProductActivationBody.product, validity_days: 3_651 },
+    { ...validProductActivationBody.product, sort_order: 10_001 },
+    { ...validProductActivationBody.product, stripe_price_id: 'prod_wrong' },
+  ]) {
+    assert.throws(
+      () => normalizeProductActivationRequest({ ...validProductActivationBody, product }),
+      /INVALID_PRODUCT_ACTIVATION/,
+    );
+  }
+});
+
+test('product activation verifies Stripe identity and terms before optimistic activation', async () => {
+  const activation = normalizeProductActivationRequest(validProductActivationBody);
+  const current = {
+    ...validProduct,
+    name: 'Starter 4',
+    description: 'Four coached sessions',
+    featured: false,
+    active: false,
+    sort_order: 10,
+    updated_at: activation.expectedUpdatedAt,
+  };
+  const saved = { ...current, ...activation.updates, updated_at: '2026-07-20T03:01:00.000Z' };
+  const rpcCalls = [];
+  const admin = {
+    from(table) {
+      assert.equal(table, 'products');
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() { return { data: current, error: null }; },
+      };
+    },
+    async rpc(name, body) {
+      rpcCalls.push([name, body]);
+      return { data: saved, error: null };
+    },
+  };
+  const stripe = {
+    prices: {
+      async retrieve(id) {
+        assert.equal(id, 'price_STARTER4');
+        return {
+          id,
+          active: true,
+          deleted: false,
+          type: 'one_time',
+          unit_amount: 4800,
+          currency: 'aud',
+          livemode: true,
+          metadata: {
+            xert_product_id: validProduct.id,
+            xert_catalog_slug: 'starter-4',
+            xert_sessions: '4',
+            xert_validity_days: '28',
+          },
+        };
+      },
+    },
+  };
+
+  assert.deepEqual(
+    await activateVerifiedProduct({
+      admin,
+      stripe,
+      activation,
+      expectedLivemode: true,
+      actorId: '9bb45f52-9022-4b5b-933f-d8998dbe659f',
+    }),
+    saved,
+  );
+  assert.deepEqual(rpcCalls, [[
+    'admin_apply_verified_product',
+    {
+      p_product_id: validProduct.id,
+      p_product: activation.updates,
+      p_expected_updated_at: activation.expectedUpdatedAt,
+      p_actor_id: '9bb45f52-9022-4b5b-933f-d8998dbe659f',
+    },
+  ]]);
+
+  const mismatchedStripe = {
+    prices: { async retrieve() { return { ...(await stripe.prices.retrieve('price_STARTER4')), unit_amount: 4900 }; } },
+  };
+  rpcCalls.length = 0;
+  await assert.rejects(
+    activateVerifiedProduct({
+      admin,
+      stripe: mismatchedStripe,
+      activation,
+      expectedLivemode: true,
+      actorId: '9bb45f52-9022-4b5b-933f-d8998dbe659f',
+    }),
+    /does not match/,
+  );
+  assert.deepEqual(rpcCalls, []);
+
+  const staleAdmin = {
+    ...admin,
+    async rpc() { return { data: null, error: { message: 'PRODUCT_STALE' } }; },
+  };
+  await assert.rejects(
+    activateVerifiedProduct({
+      admin: staleAdmin,
+      stripe,
+      activation,
+      expectedLivemode: true,
+      actorId: '9bb45f52-9022-4b5b-933f-d8998dbe659f',
+    }),
+    /PRODUCT_STALE/,
+  );
 });
 
 test('payment activation compare-and-sets the paused settings version', async () => {

@@ -37,11 +37,12 @@ test('summarizes the filtered booking workload', () => {
 });
 
 test('exports booking identity, class, source, and credit reservation fields', () => {
-  const [row] = bookingCsvRows(bookings);
+  const [row] = bookingCsvRows([{ ...bookings[0], admin_notes: 'Private staff note' }]);
   assert.equal(row.source, 'Member credit booking');
   assert.equal(row.class, 'Engine Room');
   assert.equal(row.credit_reserved, 'Yes');
   assert.equal(row.email, 'alex@example.com');
+  assert.equal(Object.hasOwn(row, 'admin_notes'), false);
 });
 
 test('selects booking rows with collision-safe source keys', () => {

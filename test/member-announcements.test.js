@@ -86,7 +86,8 @@ test('announcement schema and clients enforce member visibility and privacy life
   assert.match(bookingData, /dismissMemberAnnouncement[\s\S]*?rpc\('dismiss_member_announcement'/);
   assert.match(adminData, /createMemberAnnouncement[\s\S]*?created_by: user\.id/);
   assert.match(adminData, /rpc\('admin_announcement_metrics'\)/);
-  assert.match(account, /getMemberAnnouncements\(\)\.catch\(\(\) => \[\]\)/);
+  assert.match(account, /Promise\.allSettled\([\s\S]*getMemberAnnouncements\(\)/);
+  assert.match(account, /accountSourceErrors\.announcements|nextErrors\[source\]/);
   assert.match(account, /handleDismissAnnouncement[\s\S]*?dismissMemberAnnouncement/);
   assert.match(account, /announcementAction\(notice\)[\s\S]*?action\.external/);
   assert.match(store, /announcements = \[\][\s\S]*?unavailableDataSources\.subtract/);

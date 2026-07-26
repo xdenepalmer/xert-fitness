@@ -13,7 +13,8 @@ const sections = [
     title: 'Training And Health',
     content: [
       'Exercise involves risk. You are responsible for deciding whether training is appropriate for you and for disclosing relevant injuries, limitations or medical advice to your coach. Stop training and seek appropriate help if you experience pain, dizziness or other concerning symptoms.',
-      'XERT coaching and website content are general fitness services, not medical diagnosis or treatment. Consult a qualified health professional where needed and follow reasonable safety directions from XERT staff.'
+      'XERT coaching and website content are general fitness services, not medical diagnosis or treatment. Consult a qualified health professional where needed and follow reasonable safety directions from XERT staff.',
+      'Member Readiness is an administrative preparation flow. Completing it, reviewing a screening source or acknowledging a document does not mean XERT has medically assessed or cleared you to exercise. If XERT presents an additional participation document, the complete version shown at that time applies only after your separate express acknowledgement.'
     ]
   },
   {
@@ -47,5 +48,5 @@ const sections = [
 ];
 
 export default function Terms() {
-  return <LegalPage eyebrow="Service Agreement" title="Terms Of Use" updated="12 July 2026" intro="These terms set clear expectations for using XERT Fitness services, booking training and managing a member account." sections={sections} />;
+  return <LegalPage eyebrow="Service Agreement" title="Terms Of Use" updated="21 July 2026" intro="These terms set clear expectations for using XERT Fitness services, booking training and managing a member account." sections={sections} />;
 }

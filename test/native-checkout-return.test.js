@@ -29,7 +29,7 @@ test('native checkout requests the bounded iOS return target', () => {
 test('native checkout reuses an attempt after API failure and clears it after handoff', () => {
   assert.match(booking, /@State private var checkoutAttemptIDs: \[String: UUID\] = \[:\]/);
   assert.match(booking, /checkoutAttemptIDs\[product\.id\] \?\? UUID\(\)/);
-  assert.match(booking, /checkoutURL\(for: product, attemptID: checkoutAttemptID\)/);
+  assert.match(booking, /checkoutURL\([\s\S]*for: product,[\s\S]*attemptID: checkoutAttemptID,[\s\S]*activationSessionID:/);
   assert.match(booking, /if let url[\s\S]*checkoutAttemptIDs\[product\.id\] = nil[\s\S]*checkoutBrowser\.start/);
 });
 
@@ -104,7 +104,7 @@ test('native order fixtures preserve the purchased credit terms', () => {
 test('cold launches and later foregrounds resume a pending native purchase', () => {
   assert.match(store, /hasBootstrapped = true\s+await reconcilePendingCheckout\(\)/);
   assert.match(store, /try KeychainStore\.saveSession\(session\)\s+await refresh\(\)\s+await reconcilePendingCheckout\(\)/);
-  assert.match(root, /await store\.refresh\(\)\s+await store\.reconcilePendingCheckout\(\)/);
+  assert.match(root, /await store\.refreshIfStale\(\)\s+await store\.reconcilePendingCheckout\(\)/);
   assert.match(root, /store\.cancelPendingCheckout\(\)/);
   assert.match(booking, /await store\.reconcilePendingCheckout\(\)/);
 });

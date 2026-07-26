@@ -28,7 +28,7 @@ const NAV_GROUPS = [
     items: [
       { key: 'gym-members', label: 'Members', icon: Users },
       { key: 'orders', label: 'Orders & Revenue', icon: DollarSign },
-      { key: 'products', label: 'Session Packs', icon: Ticket },
+      { key: 'products', label: 'Session Packs & Pricing', icon: Ticket },
     ],
   },
   {

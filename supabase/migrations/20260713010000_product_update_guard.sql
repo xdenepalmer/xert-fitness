@@ -53,8 +53,21 @@ begin
   if v_current.stripe_price_id is not null
      and v_current.stripe_price_id = v_update.stripe_price_id
      and (v_current.price_cents <> v_update.price_cents
-       or lower(v_current.currency) <> lower(v_update.currency)) then
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days) then
     raise exception 'STRIPE_PRICE_REFRESH_REQUIRED';
+  end if;
+
+  if v_update.active and (
+       not v_current.active
+       or v_current.stripe_price_id is distinct from nullif(btrim(v_update.stripe_price_id), '')
+       or v_current.price_cents <> v_update.price_cents
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days
+     ) then
+    raise exception 'PRODUCT_ACTIVATION_VERIFICATION_REQUIRED';
   end if;
 
   update public.products

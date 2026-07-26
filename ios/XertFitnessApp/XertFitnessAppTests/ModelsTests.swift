@@ -105,8 +105,10 @@ final class ModelsTests: XCTestCase {
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000082"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000083"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000084"))
+        let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000085"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
+            XertOwnerRoute(task: .classSession(classID)),
             XertOwnerRoute(task: .order(orderID)),
             XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
@@ -130,6 +132,11 @@ final class ModelsTests: XCTestCase {
         }
 
         XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/timetable/class/\(classID.uuidString)"))
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/classdesk/class/\(classID.uuidString)"),
+            XertOwnerRoute(task: .classSession(classID))
+        )
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
         XCTAssertEqual(
@@ -157,6 +164,77 @@ final class ModelsTests: XCTestCase {
             isProfileLoaded: true,
             isAdmin: false
         ), .deny)
+    }
+
+    func testStripeLaunchRunwayFailsClosedAndRoutesTheExactNextAction() throws {
+        let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000096"))
+        func runway(
+            refreshed: Bool = true,
+            current: Bool = true,
+            paymentsEnabled: Bool? = false,
+            hasProducts: Bool = true,
+            linked: Bool = true,
+            healthReady: Bool? = true,
+            switchState: String? = "paused",
+            receiptReady: Bool? = true,
+            blockingProducts: [UUID] = []
+        ) -> XertStripeLaunchRunway {
+            XertStripeLaunchRunway.resolve(
+                hasCompletedRefresh: refreshed,
+                isRefreshing: !refreshed,
+                sourcesAreCurrent: current,
+                paymentsEnabled: paymentsEnabled,
+                hasActiveProducts: hasProducts,
+                activeProductsAreLinked: linked,
+                healthReady: healthReady,
+                paymentSwitchState: switchState,
+                activationReceiptReady: receiptReady,
+                blockingProductIDs: blockingProducts
+            )
+        }
+
+        let checking = runway(refreshed: false, current: false, healthReady: nil)
+        XCTAssertEqual(checking.phase, .checking)
+        XCTAssertEqual(checking.completedSteps, 0)
+        XCTAssertEqual(checking.route, XertOwnerRoute(workspace: .health))
+
+        let unavailable = runway(current: false)
+        XCTAssertEqual(unavailable.phase, .unavailable)
+        XCTAssertEqual(unavailable.route, XertOwnerRoute(workspace: .health))
+
+        let noCatalogue = runway(hasProducts: false)
+        XCTAssertEqual(noCatalogue.phase, .catalogBlocked)
+        XCTAssertEqual(noCatalogue.route, XertOwnerRoute(workspace: .products))
+
+        let exactPack = runway(linked: false, blockingProducts: [productID, productID])
+        XCTAssertEqual(exactPack.phase, .catalogBlocked)
+        XCTAssertEqual(exactPack.route, XertOwnerRoute(task: .product(productID)))
+
+        let blockedHealth = runway(healthReady: false, blockingProducts: [productID])
+        XCTAssertEqual(blockedHealth.phase, .healthBlocked)
+        XCTAssertEqual(blockedHealth.route, XertOwnerRoute(task: .product(productID)))
+
+        let ready = runway()
+        XCTAssertEqual(ready.phase, .readyToActivate)
+        XCTAssertEqual(ready.completedSteps, 3)
+        XCTAssertEqual(ready.route, XertOwnerRoute(workspace: .controls))
+
+        let unverifiedActivation = runway(
+            paymentsEnabled: true,
+            switchState: "enabled",
+            receiptReady: false
+        )
+        XCTAssertEqual(unverifiedActivation.phase, .healthBlocked)
+        XCTAssertEqual(unverifiedActivation.route, XertOwnerRoute(workspace: .health))
+
+        let live = runway(
+            paymentsEnabled: true,
+            switchState: "ENABLED",
+            receiptReady: true
+        )
+        XCTAssertEqual(live.phase, .live)
+        XCTAssertEqual(live.completedSteps, XertStripeLaunchRunway.totalSteps)
+        XCTAssertEqual(live.route, XertOwnerRoute(workspace: .health))
     }
 
     func testOwnerWorkspaceRecencyIsBoundedDeduplicatedAndRestorable() {
@@ -260,6 +338,7 @@ final class ModelsTests: XCTestCase {
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a2"))
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a3"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a4"))
+        let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a5"))
         let member = AdminMemberSummary(
             id: memberID,
             full_name: "Alex Runner",
@@ -322,6 +401,25 @@ final class ModelsTests: XCTestCase {
             sort_order: 1,
             updated_at: "2026-07-17T00:00:00Z"
         )
+        let operation = AdminDailyOperation(
+            session_id: classID,
+            title: "XERT Engine",
+            class_type: "conditioning",
+            start_time: Date(timeIntervalSince1970: 3_600),
+            end_time: Date(timeIntervalSince1970: 7_200),
+            status: "published",
+            capacity: 12,
+            coach_name: "Byron",
+            location_zone: "Main floor",
+            booking_mode: "instant_book",
+            requested_count: 0,
+            confirmed_count: 7,
+            waitlist_count: 1,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 0,
+            attendance_due: true
+        )
 
         XCTAssertEqual(
             XertOwnerCommandIndex.matches(
@@ -375,6 +473,28 @@ final class ModelsTests: XCTestCase {
                 events: []
             ).first?.kind,
             .product
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "roll call",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                classes: [operation]
+            ).map(\.route),
+            [XertOwnerRoute(task: .classSession(classID))]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "byron",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                classes: [operation]
+            ).first?.kind,
+            .classSession
         )
 
         let manyEvents = (0..<(XertOwnerCommandIndex.maximumResultsPerKind + 3)).map { index in
@@ -1562,11 +1682,13 @@ final class ModelsTests: XCTestCase {
         let userID = UUID()
         let orderIDs: Set<UUID> = [UUID(), UUID()]
         let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let activationSessionID = UUID()
         let pending = PendingCheckout(
             userID: userID,
             baselineOrderIDs: orderIDs,
             startedAt: startedAt,
-            checkoutSessionID: "cs_test_exact"
+            checkoutSessionID: "cs_test_exact",
+            activationSessionID: activationSessionID
         )
 
         PendingCheckoutStore.save(pending, defaults: defaults)
@@ -1592,6 +1714,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(migrated?.baselineOrderIDs, pending.baselineOrderIDs)
         XCTAssertEqual(migrated?.startedAt, pending.startedAt)
         XCTAssertNil(migrated?.checkoutSessionID)
+        XCTAssertNil(migrated?.activationSessionID)
     }
 
     func testPendingCheckoutRejectsAnotherUserAndExpires() throws {
@@ -1710,14 +1833,15 @@ final class ModelsTests: XCTestCase {
     }
 
     func testDataSourceLabelsAreMemberFacingAndComplete() {
-        XCTAssertEqual(Set(XertDataSource.allCases).count, 13)
+        XCTAssertEqual(Set(XertDataSource.allCases).count, 14)
         XCTAssertEqual(XertDataSource.sessions.displayName, "class timetable")
         XCTAssertEqual(XertDataSource.eventGoals.displayName, "training goals")
         XCTAssertEqual(XertDataSource.orders.displayName, "purchase history")
         XCTAssertEqual(XertDataSource.announcements.displayName, "member notices")
         XCTAssertEqual(XertDataSource.coaches.displayName, "coaches and practitioners")
         XCTAssertEqual(XertDataSource.siteContent.displayName, "public site content")
-        XCTAssertEqual(XertDataSource.platformSettings.displayName, "pack purchase availability")
+        XCTAssertEqual(XertDataSource.platformSettings.displayName, "booking and pack purchase availability")
+        XCTAssertEqual(XertDataSource.onboarding.displayName, "member readiness")
     }
 
     func testMemberAnnouncementDecodesPriorityAndExpiry() throws {
@@ -1919,6 +2043,7 @@ final class ModelsTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_784_006_400)
         let batches = [
             CreditBatch(id: UUID(), total: 2, remaining: 2, expires_at: now.addingTimeInterval(2 * 86_400)),
+            CreditBatch(id: UUID(), total: 1, remaining: 1, expires_at: now.addingTimeInterval((2 * 86_400) + 3_600)),
             CreditBatch(id: UUID(), total: 3, remaining: 3, expires_at: now.addingTimeInterval(6 * 86_400)),
             CreditBatch(id: UUID(), total: 4, remaining: 4, expires_at: now.addingTimeInterval(8 * 86_400)),
             CreditBatch(id: UUID(), total: 5, remaining: 5, expires_at: nil),
@@ -1927,7 +2052,7 @@ final class ModelsTests: XCTestCase {
 
         let summary = try XCTUnwrap(batches.expirySummary(now: now))
 
-        XCTAssertEqual(summary.credits, 5)
+        XCTAssertEqual(summary.credits, 3)
         XCTAssertEqual(summary.expiresAt, now.addingTimeInterval(2 * 86_400))
         XCTAssertEqual(summary.daysRemaining, 2)
     }
@@ -2666,6 +2791,48 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(nextBrisbaneDay.occursOnBrisbaneDay(containing: reference))
     }
 
+    func testTrainingProgressCountsOnlyRecordedAttendanceAndDeduplicatesSessions() {
+        let now = queenslandDate(2026, 7, 21, 12, 0)
+        let duplicateSessionID = UUID()
+        let progress = MemberTrainingProgress(bookings: [
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 18, 0), sessionID: duplicateSessionID),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 18, 0), sessionID: duplicateSessionID),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 13, 18, 0)),
+            booking(status: "attended", startTime: queenslandDate(2026, 6, 1, 18, 0)),
+            booking(status: "confirmed", startTime: queenslandDate(2026, 7, 19, 18, 0)),
+            booking(status: "no_show", startTime: queenslandDate(2026, 7, 12, 18, 0)),
+            booking(status: "cancelled", startTime: queenslandDate(2026, 7, 10, 18, 0)),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 22, 18, 0)),
+        ], now: now)
+
+        XCTAssertEqual(progress.totalAttended, 3)
+        XCTAssertEqual(progress.attendedLast30Days, 2)
+        XCTAssertEqual(progress.activeWeeksLastFour, 2)
+        XCTAssertEqual(progress.lastAttendedAt, queenslandDate(2026, 7, 20, 18, 0))
+    }
+
+    func testTrainingProgressUsesMondayBrisbaneWeekBoundaries() {
+        let now = queenslandDate(2026, 7, 20, 1, 30)
+        let progress = MemberTrainingProgress(bookings: [
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 19, 23, 30)),
+            booking(status: "attended", startTime: queenslandDate(2026, 7, 20, 0, 30)),
+            booking(status: "attended", startTime: queenslandDate(2026, 6, 21, 23, 30)),
+        ], now: now)
+
+        XCTAssertEqual(progress.totalAttended, 3)
+        XCTAssertEqual(progress.attendedLast30Days, 3)
+        XCTAssertEqual(progress.activeWeeksLastFour, 2)
+    }
+
+    func testTrainingProgressHasAnHonestEmptyState() {
+        let progress = MemberTrainingProgress(bookings: [], now: queenslandDate(2026, 7, 21, 12, 0))
+
+        XCTAssertEqual(progress.totalAttended, 0)
+        XCTAssertEqual(progress.attendedLast30Days, 0)
+        XCTAssertEqual(progress.activeWeeksLastFour, 0)
+        XCTAssertNil(progress.lastAttendedAt)
+    }
+
     private func booking(
         status: String,
         startTime: Date,
@@ -2736,6 +2903,7 @@ final class ModelsTests: XCTestCase {
 
         let draft = AdminProductDraft(product: product)
 
+        XCTAssertEqual(draft.slug, "ten-session-pack")
         XCTAssertEqual(draft.name, "Ten Session Pack")
         XCTAssertEqual(draft.price, "299.00")
         XCTAssertEqual(draft.currency, "AUD")
@@ -2744,6 +2912,78 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(draft.stripePriceID, "price_xert")
         XCTAssertTrue(draft.featured)
         XCTAssertTrue(draft.active)
+    }
+
+    func testAdminProductDraftValidatesExactMoneyAndStripeCommercialTerms() {
+        let product = AdminProduct(
+            id: UUID(),
+            slug: "starter-4",
+            name: "Starter Pack",
+            description: nil,
+            price_cents: 4800,
+            currency: "aud",
+            sessions_count: 4,
+            validity_days: 28,
+            stripe_price_id: "price_starter4",
+            featured: true,
+            active: true,
+            sort_order: 2,
+            updated_at: "2026-07-20T00:00:00Z"
+        )
+
+        var draft = AdminProductDraft(product: product)
+        XCTAssertNil(draft.validationMessage(existingProduct: product))
+        XCTAssertEqual(draft.normalizedPriceCents, 4800)
+
+        draft.price = "48.009"
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: product),
+            "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        )
+
+        draft.price = "48.00"
+        draft.sessions = 5
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: product),
+            "Clear or replace the Stripe Price ID before changing price, currency, sessions or validity."
+        )
+    }
+
+    func testAdminProductDraftParsesCommaMoneyAndCapsPostgresIntegerCents() {
+        var draft = AdminProductDraft(suggestedSortOrder: 0)
+        draft.slug = "locale-pack"
+        draft.name = "Locale Pack"
+        draft.price = "48,05"
+
+        XCTAssertEqual(draft.normalizedPriceCents, 4_805)
+        XCTAssertNil(draft.validationMessage(existingProduct: nil))
+
+        draft.price = "21474836.47"
+        XCTAssertEqual(draft.normalizedPriceCents, Int(Int32.max))
+
+        draft.price = "21474836,48"
+        XCTAssertNil(draft.normalizedPriceCents)
+        XCTAssertEqual(
+            draft.validationMessage(existingProduct: nil),
+            "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        )
+    }
+
+    func testNewAdminProductDraftStartsPrivateAndRequiresSafeIdentifiers() {
+        var draft = AdminProductDraft(suggestedSortOrder: 6)
+        XCTAssertFalse(draft.active)
+        XCTAssertTrue(draft.stripePriceID.isEmpty)
+        XCTAssertEqual(draft.validityDays, 28)
+        XCTAssertEqual(draft.sortOrder, 6)
+        XCTAssertNotNil(draft.validationMessage(existingProduct: nil))
+
+        draft.slug = "founders-6"
+        draft.name = "Founders Pack"
+        draft.price = "120"
+        draft.sessions = 6
+        draft.validityDays = 42
+        XCTAssertNil(draft.validationMessage(existingProduct: nil))
+        XCTAssertEqual(draft.normalizedPriceCents, 12_000)
     }
 
     func testAdminEventDraftUsesQueenslandCalendarDates() {
@@ -2814,6 +3054,77 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(requested.attendanceEligible)
         XCTAssertTrue(noShow.attendanceEligible)
         XCTAssertEqual(noShow.displayName, "late@example.com")
+    }
+
+    func testAdminAttendanceDraftRequiresExplicitCompleteRollCall() {
+        let confirmedID = UUID()
+        let attendedID = UUID()
+        let noShowID = UUID()
+        let requestedID = UUID()
+        let roster = [
+            AdminRosterMember(
+                booking_id: confirmedID, member_id: UUID(), full_name: "Confirmed",
+                email: nil, phone: nil, status: "confirmed", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: attendedID, member_id: UUID(), full_name: "Present",
+                email: nil, phone: nil, status: "attended", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: noShowID, member_id: UUID(), full_name: "Absent",
+                email: nil, phone: nil, status: "no_show", booked_at: Date()
+            ),
+            AdminRosterMember(
+                booking_id: requestedID, member_id: UUID(), full_name: "Requested",
+                email: nil, phone: nil, status: "requested", booked_at: Date()
+            ),
+        ]
+        var draft = AdminAttendanceDraft(roster: roster + [roster[0]])
+
+        XCTAssertEqual(draft.eligibleIDs, [confirmedID, attendedID, noShowID])
+        XCTAssertNil(draft.mark(for: confirmedID))
+        XCTAssertEqual(draft.mark(for: attendedID), .attended)
+        XCTAssertEqual(draft.mark(for: noShowID), .noShow)
+        XCTAssertEqual(
+            draft.summary,
+            AdminAttendanceSummary(total: 3, attended: 1, noShow: 1)
+        )
+        XCTAssertFalse(draft.summary.isComplete)
+
+        draft.set(.noShow, for: confirmedID)
+        draft.set(.attended, for: requestedID)
+        XCTAssertTrue(draft.summary.isComplete)
+        XCTAssertEqual(draft.attendedIDs, [attendedID])
+        XCTAssertEqual(draft.noShowIDs, [confirmedID, noShowID])
+
+        draft.markAllPresent()
+        XCTAssertEqual(draft.summary.attended, 3)
+        XCTAssertTrue(draft.noShowIDs.isEmpty)
+        draft.clear()
+        XCTAssertEqual(draft.summary.unmarked, 3)
+        XCTAssertFalse(draft.summary.isComplete)
+    }
+
+    func testAdminAttendanceDraftReconcilesRosterWithoutLosingLocalMarks() {
+        let firstID = UUID()
+        let secondID = UUID()
+        let first = AdminRosterMember(
+            booking_id: firstID, member_id: UUID(), full_name: "First",
+            email: nil, phone: nil, status: "confirmed", booked_at: Date()
+        )
+        let second = AdminRosterMember(
+            booking_id: secondID, member_id: UUID(), full_name: "Second",
+            email: nil, phone: nil, status: "attended", booked_at: Date()
+        )
+        var draft = AdminAttendanceDraft(roster: [first])
+        draft.set(.noShow, for: firstID)
+        draft.reconcile(roster: [first, second])
+
+        XCTAssertEqual(draft.mark(for: firstID), .noShow)
+        XCTAssertEqual(draft.mark(for: secondID), .attended)
+        draft.reconcile(roster: [second])
+        XCTAssertNil(draft.mark(for: firstID))
+        XCTAssertEqual(draft.eligibleIDs, [secondID])
     }
 
     func testAdminClassDraftHydratesLegacyNullableMetadata() {
@@ -3128,6 +3439,190 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testMemberOnboardingDraftUsesOnlyCurrentServerDocumentAcceptances() throws {
+        let currentDocumentID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000102"
+        ))
+        let staleDocumentID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000101"
+        ))
+        let state = memberOnboardingState(
+            documentIDs: [currentDocumentID],
+            acceptedIDs: [currentDocumentID, staleDocumentID]
+        )
+
+        let draft = MemberOnboardingDraft(state: state)
+
+        XCTAssertEqual(state.requiredDocumentIDs, [currentDocumentID])
+        XCTAssertEqual(state.acceptedDocumentIDs, [currentDocumentID])
+        XCTAssertEqual(state.acceptedCount, 1)
+        XCTAssertEqual(draft.acceptedDocumentIDs, [currentDocumentID])
+        XCTAssertTrue(draft.contactIsAware)
+        XCTAssertTrue(draft.confirmsAdultEligibility)
+    }
+
+    func testMemberOnboardingSaveRequestTrimsAndSendsExactCurrentDocumentSet() throws {
+        let firstID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000002"
+        ))
+        let secondID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000001"
+        ))
+        let unrelatedID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [firstID, secondID],
+            acceptedIDs: []
+        ))
+        draft.fullName = "  Alex Runner  "
+        draft.phone = "  0400 123 456  "
+        draft.emergencyContactName = "  Sam Runner  "
+        draft.emergencyContactPhone = "  +61 400 999 111  "
+        draft.emergencyContactRelationship = "  Partner  "
+        draft.contactIsAware = true
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = [firstID, secondID, unrelatedID]
+
+        let request = try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([firstID, secondID])
+        )
+
+        XCTAssertEqual(request.p_full_name, "Alex Runner")
+        XCTAssertEqual(request.p_phone, "0400 123 456")
+        XCTAssertEqual(request.p_emergency_contact_name, "Sam Runner")
+        XCTAssertEqual(request.p_emergency_contact_phone, "+61 400 999 111")
+        XCTAssertEqual(request.p_emergency_contact_relationship, "Partner")
+        XCTAssertTrue(request.p_contact_is_aware)
+        XCTAssertEqual(request.p_accepted_document_ids, [secondID, firstID])
+        XCTAssertEqual(request.p_source, "ios_app")
+
+        let payload = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(request)
+        ) as? [String: Any]
+        XCTAssertNil(payload?["p_is_adult"])
+        XCTAssertNil(payload?["p_confirms_adult_eligibility"])
+    }
+
+    func testMemberOnboardingSaveRequestRejectsMissingAwarenessAndAcknowledgements() {
+        let adultDocumentID = UUID()
+        let additionalDocumentID = UUID()
+        let documents = memberDocuments([adultDocumentID, additionalDocumentID])
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [adultDocumentID, additionalDocumentID],
+            acceptedIDs: []
+        ))
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = [adultDocumentID]
+        draft.contactIsAware = false
+
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: documents
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("emergency contact knows"))
+        }
+
+        draft.contactIsAware = true
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: documents
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("acknowledge every current"))
+        }
+    }
+
+    func testFirstClassActivationRetainsOnlyTheSelectedSessionAndStage() {
+        let sessionID = UUID()
+        var activation = XertFirstClassActivation(sessionID: sessionID, stage: .signIn)
+
+        XCTAssertTrue(activation.matches(sessionID))
+        XCTAssertFalse(activation.matches(UUID()))
+        activation.stage = .needsCredits
+        XCTAssertEqual(activation, XertFirstClassActivation(sessionID: sessionID, stage: .needsCredits))
+        activation.stage = .readyToBook
+        XCTAssertEqual(activation.sessionID, sessionID)
+        XCTAssertEqual(activation.stage, .readyToBook)
+    }
+
+    func testMemberOnboardingSaveRequestRejectsUnder18OrUnconfirmedAdultEligibility() {
+        let adultDocumentID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [adultDocumentID],
+            acceptedIDs: [adultDocumentID]
+        ))
+        draft.confirmsAdultEligibility = false
+
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([adultDocumentID])
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("only to people aged 18 or older"))
+            XCTAssertTrue(error.localizedDescription.contains("parent or guardian"))
+        }
+
+        draft.confirmsAdultEligibility = true
+        draft.acceptedDocumentIDs = []
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([adultDocumentID])
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("adult readiness document"))
+        }
+    }
+
+    func testMemberOnboardingSaveRequestMatchesBackendFieldBoundsAndPhoneCharacters() {
+        let documentID = UUID()
+        var draft = MemberOnboardingDraft(state: memberOnboardingState(
+            documentIDs: [documentID],
+            acceptedIDs: [documentID]
+        ))
+
+        draft.phone = "12345"
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.phone = "0400 CALL ME"
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.phone = "+61 (400) 123-456"
+        draft.emergencyContactRelationship = String(repeating: "R", count: 61)
+        XCTAssertThrowsError(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+
+        draft.emergencyContactRelationship = "Parent"
+        XCTAssertNoThrow(try MemberOnboardingSaveRequest(
+            draft: draft,
+            requiredDocuments: memberDocuments([documentID])
+        ))
+    }
+
+    func testMemberOnboardingDocumentOnlyOpensSafeOfficialHTTPSLinks() throws {
+        let id = UUID()
+        let safe = memberDocument(id: id, sourceURL: "https://xertfitness.com.au/member-safety")
+        let insecure = memberDocument(id: id, sourceURL: "http://xertfitness.com.au/member-safety")
+        let credentialed = memberDocument(id: id, sourceURL: "https://member:secret@xertfitness.com.au/safety")
+
+        XCTAssertEqual(safe.sourceURL?.host, "xertfitness.com.au")
+        XCTAssertNil(insecure.sourceURL)
+        XCTAssertNil(credentialed.sourceURL)
+    }
+
+    func testMemberOnboardingStaleDocumentErrorHasActionableCopy() {
+        let message = MemberOnboardingErrorMessage.display(
+            for: "P0001 ONBOARDING_DOCUMENTS_STALE"
+        )
+
+        XCTAssertTrue(message.contains("changed while you were reading"))
+        XCTAssertTrue(message.contains("acknowledge them again"))
+    }
+
     private func creditBatch(remaining: Int, orderID: UUID? = nil) -> CreditBatch {
         CreditBatch(
             id: UUID(),
@@ -3135,6 +3630,70 @@ final class ModelsTests: XCTestCase {
             remaining: remaining,
             expires_at: nil,
             order_id: orderID
+        )
+    }
+
+    private func memberOnboardingState(
+        documentIDs: [UUID],
+        acceptedIDs: [UUID]
+    ) -> MemberOnboardingState {
+        MemberOnboardingState(
+            user_id: UUID(),
+            profile: MemberOnboardingProfile(
+                full_name: "Alex Runner",
+                phone: "0400 123 456",
+                updated_at: Date()
+            ),
+            emergency_contact: MemberEmergencyContact(
+                name: "Sam Runner",
+                phone: "0400 999 111",
+                relationship: "Partner",
+                contact_awareness_confirmed_at: Date(),
+                updated_at: Date()
+            ),
+            required_documents: memberDocuments(documentIDs),
+            accepted_documents: acceptedIDs.map { id in
+                MemberOnboardingAcceptance(
+                    document_id: id,
+                    document_key: "member_safety",
+                    version: "1.0",
+                    content_sha256: "fixture-hash",
+                    accepted_at: Date(),
+                    source: "ios_app"
+                )
+            },
+            profile_complete: true,
+            emergency_contact_complete: true,
+            documents_complete: Set(documentIDs).isSubset(of: Set(acceptedIDs)),
+            is_complete: Set(documentIDs).isSubset(of: Set(acceptedIDs))
+        )
+    }
+
+    private func memberDocuments(_ ids: [UUID]) -> [MemberOnboardingDocument] {
+        ids.enumerated().map { index, id in
+            memberDocument(
+                id: id,
+                documentKey: index == 0
+                    ? MemberOnboardingDocument.adultReadinessDocumentKey
+                    : "additional_readiness_\(index)"
+            )
+        }
+    }
+
+    private func memberDocument(
+        id: UUID,
+        documentKey: String = MemberOnboardingDocument.adultReadinessDocumentKey,
+        sourceURL: String? = "https://xertfitness.com.au/member-safety"
+    ) -> MemberOnboardingDocument {
+        MemberOnboardingDocument(
+            id: id,
+            document_key: documentKey,
+            version: "1.0",
+            title: "Member safety acknowledgement",
+            body: "Read the complete current member safety instructions.",
+            source_url: sourceURL,
+            content_sha256: "fixture-hash",
+            published_at: Date()
         )
     }
 

@@ -152,7 +152,9 @@ declare
   v_current public.products%rowtype;
   v_update record;
 begin
-  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  if not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
   if p_product_id is null then raise exception 'PRODUCT_REQUIRED'; end if;
   if p_product is null then raise exception 'PRODUCT_PAYLOAD_REQUIRED'; end if;
 
@@ -179,8 +181,21 @@ begin
   if v_current.stripe_price_id is not null
      and v_current.stripe_price_id = v_update.stripe_price_id
      and (v_current.price_cents <> v_update.price_cents
-       or lower(v_current.currency) <> lower(v_update.currency)) then
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days) then
     raise exception 'STRIPE_PRICE_REFRESH_REQUIRED';
+  end if;
+
+  if v_update.active and (
+       not v_current.active
+       or v_current.stripe_price_id is distinct from nullif(btrim(v_update.stripe_price_id), '')
+       or v_current.price_cents <> v_update.price_cents
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days
+     ) then
+    raise exception 'PRODUCT_ACTIVATION_VERIFICATION_REQUIRED';
   end if;
 
   update public.products
@@ -195,6 +210,73 @@ end;
 $$;
 revoke execute on function public.admin_update_product(uuid, jsonb) from public, anon;
 grant execute on function public.admin_update_product(uuid, jsonb) to authenticated;
+
+create or replace function public.admin_create_product(p_slug text, p_product jsonb)
+returns public.products
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_product record;
+  v_created public.products%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
+  if p_product is null then raise exception 'PRODUCT_PAYLOAD_REQUIRED'; end if;
+
+  select * into v_product
+  from jsonb_to_record(p_product) as product_data(
+    name text,
+    description text,
+    price_cents integer,
+    currency text,
+    sessions_count integer,
+    validity_days integer,
+    featured boolean,
+    sort_order integer
+  );
+
+  if p_slug is null
+     or length(p_slug) > 80
+     or p_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+     or v_product.name is null or btrim(v_product.name) = ''
+     or length(btrim(v_product.name)) > 120
+     or length(coalesce(btrim(v_product.description), '')) > 2000
+     or v_product.price_cents is null or v_product.price_cents <= 0
+     or v_product.currency is null or v_product.currency !~ '^[a-zA-Z]{3}$'
+     or v_product.sessions_count is null or v_product.sessions_count not between 1 and 1000
+     or v_product.validity_days is null or v_product.validity_days not between 1 and 3650
+     or v_product.featured is null
+     or v_product.sort_order is null or v_product.sort_order not between 0 and 10000 then
+    raise exception 'INVALID_PRODUCT_PAYLOAD';
+  end if;
+
+  insert into public.products (
+    slug, name, description, price_cents, currency, sessions_count,
+    validity_days, stripe_price_id, featured, active, sort_order
+  ) values (
+    p_slug,
+    btrim(v_product.name),
+    nullif(btrim(v_product.description), ''),
+    v_product.price_cents,
+    lower(v_product.currency),
+    v_product.sessions_count,
+    v_product.validity_days,
+    null,
+    v_product.featured,
+    false,
+    v_product.sort_order
+  )
+  returning * into v_created;
+
+  return v_created;
+end;
+$$;
+
+revoke all on function public.admin_create_product(text, jsonb) from public, anon;
+grant execute on function public.admin_create_product(text, jsonb) to authenticated;
 
 insert into public.products (slug, name, description, price_cents, currency, sessions_count, validity_days, featured, sort_order) values
   ('single',         '1 Class Pass',                'Perfect for a drop-in session, casual training or trying your first XERT session.', 1500,  'aud', 1,  14, false, 1),
@@ -956,8 +1038,7 @@ create policy "products_public_read" on public.products
   for select to anon, authenticated using (active = true);
 create policy "products_admin_read" on public.products
   for select to authenticated using (public.is_admin());
-create policy "products_admin_insert" on public.products
-  for insert to authenticated with check (public.is_admin());
+revoke insert on table public.products from anon, authenticated;
 
 -- orders: a user reads own orders; admins read all. Writes happen via the
 -- service-role webhook (which bypasses RLS), so no public insert policy.

@@ -118,12 +118,22 @@ export default function BookingRequestsTable() {
     const actionKey = `${booking.source}-${booking.id}`;
     setUpdatingKey(actionKey);
     try {
+      let result = null;
       if (booking.source === 'member') {
-        await updateMemberBookingStatus(booking.id, status);
+        result = await updateMemberBookingStatus(booking.id, status);
       } else {
         await updateBookingStatus(booking.id, status);
       }
-      toast({ title: 'Booking updated', description: `${booking.full_name || 'Booking'} is now ${status.replace(/_/g, ' ')}.` });
+      const memberNotice = result?.warning
+        || (result?.notice_created
+          ? Number(result.push?.delivered || 0) > 0
+            ? 'Their private in-app notice is live and Apple push was delivered.'
+            : 'Their private in-app notice is live in their member account.'
+          : null);
+      toast({
+        title: result?.notice_created ? 'Booking updated and member notified' : 'Booking updated',
+        description: memberNotice || `${booking.full_name || 'Booking'} is now ${status.replace(/_/g, ' ')}.`,
+      });
       await load();
       setPage(1);
     } catch (e) {
@@ -190,7 +200,7 @@ export default function BookingRequestsTable() {
             { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
             { key: 'class', label: 'Class' }, { key: 'class_start', label: 'Class start' },
             { key: 'coach', label: 'Coach' }, { key: 'location', label: 'Location' },
-            { key: 'credit_reserved', label: 'Credit reserved' }, { key: 'admin_notes', label: 'Admin notes' },
+            { key: 'credit_reserved', label: 'Credit reserved' },
           ]
         )} disabled={filteredBookings.length === 0}
           className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">

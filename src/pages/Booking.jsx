@@ -11,8 +11,10 @@ import {
 } from '@/lib/bookingData';
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
+import { getSoftLaunchSettings } from '@/lib/adminData';
+import { pricesComingSoon } from '@/lib/launchSettings';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
-import { formatPackPrice, formatPackValidity, packCta } from '@/lib/products';
+import { formatPackPrice, formatPackValidity, packCta, PRICES_COMING_SOON_LABEL } from '@/lib/products';
 import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
 import { clearPendingWebCheckout } from '@/lib/webCheckoutRecovery';
 
@@ -45,6 +47,8 @@ export default function Booking() {
   const [myBookings, setMyBookings] = useState([]);
   const [credits, setCredits] = useState(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  // Default to hidden: prices stay "Coming soon" until settings confirm otherwise.
+  const [comingSoon, setComingSoon] = useState(true);
   const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
@@ -66,7 +70,7 @@ export default function Booking() {
 
   const refresh = useCallback(async () => {
     setLoadErrors([]);
-    const requests = [getProducts(), getAvailableSessions(), getSessionPackPaymentAvailability()];
+    const requests = [getProducts(), getAvailableSessions(), getSessionPackPaymentAvailability(), getSoftLaunchSettings()];
     if (session) requests.push(getMyCredits(), getMyBookings());
     const results = await Promise.allSettled(requests);
     const errors = [];
@@ -80,10 +84,12 @@ export default function Booking() {
     apply(results[0], 'Session packs', setProducts, []);
     apply(results[1], 'Timetable', setSessions, []);
     apply(results[2], 'Pack checkout', setPaymentsEnabled, false);
+    // On failure the fallback keeps pricing hidden rather than leaking amounts.
+    apply(results[3], 'Launch settings', s => setComingSoon(pricesComingSoon(s)), { prices_coming_soon: true });
     setPaymentAvailabilityLoaded(true);
     if (session) {
-      apply(results[3], 'Credits', setCredits, null);
-      apply(results[4], 'Your bookings', setMyBookings, []);
+      apply(results[4], 'Credits', setCredits, null);
+      apply(results[5], 'Your bookings', setMyBookings, []);
     } else {
       setCredits(null);
       setMyBookings([]);
@@ -274,9 +280,15 @@ export default function Booking() {
                     <Ticket className="w-5 h-5" style={{ color: pack.featured ? '#101820' : '#7BA7BC' }} />
                   </div>
                   <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h2>
-                  <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
-                    {formatPackPrice(pack.price_cents, pack.currency)}
-                  </p>
+                  {comingSoon ? (
+                    <p className="font-display text-2xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
+                      {PRICES_COMING_SOON_LABEL}
+                    </p>
+                  ) : (
+                    <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
+                      {formatPackPrice(pack.price_cents, pack.currency)}
+                    </p>
+                  )}
                   <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>
                     {formatPackValidity(pack.validity_days)}
                   </p>

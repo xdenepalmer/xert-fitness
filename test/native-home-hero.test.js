@@ -27,7 +27,8 @@ test('native home opens with the photographic XERT website hero language', async
   assert.match(home, /Task\.sleep\(nanoseconds: 5_000_000_000\)/);
   assert.match(home, /withAnimation\(\.easeInOut\(duration: 1\.2\)\)/);
   assert.ok(home.includes('Show training photo \\(index + 1) of \\(heroPhotoURLs.count)'));
-  assert.match(home, /guard heroPhotoURLs\.count > 1, !reduceMotion else \{ return \}/);
+  assert.match(home, /guard heroPhotoURLs\.count > 1, allowsAutomaticCarousel else \{ return \}/);
+  assert.match(home, /scenePhase == \.active && !reduceMotion && !isLowPowerModeEnabled/);
   assert.match(home, /\["https", "http"\]\.contains\(url\.scheme\?\.lowercased\(\)\)/);
 });
 

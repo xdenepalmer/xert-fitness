@@ -6,6 +6,7 @@ import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -475,6 +476,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [timeFilter, setTimeFilter] = useState('upcoming');
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
   const [promotingSessionId, setPromotingSessionId] = useState(null);
+  const [promotionCandidate, setPromotionCandidate] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
   const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
@@ -612,8 +614,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
     setUpdatingBookingId(bookingId);
     try {
-      await adminSetBookingStatus(bookingId, status);
+      const result = await adminSetBookingStatus(bookingId, status);
       await refreshBookings(sessionId);
+      if (result?.notice_created) {
+        toast({
+          title: 'Booking updated and member notified',
+          description: result.warning
+            || (Number(result.push?.delivered || 0) > 0
+              ? 'Their private notice is live and Apple push was delivered.'
+              : 'Their private notice is live in their member account.'),
+        });
+      }
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -621,20 +632,25 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
-  const handlePromoteNext = async session => {
+  const handlePromoteNext = async candidate => {
     if (promotingSessionId) return;
-    setPromotingSessionId(session.id);
+    setPromotingSessionId(candidate.session_id);
     try {
-      await adminPromoteNextWaitlisted(session.id);
+      const result = await adminPromoteNextWaitlisted(candidate.session_id, candidate.next_booking_id);
       await Promise.all([
         refreshWaitlistOverview(),
-        ...(expandedBookings === session.id ? [refreshBookings(session.id)] : []),
+        ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
       ]);
-      toast({ title: 'Next member promoted', description: 'Their earliest-expiring available credit is now reserved.' });
+      const delivery = result.warning
+        || (Number(result.push?.delivered || 0) > 0
+          ? 'Their credit is reserved, their member notice is live, and Apple push was delivered.'
+          : 'Their credit is reserved and a private notice is waiting in their member account.');
+      toast({ title: 'Member promoted and notified', description: delivery });
     } catch (error) {
       toast({ title: 'Promotion paused', description: error.message, variant: 'destructive' });
     } finally {
       setPromotingSessionId(null);
+      setPromotionCandidate(null);
     }
   };
 
@@ -821,7 +837,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         promotingSessionId={promotingSessionId}
         onRetry={refreshWaitlistOverview}
         onOpen={openWaitlistRoster}
-        onPromote={item => handlePromoteNext({ id: item.session_id })}
+        onPromote={setPromotionCandidate}
       />
 
       {loading ? (
@@ -841,6 +857,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             const sessionBlackouts = blackoutsOverlappingSession(s, blackouts);
             const activeRosterCount = roster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
             const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
+            const promotionItem = waitlistOverview.find(item => item.session_id === s.id) || null;
             const hasOpenPlace = s.capacity == null || activeRosterCount < s.capacity;
             return (
             <div id={`class-session-${s.id}`} key={s.id} className="bg-xert-ink border border-xert-steel/20 scroll-mt-20">
@@ -901,8 +918,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       Class roster ({activeRosterCount}{s.capacity ? `/${s.capacity}` : ''})
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {s.status === 'published' && new Date(s.start_time).getTime() > now && hasOpenPlace && waitlistedRoster.length > 0 && (
-                        <button type="button" onClick={() => handlePromoteNext(s)} disabled={Boolean(promotingSessionId)}
+                      {s.status === 'published' && new Date(s.start_time).getTime() > now && hasOpenPlace && waitlistedRoster.length > 0 && promotionItem && (
+                        <button type="button" onClick={() => setPromotionCandidate(promotionItem)} disabled={Boolean(promotingSessionId)}
                           className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-[11px] uppercase tracking-wider text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
                           <UserCheck className="w-3.5 h-3.5" />
                           {promotingSessionId === s.id ? 'Promoting...' : `Promote next (${waitlistedRoster.length})`}
@@ -1107,6 +1124,19 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       {cancellationFollowUp && (
         <CancellationFollowUpDialog followUp={cancellationFollowUp} onClose={() => setCancellationFollowUp(null)} />
       )}
+
+      <AdminConfirmDialog
+        open={Boolean(promotionCandidate)}
+        title="Confirm and notify this member?"
+        description={promotionCandidate
+          ? `${promotionCandidate.next_full_name || promotionCandidate.next_email || 'The next member'} will be confirmed into ${promotionCandidate.title}. Their earliest-expiring credit will be reserved and a private member notice will be created.`
+          : ''}
+        warning="This is FIFO protected. If the queue changes before confirmation, the promotion stops for review."
+        confirmLabel={promotingSessionId ? 'Promoting…' : 'Promote and notify'}
+        busy={Boolean(promotingSessionId)}
+        onOpenChange={open => { if (!open) setPromotionCandidate(null); }}
+        onConfirm={() => promotionCandidate && void handlePromoteNext(promotionCandidate)}
+      />
     </div>
   );
 }

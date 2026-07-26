@@ -1,4 +1,15 @@
-const SITE_NAME = 'XERT Fitness';
+export const SITE_NAME = 'XERT Fitness';
+
+// Site-wide social-preview image for og:image / twitter:image: a purpose-built
+// 1200x630 card (navy blueprint backdrop + wordmark) at the exact ratio social
+// platforms crop to, saved as an opaque JPEG so it composites predictably.
+export const SOCIAL_IMAGE = Object.freeze({
+  url: '/assets/xert-social-card.jpg',
+  width: 1200,
+  height: 630,
+  alt: 'XERT Fitness',
+});
+
 const HOME_TITLE = 'XERT Fitness | Functional Training Kingaroy';
 const HOME_DESCRIPTION = 'Structured, coach-led functional fitness, personal training and event preparation in Kingaroy, Queensland.';
 

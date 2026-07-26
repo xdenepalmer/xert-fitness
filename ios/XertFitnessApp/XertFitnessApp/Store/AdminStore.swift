@@ -13,8 +13,14 @@ final class AdminStore: ObservableObject {
     @Published private(set) var dailyOperations: [AdminDailyOperation] = []
     @Published private(set) var waitlist: [AdminWaitlistItem] = []
     @Published private(set) var followUps: [AdminFollowUp] = []
+    @Published private(set) var activationOverview: AdminMemberActivationOverview?
+    @Published private(set) var activationQueue: [AdminMemberActivationItem] = []
     @Published private(set) var members: [AdminMemberSummary] = []
     @Published private(set) var memberNotes: [AdminMemberNote] = []
+    @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
+    @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
+    @Published private(set) var loadedMemberDetailID: UUID?
+    @Published private(set) var memberDetailUnavailableSources: [String] = []
     @Published private(set) var orders: [OrderItem] = []
     @Published private(set) var settings: AdminPlatformSettings?
     @Published private(set) var ptRequests: [AdminPTRequest] = []
@@ -39,17 +45,21 @@ final class AdminStore: ObservableObject {
     @Published private(set) var siteContentRows: [AdminSiteContentRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshingHealth = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var ownerMemberSearchResults: [AdminMemberSummary] = []
     @Published private(set) var isSearchingOwnerMembers = false
     @Published private(set) var ownerMemberSearchError: String?
     @Published private(set) var resolvingOwnerTask: XertOwnerTask?
     @Published private(set) var promotingSessionID: UUID?
+    @Published private(set) var promotionNoticeWarning: String?
+    @Published private(set) var bookingDecisionNoticeWarning: String?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var isPublishingAnnouncement = false
     @Published private(set) var savingProductID: UUID?
+    @Published private(set) var provisioningProductPriceID: UUID?
     @Published private(set) var savingEventID: UUID?
     @Published private(set) var deletingEventID: UUID?
     @Published private(set) var loadingEventRosterID: UUID?
@@ -63,6 +73,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var savingScheduleWindowID: UUID?
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var loadingMemberDetailID: UUID?
+    @Published private(set) var revealingEmergencyContactMemberID: UUID?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
@@ -76,11 +87,18 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var hasCompletedRefresh = false
     @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
     @Published private(set) var refreshUnavailableSources: [String] = []
+    @Published private(set) var loadedSources: Set<String> = []
+    @Published private(set) var healthSourceUpdatedAt: [String: Date] = [:]
+    @Published private(set) var launchGateUpdatedAt: Date?
 
     private let api = XertAPI()
     private var ownerMemberSearchGeneration: UInt = 0
+    private var memberDetailGeneration: UInt = 0
+    private var emergencyContactRevealGeneration: UInt = 0
+    private var healthRefreshGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -96,17 +114,35 @@ final class AdminStore: ObservableObject {
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
     var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
     var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
+    var unavailableHealthSourceCount: Int {
+        guard hasCompletedRefresh else { return 0 }
+        return Self.healthSources.filter {
+            !loadedSources.contains($0) || refreshUnavailableSources.contains($0)
+        }.count
+    }
     var healthIssues: Int {
-        missingSchemaCapabilities.count
-            + (commerceHealth?.ready == false ? 1 : 0)
-            + (pushHealth?.ready == false ? 1 : 0)
+        unavailableHealthSourceCount
+            + (healthSourceIsCurrent("schema health") ? missingSchemaCapabilities.count : 0)
+            + (healthSourceIsCurrent("Stripe health") && commerceHealth?.ready == false ? 1 : 0)
+            + (healthSourceIsCurrent("push health") && pushHealth?.ready == false ? 1 : 0)
     }
     var hasHealthSnapshot: Bool {
-        !schemaCapabilities.isEmpty && commerceHealth != nil && pushHealth != nil
+        unavailableHealthSourceCount == 0
+            && commerceHealth != nil
+            && pushHealth != nil
+    }
+
+    private static let healthSources: Set<String> = ["schema health", "Stripe health", "push health"]
+    private static let launchGateSources: Set<String> = [
+        "schema health", "Stripe health", "platform controls", "session packs", "full timetable"
+    ]
+
+    private func healthSourceIsCurrent(_ source: String) -> Bool {
+        loadedSources.contains(source) && !refreshUnavailableSources.contains(source)
     }
 
     func refresh(session: AuthSession) async {
-        guard !isLoading else { return }
+        guard !isLoading, !isRefreshingHealth else { return }
         isLoading = true
         operationalQueueState = .loading
         defer { isLoading = false }
@@ -114,6 +150,8 @@ final class AdminStore: ObservableObject {
         async let operationsRequest = api.adminDailyOperations(session: session)
         async let waitlistRequest = api.adminWaitlist(session: session)
         async let followUpRequest = api.adminFollowUps(session: session)
+        async let activationOverviewRequest = api.adminMemberActivationOverview(session: session)
+        async let activationQueueRequest = api.adminMemberActivationQueue(session: session)
         async let memberRequest = api.adminMembers(session: session)
         async let orderRequest = api.adminOrders(session: session)
         async let settingsRequest = api.adminPlatformSettings(session: session)
@@ -133,55 +171,213 @@ final class AdminStore: ObservableObject {
 
         var failures: [String] = []
         var queueFailures: [String] = []
+        var successfulSources = Set<String>()
         var loadedSource = false
-        do { dailyOperations = try await operationsRequest; loadedSource = true }
+        do { dailyOperations = try await operationsRequest; successfulSources.insert("today's classes"); loadedSource = true }
         catch { failures.append("today's classes"); queueFailures.append("today's classes") }
-        do { waitlist = try await waitlistRequest; loadedSource = true }
+        do { waitlist = try await waitlistRequest; successfulSources.insert("waitlists"); loadedSource = true }
         catch { failures.append("waitlists"); queueFailures.append("waitlists") }
-        do { followUps = try await followUpRequest; loadedSource = true }
+        do { followUps = try await followUpRequest; successfulSources.insert("retention"); loadedSource = true }
         catch { failures.append("retention"); queueFailures.append("retention") }
-        do { members = try await memberRequest; loadedSource = true }
-        catch { failures.append("members") }
-        do { orders = try await orderRequest; loadedSource = true }
+        do {
+            activationOverview = try await activationOverviewRequest
+            successfulSources.insert("member activation")
+            loadedSource = true
+        } catch { failures.append("member activation") }
+        do {
+            activationQueue = try await activationQueueRequest
+            successfulSources.insert("activation actions")
+            loadedSource = true
+        } catch { failures.append("activation actions"); queueFailures.append("activation actions") }
+        do { members = try await memberRequest; successfulSources.insert("members"); loadedSource = true }
+        catch {
+            // The member directory and server-backed health endpoints are the
+            // most likely reads to meet a cold connection on first open. Retry
+            // them once before presenting partial data, but never retry a stale
+            // foreground refresh or a cancelled Command Centre task.
+            if !loadedSources.contains("members"), !Task.isCancelled {
+                do {
+                    members = try await api.adminMembers(session: session)
+                    successfulSources.insert("members")
+                    loadedSource = true
+                } catch { failures.append("members") }
+            } else {
+                failures.append("members")
+            }
+        }
+        do { orders = try await orderRequest; successfulSources.insert("orders"); loadedSource = true }
         catch { failures.append("orders"); queueFailures.append("orders") }
-        do { settings = try await settingsRequest; loadedSource = true }
+        do { settings = try await settingsRequest; successfulSources.insert("platform controls"); loadedSource = true }
         catch { failures.append("platform controls") }
-        do { ptRequests = try await ptRequest; loadedSource = true }
+        do { ptRequests = try await ptRequest; successfulSources.insert("PT requests"); loadedSource = true }
         catch { failures.append("PT requests"); queueFailures.append("PT requests") }
-        do { announcements = try await announcementRequest; loadedSource = true }
+        do { announcements = try await announcementRequest; successfulSources.insert("member notices"); loadedSource = true }
         catch { failures.append("member notices") }
-        do { schemaCapabilities = try await capabilitiesRequest; loadedSource = true }
+        do { schemaCapabilities = try await capabilitiesRequest; successfulSources.insert("schema health"); loadedSource = true }
         catch { failures.append("schema health") }
-        do { commerceHealth = try await commerceRequest; loadedSource = true }
-        catch { failures.append("Stripe health") }
-        do { pushHealth = try await pushRequest; loadedSource = true }
-        catch { failures.append("push health") }
-        do { auditEntries = try await auditRequest; loadedSource = true }
+        do { commerceHealth = try await commerceRequest; successfulSources.insert("Stripe health"); loadedSource = true }
+        catch {
+            if !loadedSources.contains("Stripe health"), !Task.isCancelled {
+                do {
+                    commerceHealth = try await api.adminCommerceHealth(session: session)
+                    successfulSources.insert("Stripe health")
+                    loadedSource = true
+                } catch { failures.append("Stripe health") }
+            } else {
+                failures.append("Stripe health")
+            }
+        }
+        do { pushHealth = try await pushRequest; successfulSources.insert("push health"); loadedSource = true }
+        catch {
+            if !loadedSources.contains("push health"), !Task.isCancelled {
+                do {
+                    pushHealth = try await api.adminPushHealth(session: session)
+                    successfulSources.insert("push health")
+                    loadedSource = true
+                } catch { failures.append("push health") }
+            } else {
+                failures.append("push health")
+            }
+        }
+        do { auditEntries = try await auditRequest; successfulSources.insert("admin audit"); loadedSource = true }
         catch { failures.append("admin audit") }
-        do { products = try await productRequest; loadedSource = true }
+        do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
         catch { failures.append("session packs") }
-        do { events = try await eventRequest; loadedSource = true }
+        do { events = try await eventRequest; successfulSources.insert("event calendar"); loadedSource = true }
         catch { failures.append("event calendar") }
         do {
             eventGoalCounts = Dictionary(grouping: try await eventGoalsRequest, by: \.event_id).mapValues(\.count)
+            successfulSources.insert("event training groups")
             loadedSource = true
         } catch { failures.append("event training groups") }
-        do { coaches = try await coachRequest; loadedSource = true }
+        do { coaches = try await coachRequest; successfulSources.insert("team directory"); loadedSource = true }
         catch { failures.append("team directory") }
-        do { classSessions = try await classSessionRequest; loadedSource = true }
+        do { classSessions = try await classSessionRequest; successfulSources.insert("full timetable"); loadedSource = true }
         catch { failures.append("full timetable") }
-        do { availabilityBlocks = try await availabilityRequest; loadedSource = true }
+        do { availabilityBlocks = try await availabilityRequest; successfulSources.insert("availability"); loadedSource = true }
         catch { failures.append("availability") }
-        do { blackoutPeriods = try await blackoutRequest; loadedSource = true }
+        do { blackoutPeriods = try await blackoutRequest; successfulSources.insert("blackouts"); loadedSource = true }
         catch { failures.append("blackouts") }
 
         if loadedSource {
             lastUpdatedAt = Date()
         }
+        loadedSources.formUnion(successfulSources)
+        let refreshedAt = Date()
+        for source in successfulSources where Self.healthSources.contains(source) {
+            healthSourceUpdatedAt[source] = refreshedAt
+        }
+        if Self.launchGateSources.isSubset(of: successfulSources) {
+            launchGateUpdatedAt = refreshedAt
+        }
         refreshUnavailableSources = failures
+        hasCompletedRefresh = true
         operationalQueueState = queueFailures.isEmpty
             ? .ready
             : .partial(unavailableSources: queueFailures)
+    }
+
+    /// Refreshes the bounded release-health and launch-gate contracts used by Operations Health.
+    /// Failed requests preserve their last successful payload. The source is
+    /// marked unavailable so stale snapshots cannot be presented as current.
+    /// Partial availability stays inline and never raises a global modal alert.
+    func refreshHealth(session: AuthSession) async {
+        guard !isLoading,
+              !isRefreshingHealth,
+              !isSavingSettings,
+              savingProductID == nil,
+              savingClassID == nil,
+              cancellingClassID == nil,
+              resolvingStripeIncidentID == nil,
+              retryingStripeIncidentID == nil else { return }
+        healthRefreshGeneration &+= 1
+        let generation = healthRefreshGeneration
+        isRefreshingHealth = true
+        defer { isRefreshingHealth = false }
+
+        async let capabilitiesRequest = api.adminSchemaCapabilities(session: session)
+        async let commerceRequest = api.adminCommerceHealth(session: session)
+        async let pushRequest = api.adminPushHealth(session: session)
+        async let settingsRequest = api.adminPlatformSettings(session: session)
+        async let productRequest = api.adminProducts(session: session)
+        async let classSessionRequest = api.adminClassSessions(session: session)
+
+        var failures: [String] = []
+        var successfulSources = Set<String>()
+
+        do {
+            let nextCapabilities = try await capabilitiesRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            schemaCapabilities = nextCapabilities
+            successfulSources.insert("schema health")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("schema health")
+        }
+        do {
+            let nextCommerceHealth = try await commerceRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            commerceHealth = nextCommerceHealth
+            successfulSources.insert("Stripe health")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("Stripe health")
+        }
+        do {
+            let nextPushHealth = try await pushRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            pushHealth = nextPushHealth
+            successfulSources.insert("push health")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("push health")
+        }
+        do {
+            let nextSettings = try await settingsRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            settings = nextSettings
+            successfulSources.insert("platform controls")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("platform controls")
+        }
+        do {
+            let nextProducts = try await productRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            products = nextProducts
+            successfulSources.insert("session packs")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("session packs")
+        }
+        do {
+            let nextClassSessions = try await classSessionRequest
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            classSessions = nextClassSessions
+            successfulSources.insert("full timetable")
+        } catch {
+            guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+            failures.append("full timetable")
+        }
+
+        guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
+        let refreshedAt = Date()
+        loadedSources.formUnion(successfulSources)
+        for source in successfulSources {
+            healthSourceUpdatedAt[source] = refreshedAt
+        }
+        if Self.launchGateSources.isSubset(of: successfulSources) {
+            launchGateUpdatedAt = refreshedAt
+        } else {
+            launchGateUpdatedAt = nil
+        }
+
+        // Replace only health failures. Unrelated stale owner data must survive
+        // this scoped retry unchanged.
+        refreshUnavailableSources.removeAll {
+            Self.healthSources.contains($0) || Self.launchGateSources.contains($0)
+        }
+        refreshUnavailableSources.append(contentsOf: failures)
     }
 
     func searchMembers(session: AuthSession, query: String) async {
@@ -240,6 +436,8 @@ final class AdminStore: ObservableObject {
         switch task {
         case .member(let memberID):
             guard !members.contains(where: { $0.id == memberID }) else { return }
+        case .classSession(let sessionID):
+            guard !dailyOperations.contains(where: { $0.id == sessionID }) else { return }
         case .product(let productID):
             guard !products.contains(where: { $0.id == productID }) else { return }
         case .order, .event:
@@ -253,10 +451,18 @@ final class AdminStore: ObservableObject {
                 let member = try await api.adminMember(session: session, id: memberID)
                 members.removeAll(where: { $0.id == memberID })
                 members.insert(member, at: 0)
+            case .classSession(let sessionID):
+                let operations = try await api.adminDailyOperations(session: session)
+                guard operations.contains(where: { $0.id == sessionID }) else { return }
+                dailyOperations = operations
+                loadedSources.insert("today's classes")
+                refreshUnavailableSources.removeAll { $0 == "today's classes" }
             case .product(let productID):
                 let refreshedProducts = try await api.adminProducts(session: session)
                 guard refreshedProducts.contains(where: { $0.id == productID }) else { return }
                 products = refreshedProducts
+                loadedSources.insert("session packs")
+                refreshUnavailableSources.removeAll { $0 == "session packs" }
             case .order, .event:
                 break
             }
@@ -267,11 +473,90 @@ final class AdminStore: ObservableObject {
 
     func loadMemberDetail(session: AuthSession, memberID: UUID) async {
         guard loadingMemberDetailID == nil else { return }
+        memberDetailGeneration &+= 1
+        let generation = memberDetailGeneration
+        loadedMemberDetailID = memberID
         memberNotes = []
+        memberOnboardingSummary = nil
+        revealedMemberEmergencyContact = nil
+        memberDetailUnavailableSources = []
         loadingMemberDetailID = memberID
-        defer { loadingMemberDetailID = nil }
-        do { memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID) }
-        catch { errorMessage = error.localizedDescription }
+        defer {
+            if memberDetailGeneration == generation { loadingMemberDetailID = nil }
+        }
+
+        async let notesRequest = api.adminMemberNotes(session: session, memberID: memberID)
+        async let onboardingRequest = api.adminMemberOnboardingSummary(session: session, memberID: memberID)
+        var failures: [String] = []
+
+        do {
+            let notes = try await notesRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberNotes = notes
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("staff timeline")
+        }
+
+        do {
+            let summary = try await onboardingRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberOnboardingSummary = summary
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("member readiness")
+        }
+
+        guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+        memberDetailUnavailableSources = failures
+    }
+
+    func clearMemberDetail(memberID: UUID) {
+        guard loadedMemberDetailID == memberID else { return }
+        memberDetailGeneration &+= 1
+        emergencyContactRevealGeneration &+= 1
+        loadedMemberDetailID = nil
+        loadingMemberDetailID = nil
+        revealingEmergencyContactMemberID = nil
+        memberNotes = []
+        memberOnboardingSummary = nil
+        revealedMemberEmergencyContact = nil
+        memberDetailUnavailableSources = []
+    }
+
+    func clearRevealedMemberEmergencyContact() {
+        emergencyContactRevealGeneration &+= 1
+        revealingEmergencyContactMemberID = nil
+        revealedMemberEmergencyContact = nil
+    }
+
+    func revealMemberEmergencyContact(session: AuthSession, memberID: UUID) async {
+        guard revealingEmergencyContactMemberID == nil,
+              loadedMemberDetailID == memberID,
+              memberOnboardingSummary?.emergency_contact_complete == true else { return }
+        let generation = memberDetailGeneration
+        emergencyContactRevealGeneration &+= 1
+        let revealGeneration = emergencyContactRevealGeneration
+        revealingEmergencyContactMemberID = memberID
+        defer {
+            if memberDetailGeneration == generation,
+               emergencyContactRevealGeneration == revealGeneration {
+                revealingEmergencyContactMemberID = nil
+            }
+        }
+        do {
+            let reveal = try await api.adminRevealMemberEmergencyContact(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  emergencyContactRevealGeneration == revealGeneration,
+                  loadedMemberDetailID == memberID else { return }
+            revealedMemberEmergencyContact = reveal
+            XertHaptics.play(.success)
+        } catch {
+            guard memberDetailGeneration == generation,
+                  emergencyContactRevealGeneration == revealGeneration else { return }
+            errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
+        }
     }
 
     func addMemberNote(session: AuthSession, memberID: UUID, category: String, body: String) async -> Bool {
@@ -533,7 +818,9 @@ final class AdminStore: ObservableObject {
         updatingBookingRequestIDs = [booking.id]
         defer { updatingBookingRequestIDs = [] }
         do {
-            try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            bookingDecisionNoticeWarning = nil
+            let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            bookingDecisionNoticeWarning = warning
             try await refreshBookingOperationsSnapshot(session: session)
             lastUpdatedAt = Date()
             return true
@@ -553,7 +840,10 @@ final class AdminStore: ObservableObject {
         defer { updatingBookingRequestIDs = [] }
         var failed: Set<String> = []
         for booking in bookings {
-            do { try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status) }
+            do {
+                let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+                if let warning { bookingDecisionNoticeWarning = warning }
+            }
             catch { failed.insert(booking.id) }
         }
         do {
@@ -597,18 +887,38 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func promoteNext(session: AuthSession, classSessionID: UUID) async -> Bool {
+    func promoteNext(
+        session: AuthSession,
+        classSessionID: UUID,
+        expectedBookingID: UUID,
+        requestID: UUID
+    ) async -> Bool {
         guard promotingSessionID == nil else { return false }
         promotingSessionID = classSessionID
+        promotionNoticeWarning = nil
         defer { promotingSessionID = nil }
         do {
-            try await api.adminPromoteNextWaitlisted(session: session, classSessionID: classSessionID)
+            let outcome = try await api.adminPromoteNextWaitlisted(
+                session: session,
+                classSessionID: classSessionID,
+                expectedBookingID: expectedBookingID,
+                requestID: requestID
+            )
+            promotionNoticeWarning = outcome.warning
             waitlist = try await api.adminWaitlist(session: session)
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            let message = error.localizedDescription
+            if message.localizedCaseInsensitiveContains("WAITLIST_CHANGED")
+                || message.localizedCaseInsensitiveContains("WAITLIST_PROMOTION_REQUEST_CONFLICT") {
+                errorMessage = "The queue changed before confirmation. Refresh and review the next member."
+            } else if message.localizedCaseInsensitiveContains("admin_promote_next_waitlisted_with_notice") {
+                errorMessage = "Apply the waitlist promotion notifications migration before promoting members."
+            } else {
+                errorMessage = message
+            }
             return false
         }
     }
@@ -634,7 +944,9 @@ final class AdminStore: ObservableObject {
         updatingBookingID = bookingID
         defer { updatingBookingID = nil }
         do {
-            try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
+            bookingDecisionNoticeWarning = nil
+            let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
+            bookingDecisionNoticeWarning = outcome.warning
             classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)
@@ -692,18 +1004,77 @@ final class AdminStore: ObservableObject {
         }
     }
 
+    func logActivationFollowUp(
+        session: AuthSession,
+        member: AdminMemberActivationItem,
+        channel: String
+    ) async -> Bool {
+        guard loggingFollowUpMemberID == nil else { return false }
+        loggingFollowUpMemberID = member.id
+        defer { loggingFollowUpMemberID = nil }
+        do {
+            try await api.adminAddMemberNote(
+                session: session,
+                memberID: member.id,
+                category: "follow_up",
+                body: "Activation follow-up completed via \(channel). Next step: \(member.reasonLabel)."
+            )
+            activationQueue.removeAll { $0.id == member.id }
+            lastUpdatedAt = Date()
+            do {
+                activationQueue = try await api.adminMemberActivationQueue(session: session)
+                loadedSources.insert("activation actions")
+                refreshUnavailableSources.removeAll { $0 == "activation actions" }
+            } catch {
+                if !refreshUnavailableSources.contains("activation actions") {
+                    refreshUnavailableSources.append("activation actions")
+                }
+            }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func saveSettings(session: AuthSession, draft: AdminPlatformSettings) async -> Bool {
         guard !isSavingSettings else { return false }
+        guard loadedSources.contains("platform controls"),
+              !refreshUnavailableSources.contains("platform controls"),
+              !isLoading else {
+            errorMessage = "Refresh Platform Controls before saving live settings."
+            return false
+        }
+        if draft.bookings_enabled {
+            guard loadedSources.contains("schema health"),
+                  !refreshUnavailableSources.contains("schema health"),
+                  schemaCapabilities.contains(where: { $0.capability == "member_booking_switch_guard" }) else {
+                errorMessage = "Bookings stay paused until Operations Health verifies the member booking-switch guard."
+                return false
+            }
+        }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
         isSavingSettings = true
         defer { isSavingSettings = false }
         do {
             let activatingPayments = draft.payments_enabled && settings?.payments_enabled != true
             if activatingPayments {
                 settings = try await api.adminActivatePlatformPayments(session: session, settings: draft)
-                commerceHealth = try? await api.adminCommerceHealth(session: session)
+                do {
+                    commerceHealth = try await api.adminCommerceHealth(session: session)
+                    loadedSources.insert("Stripe health")
+                    refreshUnavailableSources.removeAll { $0 == "Stripe health" }
+                } catch {
+                    if !refreshUnavailableSources.contains("Stripe health") {
+                        refreshUnavailableSources.append("Stripe health")
+                    }
+                }
             } else {
                 settings = try await api.adminUpdatePlatformSettings(session: session, settings: draft)
             }
+            loadedSources.insert("platform controls")
+            refreshUnavailableSources.removeAll { $0 == "platform controls" }
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -717,6 +1088,8 @@ final class AdminStore: ObservableObject {
         incident: AdminCommerceHealth.WebhookDelivery.Incident
     ) async -> Bool {
         guard resolvingStripeIncidentID == nil, let errorCode = incident.error_code else { return false }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
         resolvingStripeIncidentID = incident.event_id
         defer { resolvingStripeIncidentID = nil }
         do {
@@ -739,6 +1112,8 @@ final class AdminStore: ObservableObject {
         incident: AdminCommerceHealth.WebhookDelivery.Incident
     ) async -> Bool {
         guard retryingStripeIncidentID == nil, incident.resolution == nil else { return false }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
         retryingStripeIncidentID = incident.event_id
         defer { retryingStripeIncidentID = nil }
         do {
@@ -794,18 +1169,72 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func saveProduct(session: AuthSession, product: AdminProduct, draft: AdminProductDraft) async -> Bool {
-        guard savingProductID == nil else { return false }
-        savingProductID = product.id
+    func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {
+        guard savingProductID == nil, provisioningProductPriceID == nil else { return false }
+        guard loadedSources.contains("session packs"),
+              !refreshUnavailableSources.contains("session packs"),
+              !isLoading else {
+            errorMessage = "Refresh Session Packs & Pricing before saving catalogue changes."
+            return false
+        }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        savingProductID = product?.id ?? UUID()
         defer { savingProductID = nil }
         do {
-            try await api.adminUpdateProduct(session: session, product: product, draft: draft)
-            products = try await api.adminProducts(session: session)
+            let savedProduct: AdminProduct
+            if let product {
+                savedProduct = try await api.adminUpdateProduct(session: session, product: product, draft: draft)
+            } else {
+                savedProduct = try await api.adminCreateProduct(session: session, draft: draft)
+            }
+            mergeProduct(savedProduct)
             lastUpdatedAt = Date()
+            do {
+                products = try await api.adminProducts(session: session)
+                loadedSources.insert("session packs")
+                refreshUnavailableSources.removeAll(where: { $0 == "session packs" })
+            } catch {
+                if !refreshUnavailableSources.contains("session packs") {
+                    refreshUnavailableSources.append("session packs")
+                }
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    func provisionProductPrice(session: AuthSession, product: AdminProduct) async -> AdminProduct? {
+        guard provisioningProductPriceID == nil, savingProductID == nil else { return nil }
+        guard !product.active, product.stripe_price_id == nil else {
+            errorMessage = "Only an unlinked private pack can create a Stripe Price."
+            return nil
+        }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        provisioningProductPriceID = product.id
+        defer { provisioningProductPriceID = nil }
+        do {
+            let saved = try await api.adminProvisionProductPrice(session: session, product: product)
+            mergeProduct(saved)
+            loadedSources.insert("session packs")
+            refreshUnavailableSources.removeAll { $0 == "session packs" }
+            lastUpdatedAt = Date()
+            return saved
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func mergeProduct(_ product: AdminProduct) {
+        products.removeAll(where: { $0.id == product.id })
+        products.append(product)
+        products.sort {
+            if $0.sort_order != $1.sort_order { return $0.sort_order < $1.sort_order }
+            return $0.slug.localizedCaseInsensitiveCompare($1.slug) == .orderedAscending
         }
     }
 
@@ -898,6 +1327,8 @@ final class AdminStore: ObservableObject {
 
     func saveClass(session: AuthSession, classSession: AdminClassSession?, draft: AdminClassDraft) async -> Bool {
         guard savingClassID == nil else { return false }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
         savingClassID = classSession?.id ?? UUID()
         defer { savingClassID = nil }
         do {
@@ -930,6 +1361,8 @@ final class AdminStore: ObservableObject {
 
     func cancelClass(session: AuthSession, classSession: AdminClassSession) async -> Bool {
         guard cancellingClassID == nil else { return false }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
         cancellingClassID = classSession.id
         defer { cancellingClassID = nil }
         do {

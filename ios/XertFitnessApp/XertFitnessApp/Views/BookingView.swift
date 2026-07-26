@@ -3,6 +3,7 @@ import SwiftUI
 struct BookingView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @StateObject private var checkoutBrowser = CheckoutBrowser()
     @State private var activeSheet: BookingSheet?
     @State private var expandedSessionIDs: Set<UUID> = []
@@ -16,12 +17,26 @@ struct BookingView: View {
     let route: XertMemberRoute
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+    let firstClassActivation: XertFirstClassActivation?
+    let onRequireSignInForClass: (UUID) -> Void
+    let onBookingNeedsCredits: (UUID) -> Void
+    let onChooseCreditsForClass: (UUID) -> Void
+    let onCheckoutStarted: () -> Void
+    let onBookingCompleted: (UUID) -> Void
 
     private enum ScrollTarget: Hashable {
         case credits, packs, session(UUID)
     }
 
     var body: some View {
+        let visibleSessions = ClassSessionDiscovery.sessions(
+            from: store.sessions,
+            search: classSearch,
+            dateWindow: classDateWindow,
+            fit: classFit
+        )
+        let activeBookings = BookingItem.activeBySession(store.bookings)
+
         NavigationStack {
             ScrollViewReader { proxy in
                 List {
@@ -32,9 +47,7 @@ struct BookingView: View {
                             title: "Train. Book. Repeat.",
                             subtitle: store.publicContent(for: .booking).intro
                                 ?? "Choose the session that matches your goal, reserve your place and arrive ready to work.",
-                            badge: store.isSignedIn
-                                ? "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
-                                : "Your first coached session starts here"
+                            badge: bookingHeroBadge
                         )
                     }
                     .listRowInsets(EdgeInsets())
@@ -45,13 +58,17 @@ struct BookingView: View {
                     creditsSection
                     packsSection
                     classDiscoverySection
-                    classesSection
+                    classesSection(
+                        visibleSessions: visibleSessions,
+                        activeBookings: activeBookings
+                    )
                     personalTrainingSection
                     XertScrollEndSpacer()
                 }
                 .tint(.xertSteel)
                 .xertListBackground()
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
                 .navigationTitle("Book")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .tabBar)
@@ -131,9 +148,9 @@ struct BookingView: View {
             .listRowBackground(Color.xertInk)
             .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
         }
-        if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .credits, .bookings]) {
+        if !store.unavailableDataSources.isDisjoint(with: [.products, .sessions, .platformSettings, .credits, .bookings]) {
             Section {
-                DataAvailabilityNotice(sources: [.products, .sessions, .credits, .bookings])
+                DataAvailabilityNotice(sources: [.products, .sessions, .platformSettings, .credits, .bookings])
             }
             .listRowBackground(Color.xertInk)
             .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
@@ -147,9 +164,25 @@ struct BookingView: View {
                     Text("Available credits")
                         .foregroundStyle(Color.xertOffWhite)
                     Spacer()
-                    Text("\(store.creditTotal)")
+                    Text(bookingCreditValue)
                         .foregroundStyle(.xertSteel)
                         .fontWeight(.bold)
+                }
+                if let status = bookingCreditStatus {
+                    HStack(spacing: 8) {
+                        if bookingCreditIsInitiallyLoading {
+                            ProgressView()
+                                .tint(.xertSteel)
+                        } else {
+                            Image(systemName: store.unavailableDataSources.contains(.credits)
+                                ? "wifi.exclamationmark"
+                                : "clock.arrow.circlepath")
+                        }
+                        Text(status)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(bookingCreditStatusColor)
+                    .accessibilityElement(children: .combine)
                 }
                 if store.isReconcilingCheckout {
                     HStack(spacing: 10) {
@@ -190,9 +223,80 @@ struct BookingView: View {
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
     }
 
+    private var hasKnownCreditBalance: Bool {
+        store.creditBalanceLoaded
+    }
+
+    private var bookingCreditIsInitiallyLoading: Bool {
+        !hasKnownCreditBalance
+            && !store.unavailableDataSources.contains(.credits)
+            && (!store.hasBootstrapped || store.isLoading)
+    }
+
+    private var bookingCreditValue: String {
+        hasKnownCreditBalance ? "\(store.creditTotal)" : "—"
+    }
+
+    private var bookingCreditStatus: String? {
+        if store.unavailableDataSources.contains(.credits) {
+            return hasKnownCreditBalance ? "Last known balance — pull to refresh" : "Balance unavailable — pull to refresh"
+        }
+        if bookingCreditIsInitiallyLoading {
+            return "Loading your credit balance…"
+        }
+        if store.isUsingStaleMemberData {
+            return "Last synced balance"
+        }
+        return nil
+    }
+
+    private var bookingCreditStatusColor: Color {
+        if store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData {
+            return .orange
+        }
+        return Color.xertPale
+    }
+
+    private var bookingHeroBadge: String {
+        guard store.isSignedIn else { return "Your first coached session starts here" }
+        guard hasKnownCreditBalance else {
+            return store.unavailableDataSources.contains(.credits)
+                ? "Credit balance unavailable"
+                : "Checking credit balance"
+        }
+        let balance = "\(store.creditTotal) credit\(store.creditTotal == 1 ? "" : "s") available"
+        return store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData
+            ? "\(balance) · last synced"
+            : balance
+    }
+
     private var packsSection: some View {
         Section {
-            if store.paymentAvailabilityLoaded && !store.sessionPackPaymentsEnabled {
+            if !store.paymentAvailabilityLoaded {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .tint(.xertSteel)
+                    Text("Checking secure checkout availability…")
+                        .foregroundStyle(Color.xertPale)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Checking secure checkout availability")
+            } else if store.unavailableDataSources.contains(.platformSettings) {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Checkout status is unavailable")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Pull to refresh before buying a session pack.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertMuted)
+                    }
+                } icon: {
+                    Image(systemName: "wifi.exclamationmark")
+                        .foregroundStyle(Color.orange)
+                }
+                .accessibilityElement(children: .combine)
+            } else if !store.sessionPackPaymentsEnabled {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Pack purchases are paused")
@@ -208,46 +312,68 @@ struct BookingView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            ForEach(store.products) { product in
-                Button {
-                    guard store.isSignedIn else {
-                        onNavigate(.account)
-                        return
-                    }
-                    guard checkoutProductID == nil, !checkoutBrowser.isPresenting else { return }
-                    checkoutProductID = product.id
-                    let checkoutAttemptID = checkoutAttemptIDs[product.id] ?? UUID()
-                    checkoutAttemptIDs[product.id] = checkoutAttemptID
-                    Task {
-                        if let url = await store.checkoutURL(for: product, attemptID: checkoutAttemptID) {
-                            checkoutAttemptIDs[product.id] = nil
-                            checkoutBrowser.start(url: url) { result in
-                                checkoutProductID = nil
-                                switch result {
-                                case .success(let callbackURL):
-                                    NotificationCenter.default.post(name: .xertCheckoutCallback, object: callbackURL)
-                                case .failure(.cancelled):
-                                    Task { await store.reconcilePendingCheckout() }
-                                case .failure(let error):
-                                    checkoutErrorMessage = error.localizedDescription
-                                    Task { await store.reconcilePendingCheckout() }
-                                }
-                            }
-                        } else {
-                            checkoutProductID = nil
-                        }
-                    }
-                } label: {
-                    ZStack(alignment: .trailing) {
-                        productSummary(product)
-                        if checkoutProductID == product.id {
-                            ProgressView()
-                                .tint(Color.xertSteel)
-                                .accessibilityLabel("Opening secure checkout")
-                        }
-                    }
+
+            if store.products.isEmpty {
+                if store.isLoading || !store.hasBootstrapped {
+                    bookingLoadingRow("Loading session packs…")
+                } else if store.unavailableDataSources.contains(.products) {
+                    bookingUnavailableRow("Session packs")
+                } else {
+                    Text("No session packs are available yet.")
+                        .foregroundStyle(Color.xertMuted)
                 }
-                .disabled(!store.sessionPackPaymentsEnabled || checkoutProductID != nil || checkoutBrowser.isPresenting)
+            } else {
+                ForEach(store.products) { product in
+                    Button {
+                        guard store.isSignedIn else {
+                            onNavigate(.account)
+                            return
+                        }
+                        guard checkoutProductID == nil, !checkoutBrowser.isPresenting else { return }
+                        checkoutProductID = product.id
+                        let checkoutAttemptID = checkoutAttemptIDs[product.id] ?? UUID()
+                        checkoutAttemptIDs[product.id] = checkoutAttemptID
+                        Task {
+                            if let url = await store.checkoutURL(
+                                for: product,
+                                attemptID: checkoutAttemptID,
+                                activationSessionID: firstClassActivation?.sessionID
+                            ) {
+                                onCheckoutStarted()
+                                checkoutAttemptIDs[product.id] = nil
+                                checkoutBrowser.start(url: url) { result in
+                                    checkoutProductID = nil
+                                    switch result {
+                                    case .success(let callbackURL):
+                                        NotificationCenter.default.post(name: .xertCheckoutCallback, object: callbackURL)
+                                    case .failure(.cancelled):
+                                        Task { await store.reconcilePendingCheckout() }
+                                    case .failure(let error):
+                                        checkoutErrorMessage = error.localizedDescription
+                                        Task { await store.reconcilePendingCheckout() }
+                                    }
+                                }
+                            } else {
+                                checkoutProductID = nil
+                            }
+                        }
+                    } label: {
+                        ZStack(alignment: .trailing) {
+                            productSummary(product)
+                                .padding(.trailing, checkoutProductID == product.id ? 34 : 0)
+                            if checkoutProductID == product.id {
+                                ProgressView()
+                                    .tint(Color.xertSteel)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .disabled(!store.sessionPackPaymentsEnabled || checkoutProductID != nil || checkoutBrowser.isPresenting)
+                    .accessibilityLabel("\(product.name), \(product.sessionsCount) sessions, \(product.displayPrice)")
+                    .accessibilityValue(checkoutProductID == product.id ? "Opening secure checkout" : "")
+                    .accessibilityHint(store.isSignedIn ? "Opens secure checkout" : "Opens member sign in")
+                }
             }
         } header: {
             Text(store.sessionPackPaymentsEnabled ? "Buy Session Packs" : "Session Packs").xertEyebrow()
@@ -257,12 +383,40 @@ struct BookingView: View {
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
     }
 
-    private var classesSection: some View {
+    private func classesSection(
+        visibleSessions: [ClassSession],
+        activeBookings: [UUID: BookingItem]
+    ) -> some View {
         Section {
+            if store.bookingAvailabilityLoaded,
+               !store.memberBookingsEnabled,
+               !store.unavailableDataSources.contains(.platformSettings) {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Online bookings are paused")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Browse the timetable and register interest. XERT will follow up about your place.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertMuted)
+                    }
+                } icon: {
+                    Image(systemName: "person.2.badge.plus")
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             if store.sessions.isEmpty {
-                Text("No published classes yet.")
-                    .foregroundStyle(Color.xertMuted)
-                    .listRowBackground(Color.xertInk)
+                if store.isLoading || !store.hasBootstrapped {
+                    bookingLoadingRow("Loading upcoming classes…")
+                } else if store.unavailableDataSources.contains(.sessions) {
+                    bookingUnavailableRow("Upcoming classes")
+                } else {
+                    Text("No published classes yet.")
+                        .foregroundStyle(Color.xertMuted)
+                        .listRowBackground(Color.xertInk)
+                }
             } else if visibleSessions.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("No classes match those filters.")
@@ -273,11 +427,11 @@ struct BookingView: View {
                 .padding(.vertical, 4)
             } else {
                 ForEach(visibleSessions) { session in
-                    sessionCard(for: session)
+                    sessionCard(for: session, booking: activeBookings[session.id])
                 }
             }
         } header: {
-            Text("Upcoming Classes (\(visibleSessions.count))").xertEyebrow()
+            Text(classSectionTitle(count: visibleSessions.count)).xertEyebrow()
         }
     }
 
@@ -285,22 +439,12 @@ struct BookingView: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Text("When").font(.caption).foregroundStyle(Color.xertMuted)
-                Picker("When", selection: $classDateWindow) {
-                    ForEach(ClassSessionDateWindow.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
+                dateWindowPicker
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Training fit").font(.caption).foregroundStyle(Color.xertMuted)
-                Picker("Training fit", selection: $classFit) {
-                    ForEach(ClassSessionFit.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
+                trainingFitPicker
             }
 
             if hasActiveClassDiscovery {
@@ -314,6 +458,48 @@ struct BookingView: View {
         }
         .listRowBackground(Color.xertInk)
         .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private var dateWindowPicker: some View {
+        ViewThatFits(in: .horizontal) {
+            Picker("When", selection: $classDateWindow) {
+                ForEach(ClassSessionDateWindow.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
+
+            Picker("When", selection: $classDateWindow) {
+                ForEach(ClassSessionDateWindow.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint("Filters classes by date")
+    }
+
+    private var trainingFitPicker: some View {
+        ViewThatFits(in: .horizontal) {
+            Picker("Training fit", selection: $classFit) {
+                ForEach(ClassSessionFit.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
+
+            Picker("Training fit", selection: $classFit) {
+                ForEach(ClassSessionFit.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint("Filters classes by availability or beginner suitability")
     }
 
     private var personalTrainingSection: some View {
@@ -344,8 +530,7 @@ struct BookingView: View {
 
     // MARK: Session cards
 
-    private func sessionCard(for session: ClassSession) -> some View {
-        let booking = activeBookings[session.id]
+    private func sessionCard(for session: ClassSession, booking: BookingItem?) -> some View {
         let timeConflict = session.isFull ? nil : BookingItem.timeConflict(for: session, in: store.bookings)
         return VStack(alignment: .leading, spacing: 12) {
             sessionHeader(session)
@@ -358,6 +543,15 @@ struct BookingView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.red)
                     .accessibilityLabel("Time conflict with \(timeConflict.title)")
+            }
+
+            if firstClassActivation?.matches(session.id) == true,
+               firstClassActivation?.stage == .readyToBook,
+               booking == nil {
+                Label("Credits ready — book your place below", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.green)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             DisclosureGroup(isExpanded: expansionBinding(for: session.id)) {
@@ -511,14 +705,55 @@ struct BookingView: View {
 
     @ViewBuilder
     private func sessionAction(for session: ClassSession, booking: BookingItem?, timeConflict: BookingItem?) -> some View {
+        let isWorking = store.bookingSessionID == session.id
+        let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
         if let booking {
-            Label(
-                booking.stateLabel,
-                systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
-            )
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.xertSteel)
-        } else if session.booking_mode == "interest_only" {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    booking.stateLabel,
+                    systemImage: booking.status == "confirmed" ? "checkmark.circle" : "clock"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.xertSteel)
+
+                Button {
+                    guard let destination = URL(
+                        string: "xertfitness://account/bookings/\(booking.id.uuidString.lowercased())"
+                    ) else { return }
+                    openURL(destination)
+                } label: {
+                    Label("Manage booking", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.xertGhost)
+                .accessibilityHint("Opens this booking to add it to your calendar or cancel it")
+            }
+        } else if firstClassActivation?.matches(session.id) == true,
+                  firstClassActivation?.stage == .needsCredits {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("You need a session credit to book this class.", systemImage: "ticket")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    onChooseCreditsForClass(session.id)
+                } label: {
+                    Label("Choose a session pack", systemImage: "creditcard")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.xertPrimary)
+                .accessibilityHint("Keeps this class selected while you choose credits")
+            }
+        } else if !store.bookingAvailabilityLoaded {
+            Label("Checking booking availability…", systemImage: "arrow.clockwise")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertMuted)
+        } else if store.unavailableDataSources.contains(.platformSettings) {
+            Label("Booking status unavailable", systemImage: "wifi.exclamationmark")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.orange)
+        } else if !store.memberBookingsEnabled || session.booking_mode == "interest_only" {
             Button {
                 activeSheet = .classInterest(session)
             } label: {
@@ -528,15 +763,29 @@ struct BookingView: View {
         } else if session.isFull {
             Button {
                 if store.isSignedIn {
-                    Task { await store.joinWaitlist(session) }
+                    Task {
+                        let outcome = await store.joinWaitlist(session)
+                        if outcome == .completed {
+                            onBookingCompleted(session.id)
+                        }
+                    }
                 } else {
-                    onNavigate(.account)
+                    onRequireSignInForClass(session.id)
                 }
             } label: {
-                Label(store.isSignedIn ? "Join waitlist" : "Sign in to join waitlist", systemImage: "person.2.badge.plus")
+                bookingActionLabel(
+                    store.isSignedIn
+                        ? (isWorking ? "Joining waitlist…" : "Join waitlist")
+                        : "Sign in to join waitlist",
+                    systemImage: "person.2.badge.plus",
+                    isWorking: isWorking
+                )
             }
             .buttonStyle(.xertPrimary)
-            .disabled(store.bookingSessionID == session.id)
+            .disabled(hasBookingMutation)
+            .accessibilityValue(
+                isWorking ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
+            )
         } else if timeConflict != nil {
             Label("Time conflict", systemImage: "exclamationmark.circle")
                 .font(.subheadline.weight(.semibold))
@@ -544,20 +793,50 @@ struct BookingView: View {
         } else {
             Button {
                 if store.isSignedIn {
-                    Task { await store.book(session) }
+                    Task {
+                        let outcome = await store.book(session)
+                        if outcome == .needsCredits {
+                            onBookingNeedsCredits(session.id)
+                        } else if outcome == .completed {
+                            onBookingCompleted(session.id)
+                        }
+                    }
                 } else {
-                    onNavigate(.account)
+                    onRequireSignInForClass(session.id)
                 }
             } label: {
-                Label(
+                bookingActionLabel(
                     store.isSignedIn
-                        ? (session.booking_mode == "request_to_book" ? "Request spot" : "Book class")
+                        ? (isWorking
+                            ? (session.booking_mode == "request_to_book" ? "Requesting spot…" : "Booking class…")
+                            : (session.booking_mode == "request_to_book" ? "Request spot" : "Book class"))
                         : "Sign in to book",
-                    systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle"
+                    systemImage: session.booking_mode == "request_to_book" ? "clock.badge.checkmark" : "checkmark.circle",
+                    isWorking: isWorking
                 )
             }
             .buttonStyle(.xertPrimary)
-            .disabled(store.bookingSessionID == session.id)
+            .disabled(hasBookingMutation)
+            .accessibilityValue(
+                isWorking ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
+            )
+        }
+    }
+
+    private func bookingActionLabel(
+        _ title: String,
+        systemImage: String,
+        isWorking: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            Label(title, systemImage: systemImage)
+            Spacer(minLength: 8)
+            if isWorking {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(Color.xertNavy)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -578,19 +857,6 @@ struct BookingView: View {
             .accessibilityLabel(spots > 0 ? "\(spots) spots left" : "No spots left")
     }
 
-    private var activeBookings: [UUID: BookingItem] {
-        BookingItem.activeBySession(store.bookings)
-    }
-
-    private var visibleSessions: [ClassSession] {
-        ClassSessionDiscovery.sessions(
-            from: store.sessions,
-            search: classSearch,
-            dateWindow: classDateWindow,
-            fit: classFit
-        )
-    }
-
     private var hasActiveClassDiscovery: Bool {
         !classSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || classDateWindow != .all
@@ -601,6 +867,31 @@ struct BookingView: View {
         classSearch = ""
         classDateWindow = .all
         classFit = .all
+    }
+
+    private func classSectionTitle(count: Int) -> String {
+        if store.sessions.isEmpty,
+           !store.hasBootstrapped || store.isLoading || store.unavailableDataSources.contains(.sessions) {
+            return "Upcoming Classes"
+        }
+        return "Upcoming Classes (\(count))"
+    }
+
+    private func bookingLoadingRow(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(Color.xertSteel)
+            Text(title)
+                .foregroundStyle(Color.xertMuted)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func bookingUnavailableRow(_ title: String) -> some View {
+        Label("\(title) unavailable. Pull to refresh.", systemImage: "wifi.exclamationmark")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var initialName: String { store.profile?.full_name ?? "" }
@@ -635,6 +926,11 @@ private struct PrivateSessionRequestView: View {
     @State private var consentsToContact = false
     @State private var validationMessage: String?
     @State private var submitted = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case fullName, email, phone, notes
+    }
 
     private let sessionTypes = ["30-minute PT session", "45-minute PT session", "60-minute PT session", "Intro assessment", "Private coaching block"]
     private let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Flexible"]
@@ -663,9 +959,15 @@ private struct PrivateSessionRequestView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                         .tint(.xertSteel)
+                        .disabled(store.isRequestingPrivateSession)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
                 }
             }
         }
+        .interactiveDismissDisabled(store.isRequestingPrivateSession)
     }
 
     private var confirmationView: some View {
@@ -696,21 +998,29 @@ private struct PrivateSessionRequestView: View {
         }
         .tint(.xertSteel)
         .xertListBackground()
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var contactSection: some View {
         Section {
             TextField("Full name", text: $fullName)
                 .textContentType(.name)
+                .focused($focusedField, equals: .fullName)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .email }
                 .foregroundStyle(Color.xertOffWhite)
             TextField("Email", text: $email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
+                .focused($focusedField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .phone }
                 .foregroundStyle(Color.xertOffWhite)
             TextField("Mobile number", text: $phone)
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
+                .focused($focusedField, equals: .phone)
                 .foregroundStyle(Color.xertOffWhite)
         } header: {
             Text("Contact").xertEyebrow()
@@ -755,6 +1065,7 @@ private struct PrivateSessionRequestView: View {
             .foregroundStyle(Color.xertOffWhite)
             TextField("Notes for your coach", text: $notes, axis: .vertical)
                 .lineLimit(2...5)
+                .focused($focusedField, equals: .notes)
                 .foregroundStyle(Color.xertOffWhite)
         } header: {
             Text("Training").xertEyebrow()
@@ -774,6 +1085,7 @@ private struct PrivateSessionRequestView: View {
                 Text(validationMessage)
                     .font(.footnote)
                     .foregroundStyle(.red)
+                    .accessibilityLabel("Error: \(validationMessage)")
                     .listRowBackground(Color.xertInk)
                     .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
             }
@@ -798,6 +1110,7 @@ private struct PrivateSessionRequestView: View {
     }
 
     private func submit() {
+        focusedField = nil
         validationMessage = nil
         guard consentsToContact else {
             validationMessage = "Consent to contact is required."
@@ -826,6 +1139,18 @@ private struct PrivateSessionRequestView: View {
             }
         } catch {
             validationMessage = error.localizedDescription
+            focusFirstInvalidContactField()
+        }
+    }
+
+    private func focusFirstInvalidContactField() {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            focusedField = .fullName
+        } else if !normalizedEmail.contains("@") || !normalizedEmail.contains(".") {
+            focusedField = .email
+        } else if phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            focusedField = .phone
         }
     }
 }
@@ -842,6 +1167,11 @@ private struct ClassInterestRequestView: View {
     @State private var consentsToContact = false
     @State private var validationMessage: String?
     @State private var submitted = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case fullName, email, phone, notes
+    }
 
     private let trainingLevels = ["New / beginner", "Some gym experience", "Regular trainer", "Advanced"]
 
@@ -867,9 +1197,15 @@ private struct ClassInterestRequestView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                         .tint(.xertSteel)
+                        .disabled(store.isRequestingClassInterest)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
                 }
             }
         }
+        .interactiveDismissDisabled(store.isRequestingClassInterest)
     }
 
     private var confirmationView: some View {
@@ -896,9 +1232,11 @@ private struct ClassInterestRequestView: View {
             contactSection
             trainingSection
             submitSection
+            XertScrollEndSpacer()
         }
         .tint(.xertSteel)
         .xertListBackground()
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var selectedClassSection: some View {
@@ -925,15 +1263,22 @@ private struct ClassInterestRequestView: View {
         Section {
             TextField("Full name", text: $fullName)
                 .textContentType(.name)
+                .focused($focusedField, equals: .fullName)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .email }
                 .foregroundStyle(Color.xertOffWhite)
             TextField("Email", text: $email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
+                .focused($focusedField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .phone }
                 .foregroundStyle(Color.xertOffWhite)
             TextField("Mobile number", text: $phone)
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
+                .focused($focusedField, equals: .phone)
                 .foregroundStyle(Color.xertOffWhite)
         } header: {
             Text("Contact").xertEyebrow()
@@ -951,6 +1296,7 @@ private struct ClassInterestRequestView: View {
             .foregroundStyle(Color.xertOffWhite)
             TextField("Notes for the coach", text: $notes, axis: .vertical)
                 .lineLimit(2...5)
+                .focused($focusedField, equals: .notes)
                 .foregroundStyle(Color.xertOffWhite)
         } header: {
             Text("Training").xertEyebrow()
@@ -970,6 +1316,7 @@ private struct ClassInterestRequestView: View {
                 Text(validationMessage)
                     .font(.footnote)
                     .foregroundStyle(.red)
+                    .accessibilityLabel("Error: \(validationMessage)")
                     .listRowBackground(Color.xertInk)
                     .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
             }
@@ -994,6 +1341,7 @@ private struct ClassInterestRequestView: View {
     }
 
     private func submit() {
+        focusedField = nil
         validationMessage = nil
         guard consentsToContact else {
             validationMessage = "Consent to contact is required."
@@ -1019,6 +1367,18 @@ private struct ClassInterestRequestView: View {
             }
         } catch {
             validationMessage = error.localizedDescription
+            focusFirstInvalidContactField()
+        }
+    }
+
+    private func focusFirstInvalidContactField() {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            focusedField = .fullName
+        } else if !normalizedEmail.contains("@") || !normalizedEmail.contains(".") {
+            focusedField = .email
+        } else if phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            focusedField = .phone
         }
     }
 }

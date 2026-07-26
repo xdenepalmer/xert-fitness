@@ -17,6 +17,92 @@ struct AdminMemberSummary: Identifiable, Codable, Hashable {
     var totalSpent: String { (Double(total_spent_cents) / 100).formatted(.currency(code: "AUD")) }
 }
 
+struct AdminMemberOnboardingSummary: Identifiable, Codable, Hashable {
+    var id: UUID { user_id }
+    let user_id: UUID
+    let profile_complete: Bool
+    let emergency_contact_complete: Bool
+    let documents_complete: Bool
+    let onboarding_complete: Bool
+    let accepted_required_count: Int
+    let required_document_count: Int
+
+    var completedSteps: Int {
+        [profile_complete, emergency_contact_complete, documents_complete].filter { $0 }.count
+    }
+
+    var statusLabel: String {
+        onboarding_complete ? "Ready" : "\(completedSteps) of 3 complete"
+    }
+}
+
+struct AdminMemberActivationOverview: Codable, Hashable {
+    let as_of: Date
+    let cohort_days: Int
+    let accounts_created: Int
+    let readiness_complete: Int
+    let training_access: Int
+    let first_booking: Int
+    let first_attended: Int
+    let returned: Int
+
+    var stages: [(label: String, count: Int)] {
+        [
+            ("Accounts", accounts_created),
+            ("Ready now", readiness_complete),
+            ("Access", training_access),
+            ("Booked", first_booking),
+            ("Attended", first_attended),
+            ("Returned", returned),
+        ]
+    }
+}
+
+struct AdminMemberActivationItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    let full_name: String?
+    let email: String?
+    let phone: String?
+    let role: String
+    let joined_at: Date
+    let credits_remaining: Int
+    let bookings_count: Int
+    let total_spent_cents: Int
+    let reason: String
+    let has_training_access: Bool
+    let profile_complete: Bool
+    let emergency_contact_complete: Bool
+    let documents_complete: Bool
+    let readiness_complete: Bool
+
+    var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "XERT member" }
+    var reasonLabel: String {
+        switch reason {
+        case "setup_incomplete": return "Finish member setup"
+        case "readiness_incomplete": return "Review current readiness"
+        case "no_training_access": return "Choose a pack or add credits"
+        case "no_first_booking": return "Book a first class"
+        case "no_first_attendance": return "Complete a first class"
+        default: return "Activation follow-up"
+        }
+    }
+}
+
+struct AdminMemberEmergencyContact: Codable, Hashable {
+    let name: String
+    let phone: String
+    let relationship: String
+    let contact_awareness_confirmed_at: Date
+    let updated_at: Date
+}
+
+struct AdminMemberEmergencyContactReveal: Codable, Hashable {
+    let audit_event_id: UUID
+    let revealed_at: Date
+    let user_id: UUID
+    let emergency_contact: AdminMemberEmergencyContact
+}
+
 struct AdminMemberNote: Identifiable, Codable, Hashable {
     let id: UUID
     let user_id: UUID
@@ -64,6 +150,77 @@ struct AdminRosterMember: Identifiable, Codable, Hashable {
 
     var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "XERT member" }
     var attendanceEligible: Bool { ["confirmed", "attended", "no_show"].contains(status) }
+}
+
+enum AdminAttendanceMark: String, Equatable {
+    case attended
+    case noShow = "no_show"
+}
+
+struct AdminAttendanceSummary: Equatable {
+    let total: Int
+    let attended: Int
+    let noShow: Int
+
+    var marked: Int { attended + noShow }
+    var unmarked: Int { max(0, total - marked) }
+    var isComplete: Bool { total > 0 && unmarked == 0 }
+}
+
+struct AdminAttendanceDraft: Equatable {
+    private(set) var eligibleIDs: [UUID] = []
+    private(set) var marks: [UUID: AdminAttendanceMark] = [:]
+
+    init(roster: [AdminRosterMember] = []) {
+        reconcile(roster: roster)
+    }
+
+    var summary: AdminAttendanceSummary {
+        AdminAttendanceSummary(
+            total: eligibleIDs.count,
+            attended: eligibleIDs.lazy.filter { marks[$0] == .attended }.count,
+            noShow: eligibleIDs.lazy.filter { marks[$0] == .noShow }.count
+        )
+    }
+
+    var attendedIDs: [UUID] { eligibleIDs.filter { marks[$0] == .attended } }
+    var noShowIDs: [UUID] { eligibleIDs.filter { marks[$0] == .noShow } }
+
+    func mark(for bookingID: UUID) -> AdminAttendanceMark? {
+        marks[bookingID]
+    }
+
+    mutating func set(_ mark: AdminAttendanceMark, for bookingID: UUID) {
+        guard eligibleIDs.contains(bookingID) else { return }
+        marks[bookingID] = mark
+    }
+
+    mutating func markAllPresent() {
+        marks = Dictionary(uniqueKeysWithValues: eligibleIDs.map { ($0, .attended) })
+    }
+
+    mutating func clear() {
+        marks = [:]
+    }
+
+    mutating func reconcile(roster: [AdminRosterMember]) {
+        var seen = Set<UUID>()
+        let eligible = roster.filter { $0.attendanceEligible && seen.insert($0.id).inserted }
+        let ids = eligible.map(\.id)
+        let allowed = Set(ids)
+        marks = marks.filter { allowed.contains($0.key) }
+        for member in eligible where marks[member.id] == nil {
+            switch member.status {
+            case AdminAttendanceMark.attended.rawValue:
+                marks[member.id] = .attended
+            case AdminAttendanceMark.noShow.rawValue:
+                marks[member.id] = .noShow
+            default:
+                break
+            }
+        }
+        eligibleIDs = ids
+    }
 }
 
 struct AdminClassSession: Identifiable, Codable, Hashable {
@@ -207,6 +364,39 @@ struct AdminWaitlistItem: Identifiable, Codable, Hashable {
     let next_available_credits: Int
 
     var nextMemberName: String { next_full_name?.nilIfBlank ?? next_email?.nilIfBlank ?? "Next member" }
+}
+
+struct AdminWaitlistPromotion: Codable, Hashable {
+    let request_id: UUID
+    let session_id: UUID
+    let booking_id: UUID
+    let user_id: UUID
+    let announcement_id: UUID
+    let promoted_at: Date
+}
+
+struct AdminWaitlistPromotionOutcome: Hashable {
+    let promotion: AdminWaitlistPromotion
+    let pushDelivered: Bool
+    let warning: String?
+}
+
+struct AdminBookingDecision: Codable, Hashable {
+    let request_id: UUID
+    let booking_id: UUID
+    let session_id: UUID
+    let user_id: UUID
+    let previous_status: String
+    let new_status: String
+    let announcement_id: UUID?
+    let notice_created: Bool
+    let decided_at: Date
+}
+
+struct AdminBookingDecisionOutcome: Hashable {
+    let decision: AdminBookingDecision
+    let pushDelivered: Bool
+    let warning: String?
 }
 
 struct AdminFollowUp: Identifiable, Codable, Hashable {
@@ -959,6 +1149,7 @@ struct AdminPushHealth: Codable, Hashable {
 enum AdminSchemaReadiness {
     static let required: Set<String> = [
         "admin_role_safety", "audited_credit_grants", "booking_waitlist_withdrawal",
+        "member_booking_switch_guard",
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
         "class_session_update_guard", "product_update_guard", "stripe_refund_reconciliation",
         "checkout_reconciliation", "stripe_payment_fulfillment", "guarded_payment_activation",
@@ -975,7 +1166,10 @@ enum AdminSchemaReadiness {
         "lead_pipeline_audit", "schedule_change_audit", "content_change_audit",
         "booking_lifecycle_audit", "class_cancellation_notifications", "admin_daily_operations",
         "schedule_optimistic_locking", "shared_admin_optimistic_locking",
-        "catalog_optimistic_locking", "targeted_member_notices"
+        "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
+        "waitlist_promotion_notifications",
+        "booking_decision_notifications",
+        "member_onboarding_foundation", "member_activation_cockpit"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {
@@ -1008,6 +1202,11 @@ struct AdminProduct: Identifiable, Codable, Hashable {
     let updated_at: String
 
     var displayPrice: String { (Double(price_cents) / 100).formatted(.currency(code: currency.uppercased())) }
+    var displayPricePerSession: String {
+        guard sessions_count > 0 else { return displayPrice }
+        return (Double(price_cents) / 100 / Double(sessions_count))
+            .formatted(.currency(code: currency.uppercased()))
+    }
     var hasStableStripePriceID: Bool {
         guard let stripePriceID = stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
         return stripePriceID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) != nil
@@ -1015,6 +1214,9 @@ struct AdminProduct: Identifiable, Codable, Hashable {
 }
 
 struct AdminProductDraft: Equatable {
+    static let maximumPriceCents = Int(Int32.max)
+
+    var slug: String
     var name: String
     var description: String
     var price: String
@@ -1027,6 +1229,7 @@ struct AdminProductDraft: Equatable {
     var sortOrder: Int
 
     init(product: AdminProduct) {
+        slug = product.slug
         name = product.name
         description = product.description ?? ""
         price = String(format: "%.2f", Double(product.price_cents) / 100)
@@ -1037,6 +1240,77 @@ struct AdminProductDraft: Equatable {
         featured = product.featured
         active = product.active
         sortOrder = product.sort_order
+    }
+
+    init(suggestedSortOrder: Int = 0) {
+        slug = ""
+        name = ""
+        description = ""
+        price = ""
+        currency = "AUD"
+        sessions = 1
+        validityDays = 28
+        stripePriceID = ""
+        featured = false
+        active = false
+        sortOrder = suggestedSortOrder
+    }
+
+    var normalizedPriceCents: Int? {
+        let value = price.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: #"^\d+(?:[\.,]\d{1,2})?$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        let components = value.split(whereSeparator: { $0 == "." || $0 == "," })
+        guard let dollars = Int(components[0]), dollars <= Self.maximumPriceCents / 100 else { return nil }
+        let fraction = components.count == 2 ? String(components[1]) : ""
+        let cents = Int(fraction.padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0
+        let total = dollars * 100 + cents
+        return total > 0 && total <= Self.maximumPriceCents ? total : nil
+    }
+
+    func validationMessage(existingProduct: AdminProduct?) -> String? {
+        let normalizedSlug = slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if existingProduct == nil,
+           (normalizedSlug.count > 80 || normalizedSlug.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) == nil) {
+            return "Use a permanent ID made from lowercase letters, numbers and single hyphens."
+        }
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedName.isEmpty { return "Add a name for this session pack." }
+        if normalizedName.count > 120 { return "Keep the pack name to 120 characters or fewer." }
+        if description.trimmingCharacters(in: .whitespacesAndNewlines).count > 2_000 {
+            return "Keep the description to 2,000 characters or fewer."
+        }
+        guard normalizedPriceCents != nil else {
+            return "Enter a positive price up to 21,474,836.47 with no more than two decimal places."
+        }
+        guard (1...1_000).contains(sessions) else { return "Sessions must be between 1 and 1,000." }
+        guard (1...3_650).contains(validityDays) else { return "Validity must be between 1 and 3,650 days." }
+        guard (0...10_000).contains(sortOrder) else { return "Display order must be between 0 and 10,000." }
+
+        let normalizedCurrency = currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalizedCurrency.range(of: #"^[a-z]{3}$"#, options: .regularExpression) != nil else {
+            return "Use a three-letter currency code such as AUD."
+        }
+        let normalizedStripeID = stripePriceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedStripeID.isEmpty,
+           normalizedStripeID.range(of: #"^price_[A-Za-z0-9]+$"#, options: .regularExpression) == nil {
+            return "Stripe Price ID must begin with price_ and contain only letters and numbers."
+        }
+        if active && normalizedStripeID.isEmpty {
+            return "Add a Stripe Price ID before making this pack active and purchasable."
+        }
+        if let existingProduct,
+           let currentStripeID = existingProduct.stripe_price_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !currentStripeID.isEmpty,
+           currentStripeID == normalizedStripeID,
+           (existingProduct.price_cents != normalizedPriceCents
+            || existingProduct.currency.lowercased() != normalizedCurrency
+            || existingProduct.sessions_count != sessions
+            || existingProduct.validity_days != validityDays) {
+            return "Clear or replace the Stripe Price ID before changing price, currency, sessions or validity."
+        }
+        return nil
     }
 }
 

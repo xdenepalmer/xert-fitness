@@ -25,6 +25,7 @@ const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
 const STRIPE_WEBHOOK_LEDGER_CAPABILITY = 'stripe_webhook_ledger';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
 export const REQUIRED_WEBHOOK_EVENTS = [
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
@@ -104,6 +105,206 @@ export function normalizePaymentActivationRequest(body) {
       announcement_banner_enabled: settings.announcement_banner_enabled,
     },
   };
+}
+
+export function normalizeProductActivationRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.action !== 'activate_product') {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+  const productId = String(body.product_id || '').trim();
+  const expectedUpdatedAt = String(body.expected_updated_at || '').trim();
+  const product = body.product;
+  if (
+    !UUID_PATTERN.test(productId)
+    || expectedUpdatedAt.length > 64
+    || !Number.isFinite(Date.parse(expectedUpdatedAt))
+    || !product
+    || typeof product !== 'object'
+    || Array.isArray(product)
+  ) {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+
+  const name = String(product.name || '').trim();
+  const description = product.description == null ? null : String(product.description).trim() || null;
+  const priceCents = Number(product.price_cents);
+  const sessionsCount = Number(product.sessions_count);
+  const validityDays = Number(product.validity_days);
+  const sortOrder = Number(product.sort_order);
+  const currency = String(product.currency || '').trim().toLowerCase();
+  const stripePriceId = String(product.stripe_price_id || '').trim();
+  if (
+    !name || name.length > 120
+    || (description?.length || 0) > 2_000
+    || !Number.isSafeInteger(priceCents) || priceCents < 1 || priceCents > POSTGRES_INTEGER_MAX
+    || !Number.isSafeInteger(sessionsCount) || sessionsCount < 1 || sessionsCount > 1_000
+    || !Number.isSafeInteger(validityDays) || validityDays < 1 || validityDays > 3_650
+    || !Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 10_000
+    || !/^[a-z]{3}$/.test(currency)
+    || !/^price_[A-Za-z0-9]+$/.test(stripePriceId)
+    || typeof product.featured !== 'boolean'
+    || product.active !== true
+  ) {
+    throw new Error('INVALID_PRODUCT_ACTIVATION');
+  }
+
+  return {
+    productId,
+    expectedUpdatedAt,
+    updates: {
+      name,
+      description,
+      price_cents: priceCents,
+      currency,
+      sessions_count: sessionsCount,
+      validity_days: validityDays,
+      stripe_price_id: stripePriceId,
+      featured: product.featured,
+      active: true,
+      sort_order: sortOrder,
+    },
+  };
+}
+
+export function normalizeProductPriceProvisionRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || body.action !== 'provision_product_price'
+    || body.confirmation !== 'CREATE STRIPE PRICE') {
+    throw new Error('INVALID_PRODUCT_PRICE_PROVISION');
+  }
+  const productId = String(body.product_id || '').trim();
+  const expectedUpdatedAt = String(body.expected_updated_at || '').trim();
+  if (!UUID_PATTERN.test(productId)
+    || expectedUpdatedAt.length > 64
+    || !Number.isFinite(Date.parse(expectedUpdatedAt))) {
+    throw new Error('INVALID_PRODUCT_PRICE_PROVISION');
+  }
+  return { productId, expectedUpdatedAt };
+}
+
+function stripeCatalogMetadata(product) {
+  return {
+    xert_product_id: product.id,
+    xert_catalog_slug: product.slug,
+    xert_sessions: String(product.sessions_count),
+    xert_validity_days: String(product.validity_days),
+  };
+}
+
+export async function provisionStripePriceForDraft({
+  admin, stripe, request, expectedLivemode, actorId,
+}) {
+  const { data: product, error } = await admin
+    .from('products')
+    .select('*')
+    .eq('id', request.productId)
+    .maybeSingle();
+  if (error) throw new Error('PRODUCT_PRICE_LOOKUP_FAILED');
+  if (!product) throw new Error('PRODUCT_NOT_FOUND');
+  if (product.updated_at !== request.expectedUpdatedAt) throw new Error('PRODUCT_STALE');
+  if (product.active || product.stripe_price_id) throw new Error('PRODUCT_PRICE_ALREADY_LINKED');
+  assertCheckoutProduct(product);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(product.slug || ''))
+    || !String(product.name || '').trim()) {
+    throw new Error('Product configuration is invalid.');
+  }
+
+  const metadata = stripeCatalogMetadata(product);
+  const productSearch = await stripe.products.search({
+    query: `metadata['xert_catalog_slug']:'${product.slug}'`,
+    limit: 10,
+  });
+  let stripeProduct = (productSearch.data || []).find(candidate => (
+    candidate.active === true
+    && candidate.livemode === expectedLivemode
+    && candidate.metadata?.xert_product_id === product.id
+    && candidate.metadata?.xert_catalog_slug === product.slug
+  ));
+  if (!stripeProduct) {
+    stripeProduct = await stripe.products.create({
+      name: String(product.name).trim(),
+      description: String(product.description || '').trim() || undefined,
+      metadata,
+    }, { idempotencyKey: `xert-owner-product-v1-${expectedLivemode ? 'live' : 'test'}-${product.id}` });
+  }
+
+  const prices = await stripe.prices.list({
+    product: stripeProduct.id,
+    active: true,
+    type: 'one_time',
+    limit: 100,
+  });
+  let stripePrice = (prices.data || []).find(candidate => {
+    try {
+      assertStripePriceMatchesProduct({ ...product, stripe_price_id: candidate.id }, candidate, expectedLivemode);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!stripePrice) {
+    stripePrice = await stripe.prices.create({
+      product: stripeProduct.id,
+      unit_amount: product.price_cents,
+      currency: String(product.currency).toLowerCase(),
+      metadata,
+    }, {
+      idempotencyKey: [
+        'xert-owner-price-v1', expectedLivemode ? 'live' : 'test', product.id,
+        String(product.currency).toLowerCase(), product.price_cents,
+        product.sessions_count, product.validity_days,
+      ].join('-'),
+    });
+  }
+  assertStripePriceMatchesProduct({ ...product, stripe_price_id: stripePrice.id }, stripePrice, expectedLivemode);
+
+  const { data: linked, error: linkError } = await admin.rpc('admin_link_verified_product_price', {
+    p_product_id: product.id,
+    p_stripe_price_id: stripePrice.id,
+    p_expected_updated_at: request.expectedUpdatedAt,
+    p_actor_id: actorId,
+  });
+  if (linkError && (['42883', 'PGRST202'].includes(linkError.code)
+    || /admin_link_verified_product_price.*(?:not found|schema cache|does not exist)/i.test(linkError.message || ''))) {
+    throw new Error('PRODUCT_PRICE_PROVISIONING_NOT_INSTALLED');
+  }
+  if (linkError && /PRODUCT_STALE/i.test(linkError.message || '')) throw new Error('PRODUCT_STALE');
+  if (linkError && /PRODUCT_PRICE_ALREADY_LINKED/i.test(linkError.message || '')) throw new Error('PRODUCT_PRICE_ALREADY_LINKED');
+  if (linkError) throw new Error('PRODUCT_PRICE_LINK_FAILED');
+  const saved = Array.isArray(linked) ? linked[0] : linked;
+  if (!saved || saved.active || saved.stripe_price_id !== stripePrice.id) {
+    throw new Error('PRODUCT_PRICE_LINK_FAILED');
+  }
+  return saved;
+}
+
+export async function activateVerifiedProduct({ admin, stripe, activation, expectedLivemode, actorId }) {
+  const { data: current, error: currentError } = await admin
+    .from('products')
+    .select('*')
+    .eq('id', activation.productId)
+    .maybeSingle();
+  if (currentError) throw new Error('PRODUCT_ACTIVATION_LOOKUP_FAILED');
+  if (!current) throw new Error('PRODUCT_NOT_FOUND');
+  if (current.updated_at !== activation.expectedUpdatedAt) throw new Error('PRODUCT_STALE');
+
+  const candidate = { ...current, ...activation.updates };
+  const stripePrice = await stripe.prices.retrieve(candidate.stripe_price_id);
+  assertCheckoutProduct(candidate);
+  assertStripePriceMatchesProduct(candidate, stripePrice, expectedLivemode);
+
+  const { data, error: saveError } = await admin.rpc('admin_apply_verified_product', {
+    p_product_id: activation.productId,
+    p_product: activation.updates,
+    p_expected_updated_at: activation.expectedUpdatedAt,
+    p_actor_id: actorId,
+  });
+  if (saveError && /PRODUCT_STALE/i.test(saveError.message || '')) throw new Error('PRODUCT_STALE');
+  if (saveError && /PRODUCT_NOT_FOUND/i.test(saveError.message || '')) throw new Error('PRODUCT_NOT_FOUND');
+  if (saveError) throw new Error('PRODUCT_ACTIVATION_SAVE_FAILED');
+  const saved = Array.isArray(data) ? data[0] : data;
+  if (!saved) throw new Error('PRODUCT_STALE');
+  return saved;
 }
 
 export function normalizeStripeReviewResolutionRequest(body) {
@@ -548,6 +749,8 @@ export default async function handler(request, response) {
   if (profile?.role !== 'admin') return json({ error: 'Admin access required.' }, 403);
 
   let activation;
+  let productActivation;
+  let productPriceProvision;
   let reviewResolution;
   let webhookRetry;
   if (request.method === 'POST') {
@@ -557,6 +760,10 @@ export default async function handler(request, response) {
         reviewResolution = normalizeStripeReviewResolutionRequest(body);
       } else if (body?.action === 'retry_stripe_event') {
         webhookRetry = normalizeStripeRetryRequest(body);
+      } else if (body?.action === 'activate_product') {
+        productActivation = normalizeProductActivationRequest(body);
+      } else if (body?.action === 'provision_product_price') {
+        productPriceProvision = normalizeProductPriceProvisionRequest(body);
       } else {
         activation = normalizePaymentActivationRequest(body);
       }
@@ -566,6 +773,12 @@ export default async function handler(request, response) {
       }
       if (error.message === 'INVALID_STRIPE_RETRY') {
         return json({ error: 'Stripe event retry request is invalid.' }, 400);
+      }
+      if (error.message === 'INVALID_PRODUCT_ACTIVATION') {
+        return json({ error: 'Session pack activation details are invalid.' }, 400);
+      }
+      if (error.message === 'INVALID_PRODUCT_PRICE_PROVISION') {
+        return json({ error: 'Type CREATE STRIPE PRICE to confirm this exact draft price.' }, 400);
       }
       if (error.message === 'PAYMENT_ACTIVATION_NOT_CONFIRMED') {
         return json({ error: 'Type ENABLE PAYMENTS to confirm activation.' }, 400);
@@ -621,6 +834,93 @@ export default async function handler(request, response) {
         return json({ error: 'This Stripe incident changed. Refresh Operations Health before retrying.' }, 409);
       }
       return json({ error: 'Stripe could not safely retry this event. The incident remains unresolved.' }, 500);
+    }
+  }
+
+  if (productActivation) {
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') {
+      return json({ error: 'Stripe verification is unavailable. The pack remains private.' }, 503);
+    }
+    try {
+      const saved = await activateVerifiedProduct({
+        admin,
+        stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+        activation: productActivation,
+        expectedLivemode: stripeMode === 'live',
+        actorId: user.id,
+      });
+      console.info('Session pack activated after Stripe verification.', {
+        requestId: trace.requestId,
+        productId: saved.id,
+        actorId: user.id,
+      });
+      return json(saved);
+    } catch (error) {
+      if (error.message === 'PRODUCT_NOT_FOUND') {
+        return json({ error: 'This session pack no longer exists. Refresh the catalogue.' }, 404);
+      }
+      if (error.message === 'PRODUCT_STALE') {
+        return json({ error: 'This session pack changed since you opened it. Refresh and review it before activating.' }, 409);
+      }
+      if (
+        error.message === 'Stripe price does not match the product configuration.'
+        || error.message === 'Product configuration is invalid.'
+        || error?.type === 'StripeInvalidRequestError'
+        || error?.code === 'resource_missing'
+      ) {
+        return json({
+          error: 'Stripe could not verify this Price against the pack amount, currency, sessions, validity, identity and mode. The pack remains private.',
+        }, 409);
+      }
+      console.error('Session pack activation failed.', {
+        requestId: trace.requestId,
+        productId: productActivation.productId,
+        code: String(error?.code || error?.message || 'PRODUCT_ACTIVATION_FAILED'),
+      });
+      return json({ error: 'The pack could not be activated safely. It remains private.' }, 500);
+    }
+  }
+
+  if (productPriceProvision) {
+    const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+    if (stripeMode === 'unknown') {
+      return json({ error: 'Stripe price creation is unavailable. The pack remains private.' }, 503);
+    }
+    try {
+      const saved = await provisionStripePriceForDraft({
+        admin,
+        stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+        request: productPriceProvision,
+        expectedLivemode: stripeMode === 'live',
+        actorId: user.id,
+      });
+      console.info('Stripe Price created and linked to private pack.', {
+        requestId: trace.requestId,
+        productId: saved.id,
+        actorId: user.id,
+      });
+      return json(saved);
+    } catch (error) {
+      if (error.message === 'PRODUCT_NOT_FOUND') return json({ error: 'This session pack no longer exists.' }, 404);
+      if (error.message === 'PRODUCT_STALE') {
+        return json({ error: 'This pack changed while Stripe was being prepared. Refresh pricing; the pack remains private.' }, 409);
+      }
+      if (error.message === 'PRODUCT_PRICE_ALREADY_LINKED') {
+        return json({ error: 'This pack is already active or linked. Refresh pricing before continuing.' }, 409);
+      }
+      if (error.message === 'PRODUCT_PRICE_LINK_FAILED') {
+        return json({ error: 'Stripe prepared the exact Price, but XERT could not link it. The pack remains private; refresh and retry safely.' }, 503);
+      }
+      if (error.message === 'PRODUCT_PRICE_PROVISIONING_NOT_INSTALLED') {
+        return json({ error: 'Install the owner Stripe Price provisioning migration. The pack remains private.' }, 503);
+      }
+      console.error('Stripe Price provisioning failed.', {
+        requestId: trace.requestId,
+        productId: productPriceProvision.productId,
+        code: String(error?.code || error?.message || 'PRODUCT_PRICE_PROVISION_FAILED'),
+      });
+      return json({ error: 'Stripe could not prepare this draft price. The pack remains private.' }, 500);
     }
   }
 

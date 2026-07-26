@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { orderOperationsHealthChecks } from '@/lib/adminHealth';
+import { resolveLaunchGate } from '@/lib/launchGate';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const STATUS_STYLE = {
@@ -44,6 +45,7 @@ const ROUTES = {
   admins: 'gym-members',
   'commerce-config': 'products',
   'push-notifications': 'announcements',
+  'platform-controls': 'settings',
 };
 
 export default function OperationsHealth({ onNavigate }) {
@@ -120,6 +122,7 @@ export default function OperationsHealth({ onNavigate }) {
   }, [checks]);
 
   const orderedChecks = useMemo(() => orderOperationsHealthChecks(checks), [checks]);
+  const launchGate = useMemo(() => resolveLaunchGate(checks), [checks]);
 
   const copyIncidentId = useCallback(async eventId => {
     try {
@@ -224,6 +227,62 @@ export default function OperationsHealth({ onNavigate }) {
           </div>
         ))}
       </div>
+
+      {!loading && !loadError && (
+        <section
+          aria-labelledby="launch-gate-title"
+          className="p-5"
+          style={{
+            backgroundColor: launchGate.state.endsWith('ready') ? 'rgba(126,201,143,0.1)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.08)' : 'rgba(224,179,106,0.1)',
+            border: `1px solid ${launchGate.state.endsWith('ready') ? 'rgba(126,201,143,0.3)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.3)' : 'rgba(224,179,106,0.3)'}`,
+          }}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-pale/45">Member purchase + booking path</p>
+              <h3 id="launch-gate-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">{launchGate.title}</h3>
+              <p className="mt-2 max-w-2xl font-body text-sm leading-relaxed text-xert-pale/65">{launchGate.detail}</p>
+            </div>
+            <div className="shrink-0 text-left sm:text-right">
+              <p className="font-display text-3xl tabular-nums text-xert-offwhite">{launchGate.completed}/{launchGate.total}</p>
+              <p className="font-body text-[10px] uppercase tracking-wider text-xert-pale/40">required gates</p>
+            </div>
+          </div>
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-xert-navy/70">
+            <div
+              className="h-full rounded-full transition-[width]"
+              style={{
+                width: `${Math.round((launchGate.completed / launchGate.total) * 100)}%`,
+                backgroundColor: launchGate.state.endsWith('ready') ? '#7ec98f' : launchGate.state === 'blocked' ? '#f87171' : '#e0b36a',
+              }}
+            />
+          </div>
+          {launchGate.next && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-xert-steel/15 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-body text-[10px] uppercase tracking-wider text-xert-pale/40">Next required action</p>
+                <p className="mt-1 font-body text-sm text-xert-pale">{launchGate.next.label}: {launchGate.next.action || launchGate.next.detail}</p>
+              </div>
+              {ROUTES[launchGate.next.key] && (
+                <button type="button" onClick={() => onNavigate?.(ROUTES[launchGate.next.key])}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border border-xert-steel/25 px-4 font-body text-xs uppercase tracking-wider text-xert-steel">
+                  Fix next gate <ArrowRight className="size-4" />
+                </button>
+              )}
+            </div>
+          )}
+          {launchGate.warnings.length > 0 && (
+            <p className="mt-3 font-body text-xs text-xert-pale/50">
+              Optional warnings: {launchGate.warnings.map(check => check.label).join(', ')}. These do not falsely block the core member path.
+            </p>
+          )}
+          {lastUpdated && (
+            <p className="mt-3 font-body text-[10px] uppercase tracking-wider text-xert-pale/35">
+              Verified {lastUpdated.toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          )}
+        </section>
+      )}
 
       {loadError && <AdminLoadError message={loadError} onRetry={load} />}
 

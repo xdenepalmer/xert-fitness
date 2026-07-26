@@ -6,11 +6,14 @@ import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
 test('reports the exact missing production database capabilities', () => {
   assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
     installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'stripe_payment_fulfillment', 'guarded_payment_activation', 'payment_activation_drift_guard', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'targeted_member_notices'],
+    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_booking_switch_guard', 'member_onboarding_foundation', 'member_activation_cockpit', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'stripe_payment_fulfillment', 'guarded_payment_activation', 'payment_activation_drift_guard', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'product_commercial_terms_guard', 'targeted_member_notices', 'waitlist_promotion_notifications', 'booking_decision_notifications', 'owner_stripe_price_provisioning'],
     ready: false,
     actions: [
       'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
       'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
+      'Apply supabase/migrations/20260721000000_member_booking_switch_guard.sql in Supabase.',
+      'Apply supabase/migrations/20260721010000_member_onboarding_foundation.sql in Supabase.',
+      'Apply supabase/migrations/20260721020000_member_activation_cockpit.sql in Supabase.',
       'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
       'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
       'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
@@ -48,7 +51,11 @@ test('reports the exact missing production database capabilities', () => {
       'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
       'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
       'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
+      'Apply supabase/migrations/20260720000000_product_commercial_terms_guard.sql in Supabase.',
       'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
+      'Apply supabase/migrations/20260721030000_waitlist_promotion_notifications.sql in Supabase.',
+      'Apply supabase/migrations/20260722000000_booking_decision_notifications.sql in Supabase.',
+      'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
     ],
   });
   assert.equal(summarizeSchemaCapabilities([
@@ -78,6 +85,9 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'member_push_notifications' },
     { capability: 'credit_expiry_follow_up' },
     { capability: 'booking_waitlist_withdrawal' },
+    { capability: 'member_booking_switch_guard' },
+    { capability: 'member_onboarding_foundation' },
+    { capability: 'member_activation_cockpit' },
     { capability: 'member_waitlist_join' },
     { capability: 'waitlist_fifo_promotion' },
     { capability: 'member_pt_request_tracking' },
@@ -91,7 +101,11 @@ test('reports the exact missing production database capabilities', () => {
     { capability: 'schedule_optimistic_locking' },
     { capability: 'shared_admin_optimistic_locking' },
     { capability: 'catalog_optimistic_locking' },
+    { capability: 'product_commercial_terms_guard' },
     { capability: 'targeted_member_notices' },
+    { capability: 'waitlist_promotion_notifications' },
+    { capability: 'booking_decision_notifications' },
+    { capability: 'owner_stripe_price_provisioning' },
     { capability: 'admin_role_safety' },
   ]).ready, true);
 });
@@ -102,6 +116,12 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260714005500_credit_grant_audit.sql', 'audited_credit_grants'],
     ['../src/supabase/booking_schema.sql', 'booking_waitlist_withdrawal'],
     ['../src/supabase/booking_modes_upgrade.sql', 'booking_waitlist_withdrawal'],
+    ['../src/supabase/member_booking_switch_guard_upgrade.sql', 'member_booking_switch_guard'],
+    ['../supabase/migrations/20260721000000_member_booking_switch_guard.sql', 'member_booking_switch_guard'],
+    ['../src/supabase/member_onboarding_upgrade.sql', 'member_onboarding_foundation'],
+    ['../supabase/migrations/20260721010000_member_onboarding_foundation.sql', 'member_onboarding_foundation'],
+    ['../src/supabase/member_activation_cockpit_upgrade.sql', 'member_activation_cockpit'],
+    ['../supabase/migrations/20260721020000_member_activation_cockpit.sql', 'member_activation_cockpit'],
     ['../src/supabase/booking_schema.sql', 'member_waitlist_join'],
     ['../src/supabase/member_waitlist_upgrade.sql', 'member_waitlist_join'],
     ['../src/supabase/admin_cms_schema.sql', 'waitlist_fifo_promotion'],
@@ -184,8 +204,15 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql', 'shared_admin_optimistic_locking'],
     ['../src/supabase/catalog_optimistic_locking_upgrade.sql', 'catalog_optimistic_locking'],
     ['../supabase/migrations/20260714020000_catalog_optimistic_locking.sql', 'catalog_optimistic_locking'],
+    ['../src/supabase/product_commercial_terms_guard_upgrade.sql', 'product_commercial_terms_guard'],
+    ['../supabase/migrations/20260720000000_product_commercial_terms_guard.sql', 'product_commercial_terms_guard'],
     ['../src/supabase/targeted_member_notices_upgrade.sql', 'targeted_member_notices'],
     ['../supabase/migrations/20260714021000_targeted_member_notices.sql', 'targeted_member_notices'],
+    ['../src/supabase/waitlist_promotion_notifications_upgrade.sql', 'waitlist_promotion_notifications'],
+    ['../supabase/migrations/20260721030000_waitlist_promotion_notifications.sql', 'waitlist_promotion_notifications'],
+    ['../src/supabase/booking_decision_notifications_upgrade.sql', 'booking_decision_notifications'],
+    ['../supabase/migrations/20260722000000_booking_decision_notifications.sql', 'booking_decision_notifications'],
+    ['../supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql', 'owner_stripe_price_provisioning'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -203,6 +230,9 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /admin_role_safety/);
   assert.match(yaml, /audited_credit_grants/);
   assert.match(yaml, /booking_waitlist_withdrawal/);
+  assert.match(yaml, /member_booking_switch_guard/);
+  assert.match(yaml, /member_onboarding_foundation/);
+  assert.match(yaml, /member_activation_cockpit/);
   assert.match(yaml, /member_waitlist_join/);
   assert.match(yaml, /waitlist_fifo_promotion/);
   assert.match(yaml, /attendance_roll_call/);
@@ -240,7 +270,11 @@ test('Codemagic TestFlight preflight enforces every production capability', () =
   assert.match(yaml, /schedule_optimistic_locking/);
   assert.match(yaml, /shared_admin_optimistic_locking/);
   assert.match(yaml, /catalog_optimistic_locking/);
+  assert.match(yaml, /product_commercial_terms_guard/);
   assert.match(yaml, /targeted_member_notices/);
+  assert.match(yaml, /waitlist_promotion_notifications/);
+  assert.match(yaml, /booking_decision_notifications/);
+  assert.match(yaml, /owner_stripe_price_provisioning/);
   assert.match(yaml, /\/api\/checkout/);
   assert.match(yaml, /expected HTTP 401/);
   assert.match(yaml, /STRIPE_SECRET_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY/);
@@ -262,6 +296,9 @@ test('read-only production check reports every release capability and migration'
     'admin_role_safety',
     'audited_credit_grants',
     'booking_waitlist_withdrawal',
+    'member_booking_switch_guard',
+    'member_onboarding_foundation',
+    'member_activation_cockpit',
     'member_waitlist_join',
     'waitlist_fifo_promotion',
     'attendance_roll_call',
@@ -299,7 +336,11 @@ test('read-only production check reports every release capability and migration'
     'schedule_optimistic_locking',
     'shared_admin_optimistic_locking',
     'catalog_optimistic_locking',
+    'product_commercial_terms_guard',
     'targeted_member_notices',
+    'waitlist_promotion_notifications',
+    'booking_decision_notifications',
+    'owner_stripe_price_provisioning',
   ];
 
   for (const capability of capabilities) {

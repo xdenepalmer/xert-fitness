@@ -2,6 +2,46 @@ import Foundation
 import UIKit
 import UserNotifications
 
+enum XertNotificationCategories {
+    static let classReminder = "xert.class-reminder"
+    static let memberNotice = "xert.member-notice"
+    static let viewBookingAction = "xert.class-reminder.view-booking"
+    static let browseClassesAction = "xert.class-reminder.browse-classes"
+    static let viewNoticeAction = "xert.member-notice.view"
+
+    static func register(with center: UNUserNotificationCenter = .current()) {
+        let viewBooking = UNNotificationAction(
+            identifier: viewBookingAction,
+            title: "View Booking",
+            options: [.foreground]
+        )
+        let browseClasses = UNNotificationAction(
+            identifier: browseClassesAction,
+            title: "Browse Classes",
+            options: [.foreground]
+        )
+        let viewNotice = UNNotificationAction(
+            identifier: viewNoticeAction,
+            title: "View Notice",
+            options: [.foreground]
+        )
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: classReminder,
+                actions: [viewBooking, browseClasses],
+                intentIdentifiers: [],
+                options: []
+            ),
+            UNNotificationCategory(
+                identifier: memberNotice,
+                actions: [viewNotice],
+                intentIdentifiers: [],
+                options: []
+            ),
+        ])
+    }
+}
+
 enum ClassReminderNotification {
     static let identifierPrefix = "xert.booking."
     static let bookingIDKey = "booking_id"
@@ -21,9 +61,23 @@ enum ClassReminderNotification {
 
 enum ClassReminderNavigation {
     static let pendingBookingIDKey = "xert.navigation.pendingBookingID"
+    static let pendingBrowseClassesKey = "xert.navigation.pendingBrowseClasses"
 
     static func markPending(bookingID: UUID, defaults: UserDefaults = .standard) {
         defaults.set(bookingID.uuidString, forKey: pendingBookingIDKey)
+        defaults.removeObject(forKey: pendingBrowseClassesKey)
+    }
+
+    static func markPendingBrowseClasses(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: pendingBrowseClassesKey)
+        defaults.removeObject(forKey: pendingBookingIDKey)
+    }
+
+    static func consumePendingBrowseClasses(defaults: UserDefaults = .standard) -> Bool {
+        let isPending = defaults.bool(forKey: pendingBrowseClassesKey)
+        defaults.removeObject(forKey: pendingBrowseClassesKey)
+        if isPending { defaults.removeObject(forKey: pendingBookingIDKey) }
+        return isPending
     }
 
     static func consumePendingBookingID(defaults: UserDefaults = .standard) -> UUID? {
@@ -69,6 +123,7 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        XertNotificationCategories.register()
         return true
     }
 
@@ -109,7 +164,9 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationCenter.default.post(name: .xertRefreshAnnouncements, object: nil)
             }
         }
-        completionHandler([.banner, .sound])
+        // Keep foreground notices in Notification Centre as well as showing a
+        // banner so a member can return after the transient banner disappears.
+        completionHandler([.banner, .list, .sound])
     }
 
     func userNotificationCenter(
@@ -132,7 +189,11 @@ final class XertAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             identifier: request.identifier,
             userInfo: request.content.userInfo
         ) {
-            ClassReminderNavigation.markPending(bookingID: bookingID)
+            if response.actionIdentifier == XertNotificationCategories.browseClassesAction {
+                ClassReminderNavigation.markPendingBrowseClasses()
+            } else {
+                ClassReminderNavigation.markPending(bookingID: bookingID)
+            }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .xertOpenBookings, object: bookingID)
             }

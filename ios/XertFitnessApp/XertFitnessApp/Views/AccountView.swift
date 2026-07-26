@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AccountView: View {
     let route: XertMemberRoute
@@ -8,7 +9,9 @@ struct AccountView: View {
 
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
+    @AppStorage(XertHapticPreference.preferenceKey) private var hapticFeedbackEnabled = true
     @State private var email = ""
     @State private var password = ""
     @State private var passwordConfirmation = ""
@@ -25,12 +28,24 @@ struct AccountView: View {
     @State private var addingBookingToCalendarID: UUID?
     @State private var bookingCalendarNotice: BookingCalendarNotice?
     @State private var showingDeleteConfirmation = false
+    @State private var showingMemberReadiness = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
     @State private var handledRouteSequence: UInt = 0
+    @State private var isSubmittingAuthentication = false
     @FocusState private var focusedProfileField: ProfileField?
+    @FocusState private var focusedAuthField: AuthField?
+    @FocusState private var focusedSecurityField: SecurityField?
 
     private enum ProfileField {
         case fullName, phone
+    }
+
+    private enum AuthField {
+        case fullName, phone, email, password, passwordConfirmation
+    }
+
+    private enum SecurityField {
+        case newPassword, passwordConfirmation
     }
 
     private enum ScrollTarget: Hashable {
@@ -71,6 +86,13 @@ struct AccountView: View {
                 .navigationTitle("Account")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .tabBar)
+                .scrollDismissesKeyboard(.interactively)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button(keyboardToolbarTitle, action: performKeyboardToolbarAction)
+                    }
+                }
                 .refreshable {
                     await store.refresh()
                 }
@@ -82,7 +104,12 @@ struct AccountView: View {
                 .onChange(of: routeSequence) { _ in
                     focusRoute(using: proxy)
                 }
-                .onChange(of: store.isSignedIn) { _ in
+                .onChange(of: store.isSignedIn) { isSignedIn in
+                    if isSignedIn {
+                        focusedAuthField = nil
+                        password = ""
+                        passwordConfirmation = ""
+                    }
                     focusRoute(using: proxy)
                 }
                 .onChange(of: store.isLoading) { _ in
@@ -133,6 +160,12 @@ struct AccountView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingMemberReadiness) {
+            MemberOnboardingView()
+                .environmentObject(store)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private func focusRoute(using proxy: ScrollViewProxy) {
@@ -170,86 +203,327 @@ struct AccountView: View {
             }
             .listRowBackground(Color.xertInk)
         }
-        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions]) {
+        if !store.unavailableDataSources.isDisjoint(with: [.credits, .bookings, .orders, .profile, .onboarding, .eventGoals, .privateSessions]) {
             Section {
-                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .eventGoals, .privateSessions])
+                DataAvailabilityNotice(sources: [.credits, .bookings, .orders, .profile, .onboarding, .eventGoals, .privateSessions])
             }
             .listRowBackground(Color.xertInk)
         }
 
+        memberReadinessSection
         membershipSection
+        trainingProgressSection
+        activeBookingSections(timeline: timeline)
+        privateSessionHistorySection
+        purchaseHistorySection
+        reminderSettingsSection
         accountDetailsSection
         accountSecuritySection
-        reminderSettingsSection
+        bookingHistorySection(timeline: timeline)
+        legalSection
         signOutSection
         accountControlSection
-        legalSection
-        purchaseHistorySection
-        privateSessionHistorySection
-        bookingSections(timeline: timeline)
+    }
+
+    private var memberReadinessSection: some View {
+        Section {
+            MemberReadinessStatusCard {
+                showingMemberReadiness = true
+            }
+        } header: {
+            Text("Member Setup").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var trainingProgressSection: some View {
+        let progress = MemberTrainingProgress(bookings: store.bookings)
+        return Section {
+            if store.bookings.isEmpty && store.isLoading && store.memberDataUpdatedAt == nil {
+                accountLoadingRow("Loading your training progress…")
+            } else if store.bookings.isEmpty && store.unavailableDataSources.contains(.bookings) {
+                accountUnavailableRow("Training progress")
+            } else {
+                trainingProgressCard(progress)
+            }
+        } header: {
+            Text("Training Momentum").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func trainingProgressCard(_ progress: MemberTrainingProgress) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings) {
+                Label("Showing last synced attendance", systemImage: "clock.arrow.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+            }
+
+            if progress.totalAttended == 0 {
+                Label("Your progress starts here", systemImage: "checkmark.seal")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Completed classes appear after Byron or the XERT team records attendance. Confirmed, cancelled and missed classes never inflate your totals.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        trainingProgressMetric("\(progress.attendedLast30Days)", label: "30 days")
+                        trainingProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        trainingProgressMetric("\(progress.totalAttended)", label: "All time")
+                    }
+                    VStack(spacing: 8) {
+                        trainingProgressMetric("\(progress.attendedLast30Days)", label: "Completed · 30 days")
+                        trainingProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        trainingProgressMetric("\(progress.totalAttended)", label: "Completed · all time")
+                    }
+                }
+
+                if let lastAttendedAt = progress.lastAttendedAt {
+                    Label(
+                        "Last completed \(lastAttendedAt.formatted(date: .abbreviated, time: .omitted))",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale)
+                }
+            }
+
+            Button {
+                guard let url = URL(string: "xertfitness://booking") else { return }
+                openURL(url)
+            } label: {
+                Label("Book your next class", systemImage: "calendar.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.xertPrimary)
+
+            Text("Attendance only · active weeks use Brisbane Monday–Sunday weeks")
+                .font(.caption2)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .xertCardStyle()
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        .listRowSeparator(.hidden)
+    }
+
+    private func trainingProgressMetric(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .xertDisplay(28)
+                .foregroundStyle(Color.xertOffWhite)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(0.7)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .padding(10)
+        .background(Color.xertNavy.opacity(0.38))
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.xertSteel.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var membershipSection: some View {
         Section {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 12) {
-                        creditSummary
-                        signedInSummary
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 12) {
-                        creditSummary
-                        signedInSummary
-                    }
+            VStack(alignment: .leading, spacing: 16) {
+                signedInSummary
+                creditSummary
+
+                Divider()
+                    .overlay(Color.xertMuted.opacity(0.35))
+
+                creditBatchWallet
+
+                Button {
+                    guard let url = URL(string: "xertfitness://booking/packs") else { return }
+                    openURL(url)
+                } label: {
+                    Label("Buy session packs", systemImage: "plus.circle.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .buttonStyle(.xertPrimary)
+                .accessibilityHint("Opens session packs on the Book page")
             }
+            .padding(14)
+            .xertCardStyle()
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             .listRowSeparator(.hidden)
         } header: {
-            Text("Membership").xertEyebrow()
+            Text("Session credits & packs").xertEyebrow()
         }
     }
 
     private var creditSummary: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    creditBalance
+                    nextCreditExpiry
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        creditBalance
+                        Spacer(minLength: 8)
+                        nextCreditExpiry
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        creditBalance
+                        nextCreditExpiry
+                    }
+                }
+            }
+        }
+    }
+
+    private var signedInSummary: some View {
+        Label(store.authSession?.user?.email ?? "Member wallet", systemImage: "person.crop.circle")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.xertPale)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel("Credit wallet for \(store.authSession?.user?.email ?? "this member")")
+    }
+
+    private var creditBalance: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Credits")
+            Text("Available balance")
                 .xertEyebrow()
             Text(creditsUnavailableOrLoading ? "—" : "\(store.creditTotal)")
                 .xertDisplay(34)
-            if store.isLoading && store.credits.isEmpty {
-                Text("Refreshing…")
-                    .font(.caption)
-                    .foregroundStyle(Color.xertMuted)
-            } else if store.unavailableDataSources.contains(.credits) {
-                Text("Unavailable · retry below")
-                    .font(.caption)
-                    .foregroundStyle(Color.orange)
-            } else if let expiry = store.creditExpirySummary {
-                Text("\(expiry.credits) expire \(expiry.expiresAt.formatted(date: .abbreviated, time: .omitted))")
+            Text(store.creditTotal == 1 ? "session credit" : "session credits")
+                .font(.caption)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var nextCreditExpiry: some View {
+        if let batch = nextExpiringCreditBatch, let expiry = batch.expires_at {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Next expiry")
+                    .xertEyebrow()
+                Text(expiry.formatted(date: .abbreviated, time: .omitted))
+                    .font(.headline)
+                    .foregroundStyle(Color.xertPale)
+                Text("\(batch.remaining) credit\(batch.remaining == 1 ? "" : "s") in this batch")
                     .font(.caption)
                     .foregroundStyle(Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255))
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .accessibilityElement(children: .combine)
         }
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .padding(14)
-        .xertCardStyle()
     }
 
-    private var signedInSummary: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Signed in")
-                .xertEyebrow()
-            Text(store.authSession?.user?.email ?? "Member")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.xertPale)
-                .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder
+    private var creditBatchWallet: some View {
+        if store.isLoading && !store.creditBalanceLoaded {
+            accountLoadingRow("Loading your credit wallet…")
+        } else if store.unavailableDataSources.contains(.credits) && !store.creditBalanceLoaded {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Credit wallet unavailable")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Pull down to retry. No balance is being shown until your credits refresh.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            if store.unavailableDataSources.contains(.credits) {
+                Label("Showing your last saved wallet. Pull down to retry.", systemImage: "clock.arrow.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if activeCreditBatches.isEmpty {
+                Text("No active session credits. Choose a pack when you're ready to book.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Active credit batches")
+                        .xertEyebrow()
+                    ForEach(activeCreditBatches) { batch in
+                        creditBatchRow(batch)
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .padding(14)
-        .xertCardStyle()
+    }
+
+    private func creditBatchRow(_ batch: CreditBatch) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                creditBatchIdentity(batch)
+                Spacer(minLength: 8)
+                creditBatchExpiry(batch)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                creditBatchIdentity(batch)
+                creditBatchExpiry(batch)
+            }
+        }
+        .padding(.top, 10)
+        .overlay(alignment: .top) {
+            Divider().overlay(Color.xertMuted.opacity(0.2))
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func creditBatchIdentity(_ batch: CreditBatch) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(creditBatchName(batch))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertOffWhite)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(batch.remaining) of \(batch.total) remaining")
+                .font(.footnote)
+                .foregroundStyle(Color.xertPale)
+        }
+    }
+
+    private func creditBatchExpiry(_ batch: CreditBatch) -> some View {
+        Text(batch.expires_at.map { "Expires \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "No expiry")
+            .font(.caption)
+            .foregroundStyle(Color.xertMuted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var activeCreditBatches: [CreditBatch] {
+        let now = Date()
+        return store.credits
+            .filter { batch in
+                batch.remaining > 0 && (batch.expires_at.map { $0 > now } ?? true)
+            }
+            .sorted { lhs, rhs in
+                (lhs.expires_at ?? .distantFuture) < (rhs.expires_at ?? .distantFuture)
+            }
+    }
+
+    private var nextExpiringCreditBatch: CreditBatch? {
+        activeCreditBatches.first { $0.expires_at != nil }
+    }
+
+    private func creditBatchName(_ batch: CreditBatch) -> String {
+        guard let orderID = batch.order_id else { return "Session credits" }
+        return store.orders.first(where: { $0.id == orderID })?.products?.name ?? "Purchased session pack"
     }
 
     private var reminderSettingsSection: some View {
@@ -294,13 +568,77 @@ struct AccountView: View {
                 .disabled(store.isUpdatingReminderPreference)
             }
 
-            Text("Member notices arrive when staff publish an update. Class reminders stay on this device and follow your selected lead time.")
+            reminderDeliveryStatus
+
+            Toggle("Haptic feedback", isOn: $hapticFeedbackEnabled)
+                .tint(.xertSteel)
+                .accessibilityHint("Adds subtle touch feedback to important XERT actions")
+                .onChange(of: hapticFeedbackEnabled) { enabled in
+                    XertHapticPreference.setEnabled(enabled)
+                    if enabled { XertHaptics.play(.lightImpact) }
+                }
+
+            if store.isUpdatingMemberPush || store.isUpdatingReminderPreference {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.xertSteel)
+                    Text("Saving preferences…")
+                        .foregroundStyle(Color.xertMuted)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
+            Text("Member notices arrive when staff publish an update. Class reminders stay on this device. Haptic feedback adds subtle confirmation without sound.")
                 .font(.footnote)
                 .foregroundStyle(Color.xertMuted)
         } header: {
-            Text("Notifications").xertEyebrow()
+            Text("App Preferences").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private var reminderDeliveryStatus: some View {
+        switch store.classReminderSyncState {
+        case .off:
+            EmptyView()
+        case .scheduled(let count):
+            Label(
+                "\(count) class reminder\(count == 1 ? "" : "s") scheduled on this device",
+                systemImage: "bell.badge.fill"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.xertSteel)
+        case .noEligibleBookings:
+            Label(
+                "Reminders are on. Your next confirmed class will be scheduled automatically.",
+                systemImage: "bell"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.xertPale)
+        case .permissionDenied:
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Class reminders are off in iOS Settings.", systemImage: "bell.slash.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                Button("Open iOS Settings") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                }
+                .buttonStyle(.borderless)
+                .frame(minHeight: 44, alignment: .leading)
+            }
+        case .failed(let scheduledCount):
+            Label(
+                scheduledCount == 0
+                    ? "No class reminders could be scheduled. Pull down to retry."
+                    : "\(scheduledCount) reminders scheduled; another reminder needs retrying.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.orange)
+        }
     }
 
     private var accountDetailsSection: some View {
@@ -316,6 +654,7 @@ struct AccountView: View {
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
                 .focused($focusedProfileField, equals: .phone)
+                .submitLabel(.done)
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
             Button {
@@ -355,28 +694,20 @@ struct AccountView: View {
         Section {
             SecureField("New password", text: $newPassword)
                 .textContentType(.newPassword)
+                .focused($focusedSecurityField, equals: .newPassword)
                 .submitLabel(.next)
+                .onSubmit { focusedSecurityField = .passwordConfirmation }
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
             SecureField("Confirm new password", text: $newPasswordConfirmation)
                 .textContentType(.newPassword)
+                .focused($focusedSecurityField, equals: .passwordConfirmation)
                 .submitLabel(.done)
+                .onSubmit { submitPasswordUpdate() }
                 .foregroundStyle(Color.xertOffWhite)
                 .tint(Color.xertSteel)
 
-            Button {
-                Task {
-                    let updated = await store.updatePassword(
-                        password: newPassword,
-                        confirmation: newPasswordConfirmation
-                    )
-                    didUpdatePassword = updated
-                    if updated {
-                        newPassword = ""
-                        newPasswordConfirmation = ""
-                    }
-                }
-            } label: {
+            Button(action: submitPasswordUpdate) {
                 HStack {
                     Text(store.isUpdatingPassword ? "Updating..." : "Update Password")
                         .font(.subheadline.weight(.semibold))
@@ -419,6 +750,24 @@ struct AccountView: View {
             Text("Account Security").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    private func submitPasswordUpdate() {
+        guard !store.isUpdatingPassword,
+              !newPassword.isEmpty,
+              !newPasswordConfirmation.isEmpty else { return }
+        focusedSecurityField = nil
+        Task {
+            let updated = await store.updatePassword(
+                password: newPassword,
+                confirmation: newPasswordConfirmation
+            )
+            didUpdatePassword = updated
+            if updated {
+                newPassword = ""
+                newPasswordConfirmation = ""
+            }
+        }
     }
 
     private var signOutSection: some View {
@@ -564,7 +913,7 @@ struct AccountView: View {
     }
 
     @ViewBuilder
-    private func bookingSections(timeline: BookingTimeline) -> some View {
+    private func activeBookingSections(timeline: BookingTimeline) -> some View {
         if store.bookings.isEmpty {
             Section {
                 if store.isLoading {
@@ -599,19 +948,23 @@ struct AccountView: View {
                 .id(timeline.pending.isEmpty ? ScrollTarget.bookings : ScrollTarget.upcoming)
                 .listRowBackground(Color.xertInk)
             }
-            if !timeline.history.isEmpty {
-                Section {
-                    bookingRows(timeline.history)
-                } header: {
-                    Text("Booking History").xertEyebrow()
-                }
-                .id(
-                    timeline.pending.isEmpty && timeline.upcoming.isEmpty
-                        ? ScrollTarget.bookings
-                        : ScrollTarget.history
-                )
-                .listRowBackground(Color.xertInk)
+        }
+    }
+
+    @ViewBuilder
+    private func bookingHistorySection(timeline: BookingTimeline) -> some View {
+        if !timeline.history.isEmpty {
+            Section {
+                bookingRows(timeline.history)
+            } header: {
+                Text("Booking History").xertEyebrow()
             }
+            .id(
+                timeline.pending.isEmpty && timeline.upcoming.isEmpty
+                    ? ScrollTarget.bookings
+                    : ScrollTarget.history
+            )
+            .listRowBackground(Color.xertInk)
         }
     }
 
@@ -626,7 +979,7 @@ struct AccountView: View {
     }
 
     private var creditsUnavailableOrLoading: Bool {
-        (store.isLoading && store.credits.isEmpty) || store.unavailableDataSources.contains(.credits)
+        !store.creditBalanceLoaded
     }
 
     private func accountLoadingRow(_ title: String) -> some View {
@@ -689,10 +1042,16 @@ struct AccountView: View {
         Section {
             Button(isCreatingAccount ? "Already have an account?" : "Create a member account") {
                 isCreatingAccount.toggle()
+                password = ""
                 passwordConfirmation = ""
                 acceptedAccountTerms = false
+                Task { @MainActor in
+                    await Task.yield()
+                    focusedAuthField = isCreatingAccount ? .fullName : .email
+                }
             }
             .buttonStyle(.xertGhost)
+            .disabled(isSubmittingAuthentication)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             .listRowSeparator(.hidden)
@@ -765,11 +1124,14 @@ struct AccountView: View {
             if isCreatingAccount {
                 TextField("Full name", text: $fullName)
                     .textContentType(.name)
+                    .focused($focusedAuthField, equals: .fullName)
                     .submitLabel(.next)
+                    .onSubmit { focusedAuthField = .phone }
                     .xertAccountField()
                 TextField("Mobile number (optional)", text: $phone)
                     .textContentType(.telephoneNumber)
                     .keyboardType(.phonePad)
+                    .focused($focusedAuthField, equals: .phone)
                     .submitLabel(.next)
                     .xertAccountField()
             }
@@ -777,14 +1139,29 @@ struct AccountView: View {
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
+                .focused($focusedAuthField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedAuthField = .password }
                 .onChange(of: email) { _ in passwordResetSent = false }
                 .xertAccountField()
             SecureField("Password", text: $password)
                 .textContentType(isCreatingAccount ? .newPassword : .password)
+                .focused($focusedAuthField, equals: .password)
+                .submitLabel(isCreatingAccount ? .next : .go)
+                .onSubmit {
+                    if isCreatingAccount {
+                        focusedAuthField = .passwordConfirmation
+                    } else {
+                        submitAuthentication()
+                    }
+                }
                 .xertAccountField()
             if isCreatingAccount {
                 SecureField("Confirm password", text: $passwordConfirmation)
                     .textContentType(.newPassword)
+                    .focused($focusedAuthField, equals: .passwordConfirmation)
+                    .submitLabel(.go)
+                    .onSubmit { submitAuthentication() }
                     .xertAccountField()
             }
         }
@@ -811,27 +1188,22 @@ struct AccountView: View {
     }
 
     private var primaryAuthButton: some View {
-        Button {
-            Task {
-                if isCreatingAccount {
-                    await store.signUp(
-                        fullName: fullName,
-                        email: email,
-                        phone: phone,
-                        password: password,
-                        confirmation: passwordConfirmation,
-                        acceptedTerms: acceptedAccountTerms
-                    )
-                } else {
-                    await store.signIn(email: email, password: password)
+        Button(action: submitAuthentication) {
+            HStack(spacing: 10) {
+                Text(authenticationActionTitle)
+                Spacer(minLength: 8)
+                if isSubmittingAuthentication {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.xertNavy)
+                        .accessibilityHidden(true)
                 }
             }
-        } label: {
-            Text(isCreatingAccount ? "Create Account" : "Sign In")
         }
         .buttonStyle(.xertPrimary)
         .disabled(authActionDisabled)
         .opacity(authActionDisabled ? 0.55 : 1)
+        .accessibilityValue(isSubmittingAuthentication ? "In progress" : "")
     }
 
     private var forgotPasswordControls: some View {
@@ -865,13 +1237,57 @@ struct AccountView: View {
 
     // MARK: - Shared helpers
 
+    private var keyboardToolbarTitle: String {
+        focusedAuthField == .phone ? "Next" : "Done"
+    }
+
+    private func performKeyboardToolbarAction() {
+        if focusedAuthField == .phone {
+            focusedAuthField = .email
+            return
+        }
+        focusedProfileField = nil
+        focusedAuthField = nil
+        focusedSecurityField = nil
+    }
+
+    private var authenticationActionTitle: String {
+        if isSubmittingAuthentication {
+            return isCreatingAccount ? "Creating Account…" : "Signing In…"
+        }
+        return isCreatingAccount ? "Create Account" : "Sign In"
+    }
+
+    private func submitAuthentication() {
+        guard !authActionDisabled else { return }
+        let creatingAccount = isCreatingAccount
+        focusedAuthField = nil
+        isSubmittingAuthentication = true
+        Task {
+            defer { isSubmittingAuthentication = false }
+            if creatingAccount {
+                await store.signUp(
+                    fullName: fullName,
+                    email: email,
+                    phone: phone,
+                    password: password,
+                    confirmation: passwordConfirmation,
+                    acceptedTerms: acceptedAccountTerms
+                )
+            } else {
+                await store.signIn(email: email, password: password)
+            }
+        }
+    }
+
     private func syncProfileForm() {
         fullName = store.profile?.full_name ?? ""
         phone = store.profile?.phone ?? ""
     }
 
     private var authActionDisabled: Bool {
-        if store.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if store.isLoading || isSubmittingAuthentication
+            || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return true
         }
         if !isCreatingAccount { return password.count < 6 }
@@ -899,22 +1315,57 @@ struct AccountView: View {
                     Button {
                         Task { await addBookingToCalendar(booking) }
                     } label: {
-                        Label(
-                            addingBookingToCalendarID == booking.id ? "Adding to calendar..." : "Add to Calendar",
-                            systemImage: "calendar.badge.plus"
-                        )
+                        HStack(spacing: 10) {
+                            Label(
+                                addingBookingToCalendarID == booking.id ? "Adding to calendar…" : "Add to Calendar",
+                                systemImage: "calendar.badge.plus"
+                            )
+                            Spacer(minLength: 8)
+                            if addingBookingToCalendarID == booking.id {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
                     .disabled(addingBookingToCalendarID != nil)
+                    .accessibilityValue(addingBookingToCalendarID == booking.id ? "In progress" : "")
                 }
                 if booking.isCancellable() {
-                    Button(booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking", role: .destructive) {
+                    let isCancelling = store.cancellingBookingID == booking.id
+                    let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
+                    Button(role: .destructive) {
                         bookingToCancel = booking
+                    } label: {
+                        HStack(spacing: 10) {
+                            Label(
+                                isCancelling
+                                    ? (booking.status == "waitlisted" ? "Leaving waitlist…" : "Cancelling booking…")
+                                    : (booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking"),
+                                systemImage: "xmark.circle"
+                            )
+                            Spacer(minLength: 8)
+                            if isCancelling {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .disabled(store.cancellingBookingID == booking.id)
+                    .buttonStyle(.borderless)
+                    .disabled(hasBookingMutation)
+                    .accessibilityValue(
+                        isCancelling ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
+                    )
                 }
             }
             .padding(.vertical, 4)
+            .accessibilityElement(children: .contain)
             .id(booking.id)
         }
     }

@@ -4,6 +4,10 @@ const PACK_CTAS = {
   'performance-10': 'Commit To Your Training',
 };
 
+// Shown in place of a pack's amount while the "prices coming soon" launch toggle
+// is on. Kept short so it fits the price slot on the pack cards.
+export const PRICES_COMING_SOON_LABEL = 'Coming soon';
+
 export function formatPackPrice(priceCents, currency = 'aud') {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
@@ -42,23 +46,27 @@ export function productStripeReadiness(products = []) {
 export function normalizeProductAdminInput(form) {
   const name = String(form.name || '').trim();
   if (!name) throw new Error('A pack name is required.');
+  if (name.length > 120) throw new Error('Pack name must be 120 characters or fewer.');
+
+  const description = String(form.description || '').trim();
+  if (description.length > 2_000) throw new Error('Description must be 2,000 characters or fewer.');
 
   const price = String(form.price_dollars ?? '').trim();
   if (!/^\d+(?:\.\d{1,2})?$/.test(price)) {
     throw new Error('Price must be a positive amount with no more than 2 decimal places.');
   }
   const priceCents = Math.round(Number(price) * 100);
-  if (!Number.isSafeInteger(priceCents) || priceCents <= 0) {
-    throw new Error('Price must be greater than $0.00.');
+  if (!Number.isSafeInteger(priceCents) || priceCents <= 0 || priceCents > 2_147_483_647) {
+    throw new Error('Price must be between $0.01 and $21,474,836.47.');
   }
 
   const sessionsCount = Number(form.sessions_count);
-  if (!Number.isSafeInteger(sessionsCount) || sessionsCount <= 0) {
-    throw new Error('Sessions must be a whole number of at least 1.');
+  if (!Number.isSafeInteger(sessionsCount) || sessionsCount < 1 || sessionsCount > 1_000) {
+    throw new Error('Sessions must be a whole number between 1 and 1,000.');
   }
   const validityDays = Number(form.validity_days);
-  if (!Number.isSafeInteger(validityDays) || validityDays <= 0) {
-    throw new Error('Validity must be a whole number of at least 1 day.');
+  if (!Number.isSafeInteger(validityDays) || validityDays < 1 || validityDays > 3_650) {
+    throw new Error('Validity must be a whole number between 1 and 3,650 days.');
   }
 
   const stripePriceId = String(form.stripe_price_id || '').trim();
@@ -71,13 +79,13 @@ export function normalizeProductAdminInput(form) {
     throw new Error('Currency must be a 3-letter code such as AUD.');
   }
   const sortOrder = Number(form.sort_order ?? 0);
-  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0) {
-    throw new Error('Display order must be a whole number of 0 or greater.');
+  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 10_000) {
+    throw new Error('Display order must be a whole number between 0 and 10,000.');
   }
 
   return {
     name,
-    description: String(form.description || '').trim() || null,
+    description: description || null,
     price_cents: priceCents,
     sessions_count: sessionsCount,
     validity_days: validityDays,
@@ -94,7 +102,12 @@ export function normalizeProductCreateInput(form) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80) {
     throw new Error('Slug must use lowercase letters, numbers and single hyphens.');
   }
-  return { slug, ...normalizeProductAdminInput(form) };
+  return {
+    slug,
+    ...normalizeProductAdminInput({ ...form, active: false, stripe_price_id: '' }),
+    active: false,
+    stripe_price_id: null,
+  };
 }
 
 export function productStripeTransitionError(current, next) {
@@ -103,9 +116,12 @@ export function productStripeTransitionError(current, next) {
   const amountChanged = Number(current?.price_cents) !== Number(next?.price_cents);
   const currencyChanged = String(current?.currency || '').toLowerCase()
     !== String(next?.currency || '').toLowerCase();
+  const sessionsChanged = Number(current?.sessions_count) !== Number(next?.sessions_count);
+  const validityChanged = Number(current?.validity_days) !== Number(next?.validity_days);
 
-  if (currentStripePrice && currentStripePrice === nextStripePrice && (amountChanged || currencyChanged)) {
-    return 'Replace or clear the Stripe Price ID before changing this pack\'s price or currency.';
+  if (currentStripePrice && currentStripePrice === nextStripePrice
+    && (amountChanged || currencyChanged || sessionsChanged || validityChanged)) {
+    return 'Replace or clear the Stripe Price ID before changing this pack\'s price, currency, sessions or validity.';
   }
   return '';
 }

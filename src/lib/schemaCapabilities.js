@@ -2,6 +2,9 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_role_safety: 'Apply src/supabase/admin_role_safety_upgrade.sql in Supabase.',
   audited_credit_grants: 'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
   booking_waitlist_withdrawal: 'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
+  member_booking_switch_guard: 'Apply supabase/migrations/20260721000000_member_booking_switch_guard.sql in Supabase.',
+  member_onboarding_foundation: 'Apply supabase/migrations/20260721010000_member_onboarding_foundation.sql in Supabase.',
+  member_activation_cockpit: 'Apply supabase/migrations/20260721020000_member_activation_cockpit.sql in Supabase.',
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
   waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
   attendance_roll_call: 'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
@@ -39,7 +42,11 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   schedule_optimistic_locking: 'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
   shared_admin_optimistic_locking: 'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
   catalog_optimistic_locking: 'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
+  product_commercial_terms_guard: 'Apply supabase/migrations/20260720000000_product_commercial_terms_guard.sql in Supabase.',
   targeted_member_notices: 'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
+  waitlist_promotion_notifications: 'Apply supabase/migrations/20260721030000_waitlist_promotion_notifications.sql in Supabase.',
+  booking_decision_notifications: 'Apply supabase/migrations/20260722000000_booking_decision_notifications.sql in Supabase.',
+  owner_stripe_price_provisioning: 'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

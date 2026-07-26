@@ -52,8 +52,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .team: return "Team Directory"
         case .finance: return "Finance"
         case .orders: return "Orders"
-        case .products: return "Session Packs"
-        case .controls: return "Platform Controls"
+        case .products: return "Session Packs & Pricing"
+        case .controls: return "Member App Controls"
         case .health: return "Operations Health"
         case .audit: return "Admin Audit"
         }
@@ -78,7 +78,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .finance: return "Review revenue and sales performance"
         case .orders: return "Recover payments, fulfil sales and issue refunds"
         case .products: return "Control pricing, credits and Stripe links"
-        case .controls: return "Control launch, bookings and messaging"
+        case .controls: return "Control member booking, purchases, launch and messaging"
         case .health: return "Verify Stripe, schema and APNs readiness"
         case .audit: return "Review protected operational changes"
         }
@@ -139,8 +139,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .team: return ["coach", "practitioner", "trainer", "team"]
         case .finance: return ["revenue", "sales", "performance", "income", "Stripe"]
         case .orders: return ["payment", "order", "checkout", "recovery", "refund", "fulfilment", "Stripe"]
-        case .products: return ["pack", "price", "credit", "Stripe", "product"]
-        case .controls: return ["launch", "payment", "booking", "platform", "settings"]
+        case .products: return ["session pack", "pack", "price", "credit", "Stripe", "product"]
+        case .controls: return ["member app", "client access", "launch", "payment", "booking", "platform", "settings"]
         case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
         case .audit: return ["audit", "history", "change", "operator"]
         }
@@ -383,6 +383,7 @@ enum XertOwnerWorkspacePinsStore {
 
 enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case member(UUID)
+    case classSession(UUID)
     case order(UUID)
     case product(UUID)
     case event(UUID)
@@ -392,6 +393,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     var workspace: XertOwnerWorkspace {
         switch self {
         case .member: return .members
+        case .classSession: return .classDesk
         case .order: return .orders
         case .product: return .products
         case .event: return .events
@@ -401,6 +403,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .member: return "Member Record"
+        case .classSession: return "Class Roster"
         case .order: return "Order Detail"
         case .product: return "Session Pack"
         case .event: return "Event Detail"
@@ -410,6 +413,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     fileprivate var restorationValue: String {
         switch self {
         case .member(let id): return "member/\(id.uuidString.lowercased())"
+        case .classSession(let id): return "class/\(id.uuidString.lowercased())"
         case .order(let id): return "order/\(id.uuidString.lowercased())"
         case .product(let id): return "product/\(id.uuidString.lowercased())"
         case .event(let id): return "event/\(id.uuidString.lowercased())"
@@ -424,6 +428,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         guard let id = UUID(uuidString: identifier) else { return nil }
         switch (workspace, kind) {
         case (.members, "member"): return .member(id)
+        case (.classDesk, "class"): return .classSession(id)
         case (.orders, "order"), (.finance, "order"): return .order(id)
         case (.products, "product"): return .product(id)
         case (.events, "event"): return .event(id)
@@ -503,8 +508,127 @@ struct XertOwnerRoute: Equatable, Hashable {
     }
 }
 
+enum XertStripeLaunchPhase: Equatable {
+    case checking
+    case unavailable
+    case catalogBlocked
+    case healthBlocked
+    case readyToActivate
+    case live
+}
+
+struct XertStripeLaunchRunway: Equatable {
+    static let totalSteps = 4
+
+    let phase: XertStripeLaunchPhase
+    let completedSteps: Int
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let route: XertOwnerRoute
+
+    static func resolve(
+        hasCompletedRefresh: Bool,
+        isRefreshing: Bool,
+        sourcesAreCurrent: Bool,
+        paymentsEnabled: Bool?,
+        hasActiveProducts: Bool,
+        activeProductsAreLinked: Bool,
+        healthReady: Bool?,
+        paymentSwitchState: String?,
+        activationReceiptReady: Bool?,
+        blockingProductIDs: [UUID]
+    ) -> Self {
+        guard hasCompletedRefresh else {
+            return Self(
+                phase: .checking,
+                completedSteps: 0,
+                title: isRefreshing ? "Checking Stripe launch gates" : "Stripe launch status pending",
+                detail: "Refresh owner data to verify the catalogue, Stripe services and payment switch.",
+                actionTitle: "Open Operations Health",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard sourcesAreCurrent else {
+            return Self(
+                phase: .unavailable,
+                completedSteps: 0,
+                title: "Stripe launch status unavailable",
+                detail: "One or more live launch sources could not be verified. Keep payments paused and retry health checks.",
+                actionTitle: "Review unavailable checks",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard hasActiveProducts else {
+            return Self(
+                phase: .catalogBlocked,
+                completedSteps: 1,
+                title: "Session-pack catalogue required",
+                detail: "Create at least one active session pack before opening checkout.",
+                actionTitle: "Open Session Packs",
+                route: XertOwnerRoute(workspace: .products)
+            )
+        }
+        guard activeProductsAreLinked else {
+            return Self(
+                phase: .catalogBlocked,
+                completedSteps: 1,
+                title: "Stripe catalogue needs attention",
+                detail: "Every active pack needs a verified stable Stripe Price ID before live checkout.",
+                actionTitle: blockingProductIDs.count == 1 ? "Fix blocking pack" : "Review active packs",
+                route: exactProductRoute(blockingProductIDs) ?? XertOwnerRoute(workspace: .products)
+            )
+        }
+        guard healthReady == true else {
+            return Self(
+                phase: .healthBlocked,
+                completedSteps: 2,
+                title: "Stripe launch checks need attention",
+                detail: "Resolve account, webhook, database or delivery checks before activation.",
+                actionTitle: blockingProductIDs.count == 1 ? "Fix blocking pack" : "Open Operations Health",
+                route: exactProductRoute(blockingProductIDs) ?? XertOwnerRoute(workspace: .health)
+            )
+        }
+        guard paymentsEnabled == true else {
+            return Self(
+                phase: .readyToActivate,
+                completedSteps: 3,
+                title: "Ready for guarded activation",
+                detail: "All current Stripe launch checks pass. Payments remain paused until you confirm activation.",
+                actionTitle: "Review payment switch",
+                route: XertOwnerRoute(workspace: .controls)
+            )
+        }
+        guard paymentSwitchState?.lowercased() == "enabled", activationReceiptReady == true else {
+            return Self(
+                phase: .healthBlocked,
+                completedSteps: 3,
+                title: "Payment activation needs verification",
+                detail: "Checkout is marked enabled, but its live switch or immutable activation receipt is not verified.",
+                actionTitle: "Verify activation",
+                route: XertOwnerRoute(workspace: .health)
+            )
+        }
+        return Self(
+            phase: .live,
+            completedSteps: totalSteps,
+            title: "Session-pack checkout is live",
+            detail: "Stripe services, catalogue links and the immutable activation receipt are verified.",
+            actionTitle: "Monitor Stripe health",
+            route: XertOwnerRoute(workspace: .health)
+        )
+    }
+
+    private static func exactProductRoute(_ productIDs: [UUID]) -> XertOwnerRoute? {
+        let uniqueIDs = Array(Set(productIDs))
+        guard uniqueIDs.count == 1, let productID = uniqueIDs.first else { return nil }
+        return XertOwnerRoute(task: .product(productID))
+    }
+}
+
 enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
     case member = "Members"
+    case classSession = "Today's Classes"
     case order = "Orders"
     case product = "Session Packs"
     case event = "Events"
@@ -537,12 +661,14 @@ enum XertOwnerCommandIndex {
         members: [AdminMemberSummary],
         orders: [OrderItem],
         products: [AdminProduct],
-        events: [AdminEvent]
+        events: [AdminEvent],
+        classes: [AdminDailyOperation] = []
     ) -> [XertOwnerRecordCommand] {
         let normalizedQuery = normalize(query)
         guard normalizedQuery.count >= 2 else { return [] }
 
         let candidates = members.map(memberCandidate)
+            + classes.map(classCandidate)
             + orders.map(orderCandidate)
             + products.map(productCandidate)
             + events.map(eventCandidate)
@@ -604,6 +730,38 @@ enum XertOwnerCommandIndex {
                 order.status,
                 order.stripe_checkout_session_id,
                 order.stripe_payment_intent_id,
+            ].compactMap { $0 }
+        )
+    }
+
+    private static func classCandidate(_ operation: AdminDailyOperation) -> Candidate {
+        let context = [
+            operation.start_time.formatted(date: .abbreviated, time: .shortened),
+            clean(operation.coach_name),
+            clean(operation.location_zone),
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
+        let state = operation.attendance_due
+            ? "Roll call due"
+            : "\(operation.confirmed_count) confirmed · \(operation.waitlist_count) waiting"
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .classSession,
+                route: XertOwnerRoute(task: .classSession(operation.id)),
+                title: operation.title,
+                subtitle: "\(context) · \(state)",
+                icon: operation.attendance_due ? "checklist" : "person.3"
+            ),
+            title: operation.title,
+            identifiers: [operation.id.uuidString],
+            searchableValues: [
+                operation.title,
+                operation.class_type,
+                operation.coach_name,
+                operation.location_zone,
+                operation.status,
+                operation.attendance_due ? "attendance roll call due" : "roster class",
             ].compactMap { $0 }
         )
     }

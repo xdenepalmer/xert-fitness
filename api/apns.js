@@ -4,6 +4,7 @@ import { createSign } from 'node:crypto';
 const INVALID_TOKEN_REASONS = new Set(['BadDeviceToken', 'DeviceTokenNotForTopic', 'Unregistered']);
 const DELIVERY_BATCH_SIZE = 25;
 const TARGET_USER_BATCH_SIZE = 100;
+export const APNS_REQUEST_TIMEOUT_MS = 8_000;
 
 function clean(value) {
   return String(value || '').trim();
@@ -43,6 +44,7 @@ export function buildAnnouncementPush(announcement) {
     aps: {
       alert: { title, body },
       sound: 'default',
+      category: 'xert.member-notice',
       'thread-id': 'xert-member-notices',
     },
     announcement_id: announcement.id,
@@ -54,7 +56,14 @@ function apnsHost(environment) {
   return environment === 'sandbox' ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com';
 }
 
-function sendNotification(client, subscription, announcement, config, providerToken) {
+export function sendNotification(
+  client,
+  subscription,
+  announcement,
+  config,
+  providerToken,
+  timeoutMs = APNS_REQUEST_TIMEOUT_MS,
+) {
   return new Promise(resolve => {
     const headers = {
       ':method': 'POST',
@@ -69,23 +78,46 @@ function sendNotification(client, subscription, announcement, config, providerTo
       const expiresAt = Math.floor(new Date(announcement.expires_at).getTime() / 1000);
       if (Number.isFinite(expiresAt)) headers['apns-expiration'] = String(expiresAt);
     }
-    const request = client.request(headers);
     let statusCode = 0;
     let responseBody = '';
+    let settled = false;
+    let timeoutId;
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(result);
+    };
+    let request;
+    try {
+      request = client.request(headers);
+    } catch (error) {
+      finish({ subscription, status: 'failed', reason: clean(error.message) || 'APNS_NETWORK_ERROR' });
+      return;
+    }
     request.setEncoding('utf8');
     request.on('response', responseHeaders => { statusCode = Number(responseHeaders[':status'] || 0); });
     request.on('data', chunk => { responseBody += chunk; });
-    request.on('error', error => resolve({ subscription, status: 'failed', reason: clean(error.message) || 'APNS_NETWORK_ERROR' }));
+    request.on('error', error => finish({ subscription, status: 'failed', reason: clean(error.message) || 'APNS_NETWORK_ERROR' }));
     request.on('end', () => {
       let reason = '';
       try { reason = JSON.parse(responseBody || '{}').reason || ''; } catch { reason = ''; }
-      resolve({
+      finish({
         subscription,
         status: statusCode === 200 ? 'delivered' : INVALID_TOKEN_REASONS.has(reason) ? 'invalid_token' : 'failed',
         reason: reason || (statusCode === 200 ? null : `APNS_HTTP_${statusCode || 'UNKNOWN'}`),
       });
     });
-    request.end(JSON.stringify(buildAnnouncementPush(announcement)));
+    timeoutId = setTimeout(() => {
+      finish({ subscription, status: 'failed', reason: 'APNS_REQUEST_TIMEOUT' });
+      try { request.close(http2.constants.NGHTTP2_CANCEL); } catch { /* stream already closed */ }
+    }, Math.max(1, Number(timeoutMs) || APNS_REQUEST_TIMEOUT_MS));
+    try {
+      request.end(JSON.stringify(buildAnnouncementPush(announcement)));
+    } catch (error) {
+      finish({ subscription, status: 'failed', reason: clean(error.message) || 'APNS_NETWORK_ERROR' });
+      try { request.close(http2.constants.NGHTTP2_CANCEL); } catch { /* stream already closed */ }
+    }
   });
 }
 

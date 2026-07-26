@@ -37,3 +37,24 @@ test('native class reminders reconcile timing changes and successful cancellatio
   assert.match(store, /sync\(bookings: bookings, leadTime: leadTime\)/);
   assert.match(store, /cancelBooking[\s\S]*remove\(bookingID: booking\.booking_id\)[\s\S]*await refresh\(\)/);
 });
+
+test('native class reminders report scheduling truth and recover from revoked permission', () => {
+  const syncBlock = scheduler.slice(
+    scheduler.indexOf('func sync('),
+    scheduler.indexOf('func clearAll()'),
+  );
+
+  assert.match(scheduler, /enum ClassReminderSyncState: Equatable/);
+  assert.match(syncBlock, /async -> ClassReminderSyncState/);
+  assert.match(syncBlock, /guard await isAuthorizedForReminders\(\) else \{ return \.permissionDenied \}/);
+  assert.match(syncBlock, /scheduledCount \+= 1/);
+  assert.match(syncBlock, /failedCount \+= 1/);
+  assert.doesNotMatch(syncBlock, /try\? await center\.add/);
+  assert.match(store, /@Published private\(set\) var classReminderSyncState/);
+  assert.match(store, /applyClassReminderSyncState/);
+  assert.match(store, /state == \.permissionDenied[\s\S]*ClassReminderPreference\.setEnabled\(false\)[\s\S]*classRemindersEnabled = false/);
+  assert.match(account, /class reminder.*scheduled on this device/i);
+  assert.match(account, /Class reminders are off in iOS Settings/);
+  assert.match(account, /UIApplication\.openSettingsURLString/);
+  assert.match(account, /No class reminders could be scheduled/);
+});

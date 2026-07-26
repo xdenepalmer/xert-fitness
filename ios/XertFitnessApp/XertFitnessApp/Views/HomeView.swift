@@ -7,7 +7,9 @@ struct HomeView: View {
     let route: XertMemberRoute
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
+    let onOpenRoute: (XertMemberRoute) -> Void
     @State private var showingNoticeCenter = false
+    @State private var showingMemberReadiness = false
     @State private var highlightedAnnouncementID: UUID?
     @State private var lastHandledRouteSequence: UInt = 0
 
@@ -32,17 +34,26 @@ struct HomeView: View {
                             usesAccessibilityText: dynamicTypeSize.isAccessibilitySize
                         ))
 
+                        MemberLaunchGuideCard(
+                            state: memberLaunchGuideState,
+                            onAction: handleMemberLaunchGuideAction
+                        )
+                        .padding(.horizontal)
+                        .padding(.vertical, memberLaunchGuideState.isCompact ? 10 : 14)
+
                         NativeValueStrip()
 
                         VStack(alignment: .leading, spacing: 18) {
                             CachedPublicDataNotice()
                             StaleMemberDataNotice()
                             DataAvailabilityNotice(sources: Set(XertDataSource.allCases))
+                            memberDashboardSection
+                            memberReadinessSection
                             announcementsSection
                             NativeTrainingIdentity(onExplore: { onNavigate(.explore) })
                             todayTrainingSection
                             creditExpirySection
-                            nextUpSection
+                            if !store.isSignedIn { nextUpSection }
                             quickActions
                             glanceSection
                             nextEventSection
@@ -74,6 +85,12 @@ struct HomeView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                 }
+                .sheet(isPresented: $showingMemberReadiness) {
+                    MemberOnboardingView()
+                        .environmentObject(store)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
                 .onChange(of: routeSequence) { sequence in
                     handleRoute(sequence)
                 }
@@ -84,6 +101,429 @@ struct HomeView: View {
         }
         .ignoresSafeArea(edges: .top)
     }
+
+    // MARK: - Member dashboard
+
+    @ViewBuilder
+    private var memberDashboardSection: some View {
+        if store.isSignedIn {
+            XertSection(title: "Member dashboard") {
+                VStack(alignment: .leading, spacing: 16) {
+                    dashboardMembershipSummary
+
+                    Rectangle()
+                        .fill(Color.xertSteel.opacity(0.18))
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+
+                    dashboardNextTraining
+
+                    Rectangle()
+                        .fill(Color.xertSteel.opacity(0.18))
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+
+                    dashboardTrainingMomentum
+                }
+            }
+        }
+    }
+
+    private var memberLaunchGuideState: MemberLaunchGuideState {
+        let now = Date()
+        let activeBookings = store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now }
+            .sorted { $0.start_time < $1.start_time }
+        let nextConfirmedBookingID = activeBookings.first(where: { $0.status == "confirmed" })?.booking_id
+        let bookingsLoaded = store.hasBootstrapped
+            && !store.isLoading
+            && !store.unavailableDataSources.contains(.bookings)
+
+        return MemberLaunchGuideResolver.resolve(
+            isSignedIn: store.isSignedIn,
+            onboardingLoaded: store.onboardingLoaded,
+            readinessComplete: store.memberOnboarding?.is_complete == true,
+            creditBalanceLoaded: store.creditBalanceLoaded,
+            creditTotal: store.creditTotal,
+            bookingsLoaded: bookingsLoaded,
+            nextActiveBookingID: activeBookings.first?.booking_id,
+            nextConfirmedBookingID: nextConfirmedBookingID,
+            classRemindersEnabled: store.classRemindersEnabled,
+            onboardingUnavailable: store.unavailableDataSources.contains(.onboarding),
+            creditsUnavailable: store.unavailableDataSources.contains(.credits),
+            bookingsUnavailable: store.unavailableDataSources.contains(.bookings)
+        )
+    }
+
+    private func handleMemberLaunchGuideAction(_ state: MemberLaunchGuideState) {
+        switch state {
+        case .signIn:
+            onNavigate(.account)
+        case .checking:
+            return
+        case .retry:
+            Task { await store.refresh() }
+        case .completeReadiness:
+            showingMemberReadiness = true
+        case .chooseAccess:
+            onOpenRoute(.sessionPacks)
+        case .bookFirstClass:
+            onOpenRoute(.booking)
+        case .enableReminder:
+            Task { await store.setClassRemindersEnabled(true) }
+        case .activated(let bookingID):
+            onOpenRoute(.upcomingBookings(bookingID))
+        }
+    }
+
+    @ViewBuilder
+    private var memberReadinessSection: some View {
+        if store.isSignedIn {
+            XertSection(title: "Member readiness") {
+                MemberReadinessStatusCard {
+                    showingMemberReadiness = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardMembershipSummary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardCreditSummary
+                dashboardNoticeButton
+            }
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                dashboardCreditSummary
+                Spacer(minLength: 8)
+                dashboardNoticeButton
+            }
+        }
+    }
+
+    private var dashboardCreditSummary: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Session credits")
+                .xertEyebrow()
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(dashboardCreditValue)
+                    .xertDisplay(36)
+                Text(store.creditTotal == 1 ? "credit" : "credits")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.xertPale)
+            }
+            Text(dashboardCreditCaption)
+                .font(.caption)
+                .foregroundStyle(dashboardCreditCaptionColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session credits. \(dashboardCreditAccessibilityLabel)")
+    }
+
+    @ViewBuilder
+    private var dashboardNoticeButton: some View {
+        if !store.announcements.isEmpty {
+            Button(action: openNoticeCenter) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.fill")
+                    Text("\(store.announcements.count) notice\(store.announcements.count == 1 ? "" : "s")")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertSteel)
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, minHeight: 44)
+                .padding(.horizontal, 12)
+                .background(Color.xertSteel.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.xertSteel.opacity(0.38), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Member notices, \(store.announcements.count) available")
+            .accessibilityHint("Opens member notices")
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardNextTraining: some View {
+        if let booking = dashboardNextBooking {
+            dashboardBookingCard(booking)
+        } else if dashboardBookingsAreInitiallyLoading {
+            HStack(alignment: .center, spacing: 12) {
+                ProgressView()
+                    .tint(Color.xertSteel)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Loading your next class")
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("Checking your bookings and waitlist places…")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        } else if store.unavailableDataSources.contains(.bookings) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Next class unavailable", systemImage: "wifi.exclamationmark")
+                    .font(.headline)
+                    .foregroundStyle(Color.orange)
+                Text("Your bookings could not refresh. Retry before relying on your next class status.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label(store.isLoading ? "Retrying…" : "Retry now", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.xertPrimary)
+                .disabled(store.isLoading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("No upcoming class booked", systemImage: "calendar.badge.plus")
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                Text("Choose a session that suits you and lock in your next training day.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Book a class") {
+                    onNavigate(.booking)
+                }
+                .buttonStyle(.xertPrimary)
+            }
+        }
+    }
+
+    private func dashboardBookingCard(_ booking: BookingItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Next class")
+                        .xertEyebrow()
+                    Text(booking.title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color.xertOffWhite)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                Text(booking.stateLabel.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.xertSteel)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label(Self.dashboardBookingFormatter.string(from: booking.start_time), systemImage: "calendar")
+                if let location = booking.location_zone {
+                    Label(location, systemImage: "mappin.and.ellipse")
+                }
+                if let coach = booking.coach_name {
+                    Label(coach, systemImage: "person.fill")
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(Color.xertPale)
+            .accessibilityElement(children: .combine)
+
+            if store.isUsingStaleMemberData || store.unavailableDataSources.contains(.bookings) {
+                Label("Booking details may be out of date", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+            }
+
+            dashboardBookingActions(booking)
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardBookingActions(_ booking: BookingItem) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                dashboardManageBookingButton(booking)
+                dashboardBookAnotherButton
+            }
+        } else {
+            HStack(spacing: 10) {
+                dashboardManageBookingButton(booking)
+                dashboardBookAnotherButton
+            }
+        }
+    }
+
+    private func dashboardManageBookingButton(_ booking: BookingItem) -> some View {
+        Button {
+            guard let url = URL(
+                string: "xertfitness://account/bookings/\(booking.id.uuidString.lowercased())"
+            ) else { return }
+            openURL(url)
+        } label: {
+            Text("Manage booking")
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .buttonStyle(.xertPrimary)
+        .accessibilityHint("Opens your booking timeline")
+    }
+
+    private var dashboardBookAnotherButton: some View {
+        Button {
+            onNavigate(.booking)
+        } label: {
+            Text("Book another")
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .buttonStyle(.xertGhost)
+    }
+
+    private var dashboardNextBooking: BookingItem? {
+        let now = Date()
+        return store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now }
+            .min { $0.start_time < $1.start_time }
+    }
+
+    private var dashboardBookingsAreInitiallyLoading: Bool {
+        store.bookings.isEmpty
+            && (!store.hasBootstrapped || (store.isLoading && store.memberDataUpdatedAt == nil))
+    }
+
+    @ViewBuilder
+    private var dashboardTrainingMomentum: some View {
+        let progress = MemberTrainingProgress(bookings: store.bookings)
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Training momentum", systemImage: "chart.line.uptrend.xyaxis")
+                .font(.headline)
+                .foregroundStyle(Color.xertOffWhite)
+
+            if dashboardBookingsAreInitiallyLoading {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading recorded attendance…")
+                        .font(.footnote)
+                        .foregroundStyle(Color.xertPale)
+                }
+            } else if store.bookings.isEmpty && store.unavailableDataSources.contains(.bookings) {
+                Text("Progress is unavailable until bookings refresh.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if progress.totalAttended == 0 {
+                Text("Completed classes will appear after the XERT team records your attendance.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        dashboardProgressMetric("\(progress.attendedLast30Days)", label: "30 days")
+                        dashboardProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        dashboardProgressMetric("\(progress.totalAttended)", label: "All time")
+                    }
+                    VStack(spacing: 8) {
+                        dashboardProgressMetric("\(progress.attendedLast30Days)", label: "Completed · 30 days")
+                        dashboardProgressMetric("\(progress.activeWeeksLastFour)/4", label: "Active weeks")
+                        dashboardProgressMetric("\(progress.totalAttended)", label: "Completed · all time")
+                    }
+                }
+            }
+
+            Text("Attendance only · Brisbane weeks")
+                .font(.caption2)
+                .foregroundStyle(Color.xertMuted)
+        }
+    }
+
+    private func dashboardProgressMetric(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .xertDisplay(25)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(0.5)
+                .foregroundStyle(Color.xertMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .padding(9)
+        .background(Color.xertNavy.opacity(0.35))
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.xertSteel.opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private var dashboardCreditValue: String {
+        let hasNoKnownBalance = !store.creditBalanceLoaded
+        if hasNoKnownBalance
+            && (!store.hasBootstrapped || store.isLoading || store.unavailableDataSources.contains(.credits)) {
+            return "—"
+        }
+        return "\(store.creditTotal)"
+    }
+
+    private var dashboardCreditCaption: String {
+        if store.unavailableDataSources.contains(.credits) {
+            return store.creditBalanceLoaded ? "Last known balance" : "Balance unavailable"
+        }
+        if store.isLoading {
+            return store.creditBalanceLoaded ? "Refreshing balance…" : "Loading balance…"
+        }
+        if store.isUsingStaleMemberData {
+            return "Last synced balance"
+        }
+        if let summary = store.creditExpirySummary {
+            return "\(summary.credits) expire in \(summary.daysRemaining) day\(summary.daysRemaining == 1 ? "" : "s")"
+        }
+        return store.creditTotal == 0 ? "No credits available" : "Ready to book"
+    }
+
+    private var dashboardCreditCaptionColor: Color {
+        if store.unavailableDataSources.contains(.credits) || store.isUsingStaleMemberData {
+            return .orange
+        }
+        if store.creditExpirySummary != nil {
+            return Color(red: 224 / 255, green: 179 / 255, blue: 106 / 255)
+        }
+        return Color.xertPale
+    }
+
+    private var dashboardCreditAccessibilityLabel: String {
+        dashboardCreditValue == "—"
+            ? dashboardCreditCaption
+            : "\(store.creditTotal) available. \(dashboardCreditCaption)"
+    }
+
+    private static let dashboardBookingFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
+        formatter.dateFormat = "EEE d MMM · h:mm a"
+        return formatter
+    }()
 
     // MARK: - Member notices
 
@@ -202,9 +642,19 @@ struct HomeView: View {
 
     @ViewBuilder
     private var glanceMetrics: some View {
-        MetricView(value: "\(store.sessions.count)", label: "Classes")
-        MetricView(value: "\(store.creditTotal)", label: "Credits")
-        MetricView(value: "\(store.events.count)", label: "Events")
+        MetricView(value: dashboardPublicMetricValue(store.sessions.count, source: .sessions), label: "Classes")
+        MetricView(value: dashboardCreditValue, label: "Credits")
+        MetricView(value: dashboardPublicMetricValue(store.events.count, source: .events), label: "Events")
+    }
+
+    private func dashboardPublicMetricValue(_ count: Int, source: XertDataSource) -> String {
+        guard count == 0 else { return "\(count)" }
+        let hasNoKnownPublicSnapshot = store.publicDataUpdatedAt == nil
+        if hasNoKnownPublicSnapshot
+            && (!store.hasBootstrapped || store.isLoading || store.unavailableDataSources.contains(source)) {
+            return "—"
+        }
+        return "0"
     }
 
     private var nextUpSection: some View {
@@ -258,7 +708,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private var todayTrainingSection: some View {
-        if store.isSignedIn && !todayBookings.isEmpty {
+        if store.isSignedIn && todayBookings.count > 1 {
             XertSection(title: "Today's training") {
                 VStack(spacing: 10) {
                     ForEach(todayBookings) { booking in
@@ -359,8 +809,9 @@ struct HomeView: View {
     }
 
     private var todayBookings: [BookingItem] {
-        store.bookings
-            .filter { $0.isActiveClassPlace && $0.occursOnBrisbaneDay() }
+        let now = Date()
+        return store.bookings
+            .filter { $0.isActiveClassPlace && $0.start_time > now && $0.occursOnBrisbaneDay() }
             .sorted { $0.start_time < $1.start_time }
     }
 
@@ -372,9 +823,170 @@ struct HomeView: View {
     }
 }
 
+private struct MemberLaunchGuideCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let state: MemberLaunchGuideState
+    let onAction: (MemberLaunchGuideState) -> Void
+
+    var body: some View {
+        Group {
+            if state.isCompact {
+                compactContent
+            } else {
+                expandedContent
+            }
+        }
+        .padding(state.isCompact ? 12 : 14)
+        .xertCardStyle()
+        .accessibilityElement(children: .contain)
+    }
+
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            guideHeader
+            Button(actionTitle) { onAction(state) }
+                .buttonStyle(.xertPrimary)
+                .disabled(state == .checking)
+                .accessibilityHint(actionHint)
+        }
+    }
+
+    private var compactContent: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                guideHeader
+                Spacer(minLength: 4)
+                compactButton
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                guideHeader
+                compactButton
+            }
+        }
+    }
+
+    private var guideHeader: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: iconName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .frame(width: 36, height: 36)
+                .background(accentColor.opacity(0.1))
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(eyebrow)
+                    .xertEyebrow()
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.xertOffWhite)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !state.isCompact || dynamicTypeSize.isAccessibilitySize {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var compactButton: some View {
+        Button(actionTitle) { onAction(state) }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.xertSteel)
+            .frame(minHeight: 44)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityHint(actionHint)
+    }
+
+    private var eyebrow: String { state.isCompact ? "Ready" : "Your next step" }
+
+    private var title: String {
+        switch state {
+        case .signIn: return "Start your XERT membership"
+        case .checking: return "Checking your member progress"
+        case .retry: return "Member progress needs a refresh"
+        case .completeReadiness: return "Complete member readiness"
+        case .chooseAccess: return "Choose your session access"
+        case .bookFirstClass: return "Book your first class"
+        case .enableReminder: return "Never miss your next class"
+        case .activated: return "You're ready to train"
+        }
+    }
+
+    private var detail: String {
+        switch state {
+        case .signIn:
+            return "Create an account or sign in, then XERT will keep your next step here."
+        case .checking:
+            return "XERT is securely loading your readiness, credits and bookings."
+        case .retry:
+            return "Some member details could not be refreshed. Your saved account remains protected."
+        case .completeReadiness:
+            return "Add your contact details and acknowledge the current member documents."
+        case .chooseAccess:
+            return "Choose the session pack that fits your training plan."
+        case .bookFirstClass:
+            return "Your credits are ready. Choose a coached session that works for you."
+        case .enableReminder:
+            return "Turn on an optional device reminder for confirmed classes."
+        case .activated:
+            return "Your next class is booked."
+        }
+    }
+
+    private var actionTitle: String {
+        switch state {
+        case .signIn: return "Create Account or Sign In"
+        case .checking: return "Checking…"
+        case .retry: return "Retry Member Progress"
+        case .completeReadiness: return "Complete Readiness"
+        case .chooseAccess: return "View Session Packs"
+        case .bookFirstClass: return "Browse Classes"
+        case .enableReminder: return "Enable Class Reminder"
+        case .activated: return "View Booking"
+        }
+    }
+
+    private var actionHint: String {
+        switch state {
+        case .signIn: return "Opens secure member access"
+        case .checking: return "Member progress is still loading"
+        case .retry: return "Retries readiness, credits and bookings"
+        case .completeReadiness: return "Opens your private member readiness form"
+        case .chooseAccess: return "Opens session pack options on the Book page"
+        case .bookFirstClass: return "Opens class discovery on the Book page"
+        case .enableReminder: return "Requests notification permission, then schedules eligible class reminders"
+        case .activated: return "Opens your upcoming bookings"
+        }
+    }
+
+    private var iconName: String {
+        switch state {
+        case .signIn: return "person.crop.circle.badge.plus"
+        case .checking: return "arrow.clockwise"
+        case .retry: return "wifi.exclamationmark"
+        case .completeReadiness: return "person.text.rectangle"
+        case .chooseAccess: return "creditcard"
+        case .bookFirstClass: return "calendar.badge.plus"
+        case .enableReminder: return "bell.badge"
+        case .activated: return "checkmark.circle.fill"
+        }
+    }
+
+    private var accentColor: Color {
+        state.isCompact ? .green : .xertSteel
+    }
+}
+
 private struct NativeHomeHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var photoIndex = 0
+    @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
     let content: AdminSiteContentData
     let isSignedIn: Bool
     let noticeCount: Int
@@ -529,11 +1141,14 @@ private struct NativeHomeHero: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSProcessInfoPowerStateDidChange)) { _ in
+            isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
         .task(id: carouselTaskID) {
             if photoIndex >= heroPhotoURLs.count { photoIndex = 0 }
-            guard heroPhotoURLs.count > 1, !reduceMotion else { return }
+            guard heroPhotoURLs.count > 1, allowsAutomaticCarousel else { return }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, allowsAutomaticCarousel else { return }
             withAnimation(.easeInOut(duration: 1.2)) {
                 photoIndex = (photoIndex + 1) % heroPhotoURLs.count
             }
@@ -543,9 +1158,12 @@ private struct NativeHomeHero: View {
     @ViewBuilder
     private var heroImage: some View {
         if let url = currentHeroPhotoURL {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { fallbackImage }
+            XertRemoteImage(
+                url: url,
+                maximumPointDimension: 760,
+                contentMode: .fill
+            ) {
+                fallbackImage
             }
             .id(url)
             .transition(.opacity)
@@ -569,7 +1187,11 @@ private struct NativeHomeHero: View {
     }
 
     private var carouselTaskID: String {
-        "\(reduceMotion)-\(photoIndex)-" + heroPhotoURLs.map(\.absoluteString).joined(separator: "|")
+        "\(allowsAutomaticCarousel)-\(photoIndex)-" + heroPhotoURLs.map(\.absoluteString).joined(separator: "|")
+    }
+
+    private var allowsAutomaticCarousel: Bool {
+        scenePhase == .active && !reduceMotion && !isLowPowerModeEnabled
     }
 
     private var fallbackImage: some View {
