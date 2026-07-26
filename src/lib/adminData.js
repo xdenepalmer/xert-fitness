@@ -124,23 +124,30 @@ export async function updateLegacyBookingNotes(id, adminNotes) {
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
 
-// The public timetable only advertises upcoming, bookable classes. Bounding the
-// query keeps a growing class catalogue from shipping to every visitor and stops
-// the enquiry path from offering live requests against finished classes.
-const PUBLIC_TIMETABLE_LIMIT = 100;
-
+// Page every matching class_sessions row. A single PostgREST select is capped by
+// max_rows — the admin calendar and soft-launch / public timetable used to
+// silently hide classes past that ceiling (or an explicit 100-row public cut),
+// so operators could miss live sessions and members could not book them.
 export async function getClassSessions(publicOnly = false) {
-  let query = supabase.from('class_sessions').select('*').order('start_time', { ascending: true });
-  if (publicOnly) {
-    query = query
-      .eq('public_visible', true)
-      .eq('status', 'published')
-      .gte('start_time', new Date().toISOString())
-      .limit(PUBLIC_TIMETABLE_LIMIT);
-  }
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data || [];
+  const nowIso = new Date().toISOString();
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    let query = supabase
+      .from('class_sessions')
+      .select('*')
+      .order('start_time', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (publicOnly) {
+      query = query
+        .eq('public_visible', true)
+        .eq('status', 'published')
+        .gte('start_time', nowIso);
+    }
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function createClassSession(sessionData) {
@@ -1938,28 +1945,53 @@ export async function revealMemberEmergencyContact(userId) {
 }
 
 export async function adminMemberDetail(userId) {
-  const [credits, bookings, orders, grants, notes, notices, onboardingRows] = await Promise.all([
-    supabase.from('credit_batches').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+  // Credits / orders / grant audit must page past PostgREST max_rows — a truncated
+  // pack history silently hides paid packs and manual grants during refund review.
+  const loadMemberBatches = (table, columns, orderColumn = 'created_at') => (
+    collectAdminBatches(async (page, pageSize) => {
+      const from = (page - 1) * pageSize;
+      const { data, error } = await supabase
+        .from(table)
+        .select(columns)
+        .eq('user_id', userId)
+        .order(orderColumn, { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw new Error(error.message);
+      return data || [];
+    })
+  );
+
+  const [credits, bookings, orders, grantsResult, notes, notices, onboardingRows] = await Promise.all([
+    loadMemberBatches('credit_batches', '*'),
     supabase.from('session_bookings').select('*, class_sessions(title, class_type, start_time)').eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
-    supabase.from('orders').select('*, products(name)').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('admin_credit_grants').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    loadMemberBatches('orders', '*, products(name)'),
+    loadMemberBatches('admin_credit_grants', '*').then(
+      rows => ({ rows, available: true }),
+      error => {
+        // Rolling-upgrade only: missing grant audit table is not an empty history.
+        const message = error?.message || '';
+        if (/admin_credit_grants|schema cache|does not exist|42P01|PGRST205/i.test(message)) {
+          return { rows: [], available: false };
+        }
+        throw error instanceof Error ? error : new Error(message || 'Credit grant audit unavailable.');
+      },
+    ),
     adminListMemberNotes(userId, true),
     adminListMemberNotices(userId),
     adminMemberOnboardingSummary([userId]),
   ]);
-  for (const r of [credits, bookings, orders]) {
-    if (r.error) throw new Error(r.error.message);
-  }
+  if (bookings.error) throw new Error(bookings.error.message);
   const onboardingAvailable = onboardingRows !== null;
   const onboarding = onboardingAvailable
     ? (onboardingRows.find(row => row.user_id === userId) || null)
     : null;
   return {
-    credits: credits.data || [],
+    credits,
     bookings: bookings.data || [],
-    orders: orders.data || [],
-    grants: grants.error ? [] : grants.data || [],
-    creditAuditAvailable: !grants.error,
+    orders,
+    grants: grantsResult.rows,
+    creditAuditAvailable: grantsResult.available,
     notes: notes.rows,
     memberNotesAvailable: notes.available,
     notices: notices.rows,

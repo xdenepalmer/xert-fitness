@@ -911,7 +911,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       toast({
         title: 'Class cancelled',
         description: affectedBookings
-          ? `${affectedBookings} ${noun} cancelled. Reserved member credits were returned.`
+          // Waitlist / enquiry places and Stripe-refunded packs do not restore
+          // credits — do not claim every cancelled row returned a pack credit.
+          ? `${affectedBookings} ${noun} cancelled. Reserved credits on open credit places were returned when the pack is still live.`
           : 'No active bookings needed to be cancelled.',
       });
       if (expandedBookings === session.id) {
@@ -1360,7 +1362,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           >
             <h3 id="cancel-class-title" className="font-display text-xl uppercase text-xert-offwhite">Cancel this class?</h3>
             <p id="cancel-class-description" className="mt-3 font-body text-sm leading-relaxed text-xert-concrete/70">
-              {sessionToCancel.title} will be removed from the timetable. All active bookings will be cancelled and any reserved class credits returned.
+              {sessionToCancel.title} will be removed from the timetable. All active bookings will be cancelled. Reserved credits on open credit places are returned when the pack is still live; waitlist and enquiry places never held a credit.
             </p>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button

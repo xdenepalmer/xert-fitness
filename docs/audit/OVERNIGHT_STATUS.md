@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Class catalogue / money-history silence (app-only tip after **26121**): admin
+  calendar + soft-launch/public timetable page past PostgREST `max_rows` (and
+  drop the silent 100-row public cut) so seed/repeat growth cannot hide bookable
+  classes; iOS Command Centre class list and member Account orders page the same
+  way; Member drawer credits/orders/grant audit pages past `max_rows` so refund
+  review cannot miss packs; class-cancel confirm/toast no longer claims every
+  cancelled place returned a credit (waitlist/enquiry / Stripe-refunded packs).
 - Terminal / waitlist leftover credit markers (**26121**): waitlist cancel/skip
   clear leftover `credit_batch_id`; Stripe full refund also nulls the FK on
   already-cancelled/declined/waitlisted rows that still pointed at the refunded
@@ -612,6 +619,16 @@ Migration / operator mirror:
 `supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql`
 ↔ `src/supabase/terminal_booking_clears_stale_credit_batch.sql`. Apply through **26121**.
 
+### 40. This batch — class catalogue / money-history silence + cancel credit honesty
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (ops / bookings) | Admin `getClassSessions` and soft-launch/public timetable hit PostgREST `max_rows` (or an explicit 100-row public cut) with no paging — seed/repeat growth silently hid later classes from the calendar and bookable timetable | Page with `collectAdminBatches` (web); drop `PUBLIC_TIMETABLE_LIMIT` |
+| Silent failure (iOS) | Command Centre `adminClassSessions` hard-`limit=1000`; member Account `orders` had no offset loop — purchase history and calendar truncated without warning | Offset page at 500 (Orders / event-goals parity) |
+| Silent failure (money) | Member drawer `credit_batches` / `orders` / `admin_credit_grants` were single uncapped selects — refund review could miss packs past `max_rows` | Page money history via `collectAdminBatches` |
+| Money honesty | Class-cancel confirm + toast always said reserved credits were returned, including waitlist/enquiry-only cancels and Stripe-refunded pack skips | Honest copy (open credit places + pack still live); iOS dialog matched |
+
+No new migration for this batch (app-only tip). Apply through **26121** remains current.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -883,3 +900,8 @@ show `installed = true` and `release_ready = true`, including
     clears FK on prior late-cancelled places for that pack; class roster load
     failure toasts instead of empty; soft-launch timetable fetch failure shows
     unavailable (not coming soon); Booking CSV Credit reserved matches badges.
+39. **Class catalogue / money-history silence + cancel credit honesty** — With
+    >1000 class rows (or >100 upcoming on the old public cut), admin calendar +
+    soft-launch timetable + iOS class list still show every class; Member drawer
+    credits/orders/grants and iPhone Account orders page past max_rows; class
+    cancel confirm/toast does not claim waitlist-only cancels returned credits.

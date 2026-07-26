@@ -23,11 +23,13 @@ test('PT request page query breaks created_at ties with a unique id sort key', (
   assert.match(block, /\.order\('created_at', \{ ascending: false \}\)[\s\S]*?\.order\('id', \{ ascending: false \}\)/);
 });
 
-test('the public timetable query is bounded to upcoming classes with an explicit limit', () => {
+test('class session loads page past PostgREST max_rows instead of silently truncating', () => {
   const block = slice('export async function getClassSessions', 'export async function createClassSession');
+  assert.match(block, /collectAdminBatches/);
   assert.match(block, /if \(publicOnly\)/);
-  assert.match(block, /\.gte\('start_time', new Date\(\)\.toISOString\(\)\)/);
-  assert.match(block, /\.limit\(PUBLIC_TIMETABLE_LIMIT\)/);
+  assert.match(block, /\.gte\('start_time', nowIso\)/);
+  assert.match(block, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.doesNotMatch(block, /PUBLIC_TIMETABLE_LIMIT|\.limit\(/);
 });
 
 test('admin booking queues filter the date window server-side', () => {

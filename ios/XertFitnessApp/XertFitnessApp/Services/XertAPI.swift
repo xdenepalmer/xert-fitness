@@ -228,14 +228,26 @@ final class XertAPI {
     }
 
     func orders(session auth: AuthSession) async throws -> [OrderItem] {
-        try await restRequest(
-            path: "/rest/v1/orders",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
-                URLQueryItem(name: "order", value: "created_at.desc")
-            ],
-            auth: auth
-        )
+        // Member purchase history must page past PostgREST max_rows — a truncated
+        // list silently hides paid / refunded packs from Account.
+        let pageSize = 500
+        var offset = 0
+        var orders: [OrderItem] = []
+        while true {
+            let page: [OrderItem] = try await restRequest(
+                path: "/rest/v1/orders",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            orders.append(contentsOf: page)
+            if page.count < pageSize { return orders }
+            offset += pageSize
+        }
     }
 
     func adminOrders(session auth: AuthSession) async throws -> [OrderItem] {
@@ -345,15 +357,26 @@ final class XertAPI {
     }
 
     func adminClassSessions(session auth: AuthSession) async throws -> [AdminClassSession] {
-        return try await restRequest(
-            path: "/rest/v1/class_sessions",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,class_type,title,description,coach_name,start_time,end_time,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,status,public_visible,booking_mode,notes,updated_at"),
-                URLQueryItem(name: "order", value: "start_time.asc.nullslast"),
-                URLQueryItem(name: "limit", value: "1000")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a single limit=1000 select silently hid
+        // later classes from the Command Centre calendar after seed/repeat growth.
+        let pageSize = 500
+        var offset = 0
+        var sessions: [AdminClassSession] = []
+        while true {
+            let page: [AdminClassSession] = try await restRequest(
+                path: "/rest/v1/class_sessions",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,class_type,title,description,coach_name,start_time,end_time,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,status,public_visible,booking_mode,notes,updated_at"),
+                    URLQueryItem(name: "order", value: "start_time.asc.nullslast,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            sessions.append(contentsOf: page)
+            if page.count < pageSize { return sessions }
+            offset += pageSize
+        }
     }
 
     func adminCreateClass(session auth: AuthSession, draft: AdminClassDraft) async throws {

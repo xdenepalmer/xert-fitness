@@ -2811,7 +2811,7 @@ private struct AdminScheduleView: View {
             }
             Button("Keep class", role: .cancel) { pendingCancellation = nil }
         } message: { _ in
-            Text("Every active booking is cancelled, reserved credits are returned, and affected members receive a cancellation notice.")
+            Text("Every active booking is cancelled. Reserved credits on open credit places are returned when the pack is still live; waitlist places never held a credit. Affected members receive a cancellation notice.")
         }
     }
 
