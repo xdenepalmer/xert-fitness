@@ -523,6 +523,177 @@ struct AdminClassSession: Identifiable, Codable, Hashable {
     let notes: String?
 }
 
+struct AdminClassCancellationContact: Identifiable, Hashable {
+    let name: String
+    let email: String?
+    let phone: String?
+    let phoneDialable: String?
+
+    var id: String {
+        email?.lowercased() ?? phoneDialable ?? name.lowercased()
+    }
+
+    var displayName: String {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? (email ?? phone ?? "Affected member") : cleaned
+    }
+
+    var emailURL: URL? {
+        email.flatMap { URL(string: "mailto:\($0)") }
+    }
+
+    var phoneURL: URL? {
+        phoneDialable.flatMap { URL(string: "tel:\($0)") }
+    }
+}
+
+struct AdminClassCancellationMessage: Hashable {
+    let subject: String
+    let body: String
+
+    init(classSession: AdminClassSession) {
+        let title = classSession.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let className = title.isEmpty ? "XERT class" : title
+        let startsAt = classSession.start_time.map { Self.startFormatter.string(from: $0) } ?? "the scheduled time"
+        subject = "XERT class cancelled: \(className)"
+        body = [
+            "Hi,",
+            "",
+            "Unfortunately, XERT has cancelled \(className) on \(startsAt). Any reserved session credit has been returned automatically.",
+            "",
+            "We are sorry for the disruption. Please open XERT to choose another class, or reply if you need help.",
+            "",
+            "XERT Fitness"
+        ].joined(separator: "\n")
+    }
+
+    private static let startFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = EventItem.calendar
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = EventItem.calendar.timeZone
+        formatter.dateFormat = "EEEE d MMMM 'at' h:mm a"
+        return formatter
+    }()
+}
+
+struct AdminClassCancellationNoticeOutcome: Codable, Hashable {
+    let announcement_id: UUID
+    let recipients: Int
+    let push: AdminAnnouncementPushSummary
+}
+
+struct AdminClassCancellationFollowUp: Identifiable, Hashable {
+    static let maximumBCCRecipients = 40
+
+    let sessionID: UUID
+    let classTitle: String
+    let affectedBookings: Int
+    let contacts: [AdminClassCancellationContact]
+    let message: AdminClassCancellationMessage
+    let contactLookupIncomplete: Bool
+    let notification: AdminClassCancellationNoticeOutcome?
+    let notificationWarning: String?
+    let refreshWarnings: [String]
+    let completedAt: Date
+
+    var id: UUID { sessionID }
+    var emailRecipientCount: Int { min(emailRecipients.count, Self.maximumBCCRecipients) }
+    var omittedEmailCount: Int { max(0, emailRecipients.count - Self.maximumBCCRecipients) }
+
+    var mailtoURL: URL? {
+        let recipients = Array(emailRecipients.prefix(Self.maximumBCCRecipients))
+        guard !recipients.isEmpty else { return nil }
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = ""
+        components.queryItems = [
+            URLQueryItem(name: "bcc", value: recipients.joined(separator: ",")),
+            URLQueryItem(name: "subject", value: message.subject),
+            URLQueryItem(name: "body", value: message.body)
+        ]
+        return components.url
+    }
+
+    static func contacts(
+        roster: [AdminRosterMember],
+        enquiries: [AdminLegacyBookingRequest]
+    ) -> [AdminClassCancellationContact] {
+        let activeStatuses = Set(["requested", "confirmed", "waitlisted"])
+        var contacts: [AdminClassCancellationContact] = []
+
+        func append(name: String?, email: String?, phone: String?, status: String) {
+            guard activeStatuses.contains(status) else { return }
+            let normalizedEmail = normalizeEmail(email)
+            let normalizedPhone = normalizePhone(phone)
+            guard normalizedEmail != nil || normalizedPhone.dialable != nil else { return }
+
+            if let index = contacts.firstIndex(where: {
+                (normalizedEmail != nil && $0.email == normalizedEmail)
+                    || (normalizedPhone.dialable != nil && $0.phoneDialable == normalizedPhone.dialable)
+            }) {
+                let existing = contacts[index]
+                contacts[index] = AdminClassCancellationContact(
+                    name: existing.name.isEmpty ? clean(name) : existing.name,
+                    email: existing.email ?? normalizedEmail,
+                    phone: existing.phone ?? normalizedPhone.display,
+                    phoneDialable: existing.phoneDialable ?? normalizedPhone.dialable
+                )
+                return
+            }
+
+            contacts.append(AdminClassCancellationContact(
+                name: clean(name),
+                email: normalizedEmail,
+                phone: normalizedPhone.display,
+                phoneDialable: normalizedPhone.dialable
+            ))
+        }
+
+        for member in roster {
+            append(name: member.full_name, email: member.email, phone: member.phone, status: member.status)
+        }
+        for enquiry in enquiries {
+            append(name: enquiry.full_name, email: enquiry.email, phone: enquiry.phone, status: enquiry.status)
+        }
+        return contacts.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    private var emailRecipients: [String] {
+        var seen = Set<String>()
+        return contacts.compactMap(\.email).filter { seen.insert($0).inserted }
+    }
+
+    private static func clean(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private static func normalizeEmail(_ value: String?) -> String? {
+        let email = clean(value).lowercased()
+        guard email.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return email
+    }
+
+    private static func normalizePhone(_ value: String?) -> (display: String?, dialable: String?) {
+        let display = clean(value)
+        var dialable = ""
+        for character in display {
+            if character.isNumber {
+                dialable.append(character)
+            } else if character == "+", dialable.isEmpty {
+                dialable.append(character)
+            }
+        }
+        let digitCount = dialable.filter(\.isNumber).count
+        guard digitCount >= 8 else { return (nil, nil) }
+        return (display, dialable)
+    }
+}
+
 struct AdminClassDraft: Equatable {
     static let classTypes = ["XERT Foundation", "XERT Strength", "XERT Engine", "XERT Hybrid", "XERT Event Prep", "XERT Team"]
     static let intensities = ["Low", "Moderate", "High", "Very high"]

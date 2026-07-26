@@ -83,6 +83,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var classSessions: [AdminClassSession] = []
+    @Published private(set) var classCancellationFollowUp: AdminClassCancellationFollowUp?
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
@@ -1874,25 +1875,115 @@ final class AdminStore: ObservableObject {
         return await saveClass(session: session, classSession: nil, draft: draft)
     }
 
-    func cancelClass(session: AuthSession, classSession: AdminClassSession) async -> Bool {
-        guard cancellingClassID == nil else { return false }
+    func cancelClass(
+        session: AuthSession,
+        classSession: AdminClassSession
+    ) async -> AdminClassCancellationFollowUp? {
+        guard cancellingClassID == nil else { return nil }
         healthRefreshGeneration &+= 1
         launchGateUpdatedAt = nil
+        classCancellationFollowUp = nil
         cancellingClassID = classSession.id
         defer { cancellingClassID = nil }
+
+        async let rosterRequest = api.adminSessionRoster(
+            session: session,
+            classSessionID: classSession.id
+        )
+        async let enquiryRequest = api.adminClassCancellationEnquiries(
+            session: session,
+            classSessionID: classSession.id
+        )
+        var roster: [AdminRosterMember] = []
+        var enquiries: [AdminLegacyBookingRequest] = []
+        var contactLookupFailures = 0
+        do { roster = try await rosterRequest }
+        catch { contactLookupFailures += 1 }
+        do { enquiries = try await enquiryRequest }
+        catch { contactLookupFailures += 1 }
+
         do {
-            _ = try await api.adminCancelClass(session: session, classSessionID: classSession.id)
-            do { try await api.adminNotifyClassCancellation(session: session, classSessionID: classSession.id) }
-            catch { errorMessage = "Class cancelled, but push delivery needs attention: \(error.localizedDescription)" }
-            classSessions = try await api.adminClassSessions(session: session)
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            waitlist = try await api.adminWaitlist(session: session)
+            let affectedBookings = try await api.adminCancelClass(
+                session: session,
+                classSessionID: classSession.id
+            )
+
+            var notification: AdminClassCancellationNoticeOutcome?
+            var notificationWarning: String?
+            if affectedBookings > 0 {
+                do {
+                    notification = try await api.adminNotifyClassCancellation(
+                        session: session,
+                        classSessionID: classSession.id
+                    )
+                } catch {
+                    notificationWarning = "The private notice was created, but Apple push delivery could not be confirmed: \(error.localizedDescription)"
+                }
+            }
+
+            var refreshWarnings: [String] = []
+            do {
+                classSessions = try await api.adminClassSessions(session: session)
+                loadedSources.insert("full timetable")
+                refreshUnavailableSources.removeAll { $0 == "full timetable" }
+            } catch {
+                refreshWarnings.append("full timetable")
+                if !refreshUnavailableSources.contains("full timetable") {
+                    refreshUnavailableSources.append("full timetable")
+                }
+            }
+            do {
+                dailyOperations = try await api.adminDailyOperations(session: session)
+                loadedSources.insert("today's classes")
+                refreshUnavailableSources.removeAll { $0 == "today's classes" }
+            } catch {
+                refreshWarnings.append("today's classes")
+                if !refreshUnavailableSources.contains("today's classes") {
+                    refreshUnavailableSources.append("today's classes")
+                }
+            }
+            do {
+                waitlist = try await api.adminWaitlist(session: session)
+                loadedSources.insert("waitlists")
+                refreshUnavailableSources.removeAll { $0 == "waitlists" }
+            } catch {
+                refreshWarnings.append("waitlists")
+                if !refreshUnavailableSources.contains("waitlists") {
+                    refreshUnavailableSources.append("waitlists")
+                }
+            }
+            do {
+                bookingRequests = try await api.adminBookingRequests(session: session)
+            } catch {
+                refreshWarnings.append("booking requests")
+            }
+
+            let followUp = AdminClassCancellationFollowUp(
+                sessionID: classSession.id,
+                classTitle: classSession.title,
+                affectedBookings: affectedBookings,
+                contacts: AdminClassCancellationFollowUp.contacts(
+                    roster: roster,
+                    enquiries: enquiries
+                ),
+                message: AdminClassCancellationMessage(classSession: classSession),
+                contactLookupIncomplete: contactLookupFailures > 0,
+                notification: notification,
+                notificationWarning: notificationWarning,
+                refreshWarnings: refreshWarnings,
+                completedAt: Date()
+            )
+            classCancellationFollowUp = followUp
             lastUpdatedAt = Date()
-            return true
+            return followUp
         } catch {
             errorMessage = error.localizedDescription
-            return false
+            return nil
         }
+    }
+
+    func clearClassCancellationFollowUp() {
+        classCancellationFollowUp = nil
     }
 
     func saveAvailability(session: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async -> Bool {

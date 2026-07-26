@@ -3856,6 +3856,85 @@ final class ModelsTests: XCTestCase {
         ])
     }
 
+    func testClassCancellationFollowUpDeduplicatesActiveContactsAndBuildsFallbackCopy() {
+        let session = adminClassSession(
+            title: "XERT Engine",
+            startTime: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let member = AdminRosterMember(
+            booking_id: UUID(),
+            member_id: UUID(),
+            full_name: " ",
+            email: "ALEX@EXAMPLE.COM",
+            phone: "0401 234 567",
+            status: "confirmed",
+            booked_at: Date()
+        )
+        let duplicateEnquiry = AdminLegacyBookingRequest(
+            id: AdminLeadIdentifier("enquiry-1"),
+            full_name: "Alex Runner",
+            email: "alex@example.com",
+            phone: nil,
+            status: "requested",
+            admin_notes: nil,
+            created_at: Date(),
+            class_sessions: nil
+        )
+        let inactive = AdminLegacyBookingRequest(
+            id: AdminLeadIdentifier("enquiry-2"),
+            full_name: "Cancelled Person",
+            email: "cancelled@example.com",
+            phone: nil,
+            status: "cancelled",
+            admin_notes: nil,
+            created_at: Date(),
+            class_sessions: nil
+        )
+
+        let contacts = AdminClassCancellationFollowUp.contacts(
+            roster: [member],
+            enquiries: [duplicateEnquiry, inactive]
+        )
+        XCTAssertEqual(contacts.count, 1)
+        XCTAssertEqual(contacts[0].displayName, "Alex Runner")
+        XCTAssertEqual(contacts[0].email, "alex@example.com")
+        XCTAssertEqual(contacts[0].phoneDialable, "0401234567")
+
+        let message = AdminClassCancellationMessage(classSession: session)
+        XCTAssertEqual(message.subject, "XERT class cancelled: XERT Engine")
+        XCTAssertTrue(message.body.contains("Any reserved session credit has been returned automatically."))
+        XCTAssertTrue(message.body.contains("Please open XERT to choose another class"))
+    }
+
+    func testClassCancellationFollowUpBoundsBCCRecipients() {
+        let contacts = (0..<45).map { index in
+            AdminClassCancellationContact(
+                name: "Member \(index)",
+                email: "member\(index)@example.com",
+                phone: nil,
+                phoneDialable: nil
+            )
+        }
+        let session = adminClassSession(title: "XERT Strength")
+        let followUp = AdminClassCancellationFollowUp(
+            sessionID: session.id,
+            classTitle: session.title,
+            affectedBookings: contacts.count,
+            contacts: contacts,
+            message: AdminClassCancellationMessage(classSession: session),
+            contactLookupIncomplete: false,
+            notification: nil,
+            notificationWarning: nil,
+            refreshWarnings: [],
+            completedAt: Date()
+        )
+
+        XCTAssertEqual(followUp.emailRecipientCount, 40)
+        XCTAssertEqual(followUp.omittedEmailCount, 5)
+        XCTAssertNotNil(followUp.mailtoURL)
+        XCTAssertTrue(followUp.mailtoURL?.absoluteString.hasPrefix("mailto:") == true)
+    }
+
     func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -4029,6 +4108,30 @@ final class ModelsTests: XCTestCase {
             utm_campaign: campaign,
             source: recordedSource,
             created_at: createdAt
+        )
+    }
+
+    private func adminClassSession(
+        title: String,
+        startTime: Date = Date(timeIntervalSince1970: 1_800_000_000)
+    ) -> AdminClassSession {
+        AdminClassSession(
+            id: UUID(),
+            class_type: "XERT Engine",
+            title: title,
+            description: nil,
+            coach_name: "Coach",
+            start_time: startTime,
+            end_time: startTime.addingTimeInterval(3_600),
+            duration_minutes: 60,
+            capacity: 12,
+            location_zone: "Main floor",
+            beginner_friendly: true,
+            intensity_level: "High",
+            status: "published",
+            public_visible: true,
+            booking_mode: "instant_book",
+            notes: nil
         )
     }
 

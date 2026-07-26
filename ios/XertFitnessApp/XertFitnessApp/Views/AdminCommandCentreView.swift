@@ -548,7 +548,13 @@ struct AdminCommandCentreView: View {
         switch action {
         case .newClass:
             NavigationStack {
-                AdminClassEditor(admin: admin, session: session, classSession: nil)
+                AdminClassEditor(
+                    admin: admin,
+                    session: session,
+                    classSession: nil,
+                    mutationAllowed: admin.loadedSources.contains("full timetable")
+                        && !admin.refreshUnavailableSources.contains("full timetable")
+                )
             }
         case .newNotice:
             AdminAnnouncementComposer(
@@ -3383,6 +3389,15 @@ private struct AdminScheduleView: View {
     @State private var showingCreate = false
     @State private var pendingCancellation: AdminClassSession?
 
+    private var timetableIsCurrent: Bool {
+        admin.loadedSources.contains("full timetable")
+            && !admin.refreshUnavailableSources.contains("full timetable")
+    }
+
+    private var timetableIsLoading: Bool {
+        admin.isLoading && !admin.loadedSources.contains("full timetable")
+    }
+
     private var rows: [AdminClassSession] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !term.isEmpty else { return admin.classSessions }
@@ -3407,9 +3422,34 @@ private struct AdminScheduleView: View {
 
     var body: some View {
         List {
-            if rows.isEmpty { Text("No matching classes.").listRowBackground(Color.xertInk) }
-            ForEach(rows) { item in
-                classRow(item)
+            if timetableIsLoading {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading the full timetable...")
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                }
+                .frame(minHeight: 44)
+                .listRowBackground(Color.xertInk)
+            } else {
+                if !timetableIsCurrent {
+                    Label(
+                        admin.classSessions.isEmpty
+                            ? "The full timetable is unavailable. Refresh before managing classes."
+                            : "Showing the last timetable snapshot. Refresh before editing or cancelling a class.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+                }
+                if rows.isEmpty {
+                    Text(admin.classSessions.isEmpty ? "No classes are scheduled." : "No matching classes.")
+                        .listRowBackground(Color.xertInk)
+                }
+                ForEach(rows) { item in
+                    classRow(item)
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -3420,10 +3460,30 @@ private struct AdminScheduleView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { showingCreate = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel("Create class")
+                    .disabled(!timetableIsCurrent)
             }
         }
         .sheet(isPresented: $showingCreate) {
-            NavigationStack { AdminClassEditor(admin: admin, session: session, classSession: nil) }
+            NavigationStack {
+                AdminClassEditor(
+                    admin: admin,
+                    session: session,
+                    classSession: nil,
+                    mutationAllowed: timetableIsCurrent
+                )
+            }
+        }
+        .refreshable { await admin.refresh(session: session) }
+        .sheet(
+            item: Binding(
+                get: { admin.classCancellationFollowUp },
+                set: { if $0 == nil { admin.clearClassCancellationFollowUp() } }
+            )
+        ) { followUp in
+            AdminClassCancellationFollowUpView(
+                followUp: followUp,
+                onClose: admin.clearClassCancellationFollowUp
+            )
         }
         .confirmationDialog(
             "Cancel this class?",
@@ -3432,7 +3492,8 @@ private struct AdminScheduleView: View {
         ) { item in
             Button("Cancel \(item.title)", role: .destructive) {
                 Task {
-                    _ = await admin.cancelClass(session: session, classSession: item)
+                    let outcome = await admin.cancelClass(session: session, classSession: item)
+                    XertHaptics.play(outcome == nil ? .error : .warning)
                     pendingCancellation = nil
                 }
             }
@@ -3463,7 +3524,12 @@ private struct AdminScheduleView: View {
     private func classInformation(_ item: AdminClassSession) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             NavigationLink {
-                AdminClassEditor(admin: admin, session: session, classSession: item)
+                AdminClassEditor(
+                    admin: admin,
+                    session: session,
+                    classSession: item,
+                    mutationAllowed: timetableIsCurrent
+                )
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.title).font(.headline)
@@ -3496,7 +3562,11 @@ private struct AdminScheduleView: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
-            .disabled(admin.savingClassID != nil || admin.cancellingClassID != nil)
+            .disabled(
+                !timetableIsCurrent
+                    || admin.savingClassID != nil
+                    || admin.cancellingClassID != nil
+            )
             .accessibilityLabel("Manage \(item.title)")
         }
         .font(.caption2.weight(.bold))
@@ -3512,27 +3582,276 @@ private struct AdminScheduleView: View {
     }
 }
 
+private struct AdminClassCancellationFollowUpView: View {
+    let followUp: AdminClassCancellationFollowUp
+    let onClose: () -> Void
+    @State private var copiedMessage = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Cancellation result") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(followUp.classTitle)
+                                .font(.headline)
+                            Text(affectedSummary)
+                                .font(.caption)
+                                .foregroundStyle(Color.xertPale.opacity(0.62))
+                        }
+                    } icon: {
+                        Image(systemName: "calendar.badge.minus")
+                            .foregroundStyle(Color.orange)
+                    }
+
+                    if !followUp.refreshWarnings.isEmpty {
+                        Label(
+                            "Class cancelled, but \(followUp.refreshWarnings.joined(separator: ", ")) could not refresh.",
+                            systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+
+                if followUp.affectedBookings > 0 {
+                    notificationSection
+                    contactSection
+
+                    Section("Ready-to-send message") {
+                        Text(followUp.message.body)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.xertOffWhite)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if followUp.omittedEmailCount > 0 {
+                            Label(
+                                "\(followUp.omittedEmailCount) additional email recipient\(followUp.omittedEmailCount == 1 ? " was" : "s were") omitted from the bounded BCC message.",
+                                systemImage: "person.crop.circle.badge.exclamationmark"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(Color.orange)
+                        }
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.xertNavy)
+            .navigationTitle("Cancellation Follow-up")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { onClose() }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if followUp.affectedBookings > 0 {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            followUpActions(expands: false)
+                        }
+                        VStack(spacing: 10) {
+                            followUpActions(expands: true)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+    }
+
+    private var notificationSection: some View {
+        Section("Member notification") {
+            if let notification = followUp.notification {
+                Label(
+                    "Private notice created for \(notification.recipients) member account\(notification.recipients == 1 ? "" : "s").",
+                    systemImage: "bell.badge.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertSteel)
+
+                Label(pushSummary(notification.push), systemImage: pushIcon(notification.push))
+                    .font(.caption)
+                    .foregroundStyle(notification.push.delivered > 0 ? Color.green : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let warning = followUp.notificationWarning {
+                Label(warning, systemImage: "bell.slash.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label(
+                    "The cancellation notice exists in affected member accounts. Use the contact fallback below.",
+                    systemImage: "bell"
+                )
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.65))
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private var contactSection: some View {
+        Section("Contact fallback") {
+            if followUp.contactLookupIncomplete {
+                Label(
+                    "One booking source could not be checked. Review Booking Requests before considering follow-up complete.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if followUp.contacts.isEmpty {
+                Text("No email address or callable phone number was available for affected bookings.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.xertPale.opacity(0.62))
+            } else {
+                ForEach(followUp.contacts) { contact in
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            contactIdentity(contact)
+                            Spacer(minLength: 8)
+                            contactActions(contact)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            contactIdentity(contact)
+                            contactActions(contact)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                }
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
+    private func contactIdentity(_ contact: AdminClassCancellationContact) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(contact.displayName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.xertOffWhite)
+            Text([contact.email, contact.phone].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.55))
+                .lineLimit(2)
+        }
+    }
+
+    private func contactActions(_ contact: AdminClassCancellationContact) -> some View {
+        HStack(spacing: 6) {
+            if let emailURL = contact.emailURL {
+                Link(destination: emailURL) {
+                    Image(systemName: "envelope")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Email \(contact.displayName)")
+            }
+            if let phoneURL = contact.phoneURL {
+                Link(destination: phoneURL) {
+                    Image(systemName: "phone")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Call \(contact.displayName)")
+            }
+        }
+        .foregroundStyle(Color.xertSteel)
+    }
+
+    @ViewBuilder
+    private func followUpActions(expands: Bool) -> some View {
+        Button {
+            UIPasteboard.general.string = followUp.message.body
+            copiedMessage = true
+            XertHaptics.play(.success)
+        } label: {
+            Label(copiedMessage ? "Message copied" : "Copy message", systemImage: copiedMessage ? "checkmark" : "doc.on.doc")
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 46)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.xertSteel)
+
+        if let mailtoURL = followUp.mailtoURL {
+            Link(destination: mailtoURL) {
+                Label("Email \(followUp.emailRecipientCount) via BCC", systemImage: "envelope.fill")
+                    .frame(maxWidth: expands ? .infinity : nil, minHeight: 46)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+        }
+    }
+
+    private var affectedSummary: String {
+        guard followUp.affectedBookings > 0 else {
+            return "No active bookings needed to be cancelled."
+        }
+        return "\(followUp.affectedBookings) active booking\(followUp.affectedBookings == 1 ? " was" : "s were") cancelled. Reserved credits were returned."
+    }
+
+    private func pushSummary(_ push: AdminAnnouncementPushSummary) -> String {
+        if push.delivered > 0 {
+            return "\(push.delivered) Apple push notification\(push.delivered == 1 ? " was" : "s were") delivered."
+        }
+        if !push.configured {
+            return "Apple push is not configured. The private notice remains available in XERT."
+        }
+        if push.attempted > 0 {
+            return "Apple push was attempted but did not reach a registered device."
+        }
+        return "No enabled Apple device was registered. The private notice remains available in XERT."
+    }
+
+    private func pushIcon(_ push: AdminAnnouncementPushSummary) -> String {
+        push.delivered > 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+}
+
 private struct AdminClassEditor: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let classSession: AdminClassSession?
+    let mutationAllowed: Bool
     private let baseline: AdminClassDraft
     @State private var draft: AdminClassDraft
 
     private var isTerminal: Bool { classSession.map { ["cancelled", "completed"].contains($0.status) } ?? false }
 
-    init(admin: AdminStore, session: AuthSession, classSession: AdminClassSession?) {
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        classSession: AdminClassSession?,
+        mutationAllowed: Bool
+    ) {
         let initial = AdminClassDraft(classSession: classSession)
         self.admin = admin
         self.session = session
         self.classSession = classSession
+        self.mutationAllowed = mutationAllowed
         baseline = initial
         _draft = State(initialValue: initial)
     }
 
     var body: some View {
         Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "This timetable snapshot is not current. Close this editor and refresh before changing the class.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+                }
+            }
             if isTerminal {
                 Section {
                     Label("This class is \(classSession?.status ?? "closed") and cannot be reopened. Duplicate it to create a new draft.", systemImage: "lock")
@@ -3597,13 +3916,13 @@ private struct AdminClassEditor: View {
                             Spacer()
                         }
                     }
-                    .disabled(admin.savingClassID != nil || draft == baseline)
+                    .disabled(!mutationAllowed || admin.savingClassID != nil || draft == baseline)
                     .listRowBackground(Color.xertSteel)
                     .foregroundStyle(Color.xertNavy)
                 }
             }
         }
-        .disabled(isTerminal)
+        .disabled(isTerminal || !mutationAllowed)
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle(classSession == nil ? "New Class" : "Edit Class")

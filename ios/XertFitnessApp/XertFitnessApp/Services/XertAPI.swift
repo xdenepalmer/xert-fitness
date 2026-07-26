@@ -360,6 +360,32 @@ final class XertAPI {
         )
     }
 
+    func adminClassCancellationEnquiries(
+        session auth: AuthSession,
+        classSessionID: UUID
+    ) async throws -> [AdminLegacyBookingRequest] {
+        let pageSize = 500
+        var offset = 0
+        var enquiries: [AdminLegacyBookingRequest] = []
+        while true {
+            let page: [AdminLegacyBookingRequest] = try await restRequest(
+                path: "/rest/v1/class_bookings",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,full_name,email,phone,status,admin_notes,created_at"),
+                    URLQueryItem(name: "class_session_id", value: "eq.\(classSessionID.uuidString)"),
+                    URLQueryItem(name: "status", value: "in.(requested,confirmed,waitlisted)"),
+                    URLQueryItem(name: "order", value: "created_at.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            enquiries.append(contentsOf: page)
+            if page.count < pageSize { return enquiries }
+            offset += pageSize
+        }
+    }
+
     func adminClassSessions(session auth: AuthSession) async throws -> [AdminClassSession] {
         return try await restRequest(
             path: "/rest/v1/class_sessions",
@@ -410,8 +436,11 @@ final class XertAPI {
         )
     }
 
-    func adminNotifyClassCancellation(session auth: AuthSession, classSessionID: UUID) async throws {
-        let _: AdminCancellationNoticeResponse = try await vercelRequest(
+    func adminNotifyClassCancellation(
+        session auth: AuthSession,
+        classSessionID: UUID
+    ) async throws -> AdminClassCancellationNoticeOutcome {
+        try await vercelRequest(
             path: "/api/admin-publish-announcement",
             body: AdminCancellationNoticeRequest(action: "notify_class_cancellation", session_id: classSessionID),
             auth: auth
@@ -2450,7 +2479,6 @@ private struct AdminCancellationNoticeRequest: Encodable {
     let action: String
     let session_id: UUID
 }
-private struct AdminCancellationNoticeResponse: Decodable {}
 private struct AdminTargetedNoticeRequest: Encodable {
     let action: String
     let announcement_id: UUID

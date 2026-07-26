@@ -266,7 +266,10 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
     assert.match(view, new RegExp(label));
   }
   assert.match(view, /sheet\(item: \$presentedQuickAction\)/);
-  assert.match(view, /AdminClassEditor\(admin: admin, session: session, classSession: nil\)/);
+  assert.match(
+    view,
+    /AdminClassEditor\([\s\S]*classSession: nil,[\s\S]*mutationAllowed: admin\.loadedSources\.contains\("full timetable"\)/,
+  );
   assert.match(view, /AdminAnnouncementComposer\([\s\S]*announcement: nil,[\s\S]*isSaving: admin\.announcementMutationID != nil,[\s\S]*isPublishing: admin\.isPublishingAnnouncement/);
   assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
 
@@ -803,4 +806,65 @@ test('native revenue desk filters and exports a current ledger and member purcha
   assert.match(orders, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
   assert.match(orders, /\.onChange\(of: currencies\)[\s\S]*currency = "all"/);
   assert.match(orders, /ViewThatFits\(in: \.horizontal\)/);
+});
+
+test('native class cancellation preserves mutation truth and provides complete member follow-up', async () => {
+  const [api, store, view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  assert.match(models, /struct AdminClassCancellationContact: Identifiable, Hashable/);
+  assert.match(models, /struct AdminClassCancellationMessage: Hashable/);
+  assert.match(models, /struct AdminClassCancellationNoticeOutcome: Codable, Hashable/);
+  assert.match(models, /struct AdminClassCancellationFollowUp: Identifiable, Hashable/);
+  assert.match(models, /static let maximumBCCRecipients = 40/);
+  assert.match(models, /activeStatuses = Set\(\["requested", "confirmed", "waitlisted"\]\)/);
+  assert.match(models, /normalizedEmail != nil && \$0\.email == normalizedEmail/);
+  assert.match(models, /Any reserved session credit has been returned automatically/);
+
+  const enquiryMethod = api.slice(
+    api.indexOf('func adminClassCancellationEnquiries'),
+    api.indexOf('func adminClassSessions'),
+  );
+  assert.match(enquiryMethod, /class_session_id", value: "eq\.\\\(classSessionID\.uuidString\)"/);
+  assert.match(enquiryMethod, /status", value: "in\.\(requested,confirmed,waitlisted\)"/);
+  assert.match(enquiryMethod, /created_at\.asc,id\.asc/);
+  assert.match(enquiryMethod, /while true[\s\S]*offset \+= pageSize/);
+  assert.match(api, /func adminNotifyClassCancellation[\s\S]*-> AdminClassCancellationNoticeOutcome/);
+
+  const cancellationStore = store.slice(
+    store.indexOf('func cancelClass('),
+    store.indexOf('func clearClassCancellationFollowUp'),
+  );
+  assert.match(cancellationStore, /async let rosterRequest = api\.adminSessionRoster/);
+  assert.match(cancellationStore, /async let enquiryRequest = api\.adminClassCancellationEnquiries/);
+  assert.match(cancellationStore, /contactLookupFailures \+= 1/);
+  assert.match(cancellationStore, /let affectedBookings = try await api\.adminCancelClass/);
+  assert.match(cancellationStore, /notification = try await api\.adminNotifyClassCancellation/);
+  assert.match(cancellationStore, /The private notice was created, but Apple push delivery could not be confirmed/);
+  assert.match(cancellationStore, /refreshWarnings\.append\("full timetable"\)/);
+  assert.match(cancellationStore, /refreshWarnings\.append\("today's classes"\)/);
+  assert.match(cancellationStore, /refreshWarnings\.append\("waitlists"\)/);
+  assert.match(cancellationStore, /bookingRequests = try await api\.adminBookingRequests/);
+  assert.match(cancellationStore, /classCancellationFollowUp = followUp[\s\S]*return followUp/);
+
+  assert.match(view, /private struct AdminClassCancellationFollowUpView: View/);
+  assert.match(view, /Cancellation result/);
+  assert.match(view, /Member notification/);
+  assert.match(view, /Contact fallback/);
+  assert.match(view, /Ready-to-send message/);
+  assert.match(view, /Email \\\(followUp\.emailRecipientCount\) via BCC/);
+  assert.match(view, /\.safeAreaInset\(edge: \.bottom/);
+  assert.match(view, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(view, /UIPasteboard\.general\.string = followUp\.message\.body/);
+  assert.match(view, /\.interactiveDismissDisabled\(\)/);
+  assert.match(view, /private var timetableIsCurrent: Bool/);
+  assert.match(view, /Showing the last timetable snapshot/);
+  assert.match(view, /\.disabled\(!timetableIsCurrent\)/);
+  assert.match(view, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
+  assert.match(view, /let mutationAllowed: Bool/);
+  assert.match(view, /This timetable snapshot is not current/);
 });
