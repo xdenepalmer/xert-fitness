@@ -228,7 +228,7 @@ final class AdminStore: ObservableObject {
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
     var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
     var isMutatingAnnouncements: Bool {
-        isPublishingAnnouncement || announcementMutationID != nil
+        isPublishingAnnouncement || announcementMutationID != nil || isRefreshingAnnouncements
     }
     var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
     var unavailableHealthSourceCount: Int {

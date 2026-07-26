@@ -387,6 +387,7 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.match(store, /async let announcementReceiptMetricsRequest = api\.adminAnnouncementReceiptMetrics/);
   assert.match(store, /async let announcementPushMetricsRequest = api\.adminAnnouncementPushMetrics/);
   assert.match(store, /guard !isMutatingAnnouncements, !isRefreshingAnnouncements else \{ return \}/);
+  assert.match(store, /var isMutatingAnnouncements: Bool \{[\s\S]*isRefreshingAnnouncements/);
   assert.match(store, /private func setAnnouncementDeliveryMetrics/);
   assert.match(store, /announcementDeliveryStatusMessage = "Delivery evidence is temporarily unavailable/);
   assert.match(store, /announcementLoadErrorMessage = "Member notices could not refresh/);
