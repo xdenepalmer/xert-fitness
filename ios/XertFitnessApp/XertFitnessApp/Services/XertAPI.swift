@@ -259,6 +259,22 @@ final class XertAPI {
         }
     }
 
+    func adminOrder(session auth: AuthSession, id: UUID) async throws -> OrderItem {
+        let rows: [OrderItem] = try await restRequest(
+            path: "/rest/v1/orders",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,user_id,product_id,email,status,amount_cents,currency,credit_total,credit_validity_days,stripe_checkout_session_id,stripe_payment_intent_id,created_at,paid_at,refunded_at,refunded_amount_cents,reconciled_at,reconciled_by,products(name),stripe_refunds(refund_id,amount_cents,credits_revoked,credits_consumed,bookings_cancelled,refunded_at)"),
+                URLQueryItem(name: "id", value: "eq.\(id.uuidString)"),
+                URLQueryItem(name: "limit", value: "1")
+            ],
+            auth: auth
+        )
+        guard rows.count == 1, rows[0].id == id else {
+            throw APIError(message: "This order is no longer available to your administrator account.")
+        }
+        return rows[0]
+    }
+
     func adminReconcileOrder(session auth: AuthSession, orderID: UUID) async throws -> AdminReconciliationResult {
         try await vercelRequest(
             path: "/api/admin-reconcile-order",
@@ -1372,6 +1388,22 @@ final class XertAPI {
             ],
             auth: auth
         )
+    }
+
+    func adminEvent(session auth: AuthSession, id: UUID) async throws -> AdminEvent {
+        let rows: [AdminEvent] = try await restRequest(
+            path: "/rest/v1/events",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,name,category,event_date,end_date,location,region,url,published,sort_order,updated_at"),
+                URLQueryItem(name: "id", value: "eq.\(id.uuidString)"),
+                URLQueryItem(name: "limit", value: "1")
+            ],
+            auth: auth
+        )
+        guard rows.count == 1, rows[0].id == id else {
+            throw APIError(message: "This event is no longer available to your administrator account.")
+        }
+        return rows[0]
     }
 
     func adminEventGoalReferences(session auth: AuthSession) async throws -> [AdminEventGoalReference] {

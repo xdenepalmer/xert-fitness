@@ -287,6 +287,65 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /Unavailable totals are hidden so they cannot be mistaken for zero/);
 });
 
+test('native owner queues auto-sync without disturbing unrelated command-centre work', async () => {
+  const [view, store, api] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+  ]);
+
+  assert.match(store, /enum AdminOperationalRefreshPolicy/);
+  assert.match(store, /intervalNanoseconds: UInt64 = 60_000_000_000/);
+  assert.match(store, /staleAfter: TimeInterval = 120/);
+  assert.match(store, /@Published private\(set\) var isRefreshingOperations = false/);
+  assert.match(store, /@Published private\(set\) var operationalUpdatedAt: Date\?/);
+  assert.match(store, /func refreshOperationalPulse\(session: AuthSession\) async -> Bool/);
+  for (const operation of [
+    'api.adminDailyOperations',
+    'api.adminWaitlist',
+    'api.adminFollowUps',
+    'api.adminMemberActivationQueue',
+    'api.adminOrders',
+    'api.adminPTRequests',
+  ]) assert.match(store, new RegExp(operation.replace('.', '\\.')));
+  assert.match(store, /promotingSessionID == nil[\s\S]*loggingFollowUpMemberID == nil/);
+  assert.match(store, /updatingBookingID == nil[\s\S]*recordingAttendanceSessionID == nil/);
+  assert.match(store, /updatingBookingRequestIDs\.isEmpty/);
+  assert.match(store, /operatingOrderID == nil/);
+  assert.match(store, /savingClassID == nil[\s\S]*cancellingClassID == nil/);
+  assert.match(store, /loadedSources\.formUnion\(successfulSources\)/);
+  assert.match(store, /refreshUnavailableSources\.removeAll \{ operationalSources\.contains\(\$0\) \}/);
+  assert.match(store, /operationalQueueState = failures\.isEmpty[\s\S]*\.partial\(unavailableSources: failures\)/);
+  assert.match(store, /if failures\.isEmpty \{\s*operationalUpdatedAt = Date\(\)/);
+  assert.match(store, /if hasUnavailableSources \{ return \.stale \}/);
+
+  assert.match(view, /\.task\(id: operationalPulseTaskID\)/);
+  assert.match(view, /Task\.sleep\(nanoseconds: AdminOperationalRefreshPolicy\.intervalNanoseconds\)/);
+  assert.match(view, /await admin\.refreshOperationalPulse\(session: session\)/);
+  assert.match(view, /hasUnavailableSources: admin\.operationalQueueHasUnavailableSources/);
+  assert.match(view, /TimelineView\(\.periodic\(from: \.now, by: 30\)\)/);
+  assert.match(view, /accessibilityIdentifier\("owner\.operationalPulse"\)/);
+  assert.match(view, /Refreshes requests, waitlists, retention, activation, orders and private training/);
+  assert.doesNotMatch(api, /func adminOperationalPulse/);
+});
+
+test('native protected order and event routes resolve records outside the initial snapshot', async () => {
+  const [store, api] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+  ]);
+
+  assert.match(api, /func adminOrder\(session auth: AuthSession, id: UUID\)/);
+  assert.match(api, /func adminEvent\(session auth: AuthSession, id: UUID\)/);
+  assert.ok((api.match(/URLQueryItem\(name: "id", value: "eq\.\\\(id\.uuidString\)"\)/g) || []).length >= 2);
+  assert.match(store, /case \.order\(let orderID\):[\s\S]*api\.adminOrder\(session: session, id: orderID\)/);
+  assert.match(store, /orders\.removeAll\(where: \{ \$0\.id == orderID \}\)[\s\S]*orders\.insert\(order, at: 0\)/);
+  assert.match(store, /case \.event\(let eventID\):[\s\S]*api\.adminEvent\(session: session, id: eventID\)/);
+  assert.match(store, /events\.removeAll\(where: \{ \$0\.id == eventID \}\)[\s\S]*events\.insert\(event, at: 0\)/);
+  assert.doesNotMatch(store, /case \.order, \.event:\s*return/);
+  assert.doesNotMatch(store, /case \.order, \.event:\s*break/);
+});
+
 test('native platform controls and health recovery remain safe and reachable on compact iPhones', async () => {
   const [view, store] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),

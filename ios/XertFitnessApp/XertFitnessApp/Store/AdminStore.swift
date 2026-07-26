@@ -8,6 +8,44 @@ enum AdminOperationalQueueState: Equatable {
     case partial(unavailableSources: [String])
 }
 
+enum AdminOperationalFreshness: Equatable {
+    case loading
+    case current
+    case refreshing
+    case stale
+    case unavailable
+
+    var label: String {
+        switch self {
+        case .loading: return "Checking"
+        case .current: return "Live"
+        case .refreshing: return "Syncing"
+        case .stale: return "Stale"
+        case .unavailable: return "Offline"
+        }
+    }
+}
+
+enum AdminOperationalRefreshPolicy {
+    static let intervalNanoseconds: UInt64 = 60_000_000_000
+    static let staleAfter: TimeInterval = 120
+
+    static func freshness(
+        hasCompletedRefresh: Bool,
+        updatedAt: Date?,
+        isRefreshing: Bool,
+        hasUnavailableSources: Bool = false,
+        now: Date = Date()
+    ) -> AdminOperationalFreshness {
+        guard let updatedAt else {
+            return hasCompletedRefresh && !isRefreshing ? .unavailable : .loading
+        }
+        if isRefreshing { return .refreshing }
+        if hasUnavailableSources { return .stale }
+        return now.timeIntervalSince(updatedAt) <= staleAfter ? .current : .stale
+    }
+}
+
 @MainActor
 final class AdminStore: ObservableObject {
     @Published private(set) var dailyOperations: [AdminDailyOperation] = []
@@ -46,6 +84,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshingHealth = false
+    @Published private(set) var isRefreshingOperations = false
     @Published private(set) var isSearchingMembers = false
     @Published private(set) var ownerMemberSearchResults: [AdminMemberSummary] = []
     @Published private(set) var isSearchingOwnerMembers = false
@@ -87,6 +126,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var operationalUpdatedAt: Date?
     @Published private(set) var hasCompletedRefresh = false
     @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
     @Published private(set) var refreshUnavailableSources: [String] = []
@@ -99,6 +139,7 @@ final class AdminStore: ObservableObject {
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
+    private var operationalRefreshGeneration: UInt = 0
 
     var memberCount: Int { members.first?.total_count ?? members.count }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
@@ -132,6 +173,20 @@ final class AdminStore: ObservableObject {
             && pushHealth != nil
     }
 
+    var operationalFreshness: AdminOperationalFreshness {
+        AdminOperationalRefreshPolicy.freshness(
+            hasCompletedRefresh: hasCompletedRefresh,
+            updatedAt: operationalUpdatedAt,
+            isRefreshing: isRefreshingOperations,
+            hasUnavailableSources: operationalQueueHasUnavailableSources
+        )
+    }
+
+    var operationalQueueHasUnavailableSources: Bool {
+        if case .partial = operationalQueueState { return true }
+        return false
+    }
+
     private static let healthSources: Set<String> = ["schema health", "Stripe health", "push health"]
     private static let launchGateSources: Set<String> = [
         "schema health", "Stripe health", "platform controls", "session packs", "full timetable"
@@ -142,7 +197,7 @@ final class AdminStore: ObservableObject {
     }
 
     func refresh(session: AuthSession) async {
-        guard !isLoading, !isRefreshingHealth else { return }
+        guard !isLoading, !isRefreshingHealth, !isRefreshingOperations else { return }
         isLoading = true
         operationalQueueState = .loading
         defer { isLoading = false }
@@ -262,6 +317,9 @@ final class AdminStore: ObservableObject {
         if loadedSource {
             lastUpdatedAt = Date()
         }
+        if queueFailures.isEmpty {
+            operationalUpdatedAt = Date()
+        }
         loadedSources.formUnion(successfulSources)
         let refreshedAt = Date()
         for source in successfulSources where Self.healthSources.contains(source) {
@@ -275,6 +333,116 @@ final class AdminStore: ObservableObject {
         operationalQueueState = queueFailures.isEmpty
             ? .ready
             : .partial(unavailableSources: queueFailures)
+    }
+
+    /// Refreshes the owner queues that can change during an active shift
+    /// without replacing unrelated form, CMS, timetable, or directory state.
+    @discardableResult
+    func refreshOperationalPulse(session: AuthSession) async -> Bool {
+        guard !isLoading,
+              !isRefreshingHealth,
+              !isRefreshingOperations,
+              promotingSessionID == nil,
+              loggingFollowUpMemberID == nil,
+              updatingPTRequestID == nil,
+              updatingBookingID == nil,
+              updatingBookingRequestIDs.isEmpty,
+              recordingAttendanceSessionID == nil,
+              operatingOrderID == nil,
+              savingClassID == nil,
+              cancellingClassID == nil,
+              resolvingStripeIncidentID == nil,
+              retryingStripeIncidentID == nil else { return false }
+
+        operationalRefreshGeneration &+= 1
+        let generation = operationalRefreshGeneration
+        isRefreshingOperations = true
+        defer {
+            if generation == operationalRefreshGeneration {
+                isRefreshingOperations = false
+            }
+        }
+
+        async let operationsRequest = api.adminDailyOperations(session: session)
+        async let waitlistRequest = api.adminWaitlist(session: session)
+        async let followUpRequest = api.adminFollowUps(session: session)
+        async let activationRequest = api.adminMemberActivationQueue(session: session)
+        async let orderRequest = api.adminOrders(session: session)
+        async let ptRequest = api.adminPTRequests(session: session)
+
+        var failures: [String] = []
+        var successfulSources = Set<String>()
+
+        do {
+            let next = try await operationsRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            dailyOperations = next
+            successfulSources.insert("today's classes")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("today's classes")
+        }
+        do {
+            let next = try await waitlistRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            waitlist = next
+            successfulSources.insert("waitlists")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("waitlists")
+        }
+        do {
+            let next = try await followUpRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            followUps = next
+            successfulSources.insert("retention")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("retention")
+        }
+        do {
+            let next = try await activationRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            activationQueue = next
+            successfulSources.insert("activation actions")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("activation actions")
+        }
+        do {
+            let next = try await orderRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            orders = next
+            successfulSources.insert("orders")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("orders")
+        }
+        do {
+            let next = try await ptRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            ptRequests = next
+            successfulSources.insert("PT requests")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("PT requests")
+        }
+
+        guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+        loadedSources.formUnion(successfulSources)
+        let operationalSources: Set<String> = [
+            "today's classes", "waitlists", "retention",
+            "activation actions", "orders", "PT requests"
+        ]
+        refreshUnavailableSources.removeAll { operationalSources.contains($0) }
+        refreshUnavailableSources.append(contentsOf: failures)
+        operationalQueueState = failures.isEmpty
+            ? .ready
+            : .partial(unavailableSources: failures)
+        if failures.isEmpty {
+            operationalUpdatedAt = Date()
+        }
+        return true
     }
 
     /// Refreshes the bounded release-health and launch-gate contracts used by Operations Health.
@@ -440,8 +608,10 @@ final class AdminStore: ObservableObject {
             guard !dailyOperations.contains(where: { $0.id == sessionID }) else { return }
         case .product(let productID):
             guard !products.contains(where: { $0.id == productID }) else { return }
-        case .order, .event:
-            return
+        case .order(let orderID):
+            guard !orders.contains(where: { $0.id == orderID }) else { return }
+        case .event(let eventID):
+            guard !events.contains(where: { $0.id == eventID }) else { return }
         }
         resolvingOwnerTask = task
         defer { resolvingOwnerTask = nil }
@@ -463,8 +633,18 @@ final class AdminStore: ObservableObject {
                 products = refreshedProducts
                 loadedSources.insert("session packs")
                 refreshUnavailableSources.removeAll { $0 == "session packs" }
-            case .order, .event:
-                break
+            case .order(let orderID):
+                let order = try await api.adminOrder(session: session, id: orderID)
+                orders.removeAll(where: { $0.id == orderID })
+                orders.insert(order, at: 0)
+                loadedSources.insert("orders")
+                refreshUnavailableSources.removeAll { $0 == "orders" }
+            case .event(let eventID):
+                let event = try await api.adminEvent(session: session, id: eventID)
+                events.removeAll(where: { $0.id == eventID })
+                events.insert(event, at: 0)
+                loadedSources.insert("event calendar")
+                refreshUnavailableSources.removeAll { $0 == "event calendar" }
             }
         } catch {
             errorMessage = error.localizedDescription

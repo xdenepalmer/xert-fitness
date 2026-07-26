@@ -1201,6 +1201,67 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOperationalRefreshPolicyReportsHonestQueueFreshness() {
+        let now = Date(timeIntervalSince1970: 10_000)
+
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: false,
+                updatedAt: nil,
+                isRefreshing: false,
+                now: now
+            ),
+            .loading
+        )
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: true,
+                updatedAt: nil,
+                isRefreshing: false,
+                now: now
+            ),
+            .unavailable
+        )
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: true,
+                updatedAt: now.addingTimeInterval(-30),
+                isRefreshing: true,
+                now: now
+            ),
+            .refreshing
+        )
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: true,
+                updatedAt: now.addingTimeInterval(-AdminOperationalRefreshPolicy.staleAfter),
+                isRefreshing: false,
+                now: now
+            ),
+            .current
+        )
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: true,
+                updatedAt: now.addingTimeInterval(-30),
+                isRefreshing: false,
+                hasUnavailableSources: true,
+                now: now
+            ),
+            .stale
+        )
+        XCTAssertEqual(
+            AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: true,
+                updatedAt: now.addingTimeInterval(-AdminOperationalRefreshPolicy.staleAfter - 1),
+                isRefreshing: false,
+                now: now
+            ),
+            .stale
+        )
+        XCTAssertEqual(AdminOperationalRefreshPolicy.intervalNanoseconds, 60_000_000_000)
+    }
+
     func testWorkspaceOrderIsCompleteAccountScopedAndDrivesNavigation() throws {
         let suiteName = "XertWorkspaceOrderStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

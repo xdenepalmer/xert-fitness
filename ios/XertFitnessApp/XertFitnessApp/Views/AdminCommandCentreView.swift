@@ -86,6 +86,18 @@ struct AdminCommandCentreView: View {
                 await admin.resolveOwnerTask(session: session, task: task)
             }
         }
+        .task(id: operationalPulseTaskID) {
+            guard scenePhase == .active, let session = authorizedOwnerSession else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: AdminOperationalRefreshPolicy.intervalNanoseconds)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, scenePhase == .active else { return }
+                await admin.refreshOperationalPulse(session: session)
+            }
+        }
         .onChange(of: store.authSession?.user?.id) { userID in
             if let userID { prepareOwnerNavigation(for: userID) }
             reloadPinnedWorkspaces()
@@ -183,6 +195,11 @@ struct AdminCommandCentreView: View {
 
     private var currentWorkspace: XertOwnerWorkspace {
         XertOwnerWorkspace(rawValue: restoredWorkspace) ?? .overview
+    }
+
+    private var operationalPulseTaskID: String {
+        let accountID = store.authSession?.user?.id.uuidString.lowercased() ?? "guest"
+        return "\(accountID):\(scenePhase == .active ? "active" : "inactive")"
     }
 
     private var ownerDataNeedsForegroundRefresh: Bool {
@@ -502,6 +519,27 @@ struct AdminCommandCentreView: View {
             await admin.refresh(session: session)
             guard announcesResult else { return }
             XertHaptics.play(admin.refreshUnavailableSources.isEmpty ? .success : .warning)
+        }
+    }
+
+    private func refreshOperationalPulse() {
+        guard let session = authorizedOwnerSession,
+              !admin.isLoading,
+              !admin.isRefreshingOperations else { return }
+        XertHaptics.play(.softImpact)
+        Task {
+            guard await admin.refreshOperationalPulse(session: session) else {
+                XertHaptics.play(.warning)
+                return
+            }
+            switch admin.operationalQueueState {
+            case .ready:
+                XertHaptics.play(.success)
+            case .partial:
+                XertHaptics.play(.warning)
+            case .idle, .loading:
+                break
+            }
         }
     }
 
@@ -991,20 +1029,84 @@ struct AdminCommandCentreView: View {
     private var priorityQueue: some View {
         let priorities = operationalPriorities
         return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                adminHeading("Operational priority queue")
-                Spacer()
-                Text("LIVE")
-                    .font(.system(size: 9, weight: .black))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.xertNavy)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.xertSteel)
-                    .clipShape(Capsule())
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    adminHeading("Operational priority queue")
+                    Spacer(minLength: 8)
+                    operationalPulseControl
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    adminHeading("Operational priority queue")
+                    operationalPulseControl
+                }
             }
 
             operationalQueueContent(priorities)
+        }
+    }
+
+    private var operationalPulseControl: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let freshness = AdminOperationalRefreshPolicy.freshness(
+                hasCompletedRefresh: admin.hasCompletedRefresh,
+                updatedAt: admin.operationalUpdatedAt,
+                isRefreshing: admin.isRefreshingOperations,
+                hasUnavailableSources: admin.operationalQueueHasUnavailableSources,
+                now: context.date
+            )
+            Button(action: refreshOperationalPulse) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(operationalFreshnessColour(freshness))
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(freshness.label.uppercased())
+                            .font(.system(size: 9, weight: .black))
+                            .tracking(1.2)
+                        if let updatedAt = admin.operationalUpdatedAt {
+                            Text(updatedAt, style: .relative)
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .textCase(.lowercase)
+                        }
+                    }
+                    if admin.isRefreshingOperations {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                    }
+                }
+                .foregroundStyle(operationalFreshnessColour(freshness))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .background(operationalFreshnessColour(freshness).opacity(0.1))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(operationalFreshnessColour(freshness).opacity(0.36), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(admin.isLoading || admin.isRefreshingOperations)
+            .accessibilityLabel("Operational queues \(freshness.label.lowercased())")
+            .accessibilityValue(
+                admin.operationalUpdatedAt.map {
+                    "Last fully refreshed \($0.formatted(date: .omitted, time: .shortened))"
+                } ?? "No complete operational snapshot"
+            )
+            .accessibilityHint("Refreshes requests, waitlists, retention, activation, orders and private training without leaving this screen")
+            .accessibilityIdentifier("owner.operationalPulse")
+        }
+    }
+
+    private func operationalFreshnessColour(_ freshness: AdminOperationalFreshness) -> Color {
+        switch freshness {
+        case .current: return .green
+        case .loading, .refreshing: return Color.xertSteel
+        case .stale: return .orange
+        case .unavailable: return .red
         }
     }
 

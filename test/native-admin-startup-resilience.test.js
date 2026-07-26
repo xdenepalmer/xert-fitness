@@ -8,7 +8,7 @@ test('native Command Centre retries only cold-start member and health reads once
   const store = await read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
   const refresh = store.slice(
     store.indexOf('func refresh(session: AuthSession)'),
-    store.indexOf('/// Refreshes the bounded release-health'),
+    store.indexOf('/// Refreshes the owner queues'),
   );
 
   for (const [source, loader] of [
@@ -40,7 +40,7 @@ test('partial startup failures remain inline and never populate the global alert
   ]);
   const refresh = store.slice(
     store.indexOf('func refresh(session: AuthSession)'),
-    store.indexOf('/// Refreshes the bounded release-health'),
+    store.indexOf('/// Refreshes the owner queues'),
   );
   const dashboard = view.slice(
     view.indexOf('private func dashboard(session: AuthSession)'),
