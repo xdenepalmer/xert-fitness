@@ -87,19 +87,17 @@ PostgreSQL 16) and marked **FIXED** in `docs/audit/remaining-findings.md`.
 `credit_batches` remain the highest-risk area. Treat credit correctness as a gate
 before anything that mints credits automatically (see §4).
 
-### Working-tree themes (uncommitted at handoff rewrite time)
+### Later high-value closes (privacy, iOS ops, erasure, admin UX)
 
-Parallel agents also changed (verify with `git status` / `git diff`):
+- iOS refresh coalescing; checkout deep-link forgery resistance; roster scoping;
+  FAQ identity; push sign-out; calendar write-only; UserDefaults purge on exit
+- `cancel_booking` refund when the pack had expired; class-session optimistic lock
+- Health consent + Privacy overseas/UTM disclosure; audit-subject PII redaction
+- Members metric no longer collapses after search; badge poller mounts once;
+  `requestText` fails closed on pre-parsed bodies; Owner Command Centre one-tap
+- Staff/role design spec: `docs/requirements/07-staff-accounts-and-roles.md`
 
-- iOS refresh coalescing after book/waitlist/cancel; checkout deep-link forgery
-  resistance; class roster scoping; site-content editor stable row identity
-- Sign-out pending push unregister + local fail-closed clear
-- `cancel_booking` refund when the credit batch has expired (+ migration mirror)
-- Member-interest health consent (form, iOS models, SQL, Privacy policy)
-- Owner Command Centre nav restored as a visible one-tap entry on iPhone/iPad
-
-These map to findings **5, 6, 7, 10, 26, 28, 36, 41** (and nav UX outside the
-numbered queue). Later commits also closed **16, 27, 29, 31, 49, 51, 52**.
+These close findings **5–7, 10, 16, 26–29, 31, 33, 36, 41, 49, 51, 52**.
 
 ---
 
