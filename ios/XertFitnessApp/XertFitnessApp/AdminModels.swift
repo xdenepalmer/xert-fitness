@@ -1017,16 +1017,95 @@ struct AdminAnnouncement: Identifiable, Codable, Hashable {
     let cta_label: String?
     let cta_url: String?
     let published_at: Date?
+    let first_published_at: Date?
     let expires_at: Date?
     let archived_at: Date?
     let created_at: Date
     let updated_at: String
 
-    var stateLabel: String {
+    func stateLabel(now: Date = Date()) -> String {
         if archived_at != nil { return "Archived" }
-        if let expires_at, expires_at <= Date() { return "Expired" }
-        return published_at == nil ? "Draft" : "Live"
+        guard let published_at else { return "Draft" }
+        if published_at > now { return "Scheduled" }
+        if let expires_at, expires_at <= now { return "Expired" }
+        return "Live"
     }
+
+    var stateLabel: String { stateLabel() }
+    var wasPublished: Bool { first_published_at != nil || published_at != nil }
+}
+
+struct AdminAnnouncementDraft: Equatable {
+    var title = ""
+    var body = ""
+    var tone = "info"
+    var ctaLabel = ""
+    var ctaURL = ""
+    var expiresAt: Date?
+
+    init() {}
+
+    init(announcement: AdminAnnouncement) {
+        title = announcement.title
+        body = announcement.body
+        tone = announcement.tone
+        ctaLabel = announcement.cta_label ?? ""
+        ctaURL = announcement.cta_url ?? ""
+        expiresAt = announcement.expires_at
+    }
+
+    func validationMessage(publishing: Bool, now: Date = Date()) -> String? {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLabel = ctaLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedURL = ctaURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard (1...120).contains(normalizedTitle.count) else {
+            return "Title must be between 1 and 120 characters."
+        }
+        guard (1...2_000).contains(normalizedBody.count) else {
+            return "Message must be between 1 and 2,000 characters."
+        }
+        guard ["info", "action", "urgent"].contains(tone) else {
+            return "Choose a valid priority."
+        }
+        guard normalizedLabel.isEmpty == normalizedURL.isEmpty else {
+            return "Action label and destination must be provided together."
+        }
+        guard normalizedLabel.count <= 40 else {
+            return "Action label must be 40 characters or fewer."
+        }
+        if !normalizedURL.isEmpty && !Self.isValidActionURL(normalizedURL) {
+            return "Action destination must be an internal path or a secure HTTPS URL."
+        }
+        if publishing, let expiresAt, expiresAt <= now {
+            return "Choose a future expiry before publishing."
+        }
+        return nil
+    }
+
+    private static func isValidActionURL(_ value: String) -> Bool {
+        if value.hasPrefix("/") && !value.hasPrefix("//") { return value.count <= 500 }
+        guard value.count <= 500,
+              let url = URL(string: value),
+              url.scheme?.lowercased() == "https",
+              url.host?.isEmpty == false,
+              url.user == nil,
+              url.password == nil else { return false }
+        return true
+    }
+}
+
+struct AdminAnnouncementPushSummary: Codable, Hashable {
+    let configured: Bool
+    let attempted: Int
+    let delivered: Int
+    let failed: Int
+}
+
+struct AdminAnnouncementPublishOutcome: Codable, Hashable {
+    let announcement: AdminAnnouncement
+    let push: AdminAnnouncementPushSummary
 }
 
 private extension String {

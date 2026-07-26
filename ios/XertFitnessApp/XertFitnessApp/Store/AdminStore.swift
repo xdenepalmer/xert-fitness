@@ -97,6 +97,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
     @Published private(set) var isPublishingAnnouncement = false
+    @Published private(set) var announcementMutationID: UUID?
+    @Published private(set) var announcementStatusMessage: String?
     @Published private(set) var savingProductID: UUID?
     @Published private(set) var provisioningProductPriceID: UUID?
     @Published private(set) var savingEventID: UUID?
@@ -154,6 +156,9 @@ final class AdminStore: ObservableObject {
     }
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }
     var liveAnnouncements: Int { announcements.filter { $0.stateLabel == "Live" }.count }
+    var isMutatingAnnouncements: Bool {
+        isPublishingAnnouncement || announcementMutationID != nil
+    }
     var missingSchemaCapabilities: [String] { AdminSchemaReadiness.missing(from: schemaCapabilities) }
     var unavailableHealthSourceCount: Int {
         guard hasCompletedRefresh else { return 0 }
@@ -1339,18 +1344,169 @@ final class AdminStore: ObservableObject {
     }
 
     func publishAnnouncement(session: AuthSession, title: String, body: String, tone: String) async -> Bool {
-        guard !isPublishingAnnouncement else { return false }
-        isPublishingAnnouncement = true
-        defer { isPublishingAnnouncement = false }
+        var draft = AdminAnnouncementDraft()
+        draft.title = title
+        draft.body = body
+        draft.tone = tone
+        return await publishAnnouncement(session: session, announcement: nil, draft: draft)
+    }
+
+    func refreshAnnouncements(session: AuthSession) async {
+        guard !isMutatingAnnouncements else { return }
         do {
-            try await api.adminPublishAnnouncement(session: session, title: title, body: body, tone: tone)
             announcements = try await api.adminAnnouncements(session: session)
-            lastUpdatedAt = Date()
+            markAnnouncementsCurrent()
+            announcementStatusMessage = nil
+        } catch {
+            if !refreshUnavailableSources.contains("member notices") {
+                refreshUnavailableSources.append("member notices")
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveAnnouncement(
+        session: AuthSession,
+        announcement: AdminAnnouncement?,
+        draft: AdminAnnouncementDraft
+    ) async -> Bool {
+        guard announcementMutationAvailable else { return false }
+        announcementMutationID = announcement?.id ?? UUID()
+        announcementStatusMessage = nil
+        defer { announcementMutationID = nil }
+        do {
+            let saved = try await api.adminSaveAnnouncement(
+                session: session,
+                announcement: announcement,
+                draft: draft
+            )
+            mergeAnnouncement(saved)
+            markAnnouncementsCurrent()
+            announcementStatusMessage = announcement == nil
+                ? "Draft created. It remains hidden until you publish it."
+                : "Notice changes saved."
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    func publishAnnouncement(
+        session: AuthSession,
+        announcement: AdminAnnouncement?,
+        draft: AdminAnnouncementDraft
+    ) async -> Bool {
+        guard announcementMutationAvailable, !isPublishingAnnouncement else { return false }
+        isPublishingAnnouncement = true
+        announcementStatusMessage = nil
+        defer { isPublishingAnnouncement = false }
+        do {
+            let outcome = try await api.adminPublishAnnouncement(
+                session: session,
+                announcement: announcement,
+                draft: draft
+            )
+            mergeAnnouncement(outcome.announcement)
+            markAnnouncementsCurrent()
+            let push = outcome.push
+            announcementStatusMessage = push.configured
+                ? push.attempted > 0
+                    ? "\(push.delivered) device notification\(push.delivered == 1 ? "" : "s") delivered\(push.failed > 0 ? "; \(push.failed) failed" : "")."
+                    : "Notice is live. No enabled iOS devices were registered."
+                : "Notice is live. APNs delivery is not configured."
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func unpublishAnnouncement(session: AuthSession, announcement: AdminAnnouncement) async -> Bool {
+        guard announcementMutationAvailable else { return false }
+        announcementMutationID = announcement.id
+        announcementStatusMessage = nil
+        defer { announcementMutationID = nil }
+        do {
+            mergeAnnouncement(try await api.adminUnpublishAnnouncement(
+                session: session,
+                announcement: announcement
+            ))
+            markAnnouncementsCurrent()
+            announcementStatusMessage = "Notice unpublished and hidden from member accounts."
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func setAnnouncementArchived(
+        session: AuthSession,
+        announcement: AdminAnnouncement,
+        archived: Bool
+    ) async -> Bool {
+        guard announcementMutationAvailable else { return false }
+        announcementMutationID = announcement.id
+        announcementStatusMessage = nil
+        defer { announcementMutationID = nil }
+        do {
+            try await api.adminSetAnnouncementArchived(
+                session: session,
+                announcement: announcement,
+                archived: archived
+            )
+            announcements = try await api.adminAnnouncements(session: session)
+            markAnnouncementsCurrent()
+            announcementStatusMessage = archived
+                ? "Notice archived. Delivery history remains available."
+                : "Notice restored as a private draft."
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func deleteAnnouncement(session: AuthSession, announcement: AdminAnnouncement) async -> Bool {
+        guard announcementMutationAvailable else { return false }
+        announcementMutationID = announcement.id
+        announcementStatusMessage = nil
+        defer { announcementMutationID = nil }
+        do {
+            try await api.adminDeleteAnnouncement(session: session, announcement: announcement)
+            announcements.removeAll(where: { $0.id == announcement.id })
+            markAnnouncementsCurrent()
+            announcementStatusMessage = "Unpublished draft deleted."
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private var announcementMutationAvailable: Bool {
+        guard !isMutatingAnnouncements,
+              loadedSources.contains("member notices"),
+              !refreshUnavailableSources.contains("member notices"),
+              !isLoading else {
+            if !isMutatingAnnouncements {
+                errorMessage = "Refresh Member Notices before changing communications."
+            }
+            return false
+        }
+        return true
+    }
+
+    private func mergeAnnouncement(_ announcement: AdminAnnouncement) {
+        announcements.removeAll(where: { $0.id == announcement.id })
+        announcements.insert(announcement, at: 0)
+    }
+
+    private func markAnnouncementsCurrent() {
+        loadedSources.insert("member notices")
+        refreshUnavailableSources.removeAll { $0 == "member notices" }
+        lastUpdatedAt = Date()
     }
 
     func saveProduct(session: AuthSession, product: AdminProduct?, draft: AdminProductDraft) async -> Bool {

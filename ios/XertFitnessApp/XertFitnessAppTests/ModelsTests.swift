@@ -3709,6 +3709,100 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        XCTAssertEqual(adminAnnouncement(publishedAt: nil).stateLabel(now: now), "Draft")
+        XCTAssertEqual(
+            adminAnnouncement(publishedAt: now.addingTimeInterval(3_600)).stateLabel(now: now),
+            "Scheduled"
+        )
+        XCTAssertEqual(
+            adminAnnouncement(
+                publishedAt: now.addingTimeInterval(-7_200),
+                expiresAt: now.addingTimeInterval(-60)
+            ).stateLabel(now: now),
+            "Expired"
+        )
+        XCTAssertEqual(
+            adminAnnouncement(
+                publishedAt: now.addingTimeInterval(-7_200),
+                expiresAt: now.addingTimeInterval(3_600)
+            ).stateLabel(now: now),
+            "Live"
+        )
+        XCTAssertEqual(
+            adminAnnouncement(
+                publishedAt: now.addingTimeInterval(-7_200),
+                archivedAt: now.addingTimeInterval(-60)
+            ).stateLabel(now: now),
+            "Archived"
+        )
+    }
+
+    func testAdminAnnouncementDraftRequiresSafeCompleteMemberActions() {
+        var draft = AdminAnnouncementDraft()
+        draft.title = "Class update"
+        draft.body = "Saturday training now begins at 7 am."
+
+        XCTAssertNil(draft.validationMessage(publishing: true))
+
+        draft.ctaLabel = "Book now"
+        XCTAssertEqual(
+            draft.validationMessage(publishing: false),
+            "Action label and destination must be provided together."
+        )
+
+        draft.ctaURL = "http://example.com/booking"
+        XCTAssertEqual(
+            draft.validationMessage(publishing: false),
+            "Action destination must be an internal path or a secure HTTPS URL."
+        )
+
+        draft.ctaURL = "/booking"
+        XCTAssertNil(draft.validationMessage(publishing: true))
+
+        draft.ctaURL = "https://xertfitness.com.au/booking"
+        XCTAssertNil(draft.validationMessage(publishing: true))
+
+        draft.expiresAt = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertNil(
+            draft.validationMessage(
+                publishing: false,
+                now: Date(timeIntervalSince1970: 1_800_000_000)
+            )
+        )
+        XCTAssertEqual(
+            draft.validationMessage(
+                publishing: true,
+                now: Date(timeIntervalSince1970: 1_800_000_000)
+            ),
+            "Choose a future expiry before publishing."
+        )
+    }
+
+    private func adminAnnouncement(
+        publishedAt: Date?,
+        expiresAt: Date? = nil,
+        archivedAt: Date? = nil
+    ) -> AdminAnnouncement {
+        AdminAnnouncement(
+            id: UUID(),
+            title: "Training update",
+            body: "Saturday training now begins at 7 am.",
+            tone: "info",
+            audience: "all",
+            cta_label: nil,
+            cta_url: nil,
+            published_at: publishedAt,
+            first_published_at: publishedAt,
+            expires_at: expiresAt,
+            archived_at: archivedAt,
+            created_at: Date(timeIntervalSince1970: 1_700_000_000),
+            updated_at: "2027-01-15T08:00:00.000Z"
+        )
+    }
+
     private func memberOnboardingState(
         documentIDs: [UUID],
         acceptedIDs: [UUID]

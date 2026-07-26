@@ -267,7 +267,7 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   }
   assert.match(view, /sheet\(item: \$presentedQuickAction\)/);
   assert.match(view, /AdminClassEditor\(admin: admin, session: session, classSession: nil\)/);
-  assert.match(view, /AdminAnnouncementComposer\(isPublishing: admin\.isPublishingAnnouncement\)/);
+  assert.match(view, /AdminAnnouncementComposer\([\s\S]*announcement: nil,[\s\S]*isSaving: admin\.announcementMutationID != nil,[\s\S]*isPublishing: admin\.isPublishingAnnouncement/);
   assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
 
   assert.match(store, /@Published private\(set\) var loadedSources: Set<String> = \[\]/);
@@ -285,6 +285,55 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /if !admin\.hasCompletedRefresh \{[\s\S]*Checking release services/);
   assert.match(view, /case \.unavailable:[\s\S]*Text\("—"\)/);
   assert.match(view, /Unavailable totals are hidden so they cannot be mistaken for zero/);
+});
+
+test('native member communications supports a safe complete notice lifecycle', async () => {
+  const [view, store, api, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  assert.match(models, /struct AdminAnnouncementDraft: Equatable/);
+  assert.match(models, /published_at > now \{ return "Scheduled" \}/);
+  assert.match(models, /Action label and destination must be provided together/);
+  assert.match(models, /url\.scheme\?\.lowercased\(\) == "https"/);
+  assert.match(api, /func adminSaveAnnouncement/);
+  assert.match(api, /func adminUnpublishAnnouncement/);
+  assert.match(api, /func adminSetAnnouncementArchived/);
+  assert.match(api, /func adminDeleteAnnouncement/);
+  assert.ok(api.includes('URLQueryItem(name: "updated_at", value: "eq.\\(announcement.updated_at)")'));
+  assert.match(api, /guard !announcement\.wasPublished/);
+  assert.match(store, /private var announcementMutationAvailable: Bool/);
+  assert.match(store, /Refresh Member Notices before changing communications/);
+  assert.match(store, /mergeAnnouncement\(outcome\.announcement\)/);
+  assert.match(store, /No enabled iOS devices were registered/);
+
+  const communications = view.slice(
+    view.indexOf('private struct AdminCommunicationsView'),
+    view.indexOf('private struct AdminAnnouncementComposer'),
+  );
+  assert.match(communications, /AdminAnnouncementStatusStrip/);
+  assert.match(communications, /Showing the last notice snapshot/);
+  assert.match(communications, /Label\("Review and publish", systemImage: "paperplane"\)/);
+  assert.match(communications, /Label\("Unpublish", systemImage: "eye\.slash"\)/);
+  assert.match(communications, /Label\("Archive", systemImage: "archivebox"\)/);
+  assert.match(communications, /Label\("Delete draft", systemImage: "trash"\)/);
+  assert.match(communications, /\.refreshable \{ await admin\.refreshAnnouncements\(session: session\) \}/);
+
+  const composer = view.slice(
+    view.indexOf('private struct AdminAnnouncementComposer'),
+    view.indexOf('private enum AdminOwnerQuickAction'),
+  );
+  assert.match(composer, /\.safeAreaInset\(edge: \.bottom/);
+  assert.match(composer, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(composer, /\.scrollDismissesKeyboard\(\.interactively\)/);
+  assert.match(composer, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+  assert.match(composer, /Section\("Member action"\)/);
+  assert.match(composer, /Section\("Visibility window"\)/);
+  assert.match(composer, /owner\.notice\.save/);
+  assert.match(composer, /owner\.notice\.publish/);
 });
 
 test('native owner queues auto-sync without disturbing unrelated command-centre work', async () => {

@@ -1141,13 +1141,132 @@ final class XertAPI {
         try await restRequest(
             path: "/rest/v1/member_announcements",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,expires_at,archived_at,created_at,updated_at"),
+                URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,first_published_at,expires_at,archived_at,created_at,updated_at"),
                 URLQueryItem(name: "audience", value: "eq.all"),
                 URLQueryItem(name: "order", value: "created_at.desc"),
                 URLQueryItem(name: "limit", value: "100")
             ],
             auth: auth
         )
+    }
+
+    func adminSaveAnnouncement(
+        session auth: AuthSession,
+        announcement: AdminAnnouncement?,
+        draft: AdminAnnouncementDraft
+    ) async throws -> AdminAnnouncement {
+        let payload = try adminAnnouncementPayload(draft, publishing: false)
+        var request: URLRequest
+        if let announcement {
+            guard announcement.archived_at == nil else {
+                throw APIError(message: "Restore this notice before editing it.")
+            }
+            request = try self.request(
+                baseURL: AppConfig.supabaseURL,
+                path: "/rest/v1/member_announcements",
+                queryItems: [
+                    URLQueryItem(name: "id", value: "eq.\(announcement.id.uuidString)"),
+                    URLQueryItem(name: "updated_at", value: "eq.\(announcement.updated_at)")
+                ]
+            )
+            request.httpMethod = "PATCH"
+            request.httpBody = try JSONEncoder().encode(payload)
+        } else {
+            guard let userID = auth.user?.id else {
+                throw APIError(message: "Your admin session has expired. Sign in again.")
+            }
+            request = try self.request(
+                baseURL: AppConfig.supabaseURL,
+                path: "/rest/v1/member_announcements"
+            )
+            request.httpMethod = "POST"
+            request.httpBody = try JSONEncoder().encode(
+                AdminAnnouncementCreatePayload(
+                    announcement: payload,
+                    created_by: userID
+                )
+            )
+        }
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        let rows: [AdminAnnouncement] = try await decode(request)
+        guard rows.count == 1 else {
+            throw APIError(message: announcement == nil
+                ? "The notice draft could not be created."
+                : "This notice changed elsewhere. Refresh and review the latest version.")
+        }
+        return rows[0]
+    }
+
+    func adminUnpublishAnnouncement(
+        session auth: AuthSession,
+        announcement: AdminAnnouncement
+    ) async throws -> AdminAnnouncement {
+        guard announcement.archived_at == nil else {
+            throw APIError(message: "Restore this notice before changing its visibility.")
+        }
+        var request = try self.request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/member_announcements",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(announcement.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(announcement.updated_at)")
+            ]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(AdminAnnouncementUnpublishPayload())
+        let rows: [AdminAnnouncement] = try await decode(request)
+        guard rows.count == 1 else {
+            throw APIError(message: "This notice changed elsewhere. Refresh before unpublishing it.")
+        }
+        return rows[0]
+    }
+
+    func adminSetAnnouncementArchived(
+        session auth: AuthSession,
+        announcement: AdminAnnouncement,
+        archived: Bool
+    ) async throws {
+        let _: EmptyResponse = try await rpc(
+            path: "admin_archive_member_announcement",
+            body: AdminAnnouncementArchiveRequest(
+                p_announcement_id: announcement.id,
+                p_archived: archived,
+                p_expected_updated_at: announcement.updated_at
+            ),
+            auth: auth
+        )
+    }
+
+    func adminDeleteAnnouncement(
+        session auth: AuthSession,
+        announcement: AdminAnnouncement
+    ) async throws {
+        guard !announcement.wasPublished else {
+            throw APIError(message: "Published notices must be archived so delivery history remains intact.")
+        }
+        var request = try self.request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/member_announcements",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(announcement.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(announcement.updated_at)")
+            ]
+        )
+        request.httpMethod = "DELETE"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        let rows: [AdminMutationID] = try await decode(request)
+        guard rows.count == 1 else {
+            throw APIError(message: "This draft changed elsewhere. Refresh before deleting it.")
+        }
     }
 
     func adminSchemaCapabilities(session auth: AuthSession) async throws -> [AdminSchemaCapability] {
@@ -1622,32 +1741,55 @@ final class XertAPI {
         body: String,
         tone: String
     ) async throws {
-        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (3...120).contains(normalizedTitle.count) else {
-            throw APIError(message: "Announcement titles must be between 3 and 120 characters.")
+        var draft = AdminAnnouncementDraft()
+        draft.title = title
+        draft.body = body
+        draft.tone = tone
+        _ = try await adminPublishAnnouncement(
+            session: auth,
+            announcement: nil,
+            draft: draft
+        )
+    }
+
+    func adminPublishAnnouncement(
+        session auth: AuthSession,
+        announcement: AdminAnnouncement?,
+        draft: AdminAnnouncementDraft
+    ) async throws -> AdminAnnouncementPublishOutcome {
+        if announcement?.archived_at != nil {
+            throw APIError(message: "Restore this notice before publishing it.")
         }
-        guard (3...2_000).contains(normalizedBody.count) else {
-            throw APIError(message: "Announcement messages must be between 3 and 2,000 characters.")
-        }
-        guard ["info", "action", "urgent"].contains(tone) else {
-            throw APIError(message: "Choose a valid announcement priority.")
-        }
-        let _: EmptyObject = try await vercelRequest(
+        let payload = try adminAnnouncementPayload(draft, publishing: true)
+        return try await vercelRequest(
             path: "/api/admin-publish-announcement",
             body: AdminAnnouncementPublishRequest(
-                id: nil,
-                announcement: AdminAnnouncementPayload(
-                    title: normalizedTitle,
-                    body: normalizedBody,
-                    tone: tone,
-                    expires_at: nil,
-                    cta_label: nil,
-                    cta_url: nil
-                ),
-                expected_updated_at: nil
+                id: announcement?.id,
+                announcement: payload,
+                expected_updated_at: announcement?.updated_at
             ),
             auth: auth
+        )
+    }
+
+    private func adminAnnouncementPayload(
+        _ draft: AdminAnnouncementDraft,
+        publishing: Bool
+    ) throws -> AdminAnnouncementPayload {
+        if let message = draft.validationMessage(publishing: publishing) {
+            throw APIError(message: message)
+        }
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ctaLabel = draft.ctaLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ctaURL = draft.ctaURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AdminAnnouncementPayload(
+            title: title,
+            body: body,
+            tone: draft.tone,
+            expires_at: draft.expiresAt.map { ISO8601DateFormatter.standard.string(from: $0) },
+            cta_label: ctaLabel.isEmpty ? nil : ctaLabel,
+            cta_url: ctaURL.isEmpty ? nil : ctaURL
         )
     }
 
@@ -2305,10 +2447,42 @@ private struct AdminAnnouncementPayload: Encodable {
     let cta_label: String?
     let cta_url: String?
 }
+private struct AdminAnnouncementCreatePayload: Encodable {
+    let title: String
+    let body: String
+    let tone: String
+    let expires_at: String?
+    let cta_label: String?
+    let cta_url: String?
+    let created_by: UUID
+
+    init(announcement: AdminAnnouncementPayload, created_by: UUID) {
+        title = announcement.title
+        body = announcement.body
+        tone = announcement.tone
+        expires_at = announcement.expires_at
+        cta_label = announcement.cta_label
+        cta_url = announcement.cta_url
+        self.created_by = created_by
+    }
+}
 private struct AdminAnnouncementPublishRequest: Encodable {
     let id: UUID?
     let announcement: AdminAnnouncementPayload
     let expected_updated_at: String?
+}
+private struct AdminAnnouncementArchiveRequest: Encodable {
+    let p_announcement_id: UUID
+    let p_archived: Bool
+    let p_expected_updated_at: String
+}
+private struct AdminAnnouncementUnpublishPayload: Encodable {
+    private enum CodingKeys: String, CodingKey { case published_at }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeNil(forKey: .published_at)
+    }
 }
 
 private struct AdminRoleAuditRow: Decodable {
