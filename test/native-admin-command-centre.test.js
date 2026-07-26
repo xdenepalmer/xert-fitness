@@ -336,6 +336,47 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.match(composer, /owner\.notice\.publish/);
 });
 
+test('native member records can send and audit private member notices', async () => {
+  const [view, store, api, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  assert.match(models, /struct AdminMemberNotice: Identifiable, Codable, Hashable/);
+  assert.match(models, /struct AdminMemberNoticeDraft: Equatable/);
+  assert.match(models, /case \.booking: return \("Book a class", "\/booking"\)/);
+  assert.match(models, /guard \[7, 30, 90\]\.contains\(expiryDays\)/);
+  assert.match(api, /func adminMemberNotices[\s\S]*path: "admin_list_member_notices"/);
+  assert.match(api, /func adminSendMemberNotice[\s\S]*path: "admin_send_member_notice"/);
+  assert.match(api, /action: "notify_targeted_announcement"/);
+  assert.match(api, /The notice is live in the member app, but Apple push delivery needs attention/);
+  assert.match(store, /async let noticesRequest = api\.adminMemberNotices/);
+  assert.match(store, /failures\.append\("private notices"\)/);
+  assert.match(store, /func sendMemberNotice/);
+  assert.match(store, /loadedMemberDetailID == memberID/);
+  assert.match(store, /let notices = try await api\.adminMemberNotices[\s\S]*memberNotices = notices/);
+  assert.match(store, /memberDetailGeneration == generation,[\s\S]*loadedMemberDetailID == memberID/);
+  assert.match(store, /Private notice sent, but delivery history could not refresh/);
+
+  const detail = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private struct AdminCreditGrantView'),
+  );
+  assert.match(detail, /privateNoticesSection/);
+  assert.match(detail, /Label\("Send private notice", systemImage: "bell\.badge"\)/);
+  assert.match(detail, /AdminMemberNoticeHistoryRow/);
+  assert.match(detail, /notice\.receiptLabel/);
+  assert.match(detail, /notice\.deliveryLabel/);
+  assert.match(detail, /private struct AdminMemberNoticeComposer/);
+  assert.match(detail, /\.safeAreaInset\(edge: \.bottom/);
+  assert.match(detail, /\.scrollDismissesKeyboard\(\.interactively\)/);
+  assert.match(detail, /\.interactiveDismissDisabled\(isDirty \|\| isSending\)/);
+  assert.match(detail, /Discard private notice draft\?/);
+  assert.match(detail, /owner\.memberNotice\.send/);
+});
+
 test('native owner queues auto-sync without disturbing unrelated command-centre work', async () => {
   const [view, store, api] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),

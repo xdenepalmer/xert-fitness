@@ -660,6 +660,77 @@ final class XertAPI {
         )
     }
 
+    func adminMemberNotices(session auth: AuthSession, memberID: UUID) async throws -> [AdminMemberNotice] {
+        try await rpc(
+            path: "admin_list_member_notices",
+            body: AdminMemberIDRequest(p_user_id: memberID),
+            auth: auth
+        )
+    }
+
+    func adminSendMemberNotice(
+        session auth: AuthSession,
+        memberID: UUID,
+        draft: AdminMemberNoticeDraft,
+        now: Date = Date()
+    ) async throws -> AdminMemberNoticeSendOutcome {
+        if let message = draft.validationMessage() {
+            throw APIError(message: message)
+        }
+        let action = draft.action.cta
+        guard let expiresAt = Calendar(identifier: .gregorian).date(
+            byAdding: .day,
+            value: draft.expiryDays,
+            to: now
+        ) else {
+            throw APIError(message: "The notice expiry could not be calculated.")
+        }
+        let announcementID: UUID = try await rpc(
+            path: "admin_send_member_notice",
+            body: AdminMemberNoticeRequest(
+                p_user_id: memberID,
+                p_title: draft.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                p_body: draft.body.trimmingCharacters(in: .whitespacesAndNewlines),
+                p_tone: draft.tone,
+                p_cta_label: action.label,
+                p_cta_url: action.url,
+                p_expires_at: ISO8601DateFormatter.standard.string(from: expiresAt)
+            ),
+            auth: auth
+        )
+        do {
+            let response: AdminTargetedNoticeResponse = try await vercelRequest(
+                path: "/api/admin-publish-announcement",
+                body: AdminTargetedNoticeRequest(
+                    action: "notify_targeted_announcement",
+                    announcement_id: announcementID
+                ),
+                auth: auth
+            )
+            let warning = response.push?.configured == false
+                ? "The notice is live in the member app, but Apple push is not configured."
+                : nil
+            return AdminMemberNoticeSendOutcome(
+                announcementID: announcementID,
+                push: response.push.map {
+                    AdminAnnouncementPushSummary(
+                        configured: $0.configured,
+                        attempted: $0.attempted,
+                        delivered: $0.delivered,
+                        failed: $0.failed
+                    )
+                },
+                warning: warning
+            )
+        } catch {
+            return AdminMemberNoticeSendOutcome(
+                announcementID: announcementID,
+                push: nil,
+                warning: "The notice is live in the member app, but Apple push delivery needs attention."
+            )
+        }
+    }
+
     func adminMemberActivationOverview(
         session auth: AuthSession,
         cohortDays: Int = 30
@@ -2363,6 +2434,15 @@ private struct AdminMemberNotesRequest: Encodable {
 }
 private struct AdminMemberIDsRequest: Encodable { let p_user_ids: [UUID] }
 private struct AdminMemberIDRequest: Encodable { let p_user_id: UUID }
+private struct AdminMemberNoticeRequest: Encodable {
+    let p_user_id: UUID
+    let p_title: String
+    let p_body: String
+    let p_tone: String
+    let p_cta_label: String?
+    let p_cta_url: String?
+    let p_expires_at: String
+}
 private struct AdminCreditGrantRequest: Encodable {
     let p_user_id: UUID
     let p_sessions: Int

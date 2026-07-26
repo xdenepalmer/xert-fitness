@@ -55,6 +55,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var activationQueue: [AdminMemberActivationItem] = []
     @Published private(set) var members: [AdminMemberSummary] = []
     @Published private(set) var memberNotes: [AdminMemberNote] = []
+    @Published private(set) var memberNotices: [AdminMemberNotice] = []
+    @Published private(set) var memberNoticeStatusMessage: String?
+    @Published private(set) var memberNoticeStatusIsWarning = false
     @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
     @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
     @Published private(set) var loadedMemberDetailID: UUID?
@@ -115,6 +118,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var revealingEmergencyContactMemberID: UUID?
+    @Published private(set) var sendingMemberNoticeID: UUID?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
@@ -662,6 +666,9 @@ final class AdminStore: ObservableObject {
         let generation = memberDetailGeneration
         loadedMemberDetailID = memberID
         memberNotes = []
+        memberNotices = []
+        memberNoticeStatusMessage = nil
+        memberNoticeStatusIsWarning = false
         memberOnboardingSummary = nil
         revealedMemberEmergencyContact = nil
         memberDetailUnavailableSources = []
@@ -671,6 +678,7 @@ final class AdminStore: ObservableObject {
         }
 
         async let notesRequest = api.adminMemberNotes(session: session, memberID: memberID)
+        async let noticesRequest = api.adminMemberNotices(session: session, memberID: memberID)
         async let onboardingRequest = api.adminMemberOnboardingSummary(session: session, memberID: memberID)
         var failures: [String] = []
 
@@ -692,6 +700,15 @@ final class AdminStore: ObservableObject {
             failures.append("member readiness")
         }
 
+        do {
+            let notices = try await noticesRequest
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            memberNotices = notices
+        } catch {
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
+            failures.append("private notices")
+        }
+
         guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
         memberDetailUnavailableSources = failures
     }
@@ -703,7 +720,11 @@ final class AdminStore: ObservableObject {
         loadedMemberDetailID = nil
         loadingMemberDetailID = nil
         revealingEmergencyContactMemberID = nil
+        sendingMemberNoticeID = nil
         memberNotes = []
+        memberNotices = []
+        memberNoticeStatusMessage = nil
+        memberNoticeStatusIsWarning = false
         memberOnboardingSummary = nil
         revealedMemberEmergencyContact = nil
         memberDetailUnavailableSources = []
@@ -762,6 +783,67 @@ final class AdminStore: ObservableObject {
             memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    func sendMemberNotice(
+        session: AuthSession,
+        memberID: UUID,
+        draft: AdminMemberNoticeDraft
+    ) async -> Bool {
+        guard servicingMemberID == nil,
+              sendingMemberNoticeID == nil,
+              loadedMemberDetailID == memberID,
+              !memberDetailUnavailableSources.contains("private notices") else {
+            errorMessage = "Refresh this member record before sending a private notice."
+            return false
+        }
+        servicingMemberID = memberID
+        sendingMemberNoticeID = memberID
+        memberNoticeStatusMessage = nil
+        memberNoticeStatusIsWarning = false
+        let generation = memberDetailGeneration
+        defer {
+            servicingMemberID = nil
+            sendingMemberNoticeID = nil
+        }
+        do {
+            let outcome = try await api.adminSendMemberNotice(
+                session: session,
+                memberID: memberID,
+                draft: draft
+            )
+            var historyUnavailable = false
+            do {
+                let notices = try await api.adminMemberNotices(session: session, memberID: memberID)
+                guard memberDetailGeneration == generation,
+                      loadedMemberDetailID == memberID else { return true }
+                memberNotices = notices
+                memberDetailUnavailableSources.removeAll { $0 == "private notices" }
+            } catch {
+                guard memberDetailGeneration == generation,
+                      loadedMemberDetailID == memberID else { return true }
+                historyUnavailable = true
+                if !memberDetailUnavailableSources.contains("private notices") {
+                    memberDetailUnavailableSources.append("private notices")
+                }
+            }
+            if let warning = outcome.warning {
+                memberNoticeStatusMessage = warning
+                memberNoticeStatusIsWarning = true
+            } else if historyUnavailable {
+                memberNoticeStatusMessage = "Private notice sent, but delivery history could not refresh."
+                memberNoticeStatusIsWarning = true
+            } else if (outcome.push?.delivered ?? 0) > 0 {
+                memberNoticeStatusMessage = "Private notice sent and Apple push delivered."
+            } else {
+                memberNoticeStatusMessage = "Private notice sent. It is available in the member app."
+            }
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     func grantCredits(session: AuthSession, memberID: UUID, sessions: Int, validityDays: Int?, requestID: UUID, note: String) async -> Bool {

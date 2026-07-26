@@ -2105,6 +2105,7 @@ private struct AdminMemberDetailView: View {
     @State private var noteCategory = "general"
     @State private var noteBody = ""
     @State private var showingGrant = false
+    @State private var showingNoticeComposer = false
     @State private var pendingRole: String?
 
     private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
@@ -2134,6 +2135,8 @@ private struct AdminMemberDetailView: View {
             .listRowBackground(Color.xertInk)
 
             memberReadinessSection
+
+            privateNoticesSection
 
             Section("Access") {
                 LabeledContent("Current role", value: current.role.capitalized)
@@ -2207,6 +2210,26 @@ private struct AdminMemberDetailView: View {
         .onDisappear { admin.clearMemberDetail(memberID: current.id) }
         .sheet(isPresented: $showingGrant) {
             AdminCreditGrantView(admin: admin, session: session, member: current)
+        }
+        .sheet(isPresented: $showingNoticeComposer) {
+            AdminMemberNoticeComposer(
+                memberName: current.displayName,
+                isSending: admin.sendingMemberNoticeID == current.id,
+                onSend: { draft in
+                    Task {
+                        if await admin.sendMemberNotice(
+                            session: session,
+                            memberID: current.id,
+                            draft: draft
+                        ) {
+                            showingNoticeComposer = false
+                            XertHaptics.play(admin.memberNoticeStatusIsWarning ? .warning : .success)
+                        } else {
+                            XertHaptics.play(.error)
+                        }
+                    }
+                }
+            )
         }
         .confirmationDialog(
             pendingRole == "admin" ? "Grant administrator access?" : "Remove administrator access?",
@@ -2321,6 +2344,69 @@ private struct AdminMemberDetailView: View {
         .listRowBackground(Color.xertInk)
     }
 
+    private var privateNoticesSection: some View {
+        Section("Private notices") {
+            if let status = admin.memberNoticeStatusMessage {
+                Label(
+                    status,
+                    systemImage: admin.memberNoticeStatusIsWarning
+                        ? "exclamationmark.triangle.fill"
+                        : "checkmark.circle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(admin.memberNoticeStatusIsWarning ? Color.orange : Color.green)
+                .accessibilityAddTraits(.isStaticText)
+            }
+
+            if admin.memberDetailUnavailableSources.contains("private notices") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Private notice history is unavailable.", systemImage: "wifi.exclamationmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                    Text("Refresh this member record before sending or relying on delivery history.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.58))
+                }
+            } else {
+                Button {
+                    showingNoticeComposer = true
+                    XertHaptics.play(.lightImpact)
+                } label: {
+                    HStack {
+                        Label("Send private notice", systemImage: "bell.badge")
+                        Spacer()
+                        if admin.sendingMemberNoticeID == current.id {
+                            ProgressView().tint(Color.xertSteel)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                        }
+                    }
+                    .frame(minHeight: 44)
+                }
+                .disabled(admin.servicingMemberID != nil)
+                .accessibilityHint("Composes an account-only message with optional Apple push delivery")
+
+                if admin.loadingMemberDetailID == current.id && admin.memberNotices.isEmpty {
+                    HStack {
+                        ProgressView().tint(Color.xertSteel)
+                        Text("Loading delivery history...")
+                            .foregroundStyle(Color.xertPale.opacity(0.68))
+                    }
+                } else if admin.memberNotices.isEmpty {
+                    Text("No private notices have been sent to this member.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                }
+
+                ForEach(admin.memberNotices) { notice in
+                    AdminMemberNoticeHistoryRow(notice: notice)
+                }
+            }
+        }
+        .listRowBackground(Color.xertInk)
+    }
+
     private func readinessRow(_ title: String, detail: String? = nil, complete: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: complete ? "checkmark.circle.fill" : "circle")
@@ -2336,6 +2422,233 @@ private struct AdminMemberDetailView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(complete ? "complete" : "incomplete")")
+    }
+}
+
+private struct AdminMemberNoticeHistoryRow: View {
+    let notice: AdminMemberNotice
+
+    private var toneColour: Color {
+        switch notice.tone {
+        case "urgent": return .red
+        case "action": return .orange
+        default: return Color.xertSteel
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(notice.sourceLabel.uppercased())
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(toneColour)
+                Spacer(minLength: 8)
+                Text(notice.published_at.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Color.xertPale.opacity(0.45))
+            }
+            Text(notice.title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.xertOffWhite)
+            Text(notice.body)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.68))
+                .lineLimit(4)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { evidence }
+                VStack(alignment: .leading, spacing: 5) { evidence }
+            }
+            if let label = notice.cta_label {
+                Label(label, systemImage: "arrow.up.forward.app")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.xertSteel)
+            }
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(notice.sourceLabel), \(notice.title), \(notice.receiptLabel), \(notice.deliveryLabel)"
+        )
+    }
+
+    @ViewBuilder
+    private var evidence: some View {
+        Label(
+            notice.receiptLabel,
+            systemImage: notice.read_at == nil ? "envelope" : "envelope.open"
+        )
+        Label(
+            notice.deliveryLabel,
+            systemImage: notice.push_delivered > 0
+                ? "checkmark.circle.fill"
+                : notice.push_failed > 0 ? "exclamationmark.triangle" : "iphone"
+        )
+        if let expiresAt = notice.expires_at {
+            Label(
+                expiresAt <= Date()
+                    ? "Expired \(expiresAt.formatted(date: .abbreviated, time: .omitted))"
+                    : "Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))",
+                systemImage: "calendar.badge.clock"
+            )
+        }
+    }
+}
+
+private struct AdminMemberNoticeComposer: View {
+    @Environment(\.dismiss) private var dismiss
+    let memberName: String
+    let isSending: Bool
+    let onSend: (AdminMemberNoticeDraft) -> Void
+    @State private var draft = AdminMemberNoticeDraft()
+    @State private var confirmingSend = false
+    @State private var confirmingDiscard = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case title
+        case body
+    }
+
+    private var isDirty: Bool { draft != AdminMemberNoticeDraft() }
+    private var validation: String? { draft.validationMessage() }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("PRIVATE MEMBER MESSAGE", systemImage: "person.crop.circle.badge.exclamationmark")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(Color.xertSteel)
+                        Text(memberName)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Only this member can see the notice in their XERT account.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.58))
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Notice") {
+                    TextField("Title", text: $draft.title)
+                        .focused($focusedField, equals: .title)
+                        .onChange(of: draft.title) { value in
+                            if value.count > 120 { draft.title = String(value.prefix(120)) }
+                        }
+                    HStack {
+                        Spacer()
+                        Text("\(draft.title.count)/120")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Color.xertPale.opacity(0.45))
+                    }
+                    TextEditor(text: $draft.body)
+                        .focused($focusedField, equals: .body)
+                        .frame(minHeight: 160)
+                        .onChange(of: draft.body) { value in
+                            if value.count > 2_000 { draft.body = String(value.prefix(2_000)) }
+                        }
+                    HStack {
+                        Spacer()
+                        Text("\(draft.body.count)/2000")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Color.xertPale.opacity(0.45))
+                    }
+                }
+
+                Section("Delivery") {
+                    Picker("Priority", selection: $draft.tone) {
+                        Text("Information").tag("info")
+                        Text("Action needed").tag("action")
+                        Text("Urgent").tag("urgent")
+                    }
+                    Picker("Member action", selection: $draft.action) {
+                        ForEach(AdminMemberNoticeAction.allCases) { action in
+                            Text(action.title).tag(action)
+                        }
+                    }
+                    Picker("Expires after", selection: $draft.expiryDays) {
+                        Text("7 days").tag(7)
+                        Text("30 days").tag(30)
+                        Text("90 days").tag(90)
+                    }
+                    Text("The notice is saved first, then XERT attempts Apple push delivery to the member's enabled devices.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.55))
+                }
+
+                if let validation {
+                    Section {
+                        Label(validation, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.xertNavy)
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Private Notice")
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button {
+                    focusedField = nil
+                    confirmingSend = true
+                } label: {
+                    Label(isSending ? "Sending..." : "Review & Send", systemImage: "paperplane.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+                .disabled(isSending || validation != nil)
+                .accessibilityIdentifier("owner.memberNotice.send")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { requestClose() }
+                        .disabled(isSending)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
+            }
+            .confirmationDialog(
+                "Send this private notice to \(memberName)?",
+                isPresented: $confirmingSend,
+                titleVisibility: .visible
+            ) {
+                Button("Send private notice") { onSend(draft) }
+                    .disabled(isSending || validation != nil)
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                Text("The notice becomes available in this member's account immediately. Apple push delivery is attempted once.")
+            }
+            .confirmationDialog(
+                "Discard private notice draft?",
+                isPresented: $confirmingDiscard,
+                titleVisibility: .visible
+            ) {
+                Button("Discard draft", role: .destructive) { dismiss() }
+                Button("Keep writing", role: .cancel) {}
+            } message: {
+                Text("The title, message and delivery choices will be lost.")
+            }
+        }
+        .interactiveDismissDisabled(isDirty || isSending)
+    }
+
+    private func requestClose() {
+        focusedField = nil
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            dismiss()
+        }
     }
 }
 

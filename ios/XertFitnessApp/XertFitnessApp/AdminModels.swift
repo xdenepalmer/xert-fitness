@@ -115,6 +115,102 @@ struct AdminMemberNote: Identifiable, Codable, Hashable {
     let archived_by: UUID?
 }
 
+struct AdminMemberNotice: Identifiable, Codable, Hashable {
+    let id: UUID
+    let title: String
+    let body: String
+    let tone: String
+    let cta_label: String?
+    let cta_url: String?
+    let source_kind: String
+    let published_at: Date
+    let expires_at: Date?
+    let read_at: Date?
+    let dismissed_at: Date?
+    let push_attempted: Int
+    let push_delivered: Int
+    let push_failed: Int
+
+    var sourceLabel: String {
+        switch source_kind {
+        case "booking_decision": return "Booking decision"
+        case "waitlist_promotion": return "Waitlist promotion"
+        default: return "Direct notice"
+        }
+    }
+
+    var receiptLabel: String {
+        if dismissed_at != nil { return "Dismissed" }
+        if read_at != nil { return "Read in app" }
+        return "Unread"
+    }
+
+    var deliveryLabel: String {
+        if push_delivered > 0 { return "Push delivered" }
+        if push_attempted > 0 && push_failed > 0 { return "Push failed" }
+        return "In app only"
+    }
+}
+
+enum AdminMemberNoticeAction: String, CaseIterable, Identifiable, Hashable {
+    case none
+    case booking
+    case account
+    case events
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: return "No action"
+        case .booking: return "Book a class"
+        case .account: return "View account"
+        case .events: return "View events"
+        }
+    }
+
+    var cta: (label: String?, url: String?) {
+        switch self {
+        case .none: return (nil, nil)
+        case .booking: return ("Book a class", "/booking")
+        case .account: return ("View account", "/account")
+        case .events: return ("View events", "/events")
+        }
+    }
+}
+
+struct AdminMemberNoticeDraft: Equatable {
+    var title = ""
+    var body = ""
+    var tone = "info"
+    var action = AdminMemberNoticeAction.none
+    var expiryDays = 30
+
+    func validationMessage() -> String? {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (3...120).contains(normalizedTitle.count) else {
+            return "Title must be between 3 and 120 characters."
+        }
+        guard (3...2_000).contains(normalizedBody.count) else {
+            return "Message must be between 3 and 2,000 characters."
+        }
+        guard ["info", "action", "urgent"].contains(tone) else {
+            return "Choose a valid priority."
+        }
+        guard [7, 30, 90].contains(expiryDays) else {
+            return "Choose a valid expiry."
+        }
+        return nil
+    }
+}
+
+struct AdminMemberNoticeSendOutcome: Hashable {
+    let announcementID: UUID
+    let push: AdminAnnouncementPushSummary?
+    let warning: String?
+}
+
 struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID

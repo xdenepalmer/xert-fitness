@@ -3709,6 +3709,50 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testAdminMemberNoticeDraftMatchesTheBoundedServerContract() {
+        var draft = AdminMemberNoticeDraft()
+        XCTAssertEqual(
+            draft.validationMessage(),
+            "Title must be between 3 and 120 characters."
+        )
+
+        draft.title = "Booking reminder"
+        draft.body = "Your requested class is ready to review."
+        draft.tone = "action"
+        draft.action = .booking
+        draft.expiryDays = 7
+
+        XCTAssertNil(draft.validationMessage())
+        XCTAssertEqual(draft.action.cta.label, "Book a class")
+        XCTAssertEqual(draft.action.cta.url, "/booking")
+
+        draft.expiryDays = 365
+        XCTAssertEqual(draft.validationMessage(), "Choose a valid expiry.")
+    }
+
+    func testAdminMemberNoticeEvidenceDistinguishesReadAndPushState() {
+        let notice = AdminMemberNotice(
+            id: UUID(),
+            title: "Class confirmed",
+            body: "Your place is confirmed.",
+            tone: "action",
+            cta_label: "View account",
+            cta_url: "/account",
+            source_kind: "booking_decision",
+            published_at: Date(timeIntervalSince1970: 1_800_000_000),
+            expires_at: Date(timeIntervalSince1970: 1_802_592_000),
+            read_at: Date(timeIntervalSince1970: 1_800_000_600),
+            dismissed_at: nil,
+            push_attempted: 1,
+            push_delivered: 1,
+            push_failed: 0
+        )
+
+        XCTAssertEqual(notice.sourceLabel, "Booking decision")
+        XCTAssertEqual(notice.receiptLabel, "Read in app")
+        XCTAssertEqual(notice.deliveryLabel, "Push delivered")
+    }
+
     func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
