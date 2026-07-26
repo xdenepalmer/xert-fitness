@@ -2169,6 +2169,18 @@ struct AdminIncidentCommunicationPlan {
         }
     }
 
+    var actionNoticeID: UUID? {
+        switch state {
+        case .pausedUpdateLive, .livePauseNoticeConflict:
+            return livePauseNotice?.id
+        case .recoveryUpdateLive:
+            guard let pauseDate = latestRecentPauseDate else { return nil }
+            return liveRecoveryNotice(after: pauseDate)?.id
+        case .unavailable, .normal, .pausedNeedsUpdate, .recoveryUpdateNeeded:
+            return nil
+        }
+    }
+
     private var livePauseNotice: AdminAnnouncement? {
         announcements
             .filter { $0.stateLabel(now: now) == "Live" && matchesPauseNotice($0) }

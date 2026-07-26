@@ -106,12 +106,14 @@ final class ModelsTests: XCTestCase {
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000083"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000084"))
         let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000085"))
+        let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000086"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
             XertOwnerRoute(task: .classSession(classID)),
             XertOwnerRoute(task: .order(orderID)),
             XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
+            XertOwnerRoute(task: .announcement(announcementID)),
         ]
 
         for route in routes {
@@ -139,6 +141,11 @@ final class ModelsTests: XCTestCase {
         )
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/events/announcement/\(announcementID.uuidString)"))
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/notices/announcement/\(announcementID.uuidString)"),
+            XertOwnerRoute(task: .announcement(announcementID))
+        )
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/finance/order/\(orderID.uuidString)"),
             XertOwnerRoute(task: .order(orderID))
@@ -1442,36 +1449,42 @@ final class ModelsTests: XCTestCase {
             sourceIsCurrent: true,
             now: now
         ).state, .pausedUpdateLive)
-        XCTAssertEqual(AdminIncidentCommunicationPlan(
+        let conflictPlan = AdminIncidentCommunicationPlan(
             operationsState: .liveCommerce,
             announcements: [livePause, fullRecovery],
             sourceIsCurrent: true,
             now: now
-        ).state, .livePauseNoticeConflict)
+        )
+        XCTAssertEqual(conflictPlan.state, .livePauseNoticeConflict)
+        XCTAssertEqual(conflictPlan.actionNoticeID, livePause.id)
         XCTAssertEqual(AdminIncidentCommunicationPlan(
             operationsState: .liveCommerce,
             announcements: [hiddenPause],
             sourceIsCurrent: true,
             now: now
         ).state, .recoveryUpdateNeeded)
-        XCTAssertEqual(AdminIncidentCommunicationPlan(
+        let commerceRecoveryPlan = AdminIncidentCommunicationPlan(
             operationsState: .liveCommerce,
             announcements: [hiddenPause, fullRecovery],
             sourceIsCurrent: true,
             now: now
-        ).state, .recoveryUpdateLive)
+        )
+        XCTAssertEqual(commerceRecoveryPlan.state, .recoveryUpdateLive)
+        XCTAssertEqual(commerceRecoveryPlan.actionNoticeID, fullRecovery.id)
         XCTAssertEqual(AdminIncidentCommunicationPlan(
             operationsState: .bookingsOpen,
             announcements: [hiddenPause, fullRecovery],
             sourceIsCurrent: true,
             now: now
         ).state, .recoveryUpdateNeeded)
-        XCTAssertEqual(AdminIncidentCommunicationPlan(
+        let bookingsRecoveryPlan = AdminIncidentCommunicationPlan(
             operationsState: .bookingsOpen,
             announcements: [hiddenPause, bookingsRecovery],
             sourceIsCurrent: true,
             now: now
-        ).state, .recoveryUpdateLive)
+        )
+        XCTAssertEqual(bookingsRecoveryPlan.state, .recoveryUpdateLive)
+        XCTAssertEqual(bookingsRecoveryPlan.actionNoticeID, bookingsRecovery.id)
 
         let oldHiddenPause = notice(
             title: AdminAnnouncementDraft.memberOperationsPausedTitle,

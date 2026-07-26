@@ -1114,6 +1114,7 @@ struct AdminCommandCentreView: View {
                     incidentControlActions(
                         plan: plan,
                         communication: communication.state,
+                        communicationNoticeID: communication.actionNoticeID,
                         session: session
                     )
                 }
@@ -1121,6 +1122,7 @@ struct AdminCommandCentreView: View {
                     incidentControlActions(
                         plan: plan,
                         communication: communication.state,
+                        communicationNoticeID: communication.actionNoticeID,
                         session: session
                     )
                 }
@@ -1180,6 +1182,7 @@ struct AdminCommandCentreView: View {
     private func incidentControlActions(
         plan: AdminEmergencyPausePlan,
         communication: AdminIncidentCommunicationState,
+        communicationNoticeID: UUID?,
         session: AuthSession
     ) -> some View {
         if plan.canPause {
@@ -1198,6 +1201,7 @@ struct AdminCommandCentreView: View {
             incidentLiveCommunicationAction(
                 state: communication,
                 operationsState: plan.state,
+                noticeID: communicationNoticeID,
                 session: session
             )
 
@@ -1226,7 +1230,7 @@ struct AdminCommandCentreView: View {
         } else {
             if communication == .pausedUpdateLive {
                 Button {
-                    openWorkspaceWithFeedback(.notices)
+                    openIncidentNotice(communicationNoticeID)
                 } label: {
                     Label("Review live update", systemImage: "checkmark.bubble.fill")
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -1286,12 +1290,13 @@ struct AdminCommandCentreView: View {
     private func incidentLiveCommunicationAction(
         state: AdminIncidentCommunicationState,
         operationsState: AdminMemberOperationsState,
+        noticeID: UUID?,
         session: AuthSession
     ) -> some View {
         switch state {
         case .livePauseNoticeConflict:
             Button {
-                openWorkspaceWithFeedback(.notices)
+                openIncidentNotice(noticeID)
             } label: {
                 Label("Fix member message", systemImage: "exclamationmark.bubble.fill")
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -1314,7 +1319,7 @@ struct AdminCommandCentreView: View {
             .accessibilityHint("Opens an editable recovery update without publishing it")
         case .recoveryUpdateLive:
             Button {
-                openWorkspaceWithFeedback(.notices)
+                openIncidentNotice(noticeID)
             } label: {
                 Label("Review all-clear", systemImage: "checkmark.bubble.fill")
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -1336,6 +1341,16 @@ struct AdminCommandCentreView: View {
             .disabled(admin.isLoading || admin.isSavingSettings)
         case .normal, .pausedNeedsUpdate, .pausedUpdateLive:
             EmptyView()
+        }
+    }
+
+    private func openIncidentNotice(_ noticeID: UUID?) {
+        if let noticeID {
+            openOwnerRouteWithFeedback(
+                XertOwnerRoute(task: .announcement(noticeID))
+            )
+        } else {
+            openWorkspaceWithFeedback(.notices)
         }
     }
 
@@ -2795,6 +2810,16 @@ private struct AdminOwnerTaskSheet: View {
                     .toolbar { closeToolbar }
             } else {
                 resolutionView(recordName: "event")
+            }
+        case .announcement(let id):
+            if let announcement = admin.announcements.first(where: { $0.id == id }) {
+                AdminAnnouncementDetailView(
+                    admin: admin,
+                    session: session,
+                    announcement: announcement
+                )
+            } else {
+                resolutionView(recordName: "member notice")
             }
         }
     }
@@ -9644,6 +9669,355 @@ private struct AdminPlatformView: View {
         .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(value)")
+    }
+}
+
+private struct AdminAnnouncementDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let announcement: AdminAnnouncement
+    @State private var editor: AdminAnnouncementEditorContext?
+    @State private var pendingAction: AdminAnnouncementConfirmation?
+
+    private var noticesAreCurrent: Bool {
+        admin.loadedSources.contains("member notices")
+            && !admin.refreshUnavailableSources.contains("member notices")
+            && !admin.isLoading
+    }
+
+    private var isBusy: Bool {
+        admin.isMutatingAnnouncements
+    }
+
+    var body: some View {
+        List {
+            if !noticesAreCurrent {
+                Section {
+                    Label(
+                        "Refresh the notice before changing member visibility.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+
+                    Button {
+                        Task { await admin.refreshAnnouncements(session: session) }
+                    } label: {
+                        Label("Refresh member notice", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(isBusy)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if let status = admin.announcementStatusMessage {
+                Section {
+                    Label(status, systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.green)
+                }
+                .listRowBackground(Color.green.opacity(0.08))
+            }
+
+            Section("Notice") {
+                VStack(alignment: .leading, spacing: 12) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            noticeStatus
+                            Spacer(minLength: 8)
+                            Text(announcement.tone.uppercased())
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
+                        }
+                        VStack(alignment: .leading, spacing: 7) {
+                            noticeStatus
+                            Text(announcement.tone.uppercased())
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
+                        }
+                    }
+
+                    Text(announcement.title)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Color.xertOffWhite)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(announcement.body)
+                        .font(.body)
+                        .foregroundStyle(Color.xertPale.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let label = announcement.cta_label,
+                       let url = announcement.cta_url {
+                        Label("\(label) · \(url)", systemImage: "arrow.up.forward.app")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.xertSteel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Lifecycle") {
+                detailRow(
+                    "Created",
+                    value: announcement.created_at.formatted(
+                        date: .abbreviated,
+                        time: .shortened
+                    ),
+                    icon: "clock"
+                )
+                if let firstPublished = announcement.first_published_at {
+                    detailRow(
+                        "First published",
+                        value: firstPublished.formatted(
+                            date: .abbreviated,
+                            time: .shortened
+                        ),
+                        icon: "paperplane"
+                    )
+                }
+                if let expiry = announcement.expires_at {
+                    detailRow(
+                        "Expires",
+                        value: expiry.formatted(date: .abbreviated, time: .shortened),
+                        icon: "calendar.badge.clock"
+                    )
+                }
+            }
+            .listRowBackground(Color.xertInk)
+
+            Section("Actions") {
+                if announcement.archived_at == nil {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { primaryActions }
+                        VStack(spacing: 10) { primaryActions }
+                    }
+                    .listRowInsets(
+                        EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+                    )
+                }
+
+                if announcement.archived_at != nil {
+                    Button {
+                        confirm(.restore(announcement))
+                    } label: {
+                        Label("Restore as draft", systemImage: "archivebox")
+                    }
+                } else if announcement.wasPublished {
+                    Button {
+                        confirm(.archive(announcement))
+                    } label: {
+                        Label("Archive with delivery history", systemImage: "archivebox")
+                    }
+                    .foregroundStyle(Color.orange)
+                } else {
+                    Button(role: .destructive) {
+                        confirm(.delete(announcement))
+                    } label: {
+                        Label("Delete unpublished draft", systemImage: "trash")
+                    }
+                }
+            }
+            .listRowBackground(Color.xertInk)
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle("Member Notice")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+                    .disabled(isBusy)
+            }
+        }
+        .sheet(item: $editor) { context in
+            AdminAnnouncementComposer(
+                announcement: context.announcement,
+                publishesOnOpen: context.publishesOnOpen,
+                isSaving: admin.announcementMutationID != nil,
+                isPublishing: admin.isPublishingAnnouncement,
+                onSave: { draft in
+                    Task {
+                        if await admin.saveAnnouncement(
+                            session: session,
+                            announcement: context.announcement,
+                            draft: draft
+                        ) {
+                            editor = nil
+                            XertHaptics.play(.success)
+                        } else {
+                            XertHaptics.play(.error)
+                        }
+                    }
+                },
+                onPublish: { draft in
+                    Task {
+                        if await admin.publishAnnouncement(
+                            session: session,
+                            announcement: context.announcement,
+                            draft: draft
+                        ) {
+                            editor = nil
+                            XertHaptics.play(.success)
+                        } else {
+                            XertHaptics.play(.error)
+                        }
+                    }
+                }
+            )
+        }
+        .confirmationDialog(
+            pendingAction?.title ?? "Confirm notice action",
+            isPresented: Binding(
+                get: { pendingAction != nil },
+                set: { if !$0 { pendingAction = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let action = pendingAction {
+                Button(
+                    action.confirmLabel,
+                    role: action.isDestructive ? .destructive : nil
+                ) {
+                    perform(action)
+                }
+                Button("Cancel", role: .cancel) { pendingAction = nil }
+            }
+        } message: {
+            Text(pendingAction?.message ?? "")
+        }
+        .accessibilityIdentifier("owner.notice.detail")
+    }
+
+    private var noticeStatus: some View {
+        Label(
+            announcement.stateLabel.uppercased(),
+            systemImage: announcement.published_at == nil ? "eye.slash" : "eye.fill"
+        )
+        .font(.caption.weight(.black))
+        .foregroundStyle(stateColour)
+    }
+
+    private var stateColour: Color {
+        switch announcement.stateLabel {
+        case "Live": return .green
+        case "Expired", "Archived": return .orange
+        case "Scheduled": return Color.xertSteel
+        default: return Color.xertPale.opacity(0.62)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryActions: some View {
+        if announcement.archived_at == nil {
+            Button {
+                editor = .init(announcement: announcement)
+            } label: {
+                Label("Edit notice", systemImage: "pencil")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.xertSteel)
+            .disabled(isBusy || !noticesAreCurrent)
+            .accessibilityIdentifier("owner.notice.edit")
+
+            if announcement.published_at == nil {
+                Button {
+                    editor = .init(
+                        announcement: announcement,
+                        publishesOnOpen: true
+                    )
+                } label: {
+                    Label("Review & publish", systemImage: "paperplane.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+                .disabled(isBusy || !noticesAreCurrent)
+                .accessibilityIdentifier("owner.notice.reviewPublish")
+            } else {
+                Button {
+                    confirm(.unpublish(announcement))
+                } label: {
+                    Label("Unpublish now", systemImage: "eye.slash.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.orange)
+                .disabled(isBusy || !noticesAreCurrent)
+                .accessibilityHint("Hides this exact notice from member accounts after confirmation")
+                .accessibilityIdentifier("owner.notice.unpublish")
+            }
+        }
+    }
+
+    private func detailRow(
+        _ title: String,
+        value: String,
+        icon: String
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                Label(title, systemImage: icon)
+                    .foregroundStyle(Color.xertPale.opacity(0.68))
+                Spacer(minLength: 8)
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.xertOffWhite)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Label(title, systemImage: icon)
+                    .foregroundStyle(Color.xertPale.opacity(0.68))
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.xertOffWhite)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func confirm(_ action: AdminAnnouncementConfirmation) {
+        pendingAction = action
+        XertHaptics.play(action.isDestructive ? .warning : .lightImpact)
+    }
+
+    private func perform(_ action: AdminAnnouncementConfirmation) {
+        pendingAction = nil
+        Task {
+            let succeeded: Bool
+            switch action {
+            case .unpublish(let notice):
+                succeeded = await admin.unpublishAnnouncement(
+                    session: session,
+                    announcement: notice
+                )
+            case .archive(let notice):
+                succeeded = await admin.setAnnouncementArchived(
+                    session: session,
+                    announcement: notice,
+                    archived: true
+                )
+            case .restore(let notice):
+                succeeded = await admin.setAnnouncementArchived(
+                    session: session,
+                    announcement: notice,
+                    archived: false
+                )
+            case .delete(let notice):
+                succeeded = await admin.deleteAnnouncement(
+                    session: session,
+                    announcement: notice
+                )
+            }
+            XertHaptics.play(succeeded ? .success : .error)
+        }
     }
 }
 

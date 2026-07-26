@@ -1332,6 +1332,23 @@ final class XertAPI {
         )
     }
 
+    func adminAnnouncement(session auth: AuthSession, id: UUID) async throws -> AdminAnnouncement {
+        let rows: [AdminAnnouncement] = try await restRequest(
+            path: "/rest/v1/member_announcements",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,title,body,tone,audience,cta_label,cta_url,published_at,first_published_at,expires_at,archived_at,created_at,updated_at"),
+                URLQueryItem(name: "audience", value: "eq.all"),
+                URLQueryItem(name: "id", value: "eq.\(id.uuidString)"),
+                URLQueryItem(name: "limit", value: "1")
+            ],
+            auth: auth
+        )
+        guard rows.count == 1, rows[0].id == id else {
+            throw APIError(message: "This member notice is no longer available to your administrator account.")
+        }
+        return rows[0]
+    }
+
     func adminSaveAnnouncement(
         session auth: AuthSession,
         announcement: AdminAnnouncement?,

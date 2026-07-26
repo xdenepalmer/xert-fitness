@@ -794,6 +794,8 @@ final class AdminStore: ObservableObject {
             guard !orders.contains(where: { $0.id == orderID }) else { return }
         case .event(let eventID):
             guard !events.contains(where: { $0.id == eventID }) else { return }
+        case .announcement(let announcementID):
+            guard !announcements.contains(where: { $0.id == announcementID }) else { return }
         }
         resolvingOwnerTask = task
         defer { resolvingOwnerTask = nil }
@@ -826,6 +828,14 @@ final class AdminStore: ObservableObject {
                 events.insert(event, at: 0)
                 loadedSources.insert("event calendar")
                 refreshUnavailableSources.removeAll { $0 == "event calendar" }
+            case .announcement(let announcementID):
+                let announcement = try await api.adminAnnouncement(
+                    session: session,
+                    id: announcementID
+                )
+                mergeAnnouncement(announcement)
+                loadedSources.insert("member notices")
+                refreshUnavailableSources.removeAll { $0 == "member notices" }
             }
         } catch {
             errorMessage = error.localizedDescription

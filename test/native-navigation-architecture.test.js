@@ -274,10 +274,12 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerNavigation, /case order\(UUID\)/);
   assert.match(ownerNavigation, /case product\(UUID\)/);
   assert.match(ownerNavigation, /case event\(UUID\)/);
+  assert.match(ownerNavigation, /case announcement\(UUID\)/);
   assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
   assert.match(ownerNavigation, /case \(\.orders, "order"\), \(\.finance, "order"\): return \.order\(id\)/);
   assert.match(ownerNavigation, /case \(\.products, "product"\): return \.product\(id\)/);
   assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
+  assert.match(ownerNavigation, /case \(\.notices, "announcement"\): return \.announcement\(id\)/);
   assert.match(ownerNavigation, /parts\.count == 2 \|\| parts\.count == 4/);
   assert.match(root, /@State private var requestedAdminRoute: XertOwnerRoute\?/);
   assert.match(root, /requestedAdminRoute = route[\s\S]*showingAdminCommandCentre = true/);
@@ -288,6 +290,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /admin\.orders\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.products\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /admin\.announcements\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
   assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
   assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
@@ -300,10 +303,12 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /\.sheet\(item: \$presentedMember\)/);
   assert.doesNotMatch(ownerView, /@State private var selectedOrder: OrderItem\?/);
   assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
+  assert.match(api, /func adminAnnouncement\(session auth: AuthSession, id: UUID\)/);
   assert.match(api, /p_limit: 1,[\s\S]*p_user_id: id/);
   assert.match(api, /guard rows\.count == 1, rows\[0\]\.id == id/);
   assert.match(adminStore, /func resolveOwnerTask\(session: AuthSession, task: XertOwnerTask\)/);
   assert.match(adminStore, /members\.insert\(member, at: 0\)/);
+  assert.match(adminStore, /case \.announcement\(let announcementID\):[\s\S]*api\.adminAnnouncement\([\s\S]*mergeAnnouncement\(announcement\)/);
   assert.match(modelsTests, /testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound/);
   assert.match(modelsTests, /owner\/finance\/member/);
   assert.match(modelsTests, /\.requireAuthentication/);

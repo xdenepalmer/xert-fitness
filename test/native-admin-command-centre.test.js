@@ -366,6 +366,8 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.match(models, /Action label and destination must be provided together/);
   assert.match(models, /url\.scheme\?\.lowercased\(\) == "https"/);
   assert.match(api, /func adminSaveAnnouncement/);
+  assert.match(api, /func adminAnnouncement\(session auth: AuthSession, id: UUID\)/);
+  assert.match(api, /This member notice is no longer available to your administrator account/);
   assert.match(api, /func adminUnpublishAnnouncement/);
   assert.match(api, /func adminSetAnnouncementArchived/);
   assert.match(api, /func adminDeleteAnnouncement/);
@@ -375,6 +377,22 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.match(store, /Refresh Member Notices before changing communications/);
   assert.match(store, /mergeAnnouncement\(outcome\.announcement\)/);
   assert.match(store, /No enabled iOS devices were registered/);
+
+  const exactDetail = view.slice(
+    view.indexOf('private struct AdminAnnouncementDetailView'),
+    view.indexOf('private struct AdminCommunicationsView'),
+  );
+  assert.match(exactDetail, /admin\.loadedSources\.contains\("member notices"\)/);
+  assert.match(exactDetail, /!admin\.refreshUnavailableSources\.contains\("member notices"\)/);
+  assert.match(exactDetail, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(exactDetail, /Label\("Unpublish now", systemImage: "eye\.slash\.fill"\)/);
+  assert.match(exactDetail, /confirm\(\.unpublish\(announcement\)\)/);
+  assert.match(exactDetail, /Label\("Review & publish", systemImage: "paperplane\.fill"\)/);
+  assert.match(exactDetail, /confirm\(\.archive\(announcement\)\)/);
+  assert.match(exactDetail, /confirm\(\.restore\(announcement\)\)/);
+  assert.match(exactDetail, /confirm\(\.delete\(announcement\)\)/);
+  assert.match(exactDetail, /owner\.notice\.detail/);
+  assert.match(exactDetail, /owner\.notice\.unpublish/);
 
   const communications = view.slice(
     view.indexOf('private struct AdminCommunicationsView'),
@@ -640,6 +658,7 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(composer, /Publish to members/);
 
   assert.match(incident, /AdminIncidentCommunicationPlan\(/);
+  assert.match(incident, /communicationNoticeID: communication\.actionNoticeID/);
   assert.match(incident, /if plan\.state == \.paused \{\s*incidentRunbook\(communication: communication\.state\)/);
   assert.match(incident, /INCIDENT RUNBOOK/);
   assert.match(incident, /Member activity protected/);
@@ -656,6 +675,7 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(incident, /ViewThatFits\(in: \.horizontal\) \{[\s\S]*incidentControlActions\([\s\S]*VStack\(spacing: 10\) \{[\s\S]*incidentControlActions\(/);
   assert.match(incident, /accessibilityIdentifier\("owner\.incidentCommunicationStatus"\)/);
   assert.match(incident, /Fix member message/);
+  assert.match(incident, /openOwnerRouteWithFeedback\(\s*XertOwnerRoute\(task: \.announcement\(noticeID\)\)/);
   assert.match(incident, /Draft all-clear/);
   assert.match(incident, /memberOperationsRestored\(\s*checkoutAvailable: operationsState == \.liveCommerce/);
   assert.match(incident, /Review all-clear/);
@@ -683,6 +703,7 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(models, /if livePauseNotice != nil \{ return \.livePauseNoticeConflict \}/);
   assert.match(models, /guard let pauseDate = latestRecentPauseDate else \{ return \.normal \}/);
   assert.match(models, /liveRecoveryNotice\(after: pauseDate\) == nil/);
+  assert.match(models, /var actionNoticeID: UUID\?/);
   assert.match(models, /case \.bookingsOpen:[\s\S]*memberBookingsRestoredTitle/);
   assert.match(models, /case \.liveCommerce:[\s\S]*memberCommerceRestoredTitle/);
 });
