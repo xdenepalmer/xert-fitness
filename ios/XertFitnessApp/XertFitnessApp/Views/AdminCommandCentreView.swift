@@ -2175,14 +2175,93 @@ private struct AdminMembersView: View {
     let session: AuthSession
     let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
+    @State private var role = "all"
+    @State private var credit = "all"
+    @State private var page = 1
+    @State private var exportDocument: AdminIntakeCSVDocument?
+    @State private var isExporting = false
+
+    private let pageSize = 50
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var requestKey: String {
+        "\(normalizedQuery)|\(role)|\(credit)|\(page)"
+    }
+    private var pageCount: Int {
+        max(1, Int(ceil(Double(admin.memberDirectoryTotal) / Double(pageSize))))
+    }
+    private var firstResult: Int {
+        admin.memberDirectoryTotal == 0 ? 0 : ((page - 1) * pageSize) + 1
+    }
+    private var lastResult: Int {
+        min(((page - 1) * pageSize) + admin.memberDirectoryRows.count, admin.memberDirectoryTotal)
+    }
+    private var directoryIsCurrent: Bool {
+        admin.hasLoadedMemberDirectory
+            && !admin.memberDirectoryUnavailable
+            && admin.memberDirectorySearch == normalizedQuery
+            && admin.memberDirectoryRole == role
+            && admin.memberDirectoryCredit == credit
+            && admin.memberDirectoryPage == page
+    }
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+    }
 
     var body: some View {
         List {
+            Section {
+                Picker("Role", selection: $role) {
+                    Text("All").tag("all")
+                    Text("Members").tag("member")
+                    Text("Admins").tag("admin")
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Credits", selection: $credit) {
+                    Text("All").tag("all")
+                    Text("Available").tag("available")
+                    Text("None").tag("none")
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Directory filters")
+            }
+            .listRowBackground(Color.xertInk)
+
+            if let message = admin.memberDirectoryStatusMessage {
+                Section {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                        .listRowBackground(Color.xertInk)
+                }
+            }
+
             if admin.isSearchingMembers {
                 HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
                     .listRowBackground(Color.xertInk)
             }
-            ForEach(admin.members) { member in
+
+            if directoryIsCurrent && admin.memberDirectoryRows.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "person.2.slash")
+                        .font(.title2)
+                        .foregroundStyle(Color.xertSteel)
+                    Text("No matching members")
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("Adjust the search or directory filters.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .listRowBackground(Color.xertNavy)
+            }
+
+            ForEach(admin.memberDirectoryRows) { member in
                 Button { onOpenTask(.member(member.id)) } label: {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -2199,10 +2278,13 @@ private struct AdminMembersView: View {
                                     .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
                             }
                         }
-                        HStack(spacing: 18) {
-                            Label("\(member.credits_remaining) credits", systemImage: "ticket")
-                            Label("\(member.bookings_count) bookings", systemImage: "calendar")
-                            Text(member.totalSpent)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 18) {
+                                memberValue(member)
+                            }
+                            VStack(alignment: .leading, spacing: 5) {
+                                memberValue(member)
+                            }
                         }
                         .font(.caption)
                         .foregroundStyle(Color.xertPale.opacity(0.68))
@@ -2212,19 +2294,132 @@ private struct AdminMembersView: View {
                 .buttonStyle(.plain)
                 .listRowBackground(Color.xertInk)
             }
+
+            if directoryIsCurrent {
+                Section {
+                    HStack {
+                        Button {
+                            page = max(1, page - 1)
+                        } label: {
+                            Label("Previous", systemImage: "chevron.left")
+                        }
+                        .disabled(page <= 1 || admin.isSearchingMembers)
+
+                        Spacer()
+
+                        VStack(spacing: 2) {
+                            Text("Page \(page) of \(pageCount)")
+                                .font(.caption.weight(.semibold))
+                            Text("\(firstResult)-\(lastResult) of \(admin.memberDirectoryTotal)")
+                                .font(.caption2)
+                                .foregroundStyle(Color.xertPale.opacity(0.55))
+                        }
+
+                        Spacer()
+
+                        Button {
+                            page = min(pageCount, page + 1)
+                        } label: {
+                            Label("Next", systemImage: "chevron.right")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .disabled(page >= pageCount || admin.isSearchingMembers)
+                    }
+                    .foregroundStyle(Color.xertSteel)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Members")
         .searchable(text: $query, prompt: "Name, email or phone")
-        .onSubmit(of: .search) { Task { await admin.searchMembers(session: session, query: query) } }
+        .task(id: requestKey) {
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                await loadDirectory()
+            } catch {}
+        }
+        .onChange(of: query) { _ in page = 1 }
+        .onChange(of: role) { _ in page = 1 }
+        .onChange(of: credit) { _ in page = 1 }
+        .onChange(of: admin.memberDirectoryTotal) { _ in
+            if page > pageCount { page = pageCount }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button { query = ""; Task { await admin.searchMembers(session: session, query: "") } } label: {
+                Button {
+                    Task {
+                        guard let report = await admin.exportMembers(
+                            session: session,
+                            query: normalizedQuery,
+                            role: role,
+                            credit: credit
+                        ) else {
+                            XertHaptics.play(.error)
+                            return
+                        }
+                        exportDocument = AdminIntakeCSVDocument(csv: report.csv)
+                        isExporting = true
+                        XertHaptics.play(.success)
+                    }
+                } label: {
+                    if admin.isExportingMembers {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+                .disabled(
+                    !directoryIsCurrent
+                        || admin.memberDirectoryTotal == 0
+                        || admin.isExportingMembers
+                )
+                .accessibilityLabel("Export filtered member directory CSV")
+                .accessibilityHint(
+                    directoryIsCurrent
+                        ? "Exports every member matching the current filters"
+                        : "Wait for the current directory filters to finish loading"
+                )
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { Task { await loadDirectory() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                .disabled(admin.isSearchingMembers)
+                .accessibilityLabel("Refresh members")
             }
         }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-members-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result {
+                admin.errorMessage = error.localizedDescription
+                XertHaptics.play(.error)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberValue(_ member: AdminMemberSummary) -> some View {
+        Label("\(member.credits_remaining) credits", systemImage: "ticket")
+        Label("\(member.bookings_count) bookings", systemImage: "calendar")
+        Text(member.totalSpent)
+    }
+
+    private func loadDirectory() async {
+        await admin.searchMembers(
+            session: session,
+            query: normalizedQuery,
+            role: role,
+            credit: credit,
+            page: page,
+            pageSize: pageSize
+        )
     }
 }
 

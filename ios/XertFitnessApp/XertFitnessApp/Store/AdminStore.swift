@@ -54,6 +54,15 @@ final class AdminStore: ObservableObject {
     @Published private(set) var activationOverview: AdminMemberActivationOverview?
     @Published private(set) var activationQueue: [AdminMemberActivationItem] = []
     @Published private(set) var members: [AdminMemberSummary] = []
+    @Published private(set) var memberDirectoryRows: [AdminMemberSummary] = []
+    @Published private(set) var memberDirectoryTotal = 0
+    @Published private(set) var hasLoadedMemberDirectory = false
+    @Published private(set) var memberDirectoryUnavailable = false
+    @Published private(set) var memberDirectoryStatusMessage: String?
+    @Published private(set) var memberDirectorySearch = ""
+    @Published private(set) var memberDirectoryRole = "all"
+    @Published private(set) var memberDirectoryCredit = "all"
+    @Published private(set) var memberDirectoryPage = 1
     @Published private(set) var memberNotes: [AdminMemberNote] = []
     @Published private(set) var memberNotices: [AdminMemberNotice] = []
     @Published private(set) var memberNoticeStatusMessage: String?
@@ -98,6 +107,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var isRefreshingHealth = false
     @Published private(set) var isRefreshingOperations = false
     @Published private(set) var isSearchingMembers = false
+    @Published private(set) var isExportingMembers = false
     @Published private(set) var ownerMemberSearchResults: [AdminMemberSummary] = []
     @Published private(set) var isSearchingOwnerMembers = false
     @Published private(set) var ownerMemberSearchError: String?
@@ -174,6 +184,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var launchGateUpdatedAt: Date?
 
     private let api = XertAPI()
+    private var memberDirectoryGeneration: UInt = 0
     private var ownerMemberSearchGeneration: UInt = 0
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
@@ -181,7 +192,9 @@ final class AdminStore: ObservableObject {
     private var operationalRefreshGeneration: UInt = 0
     private var eventRosterGeneration: UInt = 0
 
-    var memberCount: Int { members.first?.total_count ?? members.count }
+    var memberCount: Int {
+        max(members.map(\.total_count).max() ?? 0, members.count)
+    }
     var requestedPlaces: Int { dailyOperations.reduce(0) { $0 + $1.requested_count + $1.public_request_count } }
     var waitingMembers: Int { waitlist.reduce(0) { $0 + $1.waitlist_count } }
     var attendanceDue: Int { dailyOperations.filter(\.attendance_due).count }
@@ -634,14 +647,91 @@ final class AdminStore: ObservableObject {
         refreshUnavailableSources.append(contentsOf: failures)
     }
 
-    func searchMembers(session: AuthSession, query: String) async {
-        guard !isSearchingMembers else { return }
+    func searchMembers(session: AuthSession, query: String,
+        role: String = "all",
+        credit: String = "all",
+        page: Int = 1,
+        pageSize: Int = 50
+    ) async {
+        memberDirectoryGeneration &+= 1
+        let generation = memberDirectoryGeneration
         isSearchingMembers = true
-        defer { isSearchingMembers = false }
+        defer {
+            if generation == memberDirectoryGeneration {
+                isSearchingMembers = false
+            }
+        }
         do {
-            members = try await api.adminMembers(session: session, search: query)
+            let safePage = max(page, 1)
+            let safePageSize = min(max(pageSize, 1), 100)
+            let rows = try await api.adminMembers(
+                session: session,
+                search: query,
+                role: role,
+                credit: credit,
+                limit: safePageSize,
+                offset: (safePage - 1) * safePageSize
+            )
+            guard !Task.isCancelled, generation == memberDirectoryGeneration else { return }
+            memberDirectoryRows = rows
+            memberDirectoryTotal = rows.first?.total_count ?? 0
+            memberDirectorySearch = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            memberDirectoryRole = role
+            memberDirectoryCredit = credit
+            memberDirectoryPage = safePage
+            hasLoadedMemberDirectory = true
+            memberDirectoryUnavailable = false
+            memberDirectoryStatusMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard generation == memberDirectoryGeneration else { return }
+            memberDirectoryUnavailable = true
+            memberDirectoryStatusMessage = hasLoadedMemberDirectory
+                ? "Members could not refresh. The last loaded page is shown and exports are paused."
+                : "Members could not load. Check the connection and retry."
+        }
+    }
+
+    func exportMembers(
+        session: AuthSession,
+        query: String,
+        role: String = "all",
+        credit: String = "all"
+    ) async -> AdminMemberReport? {
+        guard !isExportingMembers else { return nil }
+        isExportingMembers = true
+        defer { isExportingMembers = false }
+
+        do {
+            let pageSize = 100
+            let maximumRows = 10_000
+            var rows: [AdminMemberSummary] = []
+            var expectedTotal: Int?
+
+            while rows.count < (expectedTotal ?? Int.max) {
+                let page = try await api.adminMembers(
+                    session: session,
+                    search: query,
+                    role: role,
+                    credit: credit,
+                    limit: pageSize,
+                    offset: rows.count
+                )
+                if expectedTotal == nil {
+                    expectedTotal = page.first?.total_count ?? page.count
+                    guard (expectedTotal ?? 0) <= maximumRows else {
+                        throw APIError(message: "This export exceeds 10,000 members. Narrow the filters and try again.")
+                    }
+                }
+                rows.append(contentsOf: page)
+                if page.count < pageSize { break }
+            }
+
+            return AdminMemberReport(rows: rows)
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
@@ -705,8 +795,7 @@ final class AdminStore: ObservableObject {
             switch task {
             case .member(let memberID):
                 let member = try await api.adminMember(session: session, id: memberID)
-                members.removeAll(where: { $0.id == memberID })
-                members.insert(member, at: 0)
+                mergeResolvedMember(member)
             case .classSession(let sessionID):
                 let operations = try await api.adminDailyOperations(session: session)
                 guard operations.contains(where: { $0.id == sessionID }) else { return }
@@ -984,7 +1073,7 @@ final class AdminStore: ObservableObject {
             _ = try await api.adminGrantCredits(session: session, memberID: memberID, sessions: sessions, validityDays: validityDays, requestID: requestID, note: note)
             var refreshWarnings: [String] = []
             do {
-                members = try await api.adminMembers(session: session)
+                mergeResolvedMember(try await api.adminMember(session: session, id: memberID))
             } catch {
                 refreshWarnings.append("member balance")
             }
@@ -1017,6 +1106,7 @@ final class AdminStore: ObservableObject {
             if !refreshWarnings.isEmpty {
                 errorMessage = "Credits were granted, but \(refreshWarnings.joined(separator: " and ")) could not refresh."
             }
+            await refreshLoadedMemberDirectory(session: session)
             lastUpdatedAt = Date()
             return true
         } catch { errorMessage = error.localizedDescription; return false }
@@ -1027,9 +1117,35 @@ final class AdminStore: ObservableObject {
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             try await api.adminSetRole(session: session, memberID: memberID, role: role)
-            members = try await api.adminMembers(session: session)
-            lastUpdatedAt = Date(); return true
-        } catch { errorMessage = error.localizedDescription; return false }
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+
+        do {
+            mergeResolvedMember(try await api.adminMember(session: session, id: memberID))
+        } catch {
+            errorMessage = "The role was updated, but the member summary could not refresh."
+        }
+        await refreshLoadedMemberDirectory(session: session)
+        lastUpdatedAt = Date()
+        return true
+    }
+
+    private func refreshLoadedMemberDirectory(session: AuthSession) async {
+        guard hasLoadedMemberDirectory else { return }
+        await searchMembers(
+            session: session,
+            query: memberDirectorySearch,
+            role: memberDirectoryRole,
+            credit: memberDirectoryCredit,
+            page: memberDirectoryPage
+        )
+    }
+
+    private func mergeResolvedMember(_ member: AdminMemberSummary) {
+        members.removeAll { $0.id == member.id }
+        members.insert(member, at: 0)
     }
 
     func reconcileOrder(session: AuthSession, order: OrderItem) async -> AdminReconciliationResult? {

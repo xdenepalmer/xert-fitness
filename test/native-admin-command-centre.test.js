@@ -4,6 +4,69 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
+test('native member directory has complete server-backed operator controls', async () => {
+  const [api, store, models, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+  const directory = view.slice(
+    view.indexOf('private struct AdminMembersView'),
+    view.indexOf('private struct AdminMemberDetailView'),
+  );
+  const search = store.slice(
+    store.indexOf('func searchMembers('),
+    store.indexOf('func searchOwnerMembers('),
+  );
+  const apiMethod = api.slice(
+    api.indexOf('func adminMembers('),
+    api.indexOf('func adminMember('),
+  );
+
+  assert.match(apiMethod, /role: String = "all"/);
+  assert.match(apiMethod, /credit: String = "all"/);
+  assert.match(apiMethod, /offset: Int = 0/);
+  assert.match(apiMethod, /p_role: normalizedRole/);
+  assert.match(apiMethod, /p_credit: normalizedCredit/);
+  assert.match(apiMethod, /p_offset: max\(offset, 0\)/);
+
+  assert.match(store, /@Published private\(set\) var memberDirectoryRows: \[AdminMemberSummary\] = \[\]/);
+  assert.match(store, /@Published private\(set\) var memberDirectoryUnavailable = false/);
+  assert.match(search, /memberDirectoryGeneration &\+= 1/);
+  assert.match(search, /generation == memberDirectoryGeneration/);
+  assert.match(search, /guard !Task\.isCancelled/);
+  assert.match(search, /offset: \(safePage - 1\) \* safePageSize/);
+  assert.match(search, /The last loaded page is shown and exports are paused/);
+  assert.doesNotMatch(search, /members = rows/);
+  assert.match(store, /func exportMembers\([\s\S]*let pageSize = 100/);
+  assert.match(store, /while rows\.count < \(expectedTotal \?\? Int\.max\)/);
+  assert.match(store, /This export exceeds 10,000 members/);
+  assert.match(store, /var memberCount: Int \{[\s\S]*members\.map\(\\\.total_count\)\.max\(\)[\s\S]*members\.count/);
+  assert.match(store, /await refreshLoadedMemberDirectory\(session: session\)/);
+  assert.match(store, /The role was updated, but the member summary could not refresh/);
+  assert.match(store, /mergeResolvedMember\(try await api\.adminMember\(session: session, id: memberID\)\)/);
+
+  assert.match(directory, /Picker\("Role", selection: \$role\)/);
+  assert.match(directory, /Picker\("Credits", selection: \$credit\)/);
+  assert.match(directory, /\.task\(id: requestKey\)/);
+  assert.match(directory, /Task\.sleep\(nanoseconds: 300_000_000\)/);
+  assert.match(directory, /Label\("Previous", systemImage: "chevron\.left"\)/);
+  assert.match(directory, /Label\("Next", systemImage: "chevron\.right"\)/);
+  assert.match(directory, /Export filtered member directory CSV/);
+  assert.match(directory, /!directoryIsCurrent/);
+  assert.match(directory, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(directory, /\.fileExporter\(/);
+
+  assert.match(models, /struct AdminMemberReport/);
+  assert.match(models, /"Spent \(AUD\)"/);
+  assert.match(models, /String\(format: "%.2f"/);
+  assert.doesNotMatch(
+    models.slice(models.indexOf('struct AdminMemberReport'), models.indexOf('struct AdminMemberOnboardingSummary')),
+    /emergency|note|orders_count/,
+  );
+});
+
 test('native app exposes the command centre only to admin profiles', async () => {
   const [models, root, view, api] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Models.swift'),

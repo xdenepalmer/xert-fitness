@@ -17,6 +17,37 @@ struct AdminMemberSummary: Identifiable, Codable, Hashable {
     var totalSpent: String { (Double(total_spent_cents) / 100).formatted(.currency(code: "AUD")) }
 }
 
+struct AdminMemberReport {
+    let rows: [AdminMemberSummary]
+
+    var csv: String {
+        let header = [
+            "Name", "Email", "Phone", "Role", "Credits", "Bookings",
+            "Spent (AUD)", "Joined"
+        ]
+        let formatter = ISO8601DateFormatter()
+        let body = rows.map { member in
+            [
+                member.full_name ?? "",
+                member.email ?? "",
+                member.phone ?? "",
+                member.role,
+                member.credits_remaining.formatted(),
+                member.bookings_count.formatted(),
+                String(format: "%.2f", Double(member.total_spent_cents) / 100),
+                formatter.string(from: member.joined_at)
+            ]
+            .map(Self.escape)
+            .joined(separator: ",")
+        }
+        return ([header.map(Self.escape).joined(separator: ",")] + body).joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
 struct AdminMemberOnboardingSummary: Identifiable, Codable, Hashable {
     var id: UUID { user_id }
     let user_id: UUID

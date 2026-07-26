@@ -647,15 +647,24 @@ final class XertAPI {
         )
     }
 
-    func adminMembers(session auth: AuthSession, search: String = "", limit: Int = 50) async throws -> [AdminMemberSummary] {
-        try await rpc(
+    func adminMembers(
+        session auth: AuthSession,
+        search: String = "",
+        role: String = "all",
+        credit: String = "all",
+        limit: Int = 50,
+        offset: Int = 0
+    ) async throws -> [AdminMemberSummary] {
+        let normalizedRole = ["member", "admin"].contains(role) ? role : "all"
+        let normalizedCredit = ["available", "none"].contains(credit) ? credit : "all"
+        return try await rpc(
             path: "admin_list_members_page",
             body: AdminMemberPageRequest(
                 p_search: search.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                p_role: "all",
-                p_credit: "all",
+                p_role: normalizedRole,
+                p_credit: normalizedCredit,
                 p_limit: min(max(limit, 1), 100),
-                p_offset: 0,
+                p_offset: max(offset, 0),
                 p_user_id: nil
             ),
             auth: auth

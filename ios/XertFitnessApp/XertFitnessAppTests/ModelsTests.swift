@@ -2958,6 +2958,36 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(progress.lastAttendedAt)
     }
 
+    func testAdminMemberReportMatchesOwnerDirectoryExportAndEscapesCSV() throws {
+        let joinedAt = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-27T03:15:00Z")
+        )
+        let member = AdminMemberSummary(
+            id: UUID(),
+            full_name: "Dene \"DP\", Palmer",
+            email: "owner@example.com",
+            phone: "0400 000 000",
+            role: "admin",
+            joined_at: joinedAt,
+            credits_remaining: 7,
+            bookings_count: 12,
+            orders_count: 3,
+            total_spent_cents: 12_345,
+            total_count: 1
+        )
+
+        let csv = AdminMemberReport(rows: [member]).csv
+
+        XCTAssertTrue(csv.hasPrefix(
+            "\"Name\",\"Email\",\"Phone\",\"Role\",\"Credits\",\"Bookings\",\"Spent (AUD)\",\"Joined\"\n"
+        ))
+        XCTAssertTrue(csv.contains("\"Dene \"\"DP\"\", Palmer\""))
+        XCTAssertTrue(csv.contains("\"123.45\""))
+        XCTAssertTrue(csv.contains("\"2026-07-27T03:15:00Z\""))
+        XCTAssertFalse(csv.contains("orders_count"))
+        XCTAssertTrue(csv.hasSuffix("\n"))
+    }
+
     private func booking(
         status: String,
         startTime: Date,
