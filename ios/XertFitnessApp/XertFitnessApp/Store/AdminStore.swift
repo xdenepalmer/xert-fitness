@@ -857,22 +857,29 @@ final class AdminStore: ObservableObject {
         }
     }
 
-    func loadMemberDetail(session: AuthSession, memberID: UUID) async {
-        guard loadingMemberDetailID == nil else { return }
+    func loadMemberDetail(
+        session: AuthSession,
+        memberID: UUID,
+        preserveCurrent: Bool = false
+    ) async {
+        guard servicingMemberID != memberID else { return }
         memberDetailGeneration &+= 1
         let generation = memberDetailGeneration
+        let canPreserveCurrent = preserveCurrent && loadedMemberDetailID == memberID
         loadedMemberDetailID = memberID
-        memberNotes = []
-        memberNotices = []
         memberNoticeStatusMessage = nil
         memberNoticeStatusIsWarning = false
-        memberCreditBatches = []
-        memberCreditGrants = []
-        memberBookingHistory = []
-        memberOrderHistory = []
-        memberOnboardingSummary = nil
         revealedMemberEmergencyContact = nil
         memberDetailUnavailableSources = []
+        if !canPreserveCurrent {
+            memberNotes = []
+            memberNotices = []
+            memberCreditBatches = []
+            memberCreditGrants = []
+            memberBookingHistory = []
+            memberOrderHistory = []
+            memberOnboardingSummary = nil
+        }
         loadingMemberDetailID = memberID
         defer {
             if memberDetailGeneration == generation { loadingMemberDetailID = nil }
@@ -984,6 +991,8 @@ final class AdminStore: ObservableObject {
     func revealMemberEmergencyContact(session: AuthSession, memberID: UUID) async {
         guard revealingEmergencyContactMemberID == nil,
               loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
+              !memberDetailUnavailableSources.contains("member readiness"),
               memberOnboardingSummary?.emergency_contact_complete == true else { return }
         let generation = memberDetailGeneration
         emergencyContactRevealGeneration &+= 1
@@ -1011,23 +1020,63 @@ final class AdminStore: ObservableObject {
     }
 
     func addMemberNote(session: AuthSession, memberID: UUID, category: String, body: String) async -> Bool {
-        guard servicingMemberID == nil else { return false }
-        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        guard servicingMemberID == nil,
+              loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
+              !memberDetailUnavailableSources.contains("staff timeline") else {
+            errorMessage = "Refresh this member record before adding a staff note."
+            return false
+        }
+        let generation = memberDetailGeneration
+        servicingMemberID = memberID
+        defer {
+            if servicingMemberID == memberID { servicingMemberID = nil }
+        }
         do {
             _ = try await api.adminAddMemberNote(session: session, memberID: memberID, category: category, body: body)
-            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
-            lastUpdatedAt = Date(); return true
-        } catch { errorMessage = error.localizedDescription; return false }
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
+            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return false }
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     func archiveMemberNote(session: AuthSession, memberID: UUID, note: AdminMemberNote) async -> Bool {
-        guard servicingMemberID == nil else { return false }
-        servicingMemberID = memberID; defer { servicingMemberID = nil }
+        guard servicingMemberID == nil,
+              loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
+              !memberDetailUnavailableSources.contains("staff timeline") else {
+            errorMessage = "Refresh this member record before changing its staff timeline."
+            return false
+        }
+        let generation = memberDetailGeneration
+        servicingMemberID = memberID
+        defer {
+            if servicingMemberID == memberID { servicingMemberID = nil }
+        }
         do {
             try await api.adminArchiveMemberNote(session: session, noteID: note.id, archived: note.archived_at == nil)
-            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
-            lastUpdatedAt = Date(); return true
-        } catch { errorMessage = error.localizedDescription; return false }
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
+            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return false }
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     func sendMemberNotice(
@@ -1038,6 +1087,7 @@ final class AdminStore: ObservableObject {
         guard servicingMemberID == nil,
               sendingMemberNoticeID == nil,
               loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
               !memberDetailUnavailableSources.contains("private notices") else {
             errorMessage = "Refresh this member record before sending a private notice."
             return false
@@ -1144,7 +1194,13 @@ final class AdminStore: ObservableObject {
     }
 
     func setMemberRole(session: AuthSession, memberID: UUID, role: String) async -> Bool {
-        guard servicingMemberID == nil else { return false }
+        guard servicingMemberID == nil,
+              loadedMemberDetailID == memberID,
+              loadingMemberDetailID == nil,
+              memberDetailUnavailableSources.isEmpty else {
+            errorMessage = "Refresh this member record before changing administrator access."
+            return false
+        }
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             try await api.adminSetRole(session: session, memberID: memberID, role: role)

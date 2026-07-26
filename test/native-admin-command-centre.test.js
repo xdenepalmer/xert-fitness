@@ -1051,7 +1051,9 @@ test('native owner access control governs launch-day administrator coverage', as
 
   assert.match(memberDetail, /private var isSignedInAdministrator: Bool/);
   assert.match(memberDetail, /current\.role == "admin" && current\.id == session\.user\?\.id/);
-  assert.match(memberDetail, /\.disabled\(admin\.servicingMemberID != nil \|\| isSignedInAdministrator\)/);
+  assert.match(memberDetail, /\.disabled\(!memberRecordMutationsAllowed \|\| isSignedInAdministrator\)/);
+  assert.match(memberDetail, /private var memberRecordIsCurrent[\s\S]*admin\.loadedMemberDetailID == current\.id/);
+  assert.match(memberDetail, /private var memberRecordMutationsAllowed[\s\S]*memberRecordIsCurrent/);
   assert.match(memberDetail, /cannot remove its own access/);
   assert.match(store, /func setMemberRole[\s\S]*api\.adminSetRole/);
   assert.match(sql, /p_user_id = auth\.uid\(\) and p_role <> 'admin'/i);

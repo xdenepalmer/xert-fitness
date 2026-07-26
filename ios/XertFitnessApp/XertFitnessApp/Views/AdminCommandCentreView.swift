@@ -3696,7 +3696,19 @@ private struct AdminMemberDetailView: View {
     private var hasNoteDraft: Bool {
         !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    private var isBusy: Bool { admin.servicingMemberID == current.id }
+    private var memberRecordIsCurrent: Bool {
+        admin.loadedMemberDetailID == current.id
+    }
+    private var memberRecordIsRefreshing: Bool {
+        admin.loadingMemberDetailID == current.id
+    }
+    private var memberRecordMutationsAllowed: Bool {
+        memberRecordIsCurrent
+            && admin.loadingMemberDetailID == nil
+            && admin.memberDetailUnavailableSources.isEmpty
+            && admin.servicingMemberID == nil
+    }
+    private var isBusy: Bool { admin.servicingMemberID != nil }
     private var isSignedInAdministrator: Bool {
         current.role == "admin" && current.id == session.user?.id
     }
@@ -3715,17 +3727,58 @@ private struct AdminMemberDetailView: View {
                 }
                 .listRowBackground(Color.xertInk)
             }
+            if !memberRecordIsCurrent || memberRecordIsRefreshing {
+                Section {
+                    HStack(spacing: 10) {
+                        ProgressView().tint(Color.xertSteel)
+                        Text(
+                            memberRecordIsCurrent
+                                ? "Refreshing verified member record..."
+                                : "Loading member record..."
+                        )
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        memberRecordIsCurrent
+                            ? "Refreshing verified member record"
+                            : "Loading member record"
+                    )
+                }
+                .listRowBackground(Color.xertInk)
+            } else if !admin.memberDetailUnavailableSources.isEmpty {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Showing the last verified record", systemImage: "exclamationmark.triangle.fill")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.orange)
+                        Text("Unavailable: \(admin.memberDetailUnavailableSources.joined(separator: ", ")). Refresh before making changes.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.68))
+                        Button {
+                            Task {
+                                await admin.loadMemberDetail(
+                                    session: session,
+                                    memberID: current.id,
+                                    preserveCurrent: true
+                                )
+                            }
+                        } label: {
+                            Label("Retry member record", systemImage: "arrow.clockwise")
+                                .frame(minHeight: 44)
+                        }
+                    }
+                }
+                .listRowBackground(Color.xertInk)
+            }
             Section("Account value") {
                 LabeledContent("Available credits", value: current.credits_remaining.formatted())
                 LabeledContent("Bookings", value: current.bookings_count.formatted())
                 LabeledContent("Paid orders", value: current.orders_count.formatted())
                 LabeledContent("Lifetime spend", value: current.totalSpent)
                 Button { showingGrant = true } label: { Label("Grant class credits", systemImage: "ticket") }
-                    .disabled(
-                        admin.servicingMemberID != nil
-                            || admin.loadingMemberDetailID != nil
-                            || admin.memberDetailUnavailableSources.contains("credit audit")
-                    )
+                    .disabled(!memberRecordMutationsAllowed)
                 if admin.memberDetailUnavailableSources.contains("credit audit") {
                     Label(
                         "Credit grants are paused until the audit ledger refreshes.",
@@ -3761,7 +3814,7 @@ private struct AdminMemberDetailView: View {
                           systemImage: current.role == "admin" ? "person.badge.minus" : "person.badge.key")
                 }
                 .foregroundStyle(current.role == "admin" ? Color.red : Color.xertSteel)
-                .disabled(admin.servicingMemberID != nil || isSignedInAdministrator)
+                .disabled(!memberRecordMutationsAllowed || isSignedInAdministrator)
                 .accessibilityHint(
                     isSignedInAdministrator
                         ? "Your signed-in administrator account cannot remove its own access"
@@ -3789,13 +3842,18 @@ private struct AdminMemberDetailView: View {
                         }
                     }
                 }
-                .disabled(admin.servicingMemberID != nil || noteBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                .disabled(!memberRecordMutationsAllowed || noteBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
             }
             .listRowBackground(Color.xertInk)
 
             Section("Staff timeline") {
-                if admin.loadingMemberDetailID == current.id { ProgressView().tint(Color.xertSteel) }
-                if admin.memberDetailUnavailableSources.contains("staff timeline") {
+                if !memberRecordIsCurrent {
+                    HStack(spacing: 10) {
+                        ProgressView().tint(Color.xertSteel)
+                        Text("Loading staff timeline...")
+                            .foregroundStyle(Color.xertPale.opacity(0.68))
+                    }
+                } else if admin.memberDetailUnavailableSources.contains("staff timeline") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Staff timeline is unavailable.")
                             .font(.subheadline.weight(.semibold))
@@ -3803,27 +3861,30 @@ private struct AdminMemberDetailView: View {
                             .font(.caption)
                             .foregroundStyle(Color.xertPale.opacity(0.58))
                     }
-                } else if admin.memberNotes.isEmpty && admin.loadingMemberDetailID == nil {
+                } else if admin.memberNotes.isEmpty && !memberRecordIsRefreshing {
                     Text("No staff notes yet.")
                 }
-                ForEach(admin.memberNotes) { note in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(note.category.replacingOccurrences(of: "_", with: " ").uppercased())
-                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
-                            Spacer()
-                            Button {
-                                Task { _ = await admin.archiveMemberNote(session: session, memberID: current.id, note: note) }
-                            } label: { Image(systemName: note.archived_at == nil ? "archivebox" : "arrow.uturn.backward.circle") }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(note.archived_at == nil ? "Archive note" : "Restore note")
+                if memberRecordIsCurrent {
+                    ForEach(admin.memberNotes) { note in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(note.category.replacingOccurrences(of: "_", with: " ").uppercased())
+                                    .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
+                                Spacer()
+                                Button {
+                                    Task { _ = await admin.archiveMemberNote(session: session, memberID: current.id, note: note) }
+                                } label: { Image(systemName: note.archived_at == nil ? "archivebox" : "arrow.uturn.backward.circle") }
+                                    .buttonStyle(.plain)
+                                    .disabled(!memberRecordMutationsAllowed)
+                                    .accessibilityLabel(note.archived_at == nil ? "Archive note" : "Restore note")
+                            }
+                            Text(note.body).font(.subheadline)
+                            Text("\(note.author_name ?? "Former admin") · \(note.created_at.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.45))
                         }
-                        Text(note.body).font(.subheadline)
-                        Text("\(note.author_name ?? "Former admin") · \(note.created_at.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption2).foregroundStyle(Color.xertPale.opacity(0.45))
+                        .opacity(note.archived_at == nil ? 1 : 0.5)
+                        .padding(.vertical, 4)
                     }
-                    .opacity(note.archived_at == nil ? 1 : 0.5)
-                    .padding(.vertical, 4)
                 }
             }
             .listRowBackground(Color.xertInk)
@@ -3836,13 +3897,40 @@ private struct AdminMemberDetailView: View {
                 Button("Close", action: requestDismiss)
                     .disabled(isBusy)
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task {
+                        await admin.loadMemberDetail(
+                            session: session,
+                            memberID: current.id,
+                            preserveCurrent: true
+                        )
+                    }
+                } label: {
+                    if memberRecordIsRefreshing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .disabled(memberRecordIsRefreshing || isBusy)
+                .accessibilityLabel("Refresh member record")
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") { noteFocused = false }
             }
         }
-        .task { await admin.loadMemberDetail(session: session, memberID: current.id) }
-        .refreshable { await admin.loadMemberDetail(session: session, memberID: current.id) }
+        .task(id: current.id) {
+            await admin.loadMemberDetail(session: session, memberID: current.id)
+        }
+        .refreshable {
+            await admin.loadMemberDetail(
+                session: session,
+                memberID: current.id,
+                preserveCurrent: true
+            )
+        }
         .onDisappear { admin.clearMemberDetail(memberID: current.id) }
         .adminOwnerExitState(
             id: exitStateID,
@@ -3917,7 +4005,7 @@ private struct AdminMemberDetailView: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("owner.member.accountHistory")
 
-            if admin.loadingMemberDetailID == current.id && accountHistoryIsEmpty {
+            if !memberRecordIsCurrent {
                 HStack(spacing: 10) {
                     ProgressView().tint(Color.xertSteel)
                     Text("Loading \(historyTab.rawValue.lowercased())...")
@@ -4093,14 +4181,6 @@ private struct AdminMemberDetailView: View {
         }
     }
 
-    private var accountHistoryIsEmpty: Bool {
-        switch historyTab {
-        case .credits: return admin.memberCreditBatches.isEmpty
-        case .bookings: return admin.memberBookingHistory.isEmpty
-        case .purchases: return admin.memberOrderHistory.isEmpty
-        }
-    }
-
     private func historyStatus(_ value: String) -> some View {
         Text(value.uppercased())
             .font(.caption2.weight(.bold))
@@ -4209,7 +4289,10 @@ private struct AdminMemberDetailView: View {
                                 }
                             }
                         }
-                        .disabled(admin.revealingEmergencyContactMemberID != nil)
+                        .disabled(
+                            !memberRecordMutationsAllowed
+                                || admin.revealingEmergencyContactMemberID != nil
+                        )
                         Text("Use only when needed for member safety. Every reveal is recorded with the administrator and time.")
                             .font(.caption)
                             .foregroundStyle(Color.xertPale.opacity(0.52))
@@ -4250,7 +4333,13 @@ private struct AdminMemberDetailView: View {
                 .accessibilityAddTraits(.isStaticText)
             }
 
-            if admin.memberDetailUnavailableSources.contains("private notices") {
+            if !memberRecordIsCurrent {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading private notice history...")
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                }
+            } else if admin.memberDetailUnavailableSources.contains("private notices") {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Private notice history is unavailable.", systemImage: "wifi.exclamationmark")
                         .font(.subheadline.weight(.semibold))
@@ -4276,7 +4365,7 @@ private struct AdminMemberDetailView: View {
                     }
                     .frame(minHeight: 44)
                 }
-                .disabled(admin.servicingMemberID != nil)
+                .disabled(!memberRecordMutationsAllowed)
                 .accessibilityHint("Composes an account-only message with optional Apple push delivery")
 
                 if admin.loadingMemberDetailID == current.id && admin.memberNotices.isEmpty {
