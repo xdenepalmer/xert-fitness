@@ -101,6 +101,44 @@ test('deleted-buyer orders still reconcile when Stripe keeps the original user i
   );
 });
 
+test('deleted-buyer reconcile settles paid without claiming pack credits were granted', async () => {
+  const deletedBuyerOrder = { ...order, user_id: null };
+  const calls = [];
+  const admin = {
+    async rpc(name, payload) {
+      calls.push({ action: 'rpc', name, payload });
+      return {
+        data: [{ fulfilled_order_id: ORDER_ID, final_status: 'paid', credit_created: false }],
+        error: null,
+      };
+    },
+    from(table) {
+      return {
+        select() {
+          return {
+            eq() { return { async single() { return { data: deletedBuyerOrder, error: null }; } }; },
+          };
+        },
+        update(payload) {
+          calls.push({ action: 'update', table, payload });
+          return { async eq(column, value) { calls.push({ action: 'where', column, value }); return { error: null }; } };
+        },
+      };
+    },
+  };
+  const stripe = { checkout: { sessions: { async retrieve() { return checkout; } } } };
+
+  const result = await reconcileCheckoutOrder({
+    admin, stripe, orderId: ORDER_ID, userId: 'admin-xert', now: NOW,
+  });
+
+  assert.equal(result.status, 'paid');
+  assert.equal(result.credits_granted, 0);
+  assert.equal(result.buyer_deleted, true);
+  assert.equal(result.already_paid, false);
+  assert.equal(calls.filter(call => call.action === 'rpc' && call.name === 'fulfill_stripe_checkout').length, 1);
+});
+
 test('expired checkout cleanup requires the complete pending order identity', () => {
   const expired = { ...checkout, status: 'expired', payment_status: 'unpaid' };
   assert.doesNotThrow(() => assertCheckoutMatchesOrder(order, expired));
@@ -147,6 +185,7 @@ test('admin recovery reuses idempotent fulfilment and saves its actor audit', as
 
   assert.equal(result.status, 'paid');
   assert.equal(result.credits_granted, 4);
+  assert.equal(result.buyer_deleted, false);
   assert.deepEqual(stripeCalls[0], { id: 'cs_xert', options: { expand: ['payment_intent.latest_charge'] } });
   assert.equal(calls.filter(call => call.action === 'rpc' && call.name === 'fulfill_stripe_checkout').length, 1);
   assert.equal(calls.find(call => call.action === 'update').payload.reconciled_by, 'admin-xert');
@@ -258,4 +297,6 @@ test('orders admin exposes authenticated payment recovery for unresolved checkou
   assert.match(ui, /\['pending', 'failed'\]\.includes\(selectedOrder\.status\)/);
   assert.match(ui, /Check Stripe Outcome/);
   assert.match(ui, /safely closes an expired unpaid checkout/);
+  assert.match(ui, /buying account is gone/);
+  assert.match(ui, /result\.buyer_deleted/);
 });

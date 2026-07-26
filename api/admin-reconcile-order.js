@@ -120,12 +120,18 @@ export async function reconcileCheckoutOrder({ admin, stripe, orderId, userId, n
     .eq('id', order.id);
   if (auditError) throw new Error('RECONCILIATION_AUDIT_FAILED');
 
+  // Deleted buyers leave orders.user_id NULL; fulfill_stripe_checkout settles
+  // without inserting credit_batches. Never report the Stripe pack size as
+  // granted when no account remains to hold credits.
+  const creditsGranted = order.user_id == null ? 0 : fulfillment.credit.total;
+
   return {
     order_id: order.id,
     status: 'paid',
-    credits_granted: fulfillment.credit.total,
+    credits_granted: creditsGranted,
     already_paid: order.status === 'paid',
     checkout_status: checkout.status,
+    buyer_deleted: order.user_id == null,
   };
 }
 

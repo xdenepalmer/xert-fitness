@@ -24,12 +24,13 @@ test('native app exposes the command centre only to admin profiles', async () =>
 });
 
 test('native owner workspace uses protected operational RPCs and real actions', async () => {
-  const [api, adminStore, adminModels, view, ownerNavigation] = await Promise.all([
+  const [api, adminStore, adminModels, view, ownerNavigation, models] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Models.swift'),
   ]);
 
   for (const rpc of [
@@ -182,6 +183,9 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /Check Stripe outcome/);
   assert.match(view, /expired unpaid checkout/);
   assert.match(view, /result\.checkout_status == "expired"/);
+  assert.match(view, /buying account is gone/);
+  assert.match(view, /result\.buyer_deleted == true/);
+  assert.match(models, /let buyer_deleted: Bool\?/);
   assert.match(api, /\/api\/admin-refund-order/);
   assert.match(api, /confirmation == "REFUND"/);
   assert.match(adminStore, /func reconcileOrder/);

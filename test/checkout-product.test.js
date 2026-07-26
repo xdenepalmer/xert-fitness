@@ -331,6 +331,7 @@ test('checkout pauses when Operations Health would mark signature or delivery ga
   const emptyLedger = paymentDeliveryAdmin({ newestLedgerAt: null, paidBeyondLedger: 0 });
   const emptyGaps = await inspectWebhookDeliveryGaps(emptyLedger.admin, now);
   assert.equal(emptyGaps.deliveryGap, false);
+  assert.equal(emptyGaps.probeFailed, false);
   assert.ok(emptyLedger.calls.some(([method, field]) => method === 'gte' && field === 'paid_at'));
   assert.ok(!emptyLedger.calls.some(([method, field]) => method === 'gt' && field === 'paid_at'));
 });
@@ -340,6 +341,21 @@ test('checkout delivery circuit breaker fails closed on uncertain ledger health'
   assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
     failedError: new Error('ledger unavailable'),
   }).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    ordersError: new Error('orders count unavailable'),
+  }).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    signatureFailureError: {
+      code: '57014',
+      message: 'canceling statement due to statement timeout',
+    },
+  }).admin, now), false);
+  const uncertainOrders = paymentDeliveryAdmin({
+    ordersError: new Error('orders count unavailable'),
+  });
+  const uncertainGaps = await inspectWebhookDeliveryGaps(uncertainOrders.admin, now);
+  assert.equal(uncertainGaps.probeFailed, true);
+  assert.equal(uncertainGaps.deliveryGap, false);
   assert.equal(await paymentFulfillmentDeliveryIsHealthy({
     from() {
       throw new Error('database unavailable');

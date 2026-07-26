@@ -368,6 +368,8 @@ struct AdminReconciliationResult: Decodable, Hashable {
     let credits_granted: Int
     let already_paid: Bool
     let checkout_status: String?
+    /// Present when admin reconcile settles a paid order whose buyer row was deleted.
+    let buyer_deleted: Bool?
 }
 
 struct AdminRefundResult: Decodable, Hashable {

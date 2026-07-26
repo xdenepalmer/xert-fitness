@@ -568,6 +568,7 @@ test('webhook delivery health reports retries, failures and stalled processing',
   assert.deepEqual(healthy, {
     ready: true, available: true, received: 2, failed: 0,
     stale_processing: 0, signature_failures: 0, delivery_gap: false,
+    delivery_probe_failed: false,
     retries: 1, incidents: [], issue: null,
   });
 

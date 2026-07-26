@@ -148,11 +148,20 @@ function isMissingSignatureFailureLedger(error) {
  * recovered orders must not count as a delivery gap. An empty ledger only
  * looks at the same 24h window as signature failures — historical paid rows
  * alone must not pause the store forever.
+ *
+ * Operational probe failures (timeouts, RLS, etc.) set probeFailed so the
+ * kill switch fails closed — only a confirmed missing signature table is
+ * ignored during rolling upgrades.
  */
 export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
   const nowTime = now instanceof Date ? now.getTime() : Number.NaN;
   if (!Number.isFinite(nowTime)) {
-    return { signatureInstalled: false, signatureFailures: 0, deliveryGap: true };
+    return {
+      signatureInstalled: false,
+      signatureFailures: 0,
+      deliveryGap: true,
+      probeFailed: true,
+    };
   }
   const since = new Date(nowTime - 24 * 60 * 60 * 1000).toISOString();
   const [signatureResult, newestLedgerResult] = await Promise.all([
@@ -166,9 +175,14 @@ export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
       .order('last_received_at', { ascending: false })
       .limit(1),
   ]);
-  const signatureInstalled = !(signatureResult?.error && isMissingSignatureFailureLedger(signatureResult.error));
+  const signatureMissing = Boolean(
+    signatureResult?.error && isMissingSignatureFailureLedger(signatureResult.error),
+  );
+  const signatureInstalled = !signatureMissing;
+  const signatureProbeFailed = Boolean(signatureResult?.error && !signatureMissing);
   const signatureFailures = signatureResult?.error ? 0 : (signatureResult?.count || 0);
-  const newestLedgerAt = newestLedgerResult?.error
+  const ledgerProbeFailed = Boolean(newestLedgerResult?.error);
+  const newestLedgerAt = ledgerProbeFailed
     ? null
     : (newestLedgerResult?.data?.[0]?.last_received_at || null);
 
@@ -179,17 +193,21 @@ export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
     .is('reconciled_at', null);
   if (newestLedgerAt) {
     paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
-  } else {
+  } else if (!ledgerProbeFailed) {
     // Empty ledger: only recent unreconciled paid orders signal a live gap.
     paidOrdersQuery = paidOrdersQuery.gte('paid_at', since);
   }
-  const paidOrdersResult = await paidOrdersQuery;
-  const paidBeyondLedger = paidOrdersResult?.error ? 0 : (paidOrdersResult?.count || 0);
+  const paidOrdersResult = ledgerProbeFailed
+    ? { data: null, count: 0, error: newestLedgerResult.error }
+    : await paidOrdersQuery;
+  const ordersProbeFailed = Boolean(paidOrdersResult?.error);
+  const paidBeyondLedger = ordersProbeFailed ? 0 : (paidOrdersResult?.count || 0);
 
   return {
     signatureInstalled,
     signatureFailures,
     deliveryGap: paidBeyondLedger > 0,
+    probeFailed: signatureProbeFailed || ledgerProbeFailed || ordersProbeFailed,
   };
 }
 
@@ -220,7 +238,8 @@ export async function paymentFulfillmentDeliveryIsHealthy(admin, now = new Date(
       && failed.count === 0
       && stalled.count === 0
       && gaps.signatureFailures === 0
-      && !gaps.deliveryGap;
+      && !gaps.deliveryGap
+      && !gaps.probeFailed;
   } catch {
     return false;
   }

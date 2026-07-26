@@ -3651,6 +3651,8 @@ private struct AdminOrderDetailView: View {
                     if let result = await admin.reconcileOrder(session: session, order: order) {
                         resultMessage = result.status == "failed" && result.checkout_status == "expired"
                             ? "Stripe confirms no payment was taken. The expired checkout is closed without granting credits."
+                            : (result.buyer_deleted == true || result.credits_granted == 0)
+                            ? "Payment settled without granting credits — the buying account is gone."
                             : result.already_paid
                             ? "Fulfilment verified. \(result.credits_granted) session credits are attached to this order."
                             : "Payment reconciled. \(result.credits_granted) session credits were granted."

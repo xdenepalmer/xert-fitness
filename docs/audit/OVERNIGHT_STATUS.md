@@ -3,6 +3,12 @@
 ## Morning owner briefing
 
 **What was made safer overnight (plain English)**
+- Admin “Check Stripe Outcome” no longer claims pack credits were granted when
+  the buying account was deleted (web + iOS); payment still settles, credits stay 0.
+- Checkout kill-switch fails closed when webhook delivery probes error
+  (orders / ledger / signature timeouts) — only a missing signature table is
+  ignored during rolling upgrades. Empty-ledger + reconciled recoveries still
+  do not false-alarm.
 - Soft Launch Settings on the website now matches iPhone: bookings cannot go
   live until the booking-switch guard is installed, and pack checkout cannot
   open while bookings stay paused.
@@ -147,6 +153,15 @@ Migration / operator mirror:
 
 No new migration for this batch.
 
+### 14. This batch — deleted-buyer reconcile honesty + kill-switch probe fail-closed
+| Area | Defect | Fix |
+|---|---|---|
+| Admin reconcile (deleted buyer) | After account deletion, `fulfill_stripe_checkout` correctly settled with `credit_created=false`, but reconcile always returned `credits_granted = pack size` → Ops toast/iOS claimed credits were granted | `credits_granted = 0` + `buyer_deleted: true` when `orders.user_id` is null; web/iOS copy says buying account is gone |
+| Checkout kill-switch | `inspectWebhookDeliveryGaps` treated orders/ledger/signature *operational* errors as healthy (count 0), so uncertain delivery could leave checkout open | `probeFailed` on non-missing probe errors; checkout + Ops Health fail closed. Missing signature table still ignored for rolling upgrades; empty ledger + reconciled recoveries unchanged |
+| Regression coverage | The three overnight store-killers lacked one integration-style node test | `test/overnight-worst-bugs-regression.test.js` — deleted-member settle/reconcile, empty-ledger kill-switch, waitlist skip FIFO race |
+
+No new migration for this batch.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -244,5 +259,11 @@ show `installed = true` and `release_ready = true`, including
     complete”, not an endless delayed spinner.
 14. **iOS Waitlisted** — With >20 waitlisted sessions, Overview Waitlisted
     reflects up to the RPC ceiling (50), including after promote/skip.
-15. **Do not** implement staff roles yet — owner/legal gates in
+15. **Deleted-buyer reconcile** — Check Stripe Outcome on a paid order whose
+    member was deleted → toast/iOS says settled without credits (not “4 credits
+    granted”).
+16. **Kill-switch probe failure** — If orders/ledger health probes error, Ops
+    Health delivery is not ready and `/api/checkout` returns 503 until probes
+    succeed again.
+17. **Do not** implement staff roles yet — owner/legal gates in
     `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

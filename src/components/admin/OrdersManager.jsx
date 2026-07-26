@@ -112,7 +112,9 @@ export default function OrdersManager() {
           : result.already_paid ? 'Fulfilment verified' : 'Payment reconciled',
         description: expired
           ? 'Stripe confirms no payment was taken. The pending order is now closed without granting credits.'
-          : `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
+          : result.buyer_deleted || Number(result.credits_granted || 0) === 0
+            ? 'Payment settled without granting credits — the buying account is gone.'
+            : `${result.credits_granted} session credit${result.credits_granted === 1 ? '' : 's'} verified for this order.`,
       });
       setSelectedOrder(null);
       await load();

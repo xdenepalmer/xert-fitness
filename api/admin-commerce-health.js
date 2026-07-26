@@ -516,13 +516,13 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
         ...(resolution ? { resolution } : {}),
       };
     });
-  const { signatureFailures, deliveryGap } = await inspectWebhookDeliveryGaps(admin, now);
+  const { signatureFailures, deliveryGap, probeFailed } = await inspectWebhookDeliveryGaps(admin, now);
   const recentTruncated = rows.length === 500;
   const failedTruncated = rawFailed.length === 200;
   const processingTruncated = rawProcessing.length === 200;
   const truncated = recentTruncated || failedTruncated || processingTruncated;
   const ready = failed === 0 && staleProcessing === 0
-    && signatureFailures === 0 && !deliveryGap && !truncated;
+    && signatureFailures === 0 && !deliveryGap && !truncated && !probeFailed;
   return {
     ready,
     available: true,
@@ -531,11 +531,14 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     stale_processing: staleProcessing,
     signature_failures: signatureFailures,
     delivery_gap: deliveryGap,
+    delivery_probe_failed: Boolean(probeFailed),
     retries,
     incidents,
     issue: truncated
       ? 'Stripe webhook delivery history reached its safety limit. Resolve the listed incidents and refresh.'
-      : signatureFailures > 0
+      : probeFailed
+        ? 'Stripe webhook delivery health could not be verified. Refresh Ops Health before taking new pack payments.'
+        : signatureFailures > 0
         ? `${signatureFailures} Stripe webhook deliver${signatureFailures === 1 ? 'y was' : 'ies were'} rejected for an invalid signature. Verify STRIPE_WEBHOOK_SECRET.`
         : deliveryGap
           ? 'Paid orders exist with no matching Stripe webhook delivery. Verify the Stripe webhook endpoint and signing secret.'
