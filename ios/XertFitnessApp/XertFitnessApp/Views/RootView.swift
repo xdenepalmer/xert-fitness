@@ -13,6 +13,10 @@ struct RootView: View {
     @AppStorage(AppPrivacyLock.preferenceKey) private var privacyLockEnabled = false
     @SceneStorage("xert.memberRoute") private var restoredMemberRoute = XertMemberRoute.home.restorationValue
     @SceneStorage("xert.memberWorkspace") private var restoredMemberWorkspace = ""
+    @SceneStorage("xert.adminWorkspace") private var restoredAdminWorkspace = XertOwnerWorkspace.overview.rawValue
+    @SceneStorage("xert.adminRecentWorkspaces") private var restoredAdminRecentWorkspaces = ""
+    @SceneStorage("xert.adminWorkspaceHistory") private var restoredAdminWorkspaceHistory = ""
+    @SceneStorage("xert.adminNavigationUserID") private var restoredAdminNavigationUserID = ""
     @StateObject private var navigation = XertNavigationCoordinator()
     @StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
@@ -702,6 +706,10 @@ struct RootView: View {
         navigation.restore(routeValue: home.restorationValue)
         restoredMemberRoute = home.restorationValue
         restoredMemberWorkspace = navigation.workspaceRestorationValue
+        restoredAdminWorkspace = XertOwnerWorkspace.overview.rawValue
+        restoredAdminRecentWorkspaces = ""
+        restoredAdminWorkspaceHistory = ""
+        restoredAdminNavigationUserID = ""
         showingNavigationCommands = false
         showingAdminCommandCentre = false
         opensAdminAfterCommandDismissal = false

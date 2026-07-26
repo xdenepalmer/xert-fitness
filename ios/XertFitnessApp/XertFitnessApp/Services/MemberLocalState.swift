@@ -6,6 +6,7 @@ enum MemberLocalState {
         XertWorkspaceOrderStore.clear(for: userID, defaults: defaults)
         XertPinnedWorkspaceStore.clear(for: userID, defaults: defaults)
         XertOwnerWorkspacePinsStore.clear(for: userID, defaults: defaults)
+        AdminSiteContentDraftStore.clearAll(ownerID: userID, defaults: defaults)
         ClassReminderNavigation.clearPending(defaults: defaults)
         AnnouncementPushNavigation.clearPending(defaults: defaults)
         XertQuickActionNavigation.clearPending(defaults: defaults)

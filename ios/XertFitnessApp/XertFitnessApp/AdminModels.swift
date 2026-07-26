@@ -2233,6 +2233,15 @@ enum AdminSiteContentDraftStore {
         guard let ownerID else { return }
         defaults.removeObject(forKey: key(section, ownerID: ownerID))
     }
+
+    static func clearAll(
+        ownerID: UUID?,
+        defaults: UserDefaults = .standard
+    ) {
+        for section in AdminSiteContentSection.allCases {
+            clear(section, ownerID: ownerID, defaults: defaults)
+        }
+    }
 }
 
 struct AdminBookingSession: Codable, Hashable {

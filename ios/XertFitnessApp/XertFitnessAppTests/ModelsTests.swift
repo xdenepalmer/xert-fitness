@@ -2561,6 +2561,12 @@ final class ModelsTests: XCTestCase {
             DevicePushToken(value: "device-token", environment: "sandbox"),
             defaults: defaults
         )
+        AdminSiteContentDraftStore.save(
+            AdminSiteContentData(headline: "Private owner draft"),
+            section: .hero,
+            ownerID: userID,
+            defaults: defaults
+        )
 
         MemberLocalState.clear(for: userID, defaults: defaults)
 
@@ -2578,6 +2584,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(MemberPushPreference.isEnabled(defaults: defaults))
         XCTAssertFalse(AppPrivacyLock.isEnabled(defaults: defaults))
         XCTAssertNil(PushDeviceTokenStore.load(defaults: defaults))
+        XCTAssertNil(AdminSiteContentDraftStore.load(.hero, ownerID: userID, defaults: defaults))
     }
 
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
