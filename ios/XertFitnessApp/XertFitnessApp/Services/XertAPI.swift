@@ -413,7 +413,9 @@ final class XertAPI {
         try await rpc(path: "admin_daily_operations", body: EmptyBody(), auth: auth)
     }
 
-    func adminWaitlist(session auth: AuthSession, limit: Int = 20) async throws -> [AdminWaitlistItem] {
+    // Default to the RPC ceiling (50). Callers that omit limit used to collapse
+    // to 20 after promote/skip/cancel and silently hide later waitlisted classes.
+    func adminWaitlist(session auth: AuthSession, limit: Int = 50) async throws -> [AdminWaitlistItem] {
         try await rpc(
             path: "admin_waitlist_overview",
             body: AdminLimitRequest(p_limit: min(max(limit, 1), 50)),
@@ -422,11 +424,25 @@ final class XertAPI {
     }
 
     func adminSessionRoster(session auth: AuthSession, classSessionID: UUID) async throws -> [AdminRosterMember] {
-        try await rpc(
-            path: "admin_session_roster",
-            body: AdminSessionRequest(p_session_id: classSessionID),
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated roster silently hid later
+        // places from roll call, status changes and roster CSV.
+        let pageSize = 500
+        var offset = 0
+        var rows: [AdminRosterMember] = []
+        while true {
+            let page: [AdminRosterMember] = try await rpc(
+                path: "admin_session_roster",
+                body: AdminSessionRequest(p_session_id: classSessionID),
+                auth: auth,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ]
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func adminClassSessions(session auth: AuthSession) async throws -> [AdminClassSession] {
@@ -729,7 +745,9 @@ final class XertAPI {
         )
     }
 
-    func adminFollowUps(session auth: AuthSession, limit: Int = 20) async throws -> [AdminFollowUp] {
+    // Default to the RPC ceiling (50). Callers that omit limit used to collapse
+    // Follow-ups to 20 after Mark Contacted and silently hide later queues.
+    func adminFollowUps(session auth: AuthSession, limit: Int = 50) async throws -> [AdminFollowUp] {
         try await rpc(
             path: "admin_member_follow_up_queue",
             body: AdminLimitRequest(p_limit: min(max(limit, 1), 50)),
@@ -1589,11 +1607,25 @@ final class XertAPI {
     }
 
     func adminEventGoalMembers(session auth: AuthSession, eventID: UUID) async throws -> [AdminEventGoalMember] {
-        try await rpc(
-            path: "admin_event_goal_members",
-            body: ["p_event_id": eventID.uuidString],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated training-group roster
+        // silently hid later member contacts from the dialog and CSV export.
+        let pageSize = 500
+        var offset = 0
+        var rows: [AdminEventGoalMember] = []
+        while true {
+            let page: [AdminEventGoalMember] = try await rpc(
+                path: "admin_event_goal_members",
+                body: ["p_event_id": eventID.uuidString],
+                auth: auth,
+                queryItems: [
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ]
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func adminCreateEvent(session auth: AuthSession, draft: AdminEventDraft) async throws {

@@ -990,7 +990,7 @@ final class AdminStore: ObservableObject {
             // the promote failed and invite a second confirm against a moved queue.
             promotionNoticeWarning = outcome.warning
             do {
-                waitlist = try await api.adminWaitlist(session: session)
+                waitlist = try await api.adminWaitlist(session: session, limit: 50)
                 dailyOperations = try await api.adminDailyOperations(session: session)
                 lastUpdatedAt = Date()
             } catch {
@@ -1036,7 +1036,7 @@ final class AdminStore: ObservableObject {
             // invite a second confirm against a moved queue.
             bookingDecisionNoticeWarning = outcome.warning
             do {
-                waitlist = try await api.adminWaitlist(session: session)
+                waitlist = try await api.adminWaitlist(session: session, limit: 50)
                 dailyOperations = try await api.adminDailyOperations(session: session)
                 lastUpdatedAt = Date()
             } catch {
@@ -1055,7 +1055,7 @@ final class AdminStore: ObservableObject {
             } else {
                 errorMessage = message
             }
-            do { waitlist = try await api.adminWaitlist(session: session) } catch { /* keep skip error primary */ }
+            do { waitlist = try await api.adminWaitlist(session: session, limit: 50) } catch { /* keep skip error primary */ }
             return false
         }
     }
@@ -1106,7 +1106,7 @@ final class AdminStore: ObservableObject {
                 loadedRosterSessionID = classSessionID
             }
             dailyOperations = try await api.adminDailyOperations(session: session)
-            waitlist = try await api.adminWaitlist(session: session)
+            waitlist = try await api.adminWaitlist(session: session, limit: 50)
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1164,7 +1164,7 @@ final class AdminStore: ObservableObject {
                 category: "follow_up",
                 body: "Follow-up completed via \(channel). Reason: \(member.reasonLabel)."
             )
-            followUps = try await api.adminFollowUps(session: session)
+            followUps = try await api.adminFollowUps(session: session, limit: 50)
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1572,7 +1572,7 @@ final class AdminStore: ObservableObject {
             catch { errorMessage = "Class cancelled, but push delivery needs attention: \(error.localizedDescription)" }
             classSessions = try await api.adminClassSessions(session: session)
             dailyOperations = try await api.adminDailyOperations(session: session)
-            waitlist = try await api.adminWaitlist(session: session)
+            waitlist = try await api.adminWaitlist(session: session, limit: 50)
             lastUpdatedAt = Date()
             return true
         } catch {

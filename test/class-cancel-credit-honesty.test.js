@@ -19,6 +19,8 @@ test('class cancel copy does not claim every cancelled place returned a credit',
     web,
     /waitlist and enquiry places never held a credit/,
   );
+  // Follow-up dialog used to say every active booking was "cancelled and refunded".
+  assert.doesNotMatch(web, /cancelled and refunded/);
   assert.doesNotMatch(
     web,
     /Reserved member credits were returned\.|any reserved class credits returned/,

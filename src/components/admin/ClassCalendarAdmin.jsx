@@ -174,7 +174,8 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
             <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class cancelled</p>
             <h3 id="cancellation-follow-up-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">Notify affected members</h3>
             <p className="mt-2 font-body text-sm text-xert-concrete/65">
-              {followUp.affectedBookings} active {followUp.affectedBookings === 1 ? 'booking was' : 'bookings were'} cancelled and refunded.
+              {followUp.affectedBookings} active {followUp.affectedBookings === 1 ? 'booking was' : 'bookings were'} cancelled.
+              Reserved credits on open credit places were returned when the pack is still live; waitlist and enquiry places never held a credit.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close cancellation follow-up" title="Close"

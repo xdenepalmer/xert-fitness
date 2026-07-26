@@ -52,4 +52,11 @@ test('owner Waitlisted and Follow-ups metrics use the RPC ceiling instead of the
   assert.doesNotMatch(refresh, /adminFollowUps\(session: session\)(?!\s*,)/);
   assert.match(bookingSnapshot, /adminWaitlist\(session: session, limit: 50\)/);
   assert.doesNotMatch(bookingSnapshot, /adminWaitlist\(session: session\)(?!\s*,)/);
+
+  // Post-mutation desk refreshes (promote/skip/cancel/status/follow-up) used the
+  // old default of 20 and silently collapsed Overview Waitlisted / Follow-ups.
+  assert.doesNotMatch(source, /adminWaitlist\(session: session\)(?!\s*,)/);
+  assert.doesNotMatch(source, /adminFollowUps\(session: session\)(?!\s*,)/);
+  assert.match(source, /adminWaitlist\(session: session, limit: 50\)/);
+  assert.match(source, /adminFollowUps\(session: session, limit: 50\)/);
 });

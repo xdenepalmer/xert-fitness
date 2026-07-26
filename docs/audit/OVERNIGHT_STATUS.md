@@ -8,6 +8,14 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Class roster / training-group silence + cancel follow-up honesty + iPhone
+  waitlist collapse (app-only tip after **26124**): `admin_session_roster` and
+  `admin_event_goal_members` page past PostgREST `max_rows` (web + iPhone) so
+  roll call / cancel mailto / roster CSV and event training-group CSV cannot
+  miss later member contacts; class-cancel follow-up dialog no longer says
+  every active booking was “cancelled and refunded”; iPhone waitlist /
+  follow-up desk refreshes after promote/skip/cancel/status/Mark Contacted use
+  the RPC ceiling (50) instead of silently collapsing to 20.
 - Member booking surfaces + Ops Health class silence (app-only tip after
   **26124**): `/booking` + iPhone Book `sessions_with_availability`, Account
   `my_bookings` / member notices, public Events + train-for goals, and Ops
@@ -298,6 +306,10 @@ were **not** built.
    Account with many bookings/notices/goals still lists every row; public Events
    with >1000 published rows still lists every event; Ops Health bookable-class
    count matches the full upcoming public catalogue.
+   Class roster / event training group with >1000 members still lists every
+   contact (CSV too); class-cancel follow-up does not say every booking was
+   refunded; iPhone promote/skip/cancel/status still shows up to 50 waitlisted
+   classes afterwards.
 
 ---
 
@@ -758,6 +770,16 @@ Migration / operator mirror:
 
 No new migration for this batch (app-only tip). Apply through **26124** remains current.
 
+### 47. This batch — roster/training-group silence + cancel follow-up honesty + iPhone waitlist collapse
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (privacy/ops) | `admin_session_roster` hit PostgREST `max_rows` with no Range/offset loop — later places vanished from roll call, cancel mailto, status desk and roster CSV | Page via `collectAdminBatches` / iOS limit+offset on the RPC |
+| Silent failure (privacy/ops) | `admin_event_goal_members` same uncapped RPC — later training-group contacts vanished from the dialog and CSV | Same Range/offset paging (web + iPhone) |
+| Money honesty | Class-cancel follow-up dialog still said every active booking was “cancelled and refunded” after toast/notice honesty landed | Honest “returned when the pack is still live” copy (waitlist/enquiry never held a credit) |
+| Silent failure (ops) | iPhone promote/skip/cancel/status/Mark Contacted refreshed waitlist/follow-ups with the old default `limit=20` while Overview uses 50 — later queues silently collapsed after a desk action | Default + callers use RPC ceiling 50 |
+
+No new migration for this batch (app-only tip). Apply through **26124** remains current.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -1069,3 +1091,8 @@ show `installed = true` and `release_ready = true`, including
     public classes, `/booking` / iPhone Book still list every class; Account
     bookings/notices/goals and public Events page past max_rows; Ops Health
     bookable-class count matches the full upcoming public catalogue.
+46. **Roster / training-group silence + cancel follow-up + iPhone waitlist** —
+    Class roster and event training group with >1000 members still list every
+    contact (CSV too); class-cancel follow-up does not claim every booking was
+    refunded; iPhone promote/skip/cancel/status/Mark Contacted still show up to
+    50 waitlisted / follow-up rows afterwards.

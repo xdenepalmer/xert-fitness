@@ -29,3 +29,22 @@ test('adminSessionRoster only degrades to empty when the RPC is missing', () => 
   assert.match(block, /admin_session_roster/);
   assert.match(block, /throw new Error\(error\.message\)/);
 });
+
+test('adminSessionRoster pages past PostgREST max_rows', () => {
+  const block = adminData.slice(
+    adminData.indexOf('export async function adminSessionRoster'),
+    adminData.indexOf('export async function adminWaitlistOverview'),
+  );
+  assert.match(block, /collectAdminBatches/);
+  assert.match(block, /\.range\(from, from \+ pageSize - 1\)/);
+});
+
+test('getEventGoalMembers pages past PostgREST max_rows', () => {
+  const block = adminData.slice(
+    adminData.indexOf('export async function getEventGoalMembers'),
+    adminData.indexOf('export async function createEvent'),
+  );
+  assert.match(block, /collectAdminBatches/);
+  assert.match(block, /admin_event_goal_members/);
+  assert.match(block, /\.range\(from, from \+ pageSize - 1\)/);
+});

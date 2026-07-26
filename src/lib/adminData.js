@@ -686,11 +686,16 @@ export async function getEventGoalCounts() {
 
 export async function getEventGoalMembers(eventId) {
   if (!eventId) throw new Error('An event is required to load its training group.');
-  const { data, error } = await supabase.rpc('admin_event_goal_members', {
-    p_event_id: eventId
+  // Page past PostgREST max_rows — a truncated training-group roster silently
+  // hid later member contacts from the dialog and CSV export.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .rpc('admin_event_goal_members', { p_event_id: eventId })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
   });
-  if (error) throw new Error(error.message);
-  return data || [];
 }
 
 export async function createEvent(event) {
@@ -1290,16 +1295,29 @@ export async function getAdminAuditRecords(days = '30') {
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────
 
 export async function adminSessionRoster(sessionId) {
-  const { data, error } = await supabase.rpc('admin_session_roster', {
-    p_session_id: sessionId
-  });
-  if (!error) return data || [];
-  // Rolling-upgrade only: missing RPC is not "empty class". Real fetch/RLS
-  // failures must surface so roll call / roster never look vacant by mistake.
-  const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
-    || /admin_session_roster.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
-  if (functionUnavailable) return [];
-  throw new Error(error.message);
+  // Page past PostgREST max_rows — a truncated roster silently hid later
+  // places from roll call, status changes, cancel mailto, and roster CSV.
+  try {
+    return await collectAdminBatches(async (page, pageSize) => {
+      const from = (page - 1) * pageSize;
+      const { data, error } = await supabase
+        .rpc('admin_session_roster', { p_session_id: sessionId })
+        .range(from, from + pageSize - 1);
+      if (error) {
+        const failure = new Error(error.message);
+        failure.code = error.code;
+        throw failure;
+      }
+      return data || [];
+    });
+  } catch (error) {
+    // Rolling-upgrade only: missing RPC is not "empty class". Real fetch/RLS
+    // failures must surface so roll call / roster never look vacant by mistake.
+    const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+      || /admin_session_roster.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+    if (functionUnavailable) return [];
+    throw new Error(error.message);
+  }
 }
 
 export async function adminWaitlistOverview(limit = 20) {
