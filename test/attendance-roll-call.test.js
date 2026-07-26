@@ -25,8 +25,13 @@ test('fresh and upgrade database paths install the audited roll-call RPC', () =>
     assert.match(source, /set status = 'completed', public_visible = false/i);
     assert.match(source, /revoke execute on function public\.admin_record_session_attendance\(uuid, uuid\[\], uuid\[\]\) from public, anon/i);
     assert.match(source, /grant execute on function public\.admin_record_session_attendance\(uuid, uuid\[\], uuid\[\]\) to authenticated/i);
-    assert.match(source, /values \('attendance_roll_call'\)/i);
+    // Pending request credits must be released (and Stripe-refunded packs skipped).
+    assert.match(source, /keeping newer admin_record_session_attendance/);
+    assert.match(source, /status = 'requested'/);
+    assert.match(source, /o\.status = 'refunded'/);
   }
+  assert.match(upgradeSchema, /values \('attendance_roll_call'\)/i);
+  assert.match(freshSchema, /values \('attendance_roll_call'\)/i);
 });
 
 test('admin roll call sends one bounded RPC and exposes complete attendance controls', () => {

@@ -163,11 +163,11 @@ test('older audit/deletion operator scripts cannot downgrade redaction-aware gua
     },
     {
       name: 'atomic_account_deletion.sql',
-      mustMatch: [/install_delete_member_account/, /redact_audit_subject_pii|member_interest/],
+      mustMatch: [/install_delete_member_account/, /keeping newer delete_member_account/, /redact_audit_subject_pii|member_interest/],
     },
     {
       name: 'audit_subject_pii_redaction_upgrade.sql',
-      mustMatch: [/install_delete_member_account/, /member_interest/],
+      mustMatch: [/install_delete_member_account/, /keeping newer delete_member_account/, /member_interest/],
     },
     {
       name: 'admin_request_status_audit_upgrade.sql',
@@ -201,6 +201,7 @@ test('older audit/deletion operator scripts cannot downgrade redaction-aware gua
   assert.match(currentDeletion.sql, /trainer_interest/);
   assert.match(currentDeletion.sql, /partner_interest/);
   assert.match(currentDeletion.sql, /private_session_requests/);
+  assert.match(currentDeletion.sql, /redact_audit_subject_pii/);
 });
 
 test('every install_public_form_insert_policies definition gates PT/booking notes on health consent', () => {
@@ -374,6 +375,32 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
       notice: /keeping newer fulfill_stripe_checkout/,
       mustMatch: [/user_id is null then null/, /install_fulfill_stripe_checkout/],
     },
+    {
+      name: 'booking_modes_upgrade.sql',
+      notice: /keeping newer cancel_booking/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_cancel_class_session/,
+        /keeping newer admin_set_booking_status/,
+        /o\.status = 'refunded'/,
+      ],
+    },
+    {
+      name: 'admin_cms_schema.sql',
+      notice: /keeping newer admin_cancel_class_session/,
+      mustMatch: [
+        /keeping newer refund_credits_to_batch/,
+        /keeping newer admin_set_booking_status/,
+        /keeping newer admin_record_session_attendance/,
+        /o\.status = 'refunded'/,
+        /status = 'requested'/,
+      ],
+    },
+    {
+      name: 'attendance_roll_call_upgrade.sql',
+      notice: /keeping newer admin_record_session_attendance/,
+      mustMatch: [/status = 'requested'/, /o\.status = 'refunded'/],
+    },
   ];
 
   for (const { name, notice, mustMatch } of guarded) {
@@ -387,6 +414,44 @@ test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfi
         `${name} is not re-run safe against a newer money/privacy shape (${pattern})`,
       );
     }
+  }
+});
+
+test('Ops Health / release readiness remediations never point at weak fulfill or delete migrations', async () => {
+  const { REQUIRED_SCHEMA_CAPABILITIES } = await import('../src/lib/schemaCapabilities.js');
+  const readiness = readFileSync(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8');
+  const weakFulfill = [
+    '20260715010000_stripe_payment_fulfillment.sql',
+    '20260716030000_stripe_pending_order_guard.sql',
+    '20260716040000_stripe_order_terms_snapshot.sql',
+  ];
+  const weakDelete = [
+    '20260726016000_atomic_account_deletion.sql',
+    '20260726105000_audit_subject_pii_redaction.sql',
+  ];
+  for (const file of [...weakFulfill, ...weakDelete]) {
+    assert.doesNotMatch(
+      readiness,
+      new RegExp(file.replace(/\./g, '\\.')),
+      `release_readiness_check.sql must not remediate via weak ${file}`,
+    );
+  }
+  for (const capability of [
+    'stripe_payment_fulfillment',
+    'stripe_pending_order_guard',
+    'stripe_order_terms_snapshot',
+    'atomic_account_deletion',
+    'audit_subject_pii_redaction',
+    'account_deletion_public_lead_cleanup',
+  ]) {
+    const action = REQUIRED_SCHEMA_CAPABILITIES[capability];
+    assert.match(action, /src\/supabase\//, `${capability} Ops Health action must use a src/supabase mirror`);
+    for (const file of [...weakFulfill, ...weakDelete]) {
+      assert.doesNotMatch(action, new RegExp(file.replace(/\./g, '\\.')), capability);
+    }
+    const sqlPath = (readiness.match(new RegExp(`\\('${capability}', '([^']+)'\\)`)) || [])[1];
+    const actionPath = (action.match(/(src\/supabase\/[\w.-]+\.sql)/) || [])[1];
+    assert.equal(sqlPath, actionPath, `${capability} release_readiness path must match Ops Health`);
   }
 });
 

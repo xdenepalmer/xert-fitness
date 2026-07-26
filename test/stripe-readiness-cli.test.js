@@ -82,14 +82,14 @@ test('Stripe readiness names missing webhook configuration and fulfillment witho
   assert.equal(report.checks.find(check => check.key === 'webhook').ready, false);
   assert.match(report.checks.find(check => check.key === 'fulfillment').detail, /is missing/);
   assert.match(report.checks.find(check => check.key === 'webhook').remediation, /STRIPE_WEBHOOK_SECRET/);
-  assert.match(report.checks.find(check => check.key === 'fulfillment').remediation, /20260715010000_stripe_payment_fulfillment\.sql/);
+  assert.match(report.checks.find(check => check.key === 'fulfillment').remediation, /src\/supabase\/stripe_payment_fulfillment_upgrade\.sql/);
   assert.match(report.checks.find(check => check.key === 'refund-reconciliation-contract').remediation, /20260713020000_stripe_refund_reconciliation\.sql/);
   assert.match(report.checks.find(check => check.key === 'checkout-reconciliation-contract').remediation, /20260713030000_checkout_reconciliation\.sql/);
   assert.match(report.checks.find(check => check.key === 'activation-guard').remediation, /20260716010000_guarded_payment_activation\.sql/);
   assert.match(report.checks.find(check => check.key === 'activation-drift-guard').remediation, /20260716060000_payment_activation_drift_guard\.sql/);
   assert.match(report.checks.find(check => check.key === 'settings-contract').remediation, /20260716020000_admin_settings_singleton\.sql/);
-  assert.match(report.checks.find(check => check.key === 'pending-order-guard').remediation, /20260716030000_stripe_pending_order_guard\.sql/);
-  assert.match(report.checks.find(check => check.key === 'order-terms').remediation, /20260716040000_stripe_order_terms_snapshot\.sql/);
+  assert.match(report.checks.find(check => check.key === 'pending-order-guard').remediation, /src\/supabase\/stripe_payment_fulfillment_upgrade\.sql/);
+  assert.match(report.checks.find(check => check.key === 'order-terms').remediation, /src\/supabase\/stripe_payment_fulfillment_upgrade\.sql/);
   assert.match(report.checks.find(check => check.key === 'webhook-ledger').remediation, /20260716050000_stripe_webhook_ledger\.sql/);
   assert.doesNotMatch(JSON.stringify(report), /sb_publishable_/);
 });

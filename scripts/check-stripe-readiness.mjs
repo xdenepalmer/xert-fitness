@@ -248,7 +248,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     detail: capabilityDetail,
     remediation: capabilityReady
       ? null
-      : 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql to the XERT Supabase project.',
+      : 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql to the XERT Supabase project.',
   });
   checks.push({
     key: 'webhook-ledger',
@@ -293,7 +293,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     detail: pendingOrderGuardDetail,
     remediation: pendingOrderGuardReady
       ? null
-      : 'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql to the XERT Supabase project.',
+      : 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql to the XERT Supabase project.',
   });
   checks.push({
     key: 'order-terms',
@@ -302,7 +302,7 @@ export async function inspectStripeReadiness({ environment = process.env, fetchI
     detail: orderTermsDetail,
     remediation: orderTermsReady
       ? null
-      : 'Apply supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql to the XERT Supabase project.',
+      : 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql to the XERT Supabase project.',
   });
 
   return { ready: checks.every(check => check.ready), checks };

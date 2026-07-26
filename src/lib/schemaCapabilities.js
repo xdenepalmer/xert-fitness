@@ -8,19 +8,23 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   member_activation_cockpit: 'Apply supabase/migrations/20260721020000_member_activation_cockpit.sql in Supabase.',
   member_waitlist_join: 'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
   waitlist_fifo_promotion: 'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
-  attendance_roll_call: 'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
+  // Bootstrap attendance_roll_call_upgrade skips-if-newer; prefer the release
+  // path that also returns unactioned request credits.
+  attendance_roll_call: 'Apply src/supabase/roll_call_releases_pending_requests.sql in Supabase.',
   class_session_update_guard: 'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
   class_session_optimistic_locking: 'Apply supabase/migrations/20260726104000_class_session_optimistic_locking.sql in Supabase.',
   audit_subject_pii_redaction: 'Apply src/supabase/audit_subject_pii_redaction_upgrade.sql in Supabase.',
   product_update_guard: 'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
   stripe_refund_reconciliation: 'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
   checkout_reconciliation: 'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
-  stripe_payment_fulfillment: 'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql in Supabase.',
+  // Historical 20260715010000 / 16030000 recreate the retired p_expires_at
+  // fulfill overload; 16040000 recreates live fulfill without email erasure.
+  stripe_payment_fulfillment: 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql in Supabase.',
   guarded_payment_activation: 'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql in Supabase.',
   payment_activation_drift_guard: 'Apply supabase/migrations/20260716060000_payment_activation_drift_guard.sql in Supabase.',
   admin_settings_singleton: 'Apply supabase/migrations/20260716020000_admin_settings_singleton.sql in Supabase.',
-  stripe_pending_order_guard: 'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql in Supabase.',
-  stripe_order_terms_snapshot: 'Apply supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql in Supabase.',
+  stripe_pending_order_guard: 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql in Supabase.',
+  stripe_order_terms_snapshot: 'Apply src/supabase/stripe_payment_fulfillment_upgrade.sql in Supabase.',
   stripe_webhook_ledger: 'Apply supabase/migrations/20260716050000_stripe_webhook_ledger.sql in Supabase.',
   member_announcements: 'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
   announcement_receipts: 'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',

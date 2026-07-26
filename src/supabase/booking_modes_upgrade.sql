@@ -220,6 +220,21 @@ as $$
   end;
 $$;
 
+-- Re-run safe: keep a refund helper that already skips Stripe-refunded packs.
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamptz';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -245,12 +260,31 @@ begin
      );
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
   from public, anon, authenticated;
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+-- Re-run safe: keep helper-backed cancel (Stripe-refunded pack skip).
+do $install_cancel_booking$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'cancel_booking'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer cancel_booking';
+  else
+    execute $fn$
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -279,6 +313,10 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_cancel_booking$;
 
 create or replace function public.sessions_with_availability()
 returns table (
@@ -305,6 +343,21 @@ returns table (
   order by s.start_time asc;
 $$;
 
+-- Re-run safe: keep helper-backed status RPC (Stripe-refunded pack skip).
+do $install_admin_set_booking_status$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer admin_set_booking_status';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -393,6 +446,10 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status$;
 
 create or replace function public.admin_promote_next_waitlisted(p_session_id uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -416,6 +473,24 @@ end; $$;
 -- When XERT cancels a class, outstanding member bookings are invalidated and
 -- credit-holding bookings return their reserved credit. The session row is
 -- locked first so a concurrent booking cannot slip in during cancellation.
+-- Re-run safe: keep attended/no_show refunds + Stripe-refunded pack skip.
+do $install_admin_cancel_class_session$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_cancel_class_session'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid';
+  if v_def is not null
+     and v_def ilike '%attended%'
+     and v_def ilike '%no_show%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_cancel_class_session';
+  else
+    execute $fn$
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer language plpgsql security definer set search_path = public as $$
 declare
@@ -488,6 +563,10 @@ begin
 
   return v_cancelled_count + v_enquiry_cancelled_count;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_admin_cancel_class_session$;
 
 revoke execute on function public.admin_cancel_class_session(uuid) from public, anon;
 grant execute on function public.admin_cancel_class_session(uuid) to authenticated;

@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Bootstrap `booking_modes_upgrade` / `admin_cms_schema` / attendance roll-call
+  scripts skip-if-newer on cancel/refund/class-cancel/status/roll-call RPCs, and
+  roll-call recreate now keeps pending-request credit release + Stripe-refunded
+  pack skip. Ops Health / release readiness / Stripe readiness CLI no longer
+  remediate fulfill or account-deletion via historical migrations that recreate
+  the dead `p_expires_at` overload, non-erasure fulfill, or weaker
+  `delete_member_account` bodies.
 - Operator re-runs of cancel/refund/fulfill/class-cancel scripts
   (`cancel_booking_expired_batch_refund`, `credit_batch_refund_reactivation`,
   `class_cancellation_credit_refund_fix`, `stripe_fulfillment_deleted_member_fix`,
@@ -442,6 +449,14 @@ No new migration for this batch (operator + Privacy tip). Apply through **26116*
 | Area | Defect | Fix |
 |---|---|---|
 | Operator SQL drift (money) | Re-running older cancel/refund/class-cancel/fulfill operator scripts could replace helper-backed or erasure-aware RPC bodies; Ops Health also pointed at historical migrations that still inline refunds / re-attach deleted-buyer email | Skip-if-newer on `cancel_booking_expired_batch_refund`, `credit_batch_refund_reactivation`, `class_cancellation_credit_refund_fix`, `stripe_fulfillment_deleted_member_fix`, `stripe_payment_fulfillment_upgrade`; Ops Health actions retargeted to strong `src/supabase/` mirrors; drift tests pin `keeping newer…` |
+
+No new migration for this batch (operator tip). Apply through **26116** remains current.
+
+### 31. This batch — bootstrap cancel/roll-call downgrade + weak fulfill/delete remediations
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (money) | Re-running `booking_modes_upgrade` / `admin_cms_schema` / `attendance_roll_call_upgrade` could replace helper-backed cancel/refund/class-cancel or wipe pending-request credit release on roll call | Skip-if-newer on those RPCs; roll-call bootstrap body restores request release + `o.status = 'refunded'` skip |
+| Ops Health / release gate (money + privacy) | Remediation still pointed at historical fulfill migrations (`p_expires_at` overload / non-erasure live body) and weaker `delete_member_account` migrations; release_readiness lagged schemaCapabilities | Retarget fulfill + deletion/redaction/lead-cleanup (+ related money caps) to strong `src/supabase/` mirrors; Stripe readiness CLI matches; drift test pins path parity |
 
 No new migration for this batch (operator tip). Apply through **26116** remains current.
 
