@@ -47,29 +47,71 @@ $$;
 
 -- RLS controls which rows a member can change, not which columns they can
 -- alter. Keep authority and identity fields server-owned to stop a direct
--- PostgREST request promoting a member profile to admin.
-create or replace function public.guard_profile_write()
-returns trigger language plpgsql security definer set search_path = public as $$
+-- PostgREST request promoting a member profile to admin. This base schema is
+-- also safe before the later CMS schema adds profiles.email.
+do $profile_guard$
 begin
-  if not public.is_admin() then
-    if tg_op = 'INSERT' then
-      if coalesce(new.role, 'member') <> 'member' then
-        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
-      end if;
-    elsif tg_op = 'UPDATE' then
-      if new.id is distinct from old.id then
-        raise exception 'PROFILE_ID_IMMUTABLE';
-      end if;
-      if new.role is distinct from old.role then
-        raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
-      end if;
-      if new.created_at is distinct from old.created_at then
-        raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
-      end if;
-    end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'email'
+  ) then
+    execute $function$
+      create or replace function public.guard_profile_write()
+      returns trigger language plpgsql security definer set search_path = public as $$
+      begin
+        if not public.is_admin() then
+          if tg_op = 'INSERT' then
+            if coalesce(new.role, 'member') <> 'member' then
+              raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+            end if;
+          elsif tg_op = 'UPDATE' then
+            if new.id is distinct from old.id then
+              raise exception 'PROFILE_ID_IMMUTABLE';
+            end if;
+            if new.role is distinct from old.role then
+              raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+            end if;
+            if new.email is distinct from old.email then
+              raise exception 'PROFILE_EMAIL_MANAGED_BY_AUTH';
+            end if;
+            if new.created_at is distinct from old.created_at then
+              raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
+            end if;
+          end if;
+        end if;
+        return new;
+      end;
+      $$;
+    $function$;
+  else
+    execute $function$
+      create or replace function public.guard_profile_write()
+      returns trigger language plpgsql security definer set search_path = public as $$
+      begin
+        if not public.is_admin() then
+          if tg_op = 'INSERT' then
+            if coalesce(new.role, 'member') <> 'member' then
+              raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+            end if;
+          elsif tg_op = 'UPDATE' then
+            if new.id is distinct from old.id then
+              raise exception 'PROFILE_ID_IMMUTABLE';
+            end if;
+            if new.role is distinct from old.role then
+              raise exception 'PROFILE_ROLE_MANAGED_BY_ADMIN';
+            end if;
+            if new.created_at is distinct from old.created_at then
+              raise exception 'PROFILE_CREATED_AT_IMMUTABLE';
+            end if;
+          end if;
+        end if;
+        return new;
+      end;
+      $$;
+    $function$;
   end if;
-  return new;
-end; $$;
+end;
+$profile_guard$;
 
 drop trigger if exists before_profile_write on public.profiles;
 create trigger before_profile_write
@@ -953,57 +995,6 @@ returns table (
 $$;
 
 
-create or replace function public.my_member_announcements()
-returns table (
-  id uuid, title text, body text, tone text, cta_label text, cta_url text, published_at timestamptz,
-  expires_at timestamptz, updated_at timestamptz
-)
-language plpgsql security definer set search_path = public as $$
-declare v_user_id uuid := auth.uid();
-begin
-  if v_user_id is null then raise exception 'AUTH_REQUIRED'; end if;
-  insert into public.member_announcement_receipts (announcement_id, user_id, read_at)
-  select announcement.id, v_user_id, now()
-  from public.member_announcements as announcement
-  where announcement.archived_at is null
-    and announcement.published_at is not null and announcement.published_at <= now()
-    and (announcement.expires_at is null or announcement.expires_at > now())
-  on conflict (announcement_id, user_id) do update
-    set read_at = least(member_announcement_receipts.read_at, excluded.read_at);
-  return query
-  select announcement.id, announcement.title, announcement.body, announcement.tone,
-         announcement.cta_label, announcement.cta_url, announcement.published_at,
-         announcement.expires_at, announcement.updated_at
-  from public.member_announcements as announcement
-  join public.member_announcement_receipts as receipt
-    on receipt.announcement_id = announcement.id and receipt.user_id = v_user_id
-  where announcement.archived_at is null
-    and announcement.published_at is not null and announcement.published_at <= now()
-    and (announcement.expires_at is null or announcement.expires_at > now())
-    and receipt.dismissed_at is null
-  order by announcement.published_at desc, announcement.id desc;
-end;
-$$;
-
-create or replace function public.dismiss_member_announcement(p_announcement_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare v_user_id uuid := auth.uid();
-begin
-  if v_user_id is null then raise exception 'AUTH_REQUIRED'; end if;
-  if not exists (
-    select 1 from public.member_announcements as announcement
-    where announcement.id = p_announcement_id
-      and announcement.archived_at is null
-      and announcement.published_at is not null and announcement.published_at <= now()
-      and (announcement.expires_at is null or announcement.expires_at > now())
-  ) then raise exception 'ANNOUNCEMENT_NOT_FOUND'; end if;
-  insert into public.member_announcement_receipts (announcement_id, user_id, read_at, dismissed_at)
-  values (p_announcement_id, v_user_id, now(), now())
-  on conflict (announcement_id, user_id) do update
-    set dismissed_at = coalesce(member_announcement_receipts.dismissed_at, excluded.dismissed_at);
-end;
-$$;
-
 create or replace function public.admin_announcement_metrics()
 returns table (announcement_id uuid, read_count bigint, dismissed_count bigint)
 language plpgsql security definer stable set search_path = public as $$
@@ -1198,14 +1189,63 @@ drop policy if exists "member_announcements_select_live_or_admin" on public.memb
 drop policy if exists "member_announcements_admin_insert" on public.member_announcements;
 drop policy if exists "member_announcements_admin_update" on public.member_announcements;
 drop policy if exists "member_announcements_admin_delete" on public.member_announcements;
-create policy "member_announcements_select_live_or_admin" on public.member_announcements
-  for select to authenticated using (
-    public.is_admin() or (
-      archived_at is null
-      and published_at is not null and published_at <= now()
-      and (expires_at is null or expires_at > now())
-    )
-  );
+do $announcement_policy$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) and to_regclass('public.member_announcement_targets') is not null then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and (
+              audience = 'all'
+              or (
+                audience = 'targeted'
+                and exists (
+                  select 1
+                  from public.member_announcement_targets target
+                  where target.announcement_id = member_announcements.id
+                    and target.user_id = (select auth.uid())
+                )
+              )
+            )
+          )
+        );
+    $policy$;
+  elsif exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) then
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and audience = 'all'
+          )
+        );
+    $policy$;
+  else
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+          )
+        );
+    $policy$;
+  end if;
+end;
+$announcement_policy$;
 create policy "member_announcements_admin_insert" on public.member_announcements
   for insert to authenticated with check (public.is_admin());
 create policy "member_announcements_admin_update" on public.member_announcements
@@ -1293,8 +1333,6 @@ revoke execute on function public.join_session_waitlist(uuid) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.my_bookings() from public, anon;
 revoke execute on function public.is_admin() from public, anon;
-revoke execute on function public.my_member_announcements() from public, anon;
-revoke execute on function public.dismiss_member_announcement(uuid) from public, anon;
 revoke execute on function public.admin_announcement_metrics() from public, anon;
 revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from public, anon;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
@@ -1303,8 +1341,6 @@ grant execute on function public.join_session_waitlist(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid)        to authenticated;
 grant execute on function public.my_bookings()               to authenticated;
 grant execute on function public.is_admin()                  to authenticated;
-grant execute on function public.my_member_announcements() to authenticated;
-grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 grant execute on function public.admin_announcement_metrics() to authenticated;
 grant execute on function public.admin_archive_member_announcement(uuid, boolean) to authenticated;
 

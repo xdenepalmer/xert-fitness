@@ -28,7 +28,7 @@ function escapeCell(value) {
 export function toCsv(rows, columns) {
   if (!rows || rows.length === 0) return '';
   const cols = columns || Object.keys(rows[0]).map(k => ({ key: k, label: k }));
-  const lines = [
+  return [
     cols.map(c => escapeCell(c.label)).join(','),
     ...rows.map(row => cols.map(c => escapeCell(row[c.key])).join(',')),
   ];
@@ -46,6 +46,11 @@ export function downloadCsv(filename, rows, columns) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.rel = 'noopener';
+  // Anchored in the document and revoked on a later task: Firefox aborts the
+  // download when the object URL is released in the same task as the click.
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

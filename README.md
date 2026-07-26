@@ -180,12 +180,18 @@ The Supabase schema is defined in:
 - `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
-- `src/supabase/waitlist_promotion_notifications_upgrade.sql` — makes FIFO promotion
-  retry-safe and atomically confirms the booking, reserves one credit, records an
-  immutable receipt and creates the member's private notice before push delivery
-- `src/supabase/booking_decision_notifications_upgrade.sql` — makes staff booking
-  approvals, waitlisting, declines and cancellations retry-safe; each affected
-  member receives an atomic private notice plus best-effort Apple push delivery
+- `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
+  refund so members get their credit back when staff cancel a class (the original refund
+  filtered on the post-update status and therefore always refunded nothing)
+- `src/supabase/audit_immutability_account_deletion_fix.sql` — lets an account with audit
+  history actually be deleted, by allowing the referential `on delete set null` update
+  through the five audit-immutability triggers while still blocking any content change
+- `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
+  order from failing fulfilment forever and gating checkout for every other member
+- `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
+  correction from charging the member a second credit for the same class
+- `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
+  files from exposing private member notices or weakening member email protection
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
