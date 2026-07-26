@@ -3801,6 +3801,61 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(booking.statusLabel, "No Show")
     }
 
+    func testAdminOrderReportFiltersRevenueWithoutMixingCurrenciesAndEscapesCSV() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let currentAUD = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 4_800,
+            currency: "aud",
+            createdAt: now.addingTimeInterval(-86_400),
+            productName: "Launch Pack, 10",
+            email: "alex@example.com"
+        )
+        let olderNZD = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 6_500,
+            currency: "nzd",
+            createdAt: now.addingTimeInterval(-40 * 86_400),
+            productName: "Travel Pack"
+        )
+        let failedAUD = order(
+            id: UUID(),
+            status: "failed",
+            amountCents: 4_800,
+            currency: "aud",
+            createdAt: now,
+            productName: "Launch Pack"
+        )
+
+        let latest = AdminOrderReport(
+            orders: [olderNZD, failedAUD, currentAUD],
+            range: .thirtyDays,
+            now: now
+        )
+        XCTAssertEqual(latest.rows.map(\.id), [failedAUD.id, currentAUD.id])
+        XCTAssertEqual(latest.paidCount, 1)
+        XCTAssertEqual(latest.paidRevenue, [
+            AdminOrderCurrencyTotal(currency: "AUD", cents: 4_800)
+        ])
+        XCTAssertTrue(latest.csv.contains("\"Launch Pack, 10\""))
+        XCTAssertTrue(latest.csv.contains("Stripe Payment Intent"))
+
+        let nzd = AdminOrderReport(
+            orders: [olderNZD, failedAUD, currentAUD],
+            query: "travel",
+            status: "paid",
+            currency: "nzd",
+            range: .ninetyDays,
+            now: now
+        )
+        XCTAssertEqual(nzd.rows.map(\.id), [olderNZD.id])
+        XCTAssertEqual(nzd.paidRevenue, [
+            AdminOrderCurrencyTotal(currency: "NZD", cents: 6_500)
+        ])
+    }
+
     func testAdminAnnouncementStatesRespectPublishingExpiryAndArchiveOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -3977,26 +4032,35 @@ final class ModelsTests: XCTestCase {
         )
     }
 
-    private func order(id: UUID, status: String, checkoutSessionID: String? = nil) -> OrderItem {
+    private func order(
+        id: UUID,
+        status: String,
+        checkoutSessionID: String? = nil,
+        amountCents: Int = 4_800,
+        currency: String = "aud",
+        createdAt: Date = Date(),
+        productName: String? = nil,
+        email: String? = nil
+    ) -> OrderItem {
         OrderItem(
             id: id,
             user_id: nil,
             product_id: nil,
-            email: nil,
+            email: email,
             status: status,
-            amount_cents: 4800,
-            currency: "aud",
+            amount_cents: amountCents,
+            currency: currency,
             credit_total: 10,
             credit_validity_days: 90,
             stripe_checkout_session_id: checkoutSessionID ?? (status == "failed" ? "cs_test_recover" : nil),
             stripe_payment_intent_id: status == "paid" ? "pi_test_paid" : nil,
-            created_at: Date(),
-            paid_at: status == "paid" ? Date() : nil,
-            refunded_at: status == "refunded" ? Date() : nil,
-            refunded_amount_cents: status == "refunded" ? 4800 : nil,
+            created_at: createdAt,
+            paid_at: status == "paid" ? createdAt : nil,
+            refunded_at: status == "refunded" ? createdAt : nil,
+            refunded_amount_cents: status == "refunded" ? amountCents : nil,
             reconciled_at: nil,
             reconciled_by: nil,
-            products: nil,
+            products: productName.map { OrderProduct(name: $0) },
             stripe_refunds: nil
         )
     }

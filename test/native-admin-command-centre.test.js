@@ -760,3 +760,47 @@ test('native member records provide bounded truthful account history and guarded
   assert.match(memberRecord, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(memberRecord, /admin\.memberDetailUnavailableSources\.contains\("credit audit"\)/);
 });
+
+test('native revenue desk filters and exports a current ledger and member purchases open exact operations', async () => {
+  const [view, models, api] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+  ]);
+
+  assert.match(api, /func adminOrders[\s\S]*let pageSize = 500[\s\S]*created_at\.desc,id\.desc[\s\S]*offset/);
+  assert.match(models, /enum AdminOrderRange: String, CaseIterable, Identifiable/);
+  assert.match(models, /struct AdminOrderReport/);
+  assert.match(models, /status == "all" \|\| order\.status == status/);
+  assert.match(models, /normalizedCurrency == "all" \|\| orderCurrency\.lowercased\(\) == normalizedCurrency/);
+  assert.match(models, /cutoff\.map \{ order\.created_at >= \$0 \} \?\? true/);
+  assert.match(models, /Dictionary\(grouping: paid\) \{ Self\.currencyCode\(\$0\) \}/);
+  assert.match(models, /Stripe Checkout Session/);
+  assert.match(models, /credits_revoked/);
+  assert.match(models, /let escaped = value\.replacingOccurrences/);
+
+  const memberRecord = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private struct AdminMemberNoticeHistoryRow'),
+  );
+  assert.match(memberRecord, /NavigationLink \{[\s\S]*AdminOrderDetailView\(admin: admin, session: session, order: order\)/);
+  assert.match(memberRecord, /Opens payment recovery, reconciliation and refund operations for this purchase/);
+
+  const orders = view.slice(
+    view.indexOf('private struct AdminOrdersView'),
+    view.indexOf('private struct AdminOrderDetailView'),
+  );
+  assert.match(orders, /let session: AuthSession/);
+  assert.match(orders, /AdminOrderReport\(/);
+  assert.match(orders, /Picker\("Reporting range", selection: \$range\)/);
+  assert.match(orders, /Picker\("Currency", selection: \$currency\)/);
+  assert.match(orders, /ordersAreCurrent/);
+  assert.match(orders, /Showing the last order snapshot\. Refresh before exporting or changing a payment\./);
+  assert.match(orders, /Section\(ordersAreCurrent \? "Revenue snapshot" : "Last revenue snapshot"\)/);
+  assert.match(orders, /\.disabled\(report\.rows\.isEmpty \|\| !ordersAreCurrent\)/);
+  assert.match(orders, /AdminOrderCSVDocument\(csv: report\.csv\)/);
+  assert.match(orders, /\.fileExporter\(/);
+  assert.match(orders, /\.refreshable \{ await admin\.refresh\(session: session\) \}/);
+  assert.match(orders, /\.onChange\(of: currencies\)[\s\S]*currency = "all"/);
+  assert.match(orders, /ViewThatFits\(in: \.horizontal\)/);
+});

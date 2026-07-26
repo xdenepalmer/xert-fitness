@@ -1621,6 +1621,7 @@ struct AdminCommandCentreView: View {
         case .orders:
             AdminOrdersView(
                 admin: admin,
+                session: session,
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) }
             )
         case .products:
@@ -2409,35 +2410,39 @@ private struct AdminMemberDetailView: View {
             accountHistoryEmpty("No purchases recorded.", icon: "creditcard")
         } else {
             ForEach(admin.memberOrderHistory) { order in
-                VStack(alignment: .leading, spacing: 7) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack {
-                            Text(order.products?.name ?? "Session pack")
-                                .font(.headline)
-                            Spacer()
-                            Text(order.displayAmount)
-                                .font(.subheadline.weight(.bold).monospacedDigit())
+                NavigationLink {
+                    AdminOrderDetailView(admin: admin, session: session, order: order)
+                } label: {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                Text(order.products?.name ?? "Session pack")
+                                    .font(.headline)
+                                Spacer()
+                                Text(order.displayAmount)
+                                    .font(.subheadline.weight(.bold).monospacedDigit())
+                            }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(order.products?.name ?? "Session pack")
+                                    .font(.headline)
+                                Text(order.displayAmount)
+                                    .font(.subheadline.weight(.bold).monospacedDigit())
+                            }
                         }
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(order.products?.name ?? "Session pack")
-                                .font(.headline)
-                            Text(order.displayAmount)
-                                .font(.subheadline.weight(.bold).monospacedDigit())
+                        HStack(spacing: 8) {
+                            historyStatus(order.displayStatus)
+                            Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(Color.xertPale.opacity(0.58))
                         }
-                    }
-                    HStack(spacing: 8) {
-                        historyStatus(order.displayStatus)
-                        Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
+                        Text(order.purchasedTerms)
                             .font(.caption)
-                            .foregroundStyle(Color.xertPale.opacity(0.58))
+                            .foregroundStyle(Color.xertPale.opacity(0.62))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(order.purchasedTerms)
-                        .font(.caption)
-                        .foregroundStyle(Color.xertPale.opacity(0.62))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 5)
                 }
-                .padding(.vertical, 5)
-                .accessibilityElement(children: .combine)
+                .accessibilityHint("Opens payment recovery, reconciliation and refund operations for this purchase")
             }
         }
     }
@@ -4100,25 +4105,54 @@ private struct AdminFinanceView: View {
 
 private struct AdminOrdersView: View {
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
     let onOpenTask: (XertOwnerTask) -> Void
     @State private var query = ""
     @State private var status = "all"
+    @State private var currency = "all"
+    @State private var range = AdminOrderRange.thirtyDays
+    @State private var exportDocument: AdminOrderCSVDocument?
+    @State private var isExporting = false
 
-    private var filteredOrders: [OrderItem] {
-        admin.orders.filter { order in
-            let matchesStatus = status == "all" || order.status == status
-            let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let haystack = [
-                order.id.uuidString, order.email ?? "", order.products?.name ?? "",
-                order.stripe_checkout_session_id ?? "", order.stripe_payment_intent_id ?? ""
-            ].joined(separator: " ").lowercased()
-            return matchesStatus && (needle.isEmpty || haystack.contains(needle))
-        }
+    private var report: AdminOrderReport {
+        AdminOrderReport(
+            orders: admin.orders,
+            query: query,
+            status: status,
+            currency: currency,
+            range: range
+        )
+    }
+
+    private var currencies: [String] {
+        Set(admin.orders.map {
+            let code = $0.currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+            return code.isEmpty ? "AUD" : code
+        }).sorted()
+    }
+
+    private var ordersAreCurrent: Bool {
+        admin.loadedSources.contains("orders") && !admin.refreshUnavailableSources.contains("orders")
+    }
+
+    private var ordersAreLoading: Bool {
+        admin.isLoading && !admin.loadedSources.contains("orders")
+    }
+
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
     }
 
     var body: some View {
         List {
-            Section("Order operations") {
+            Section("Report controls") {
+                Picker("Reporting range", selection: $range) {
+                    ForEach(AdminOrderRange.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 Picker("Order status", selection: $status) {
                     Text("All").tag("all")
                     Text("Paid").tag("paid")
@@ -4128,38 +4162,99 @@ private struct AdminOrdersView: View {
                 }
                 .pickerStyle(.menu)
                 .tint(Color.xertSteel)
-                .listRowBackground(Color.xertInk)
 
-                if filteredOrders.isEmpty {
-                    AdminEmptyState(icon: "creditcard", text: admin.orders.isEmpty ? "No orders yet." : "No matching orders.")
-                        .listRowBackground(Color.xertInk)
+                if currencies.count > 1 {
+                    Picker("Currency", selection: $currency) {
+                        Text("All currencies").tag("all")
+                        ForEach(currencies, id: \.self) { code in
+                            Text(code).tag(code.lowercased())
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Color.xertSteel)
                 }
-                ForEach(filteredOrders) { order in
-                    Button { onOpenTask(.order(order.id)) } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: order.isRecoverable ? "exclamationmark.arrow.circlepath" : "creditcard")
-                                .foregroundStyle(order.isRecoverable ? Color.orange : Color.xertSteel)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(order.products?.name ?? "Session pack").font(.headline)
-                            Text((order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
-                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.65))
-                            Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text(order.displayAmount).font(.subheadline.weight(.bold))
-                            Text(order.displayStatus.uppercased())
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(financeStatusColour(order.status))
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
-                        }
+            }
+            .listRowBackground(Color.xertInk)
+
+            if ordersAreLoading {
+                Section {
+                    HStack(spacing: 10) {
+                        ProgressView().tint(Color.xertSteel)
+                        Text("Loading complete order ledger...")
+                            .foregroundStyle(Color.xertPale.opacity(0.68))
                     }
-                    .foregroundStyle(Color.xertOffWhite)
+                    .frame(minHeight: 44)
+                }
+                .listRowBackground(Color.xertInk)
+            } else {
+                if !ordersAreCurrent {
+                    Section {
+                        Label(
+                            admin.orders.isEmpty
+                                ? "Orders are unavailable. Refresh before relying on revenue or payment state."
+                                : "Showing the last order snapshot. Refresh before exporting or changing a payment.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.plain)
                     .listRowBackground(Color.xertInk)
+                }
+
+                if ordersAreCurrent || !admin.orders.isEmpty {
+                    Section(ordersAreCurrent ? "Revenue snapshot" : "Last revenue snapshot") {
+                        LabeledContent("Matching orders", value: report.rows.count.formatted())
+                        LabeledContent("Paid orders", value: report.paidCount.formatted())
+                        if report.paidRevenue.isEmpty {
+                            LabeledContent("Paid revenue", value: "None")
+                        } else {
+                            ForEach(report.paidRevenue) { total in
+                                LabeledContent(
+                                    report.paidRevenue.count == 1 ? "Paid revenue" : "\(total.currency) paid revenue",
+                                    value: total.displayAmount
+                                )
+                            }
+                        }
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+
+                Section("Order operations") {
+                    if report.rows.isEmpty {
+                        AdminEmptyState(
+                            icon: "creditcard",
+                            text: admin.orders.isEmpty ? "No orders yet." : "No orders match these controls."
+                        )
+                        .listRowBackground(Color.xertInk)
+                    }
+                    ForEach(report.rows) { order in
+                        Button { onOpenTask(.order(order.id)) } label: {
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 12) {
+                                    orderIdentity(order)
+                                    Spacer(minLength: 8)
+                                    orderValue(order, includesChevron: true)
+                                }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    orderIdentity(order)
+                                    HStack {
+                                        orderValue(order, includesChevron: false)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(Color.xertSteel)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                        .foregroundStyle(Color.xertOffWhite)
+                        .buttonStyle(.plain)
+                        .disabled(!ordersAreCurrent)
+                        .accessibilityHint("Opens protected payment recovery, reconciliation and refund operations")
+                        .listRowBackground(Color.xertInk)
+                    }
                 }
             }
         }
@@ -4167,6 +4262,72 @@ private struct AdminOrdersView: View {
         .background(Color.xertNavy)
         .navigationTitle("Orders")
         .searchable(text: $query, prompt: "Email, pack or Stripe ID")
+        .refreshable { await admin.refresh(session: session) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminOrderCSVDocument(csv: report.csv)
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(report.rows.isEmpty || !ordersAreCurrent)
+                .accessibilityLabel("Export filtered order ledger CSV")
+                .accessibilityHint(
+                    ordersAreCurrent
+                        ? "Exports the current filtered payment ledger"
+                        : "Refresh orders before exporting"
+                )
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-orders-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result { admin.errorMessage = error.localizedDescription }
+        }
+        .onChange(of: currencies) { available in
+            let normalized = Set(available.map { $0.lowercased() })
+            if currency != "all" && !normalized.contains(currency) {
+                currency = "all"
+            }
+        }
+    }
+
+    private func orderIdentity(_ order: OrderItem) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: order.isRecoverable ? "exclamationmark.arrow.circlepath" : "creditcard")
+                .foregroundStyle(order.isRecoverable ? Color.orange : Color.xertSteel)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(order.products?.name ?? "Session pack").font(.headline)
+                Text((order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.65))
+                    .lineLimit(1)
+                Text(order.activityDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.55))
+            }
+        }
+    }
+
+    private func orderValue(_ order: OrderItem, includesChevron: Bool) -> some View {
+        HStack(spacing: 9) {
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(order.displayAmount).font(.subheadline.weight(.bold).monospacedDigit())
+                Text(order.displayStatus.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(financeStatusColour(order.status))
+            }
+            if includesChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.xertSteel)
+            }
+        }
     }
 
     private func financeStatusColour(_ value: String) -> Color {
@@ -4176,6 +4337,25 @@ private struct AdminOrdersView: View {
         case "failed": return .red
         default: return .orange
         }
+    }
+}
+
+private struct AdminOrderCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
     }
 }
 

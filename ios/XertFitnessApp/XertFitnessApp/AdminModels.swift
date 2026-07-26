@@ -267,6 +267,135 @@ enum AdminMemberHistoryTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum AdminOrderRange: String, CaseIterable, Identifiable {
+    case thirtyDays = "30 days"
+    case ninetyDays = "90 days"
+    case allTime = "All time"
+
+    var id: String { rawValue }
+
+    fileprivate var dayCount: Int? {
+        switch self {
+        case .thirtyDays: return 30
+        case .ninetyDays: return 90
+        case .allTime: return nil
+        }
+    }
+}
+
+struct AdminOrderCurrencyTotal: Identifiable, Equatable {
+    let currency: String
+    let cents: Int
+
+    var id: String { currency }
+
+    var displayAmount: String {
+        (Double(cents) / 100).formatted(.currency(code: currency))
+    }
+}
+
+struct AdminOrderReport {
+    let rows: [OrderItem]
+    let paidCount: Int
+    let paidRevenue: [AdminOrderCurrencyTotal]
+
+    init(
+        orders: [OrderItem],
+        query: String = "",
+        status: String = "all",
+        currency: String = "all",
+        range: AdminOrderRange = .thirtyDays,
+        now: Date = Date()
+    ) {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedCurrency = currency.lowercased()
+        let cutoff = range.dayCount.flatMap {
+            EventItem.calendar.date(
+                byAdding: .day,
+                value: -($0 - 1),
+                to: EventItem.calendar.startOfDay(for: now)
+            )
+        }
+        rows = orders.filter { order in
+            let orderCurrency = Self.currencyCode(order)
+            let haystack = [
+                order.id.uuidString,
+                order.email ?? "",
+                order.products?.name ?? "",
+                order.stripe_checkout_session_id ?? "",
+                order.stripe_payment_intent_id ?? ""
+            ].joined(separator: " ").lowercased()
+            return (status == "all" || order.status == status)
+                && (normalizedCurrency == "all" || orderCurrency.lowercased() == normalizedCurrency)
+                && (cutoff.map { order.created_at >= $0 } ?? true)
+                && (needle.isEmpty || haystack.contains(needle))
+        }
+        .sorted {
+            $0.created_at != $1.created_at
+                ? $0.created_at > $1.created_at
+                : $0.id.uuidString > $1.id.uuidString
+        }
+
+        let paid = rows.filter { $0.status == "paid" }
+        paidCount = paid.count
+        paidRevenue = Dictionary(grouping: paid) { Self.currencyCode($0) }
+            .map { code, orders in
+                AdminOrderCurrencyTotal(
+                    currency: code,
+                    cents: orders.reduce(0) { $0 + ($1.amount_cents ?? 0) }
+                )
+            }
+            .sorted { $0.currency < $1.currency }
+    }
+
+    var csv: String {
+        let header = [
+            "Created", "Paid", "Product", "Email", "Amount", "Currency",
+            "Purchased session credits", "Purchased validity days", "Status",
+            "Stripe Checkout Session", "Stripe Payment Intent", "Admin reconciled",
+            "Reconciled by admin ID", "Refunded", "Refund amount",
+            "Unused credits revoked", "Credits used before refund", "Future bookings cancelled"
+        ].joined(separator: ",")
+        let formatter = ISO8601DateFormatter()
+        let body = rows.map { order in
+            let refund = order.refund
+            return [
+                formatter.string(from: order.created_at),
+                order.paid_at.map { formatter.string(from: $0) } ?? "",
+                order.products?.name ?? "Session pack",
+                order.email ?? "",
+                String(format: "%.2f", Double(order.amount_cents ?? 0) / 100),
+                Self.currencyCode(order),
+                order.credit_total.map(String.init) ?? "",
+                order.credit_validity_days.map(String.init) ?? "",
+                order.status,
+                order.stripe_checkout_session_id ?? "",
+                order.stripe_payment_intent_id ?? "",
+                order.reconciled_at.map { formatter.string(from: $0) } ?? "",
+                order.reconciled_by?.uuidString ?? "",
+                order.refunded_at.map { formatter.string(from: $0) } ?? "",
+                order.refunded_amount_cents.map { String(format: "%.2f", Double($0) / 100) } ?? "",
+                refund.map { String($0.credits_revoked) } ?? "",
+                refund.map { String($0.credits_consumed) } ?? "",
+                refund.map { String($0.bookings_cancelled) } ?? ""
+            ].map(Self.csvField).joined(separator: ",")
+        }
+        return ([header] + body).joined(separator: "\n")
+    }
+
+    private static func currencyCode(_ order: OrderItem) -> String {
+        let code = order.currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        return code.isEmpty ? "AUD" : code
+    }
+
+    private static func csvField(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n")
+            ? "\"\(escaped)\""
+            : escaped
+    }
+}
+
 struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var id: UUID { session_id }
     let session_id: UUID
