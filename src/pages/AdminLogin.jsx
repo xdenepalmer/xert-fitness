@@ -38,8 +38,9 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Email</label>
+            <label htmlFor="admin-email" className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Email</label>
             <input
+              id="admin-email"
               type="email"
               required
               value={email}
@@ -53,8 +54,9 @@ export default function AdminLogin() {
           </div>
 
           <div>
-            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Password</label>
+            <label htmlFor="admin-password" className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Password</label>
             <input
+              id="admin-password"
               type="password"
               required
               value={password}

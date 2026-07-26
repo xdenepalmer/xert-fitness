@@ -7,6 +7,7 @@ import PTRequestForm from '@/components/public/PTRequestForm';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { classHasStarted } from '@/lib/bookingUi';
 
 const CLASS_COLORS = {
   'XERT Foundation': 'border-green-600/40 text-green-400',
@@ -20,6 +21,10 @@ const CLASS_COLORS = {
 function ClassCard({ session, bookingsEnabled, onBook }) {
   const colorClass = CLASS_COLORS[session.class_type] || 'border-xert-steel/40 text-xert-concrete/60';
   const isFull = session.status === 'full';
+  // Never offer a live request for a class that has already started, even if a
+  // stale client still holds it. The public enquiry RLS policy has no time guard.
+  const hasStarted = classHasStarted(session);
+  const canRequest = bookingsEnabled && !isFull && !hasStarted;
 
   return (
     <div className={`bg-xert-ink border-l-2 ${isFull ? 'border-xert-steel/30 opacity-60' : 'border-xert-red'} p-5 hover:bg-xert-charcoal transition-colors`}>
@@ -35,14 +40,14 @@ function ClassCard({ session, bookingsEnabled, onBook }) {
               </span>
             )}
             {isFull && (
-              <span className="font-body text-xs bg-xert-steel/30 text-xert-concrete/50 px-2 py-0.5 uppercase">Full</span>
+              <span className="font-body text-xs bg-xert-steel text-xert-ink px-2 py-0.5 uppercase">Full</span>
             )}
           </div>
           <h3 className="font-display text-xl text-xert-offwhite uppercase">{session.title}</h3>
         </div>
         {session.intensity_level && (
           <div className="text-right shrink-0">
-            <p className="font-body text-xs text-xert-concrete/40 uppercase">Intensity</p>
+            <p className="font-body text-xs text-xert-concrete/80 uppercase">Intensity</p>
             <p className="font-display text-sm text-xert-concrete/70 uppercase">{session.intensity_level}</p>
           </div>
         )}
@@ -50,23 +55,23 @@ function ClassCard({ session, bookingsEnabled, onBook }) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Date</p>
+          <p className="font-body text-xs text-xert-concrete/80 uppercase tracking-wider">Date</p>
           <p className="font-display text-sm text-xert-offwhite tabular-nums">
             {session.start_time ? new Date(session.start_time).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : 'TBC'}
           </p>
         </div>
         <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Time</p>
+          <p className="font-body text-xs text-xert-concrete/80 uppercase tracking-wider">Time</p>
           <p className="font-display text-sm text-xert-offwhite tabular-nums">
             {session.start_time ? new Date(session.start_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : 'TBC'}
           </p>
         </div>
         <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Duration</p>
+          <p className="font-body text-xs text-xert-concrete/80 uppercase tracking-wider">Duration</p>
           <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.duration_minutes || '—'}min</p>
         </div>
         <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Capacity</p>
+          <p className="font-body text-xs text-xert-concrete/80 uppercase tracking-wider">Capacity</p>
           <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.capacity || '—'}</p>
         </div>
       </div>
@@ -77,16 +82,22 @@ function ClassCard({ session, bookingsEnabled, onBook }) {
         </p>
       )}
 
-      {bookingsEnabled && !isFull && (
+      {canRequest && (
         <button onClick={() => onBook(session)}
           className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
           Request spot
         </button>
       )}
-      {bookingsEnabled && isFull && (
+      {bookingsEnabled && !hasStarted && isFull && (
         <button type="button" disabled aria-disabled="true"
           className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
           Class full
+        </button>
+      )}
+      {bookingsEnabled && hasStarted && (
+        <button type="button" disabled aria-disabled="true"
+          className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
+          Class started
         </button>
       )}
       {!bookingsEnabled && (
@@ -156,7 +167,7 @@ export default function SoftLaunchTimetable() {
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-display text-2xl text-xert-offwhite uppercase">Published Classes</h2>
               {!settings.bookings_enabled && (
-                <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">
+                <span className="font-body text-xs text-xert-concrete/70 border border-xert-steel/30 px-3 py-1 uppercase">
                   Bookings not yet open
                 </span>
               )}

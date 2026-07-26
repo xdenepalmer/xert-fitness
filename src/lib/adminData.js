@@ -25,7 +25,9 @@ import { apiErrorMessage } from './apiError.js';
 
 async function getLeadPage(table, filters = {}) {
   const pagination = normalizeLeadPage(filters.page, filters.pageSize);
-  let query = supabase.from(table).select('*', { count: 'exact' }).order('created_at', { ascending: false });
+  let query = supabase.from(table).select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
   const search = normalizeLeadSearch(filters.search);
   if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
@@ -113,9 +115,20 @@ export async function updateLegacyBookingNotes(id, adminNotes) {
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
 
+// The public timetable only advertises upcoming, bookable classes. Bounding the
+// query keeps a growing class catalogue from shipping to every visitor and stops
+// the enquiry path from offering live requests against finished classes.
+const PUBLIC_TIMETABLE_LIMIT = 100;
+
 export async function getClassSessions(publicOnly = false) {
   let query = supabase.from('class_sessions').select('*').order('start_time', { ascending: true });
-  if (publicOnly) query = query.eq('public_visible', true).eq('status', 'published');
+  if (publicOnly) {
+    query = query
+      .eq('public_visible', true)
+      .eq('status', 'published')
+      .gte('start_time', new Date().toISOString())
+      .limit(PUBLIC_TIMETABLE_LIMIT);
+  }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -211,6 +224,7 @@ export async function duplicateClassSession(session) {
 
 export async function getClassBookings(filters = {}) {
   const pageSize = 500;
+  const cutoff = filters.days ? adminAuditRangeStart(filters.days) : null;
   return collectAdminPages(async page => {
     const from = (page - 1) * pageSize;
     let query = supabase
@@ -220,6 +234,7 @@ export async function getClassBookings(filters = {}) {
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
     if (filters.status) query = query.eq('status', filters.status);
+    if (cutoff) query = query.gte('created_at', cutoff);
     const { data, count, error } = await query.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     return { rows: data || [], total: count || 0 };
@@ -242,6 +257,7 @@ export async function updateBookingStatus(id, status) {
 // pre-launch enquiry forms. The admin queue presents both together.
 export async function getMemberBookingRequests(filters = {}) {
   const pageSize = 500;
+  const cutoff = filters.days ? adminAuditRangeStart(filters.days) : null;
   const rows = await collectAdminPages(async page => {
     const from = (page - 1) * pageSize;
     let query = supabase
@@ -250,6 +266,7 @@ export async function getMemberBookingRequests(filters = {}) {
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.status) query = query.eq('status', filters.status);
+    if (cutoff) query = query.gte('created_at', cutoff);
     const { data, count, error } = await query.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     return { rows: data || [], total: count || 0 };
@@ -257,10 +274,15 @@ export async function getMemberBookingRequests(filters = {}) {
   const memberIds = [...new Set(rows.map(row => row.user_id).filter(Boolean))];
   if (memberIds.length === 0) return [];
 
-  const profiles = [];
+  const idChunks = [];
   for (let index = 0; index < memberIds.length; index += 100) {
-    const ids = memberIds.slice(index, index + 100);
-    const { data, error } = await supabase.from('profiles').select('id, full_name, email, phone').in('id', ids);
+    idChunks.push(memberIds.slice(index, index + 100));
+  }
+  const chunkResults = await Promise.all(
+    idChunks.map(ids => supabase.from('profiles').select('id, full_name, email, phone').in('id', ids))
+  );
+  const profiles = [];
+  for (const { data, error } of chunkResults) {
     if (error) throw new Error(error.message);
     profiles.push(...(data || []));
   }
@@ -296,7 +318,9 @@ export async function getPTRequests(filters = {}) {
   };
 
   const pageQuery = applyFilters(
-    supabase.from('private_session_requests').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+    supabase.from('private_session_requests').select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
   ).range(normalized.from, normalized.to);
   const statusCount = status => applyFilters(
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),
@@ -1528,6 +1552,9 @@ export async function getOperationsHealth() {
     healthCheck('credit-audit', 'Audited credit grants', async () => {
       const { count, error } = await supabase.from('admin_credit_grants').select('id', { count: 'exact', head: true });
       if (error) {
+        // Only a missing table means the audit upgrade is not installed. Surface
+        // any other failure (RLS denial, expired JWT, 5xx) as a real error.
+        if (!['42883', '42P01', 'PGRST202', 'PGRST205'].includes(error.code)) throw error;
         return {
           status: 'attention',
           detail: 'Manual credit grant auditing is not installed.',
@@ -1540,6 +1567,9 @@ export async function getOperationsHealth() {
     healthCheck('schema-contract', 'Database release contract', async () => {
       const { data, error } = await supabase.rpc('xert_public_capabilities');
       if (error) {
+        // Only a missing function means capability reporting is not installed.
+        // Surface any other failure so the operator can diagnose the real cause.
+        if (!['42883', '42P01', 'PGRST202', 'PGRST205'].includes(error.code)) throw error;
         return {
           status: 'attention',
           detail: 'Database capability reporting is not installed.',

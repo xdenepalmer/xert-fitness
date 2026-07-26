@@ -22,6 +22,19 @@ test('private, transactional and unknown routes are never indexed', () => {
   }
 });
 
+test('unmatched request paths never resolve to a foreign canonical origin', () => {
+  // RouteMetadata builds the canonical link and og:url with
+  // new URL(metadata.path, window.location.origin). WHATWG parsing treats a
+  // scheme-relative or backslash-authority path as a new origin, so the metadata
+  // path must never carry one.
+  const origin = 'https://xert-fitness.vercel.app';
+  for (const hostile of ['//evil.example/x', '/\\evil.example/x', '/\\/evil', 'https://evil.com/x', '/missing']) {
+    const meta = metadataForPath(hostile);
+    assert.equal(meta.indexable, false, hostile);
+    assert.equal(new URL(meta.path || '/', origin).origin, origin, hostile);
+  }
+});
+
 test('sitemap contains indexable routes and excludes private screens', async () => {
   const sitemap = await readFile(new URL('../public/sitemap.xml', import.meta.url), 'utf8');
   const robots = await readFile(new URL('../public/robots.txt', import.meta.url), 'utf8');

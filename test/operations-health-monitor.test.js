@@ -5,6 +5,24 @@ import test from 'node:test';
 import { orderOperationsHealthChecks } from '../src/lib/adminHealth.js';
 
 const monitor = readFileSync(new URL('../src/components/admin/OperationsHealth.jsx', import.meta.url), 'utf8');
+const adminData = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
+
+function healthCheckBlock(key) {
+  const start = adminData.indexOf(`healthCheck('${key}'`);
+  assert.notEqual(start, -1, `health check ${key} present`);
+  const nextCheck = adminData.indexOf('healthCheck(', start + 1);
+  return adminData.slice(start, nextCheck === -1 ? adminData.length : nextCheck);
+}
+
+test('credit-audit and schema-contract surface real errors instead of reporting a missing migration', () => {
+  for (const key of ['credit-audit', 'schema-contract']) {
+    const block = healthCheckBlock(key);
+    // Only the missing-object codes may be swallowed as "not installed"; any
+    // other error must be rethrown so healthCheck's catch shows the real cause.
+    assert.match(block, /\['42883', '42P01', 'PGRST202', 'PGRST205'\]\.includes\(error\.code\)/, key);
+    assert.match(block, /throw error/, key);
+  }
+});
 
 test('operations health retains results and rejects stale refresh responses', () => {
   assert.match(monitor, /requestInFlightRef\.current/);

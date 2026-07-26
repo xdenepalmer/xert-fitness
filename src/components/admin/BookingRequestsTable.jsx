@@ -45,9 +45,15 @@ export default function BookingRequestsTable() {
     setLoading(true);
     setLoadError('');
     try {
+      // Bound the queue server-side so the whole booking history never ships to
+      // the browser. Source and free-text search stay client-side below.
+      const serverFilters = {
+        days: daysFilter,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      };
       const [legacy, members] = await Promise.all([
-        getClassBookings(),
-        getMemberBookingRequests(),
+        getClassBookings(serverFilters),
+        getMemberBookingRequests(serverFilters),
       ]);
       const rows = [
         ...legacy.map(booking => ({
@@ -72,7 +78,7 @@ export default function BookingRequestsTable() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [daysFilter, statusFilter]);
 
   useEffect(() => { void load(); }, [load]);
 

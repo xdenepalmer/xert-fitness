@@ -16,6 +16,11 @@ function endTime(item) {
   return start + (Number.isFinite(duration) && duration > 0 ? duration * 60 * 1000 : DEFAULT_CLASS_DURATION_MS);
 }
 
+export function classHasStarted(session, now = Date.now()) {
+  const start = startTime(session);
+  return start !== null && start <= now;
+}
+
 export function activeBookingsBySession(bookings) {
   const active = new Map();
   for (const booking of bookings || []) {

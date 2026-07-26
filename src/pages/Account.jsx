@@ -75,6 +75,11 @@ export default function Account() {
   const [cancellationTarget, setCancellationTarget] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
+  // applySession runs for every auth event (token refresh, refocus) and hands us
+  // a fresh profile identity. A ref lets the sync effect skip in-progress edits
+  // without re-seeding the form when editing simply toggles off.
+  const editingProfileRef = useRef(editingProfile);
+  editingProfileRef.current = editingProfile;
   const [savingProfile, setSavingProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -136,6 +141,7 @@ export default function Account() {
   };
 
   useEffect(() => {
+    if (editingProfileRef.current) return;
     setProfileForm({
       full_name: profile?.full_name || '',
       phone: profile?.phone || ''

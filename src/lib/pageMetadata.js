@@ -29,16 +29,31 @@ const NOINDEX_PATHS = new Set([
   '/thank-you',
 ]);
 
+// Any fixed same-origin base works here; it only exists so we can reject a path
+// that WHATWG URL parsing would resolve to a foreign origin (scheme-relative
+// "//host" or its backslash equivalents) before it reaches a canonical link.
+const CANONICAL_BASE = 'https://xert-fitness.vercel.app';
+
+function sameOriginPath(candidate) {
+  try {
+    const url = new URL(candidate, CANONICAL_BASE);
+    return url.origin === CANONICAL_BASE ? url.pathname : '/';
+  } catch {
+    return '/';
+  }
+}
+
 export function metadataForPath(pathname) {
   const normalized = pathname !== '/' ? pathname.replace(/\/+$/, '') : '/';
+  const path = sameOriginPath(normalized);
   const publicMetadata = PUBLIC_METADATA[normalized];
-  if (publicMetadata) return { ...publicMetadata, indexable: true, path: normalized };
+  if (publicMetadata) return { ...publicMetadata, indexable: true, path };
 
   const isPrivate = normalized.startsWith('/admin/') || NOINDEX_PATHS.has(normalized);
   return {
     title: isPrivate ? `${SITE_NAME} | Member Access` : `Page Not Found | ${SITE_NAME}`,
     description: HOME_DESCRIPTION,
     indexable: false,
-    path: normalized,
+    path,
   };
 }
