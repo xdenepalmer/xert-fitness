@@ -8,6 +8,11 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Operator re-runs of `request_notes_health_consent.sql` no longer strip the
+  audited member-interest health reveal (26116). Re-runs of
+  `booking_decision_notifications_upgrade.sql` no longer restore the false
+  “credit returned” Skip notice. iPhone Lead detail matches Privacy/web:
+  deliberate Reveal consented health notes with audit clear on background.
 - iPhone Home Book CTAs (hero action, dashboard Book a class / Book another,
   credit-expiry Book, quick-action Book, Browse classes, View session packs,
   launch-guide packs/classes) fail closed to Explore Register interest while
@@ -403,6 +408,15 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 28. This batch — SQL operator downgrades + iOS health-reveal privacy parity
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (health) | Re-running `request_notes_health_consent.sql` replaced audited `admin_reveal_member_interest_health` (26116) with the unaudited bootstrap that never writes `member_interest_health_reveals` | Skip-if-audited install (`keeping audited…` when reveal table / `audit_event_id` shape exists) |
+| Operator SQL drift (notices) | Re-running `booking_decision_notifications_upgrade.sql` replaced waitlist-accurate Skip notice copy with the generic “credit returned” cancelled notice | Skip-if-newer install (`keeping newer…` when `Waitlist place removed` is present); InitPlan-safe receipt policy qual |
+| Privacy disclosure mismatch | Privacy + web Lead drawer offer deliberate injury reveal; iPhone Command Centre had no reveal path after column lockdown | iOS `admin_reveal_member_interest_health` + Lead detail Health notes section; clear on background / dismiss |
+
+No new migration for this batch (operator + iOS tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -579,3 +593,8 @@ show `installed = true` and `release_ready = true`, including
     CTAs say Register interest and open Explore (not Book); Account and
     `/booking` footers say Register interest; Campaign Attribution / Admin
     Audit CSV refuse double download and stay off while loading.
+31. **Operator SQL re-run + iOS health reveal** — Re-run
+    `request_notes_health_consent.sql` keeps the audited health-reveal RPC;
+    re-run `booking_decision_notifications_upgrade.sql` keeps waitlist Skip
+    notice accuracy; iPhone member-interest Lead detail can Reveal consented
+    health notes (web / Privacy parity) and clears the reveal off-screen.

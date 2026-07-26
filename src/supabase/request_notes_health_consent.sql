@@ -175,14 +175,35 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 
 select public.install_public_form_insert_policies();
 
--- Narrow reveal: injuries stay out of admin list/CSV selects; staff fetch them
--- only for a single lead when consent was recorded.
+-- Narrow reveal bootstrap: injuries stay out of admin list/CSV selects; staff
+-- fetch them only for a single lead when consent was recorded.
+-- Re-run safe: do not replace the audited member_interest_health_reveal_authz
+-- body (writes member_interest_health_reveals + audit_event_id).
+do $install_admin_reveal_member_interest_health$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_reveal_member_interest_health'
+    and pg_get_function_identity_arguments(p.oid) = 'p_lead_id uuid';
+  if v_def is not null
+     and (
+       v_def ilike '%member_interest_health_reveals%'
+       or v_def ilike '%audit_event_id%'
+       or to_regclass('public.member_interest_health_reveals') is not null
+     ) then
+    raise notice 'keeping audited admin_reveal_member_interest_health';
+  else
+    execute $fn$
 create or replace function public.admin_reveal_member_interest_health(p_lead_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 declare
   v_consent boolean;
   v_injuries text;
@@ -218,10 +239,14 @@ begin
     'injuries_or_limitations_optional', v_injuries
   );
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end;
+$install_admin_reveal_member_interest_health$;
 
 revoke all on function public.admin_reveal_member_interest_health(uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.admin_reveal_member_interest_health(uuid)
   to authenticated;
 

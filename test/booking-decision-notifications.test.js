@@ -22,6 +22,14 @@ test('staff booking decisions are atomic, retry-safe, and private', () => {
     assert.match(sql, /decided_by uuid references auth\.users\(id\) on delete set null/i);
     assert.match(sql, /values \('booking_decision_notifications'\)/i);
   }
+
+  // Operator re-run must not undo waitlist_skip_notice_accuracy notice copy.
+  const operator = read('../src/supabase/booking_decision_notifications_upgrade.sql');
+  assert.match(operator, /keeping newer admin_set_booking_status_with_notice/);
+  assert.match(
+    operator,
+    /booking_decision_receipts_admin_read[\s\S]*using\s*\(\s*\(\s*select\s+public\.is_admin\s*\(\s*\)\s*\)\s*\)/i,
+  );
 });
 
 test('web booking decisions deliver targeted push after the durable receipt', () => {

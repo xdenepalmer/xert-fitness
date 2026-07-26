@@ -103,6 +103,17 @@ struct AdminMemberEmergencyContactReveal: Codable, Hashable {
     let emergency_contact: AdminMemberEmergencyContact
 }
 
+/// Audited member-interest injury reveal (APP 3.3). Matches
+/// `admin_reveal_member_interest_health` JSON — unavailable when consent or
+/// notes are absent; audit fields only when a disclosure was recorded.
+struct AdminMemberInterestHealthReveal: Codable, Hashable {
+    let lead_id: UUID
+    let available: Bool
+    let audit_event_id: UUID?
+    let revealed_at: Date?
+    let injuries_or_limitations_optional: String?
+}
+
 struct AdminMemberNote: Identifiable, Codable, Hashable {
     let id: UUID
     let user_id: UUID

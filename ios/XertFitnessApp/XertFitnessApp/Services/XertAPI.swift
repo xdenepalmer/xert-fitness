@@ -702,6 +702,14 @@ final class XertAPI {
         )
     }
 
+    func adminRevealMemberInterestHealth(session auth: AuthSession, leadID: UUID) async throws -> AdminMemberInterestHealthReveal {
+        try await rpc(
+            path: "admin_reveal_member_interest_health",
+            body: AdminLeadHealthRevealRequest(p_lead_id: leadID),
+            auth: auth
+        )
+    }
+
     @discardableResult
     func adminGrantCredits(
         session auth: AuthSession,
@@ -2288,6 +2296,7 @@ private struct AdminMemberNotesRequest: Encodable {
 }
 private struct AdminMemberIDsRequest: Encodable { let p_user_ids: [UUID] }
 private struct AdminMemberIDRequest: Encodable { let p_user_id: UUID }
+private struct AdminLeadHealthRevealRequest: Encodable { let p_lead_id: UUID }
 private struct AdminCreditGrantRequest: Encodable {
     let p_user_id: UUID
     let p_sessions: Int

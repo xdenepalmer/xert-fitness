@@ -59,12 +59,17 @@ test('admin intake queues no longer use wildcard reads', async () => {
 });
 
 test('member-interest injuries stay out of list selects and reach admins only via deliberate reveal', async () => {
-  const [adminData, leadTable, migration, authz, authzMirror] = await Promise.all([
+  const [adminData, leadTable, migration, authz, authzMirror, requestNotesOperator, iosApi, iosStore, iosView, iosModels] = await Promise.all([
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/admin/LeadTable.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/20260726109000_request_notes_health_consent.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql', import.meta.url), 'utf8'),
     readFile(new URL('../src/supabase/member_interest_health_reveal_authz.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../src/supabase/request_notes_health_consent.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift', import.meta.url), 'utf8'),
   ]);
 
   assert.match(adminData, /admin_reveal_member_interest_health/);
@@ -76,6 +81,7 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.match(leadTable, /key=\{selectedLead\.id\}/);
   assert.match(migration, /create or replace function public\.admin_reveal_member_interest_health\(p_lead_id uuid\)/i);
   assert.match(migration, /v_consent is not true/);
+  assert.match(requestNotesOperator, /keeping audited admin_reveal_member_interest_health/);
   assert.equal(authz, authzMirror);
   assert.match(authz, /member_interest_health_reveals/);
   assert.match(authz, /revoke all on table public\.member_interest from public, anon, authenticated/i);
@@ -85,4 +91,15 @@ test('member-interest injuries stay out of list selects and reach admins only vi
   assert.match(authz, /'audit_event_id'/);
   assert.match(authz, /values \('member_interest_health_reveal_authz'\)/i);
   assert.match(authz, /if v_admin_id is null or not public\.is_admin\(\)/i);
+
+  // Privacy promises a deliberate reveal for member-interest injuries — iOS
+  // Command Centre must match the web Lead drawer, not leave owners without a path.
+  assert.match(iosModels, /struct AdminMemberInterestHealthReveal/);
+  assert.match(iosApi, /adminRevealMemberInterestHealth[\s\S]*admin_reveal_member_interest_health/);
+  assert.match(iosStore, /func revealMemberInterestHealth[\s\S]*revealingMemberInterestHealthLeadID/);
+  assert.match(iosStore, /func clearRevealedMemberInterestHealth\(\)/);
+  assert.match(iosView, /clearRevealedMemberInterestHealth\(\)/);
+  assert.match(iosView, /Label\("Reveal consented health notes"/);
+  assert.match(iosView, /No consented injury notes on this lead/);
+  assert.match(iosView, /\.privacySensitive\(\)/);
 });

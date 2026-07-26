@@ -23,6 +23,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var memberNotes: [AdminMemberNote] = []
     @Published private(set) var memberOnboardingSummary: AdminMemberOnboardingSummary?
     @Published private(set) var revealedMemberEmergencyContact: AdminMemberEmergencyContactReveal?
+    @Published private(set) var revealedMemberInterestHealth: AdminMemberInterestHealthReveal?
     @Published private(set) var loadedMemberDetailID: UUID?
     @Published private(set) var memberDetailUnavailableSources: [String] = []
     @Published private(set) var orders: [OrderItem] = []
@@ -81,6 +82,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var revealingEmergencyContactMemberID: UUID?
+    @Published private(set) var revealingMemberInterestHealthLeadID: AdminLeadIdentifier?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
@@ -106,6 +108,7 @@ final class AdminStore: ObservableObject {
     private var memberSearchGeneration: UInt = 0
     private var memberDetailGeneration: UInt = 0
     private var emergencyContactRevealGeneration: UInt = 0
+    private var memberInterestHealthRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
     private var rosterLoadGeneration: UInt = 0
     private var eventRosterLoadGeneration: UInt = 0
@@ -567,6 +570,38 @@ final class AdminStore: ObservableObject {
         emergencyContactRevealGeneration &+= 1
         revealingEmergencyContactMemberID = nil
         revealedMemberEmergencyContact = nil
+    }
+
+    func clearRevealedMemberInterestHealth() {
+        memberInterestHealthRevealGeneration &+= 1
+        revealingMemberInterestHealthLeadID = nil
+        revealedMemberInterestHealth = nil
+    }
+
+    func revealMemberInterestHealth(session: AuthSession, leadID: AdminLeadIdentifier) async {
+        guard revealingMemberInterestHealthLeadID == nil else { return }
+        guard let leadUUID = UUID(uuidString: leadID.value) else {
+            errorMessage = "This lead cannot be revealed until Member Interest health authz is available."
+            return
+        }
+        memberInterestHealthRevealGeneration &+= 1
+        let revealGeneration = memberInterestHealthRevealGeneration
+        revealingMemberInterestHealthLeadID = leadID
+        defer {
+            if memberInterestHealthRevealGeneration == revealGeneration {
+                revealingMemberInterestHealthLeadID = nil
+            }
+        }
+        do {
+            let reveal = try await api.adminRevealMemberInterestHealth(session: session, leadID: leadUUID)
+            guard memberInterestHealthRevealGeneration == revealGeneration else { return }
+            revealedMemberInterestHealth = reveal
+            XertHaptics.play(reveal.available ? .success : .warning)
+        } catch {
+            guard memberInterestHealthRevealGeneration == revealGeneration else { return }
+            errorMessage = error.localizedDescription
+            XertHaptics.play(.error)
+        }
     }
 
     func revealMemberEmergencyContact(session: AuthSession, memberID: UUID) async {

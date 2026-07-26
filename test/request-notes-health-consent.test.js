@@ -47,13 +47,23 @@ test('migration and operator mirror install notes health consent and admin revea
     read('../supabase/migrations/20260726109000_request_notes_health_consent.sql'),
     read('../src/supabase/request_notes_health_consent.sql'),
   ]);
-  assert.equal(upgrade, migration);
+  // Applied migration keeps the historical reveal body; the operator mirror is
+  // re-run safe and must not replace the audited authz shape.
   assert.match(migration, /add column if not exists health_info_consent/i);
   assert.match(migration, /private_session_requests/);
   assert.match(migration, /class_bookings/);
   assert.match(migration, /Rehab \/ return to fitness/);
   assert.match(migration, /values \('request_notes_health_consent'\)/i);
   assert.match(migration, /admin_reveal_member_interest_health/);
+  assert.match(upgrade, /add column if not exists health_info_consent/i);
+  assert.match(upgrade, /values \('request_notes_health_consent'\)/i);
+  assert.match(upgrade, /keeping audited admin_reveal_member_interest_health/);
+  assert.match(upgrade, /member_interest_health_reveals/);
+  assert.match(upgrade, /audit_event_id/);
+  assert.match(
+    upgrade,
+    /revoke all on function public\.admin_reveal_member_interest_health\(uuid\)\s+from public, anon, authenticated/i,
+  );
 });
 
 test('rehab-goal health consent migration and mirror stay aligned', async () => {

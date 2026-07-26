@@ -160,6 +160,7 @@ struct AdminCommandCentreView: View {
         .onChange(of: scenePhase) { phase in
             guard phase == .active else {
                 admin.clearRevealedMemberEmergencyContact()
+                admin.clearRevealedMemberInterestHealth()
                 return
             }
             guard
@@ -4821,6 +4822,45 @@ private struct AdminLeadDetailView: View {
                 }
             }
 
+            if pipeline == .members {
+                Section("Health notes") {
+                    if let reveal = admin.revealedMemberInterestHealth,
+                       reveal.lead_id.uuidString.lowercased() == lead.id.value.lowercased() {
+                        if reveal.available,
+                           let injuries = nonBlank(reveal.injuries_or_limitations_optional) {
+                            Text(injuries)
+                                .foregroundStyle(Color.xertOffWhite)
+                                .privacySensitive()
+                            if let revealedAt = reveal.revealed_at {
+                                Text("Revealed \(revealedAt.formatted(date: .abbreviated, time: .shortened)). This access was recorded.")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.xertPale.opacity(0.48))
+                            }
+                        } else {
+                            Text("No consented injury notes on this lead.")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.xertPale.opacity(0.58))
+                        }
+                    } else {
+                        Button {
+                            Task { await admin.revealMemberInterestHealth(session: session, leadID: lead.id) }
+                        } label: {
+                            HStack {
+                                Label("Reveal consented health notes", systemImage: "cross.case")
+                                Spacer()
+                                if admin.revealingMemberInterestHealthLeadID == lead.id {
+                                    ProgressView().tint(Color.xertSteel)
+                                }
+                            }
+                        }
+                        .disabled(admin.revealingMemberInterestHealthLeadID != nil || isSaving)
+                        Text("Injury details stay out of lists and CSV exports. Reveal only when you need them for safe follow-up. Every reveal is recorded.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.52))
+                    }
+                }
+            }
+
             Section("Pipeline") {
                 Picker("Status", selection: $status) {
                     ForEach(pipeline.statuses, id: \.self) { value in
@@ -4853,6 +4893,7 @@ private struct AdminLeadDetailView: View {
         .navigationTitle(lead.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isSaving) } }
+        .onDisappear { admin.clearRevealedMemberInterestHealth() }
     }
 
     @ViewBuilder

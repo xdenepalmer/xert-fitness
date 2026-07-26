@@ -291,6 +291,43 @@ test('operator RLS scripts keep admin policy quals as InitPlan-safe scalar subqu
   assert.equal(checked, 3);
 });
 
+test('older operator scripts cannot downgrade audited health reveal or waitlist skip notices', () => {
+  const requestNotes = scripts().find(entry => entry.name === 'request_notes_health_consent.sql');
+  assert.ok(requestNotes, 'missing request_notes_health_consent.sql');
+  assert.match(
+    requestNotes.sql,
+    /keeping audited admin_reveal_member_interest_health/,
+    'request_notes_health_consent.sql must skip replacing the audited health-reveal RPC',
+  );
+  assert.match(requestNotes.sql, /member_interest_health_reveals/);
+  assert.match(requestNotes.sql, /audit_event_id/);
+
+  const bookingDecision = scripts().find(entry => entry.name === 'booking_decision_notifications_upgrade.sql');
+  assert.ok(bookingDecision, 'missing booking_decision_notifications_upgrade.sql');
+  assert.match(
+    bookingDecision.sql,
+    /keeping newer admin_set_booking_status_with_notice/,
+    'booking_decision_notifications_upgrade.sql must skip replacing the waitlist-accurate notice RPC',
+  );
+  assert.match(bookingDecision.sql, /Waitlist place removed/);
+  // InitPlan-safe admin qual on the decision receipt policy (same class as
+  // admin_policy_scalar_subquery).
+  assert.match(
+    bookingDecision.sql,
+    /booking_decision_receipts_admin_read[\s\S]*using\s*\(\s*\(\s*select\s+public\.is_admin\s*\(\s*\)\s*\)\s*\)/i,
+  );
+
+  const accurate = scripts().find(entry => entry.name === 'waitlist_skip_notice_accuracy.sql');
+  assert.ok(accurate, 'missing waitlist_skip_notice_accuracy.sql');
+  assert.match(accurate.sql, /Waitlist place removed/);
+  assert.match(accurate.sql, /No class credit was charged/);
+
+  const authz = scripts().find(entry => entry.name === 'member_interest_health_reveal_authz.sql');
+  assert.ok(authz, 'missing member_interest_health_reveal_authz.sql');
+  assert.match(authz.sql, /insert into public\.member_interest_health_reveals/);
+  assert.match(authz.sql, /'audit_event_id'/);
+});
+
 test('README operator apply order includes the newest Ops Health migrations', () => {
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   for (const script of [

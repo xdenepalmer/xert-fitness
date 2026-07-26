@@ -47,9 +47,25 @@ revoke all on table public.booking_decision_receipts from public, anon, authenti
 drop policy if exists "booking_decision_receipts_admin_read" on public.booking_decision_receipts;
 create policy "booking_decision_receipts_admin_read"
   on public.booking_decision_receipts for select to authenticated
-  using (public.is_admin());
+  using ((select public.is_admin()));
 grant select on table public.booking_decision_receipts to authenticated;
 
+-- Re-run safe: waitlist_skip_notice_accuracy installs a newer notice body for
+-- waitlisted→cancelled (no false credit-return claim). Keep that shape.
+do $install_admin_set_booking_status_with_notice$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_set_booking_status_with_notice'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid, p_status text, p_request_id uuid';
+  if v_def is not null and v_def ilike '%Waitlist place removed%' then
+    raise notice 'keeping newer admin_set_booking_status_with_notice';
+  else
+    execute $fn$
 create or replace function public.admin_set_booking_status_with_notice(
   p_booking_id uuid,
   p_status text,
@@ -69,7 +85,7 @@ returns table (
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $body$
 declare
   v_booking public.session_bookings%rowtype;
   v_title text;
@@ -181,10 +197,15 @@ begin
     from public.booking_decision_receipts receipt
    where receipt.request_id = p_request_id;
 end;
-$$;
+$body$;
+
+$fn$;
+  end if;
+end;
+$install_admin_set_booking_status_with_notice$;
 
 revoke execute on function public.admin_set_booking_status_with_notice(uuid, text, uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.admin_set_booking_status_with_notice(uuid, text, uuid)
   to authenticated;
 
