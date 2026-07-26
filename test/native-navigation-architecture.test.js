@@ -394,7 +394,13 @@ test('owner command search ranks bounded exact records without replacing workspa
   assert.doesNotMatch(ownerSearch, /members =/);
 
   assert.match(ownerView, /private struct AdminWorkspaceSwitcher:[\s\S]*@ObservedObject var admin: AdminStore/);
-  assert.match(ownerView, /XertOwnerCommandIndex\.matches\([\s\S]*admin\.ownerMemberSearchResults[\s\S]*admin\.orders[\s\S]*admin\.products[\s\S]*admin\.events/);
+  assert.match(ownerView, /XertOwnerCommandIndex\.matches\([\s\S]*admin\.ownerMemberSearchResults[\s\S]*admin\.orders[\s\S]*admin\.products[\s\S]*admin\.events[\s\S]*admin\.bookingRequests[\s\S]*admin\.ptRequests/);
+  assert.match(ownerNavigation, /case bookingRequest = "Booking Requests"/);
+  assert.match(ownerNavigation, /case ptRequest = "PT Enquiries"/);
+  assert.match(ownerNavigation, /bookingRequests\.compactMap\(bookingRequestCandidate\)/);
+  assert.match(ownerNavigation, /ptRequests\.map\(ptRequestCandidate\)/);
+  assert.match(ownerNavigation, /route: XertOwnerRoute\(task: \.bookingRequest\(booking\.source, recordID\)\)/);
+  assert.match(ownerNavigation, /route: XertOwnerRoute\(task: \.ptRequest\(request\.id\)\)/);
   assert.match(ownerView, /ForEach\(XertOwnerRecordKind\.allCases\)/);
   assert.match(ownerView, /Button \{ onOpenRoute\(record\.route\) \}/);
   assert.match(ownerView, /\.task\(id: normalizedQuery\)[\s\S]*Task\.sleep\(nanoseconds: 300_000_000\)[\s\S]*searchOwnerMembers/);

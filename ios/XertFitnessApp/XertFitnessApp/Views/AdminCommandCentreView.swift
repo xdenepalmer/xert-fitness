@@ -2698,7 +2698,9 @@ private struct AdminWorkspaceSwitcher: View {
             orders: admin.orders,
             products: admin.products,
             events: admin.events,
-            classes: admin.dailyOperations
+            classes: admin.dailyOperations,
+            bookingRequests: admin.bookingRequests,
+            ptRequests: admin.ptRequests
         )
     }
 

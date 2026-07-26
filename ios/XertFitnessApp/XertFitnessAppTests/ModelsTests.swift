@@ -427,6 +427,8 @@ final class ModelsTests: XCTestCase {
         let eventID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a3"))
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a4"))
         let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a5"))
+        let bookingRequestID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a6"))
+        let ptRequestID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-0000000000a7"))
         let member = AdminMemberSummary(
             id: memberID,
             full_name: "Alex Runner",
@@ -508,6 +510,39 @@ final class ModelsTests: XCTestCase {
             public_request_count: 0,
             attendance_due: true
         )
+        let bookingRequest = AdminBookingRequest(
+            source: .enquiry,
+            recordID: bookingRequestID.uuidString,
+            memberBookingID: nil,
+            fullName: "Jordan Booker",
+            email: "booking.person@example.com",
+            phone: "0400000001",
+            status: "requested",
+            adminNotes: nil,
+            createdAt: Date(timeIntervalSince1970: 100),
+            creditBatchID: nil,
+            session: AdminBookingSession(
+                title: "XERT Engine",
+                start_time: Date(timeIntervalSince1970: 3_600),
+                coach_name: "Byron",
+                location_zone: "Main floor"
+            )
+        )
+        let ptRequest = AdminPTRequest(
+            id: ptRequestID,
+            full_name: "Casey Strong",
+            email: "casey@example.com",
+            phone: "0400000002",
+            requested_session_type: "Strength coaching",
+            preferred_day: "Tuesday",
+            preferred_time: "Morning",
+            training_goal: "Strength rebuild",
+            experience_level: "Intermediate",
+            notes: nil,
+            admin_notes: nil,
+            status: "requested",
+            created_at: Date(timeIntervalSince1970: 200)
+        )
 
         XCTAssertEqual(
             XertOwnerCommandIndex.matches(
@@ -583,6 +618,28 @@ final class ModelsTests: XCTestCase {
                 classes: [operation]
             ).first?.kind,
             .classSession
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "booking.person@example.com",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                bookingRequests: [bookingRequest]
+            ).map(\.route),
+            [XertOwnerRoute(task: .bookingRequest(.enquiry, bookingRequestID))]
+        )
+        XCTAssertEqual(
+            XertOwnerCommandIndex.matches(
+                query: "strength rebuild",
+                members: [],
+                orders: [],
+                products: [],
+                events: [],
+                ptRequests: [ptRequest]
+            ).map(\.route),
+            [XertOwnerRoute(task: .ptRequest(ptRequestID))]
         )
 
         let manyEvents = (0..<(XertOwnerCommandIndex.maximumResultsPerKind + 3)).map { index in

@@ -735,6 +735,8 @@ struct XertStripeLaunchRunway: Equatable {
 enum XertOwnerRecordKind: String, CaseIterable, Identifiable {
     case member = "Members"
     case classSession = "Today's Classes"
+    case bookingRequest = "Booking Requests"
+    case ptRequest = "PT Enquiries"
     case order = "Orders"
     case product = "Session Packs"
     case event = "Events"
@@ -768,13 +770,17 @@ enum XertOwnerCommandIndex {
         orders: [OrderItem],
         products: [AdminProduct],
         events: [AdminEvent],
-        classes: [AdminDailyOperation] = []
+        classes: [AdminDailyOperation] = [],
+        bookingRequests: [AdminBookingRequest] = [],
+        ptRequests: [AdminPTRequest] = []
     ) -> [XertOwnerRecordCommand] {
         let normalizedQuery = normalize(query)
         guard normalizedQuery.count >= 2 else { return [] }
 
         let candidates = members.map(memberCandidate)
             + classes.map(classCandidate)
+            + bookingRequests.compactMap(bookingRequestCandidate)
+            + ptRequests.map(ptRequestCandidate)
             + orders.map(orderCandidate)
             + products.map(productCandidate)
             + events.map(eventCandidate)
@@ -868,6 +874,65 @@ enum XertOwnerCommandIndex {
                 operation.location_zone,
                 operation.status,
                 operation.attendance_due ? "attendance roll call due" : "roster class",
+            ].compactMap { $0 }
+        )
+    }
+
+    private static func bookingRequestCandidate(_ booking: AdminBookingRequest) -> Candidate? {
+        guard let recordID = booking.routeRecordID else { return nil }
+        let classTitle = clean(booking.session?.title) ?? "Class not linked"
+        let status = booking.status.replacingOccurrences(of: "_", with: " ").capitalized
+        let source = booking.source == .member ? "Member credit" : "Public enquiry"
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .bookingRequest,
+                route: XertOwnerRoute(task: .bookingRequest(booking.source, recordID)),
+                title: booking.fullName,
+                subtitle: "\(classTitle) · \(status) · \(source)",
+                icon: booking.status == "requested"
+                    ? "person.crop.circle.badge.questionmark"
+                    : "person.crop.circle.badge.checkmark"
+            ),
+            title: booking.fullName,
+            identifiers: [recordID.uuidString, booking.recordID],
+            searchableValues: [
+                booking.fullName,
+                booking.email,
+                booking.phone,
+                booking.status,
+                booking.source.label,
+                booking.session?.title,
+                booking.session?.coach_name,
+                booking.session?.location_zone,
+            ].compactMap { $0 }
+        )
+    }
+
+    private static func ptRequestCandidate(_ request: AdminPTRequest) -> Candidate {
+        let sessionType = clean(request.requested_session_type) ?? "Private training"
+        let status = request.status.replacingOccurrences(of: "_", with: " ").capitalized
+        return Candidate(
+            command: XertOwnerRecordCommand(
+                kind: .ptRequest,
+                route: XertOwnerRoute(task: .ptRequest(request.id)),
+                title: request.displayName,
+                subtitle: "\(sessionType) · \(status)",
+                icon: request.isPending
+                    ? "figure.strengthtraining.traditional"
+                    : "checkmark.circle"
+            ),
+            title: request.displayName,
+            identifiers: [request.id.uuidString],
+            searchableValues: [
+                request.displayName,
+                request.email,
+                request.phone,
+                request.requested_session_type,
+                request.preferred_day,
+                request.preferred_time,
+                request.training_goal,
+                request.experience_level,
+                request.status,
             ].compactMap { $0 }
         )
     }
