@@ -1221,6 +1221,26 @@ test('native owner class work opens exact protected rosters from overview and se
   assert.match(store, /case \.classSession\(let sessionID\):[\s\S]*api\.adminDailyOperations/);
 });
 
+test('native class operations surface one freshness-gated run-next action', async () => {
+  const [view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  assert.match(models, /enum AdminClassOperationalPhase: Equatable/);
+  assert.match(models, /struct AdminClassOperationalFocus: Equatable/);
+  assert.match(models, /guard sourceIsCurrent else \{ return nil \}/);
+  assert.match(models, /if operation\.attendance_due \{[\s\S]*return \(0, operation\)/);
+  assert.match(models, /operation\.start_time <= now, assumedEnd > now[\s\S]*return \(1, operation\)/);
+  assert.match(models, /operation\.start_time > now[\s\S]*return \(2, operation\)/);
+  assert.match(view, /priorityQueue[\s\S]*nextClassFocus[\s\S]*shiftBriefing/);
+  assert.match(view, /accessibilityIdentifier\("owner\.nextClassFocus"\)/);
+  assert.match(view, /dashboardDataState\(for: "today's classes"\) == \.current/);
+  assert.match(view, /nextClassActionTitle\(focus, hasSetupIssues:/);
+  assert.match(view, /Section\(operationalFocus == nil \? "Today" : "Run next"\)/);
+  assert.match(view, /Section\("Later today"\)/);
+});
+
 test('native roll call requires explicit complete attendance and provides compact batch controls', async () => {
   const [view, models] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),

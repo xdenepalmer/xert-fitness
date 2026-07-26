@@ -598,6 +598,60 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var activeCount: Int { requested_count + confirmed_count }
 }
 
+enum AdminClassOperationalPhase: Equatable {
+    case attendanceDue
+    case live
+    case upcoming
+}
+
+struct AdminClassOperationalFocus: Equatable {
+    let operation: AdminDailyOperation
+    let phase: AdminClassOperationalPhase
+
+    static func resolve(
+        operations: [AdminDailyOperation],
+        sourceIsCurrent: Bool,
+        now: Date = Date()
+    ) -> Self? {
+        guard sourceIsCurrent else { return nil }
+
+        let candidates = operations.compactMap { operation -> (Int, AdminDailyOperation)? in
+            let status = operation.status.lowercased()
+
+            if operation.attendance_due {
+                return (0, operation)
+            }
+            guard ["published", "full"].contains(status) else { return nil }
+
+            let assumedEnd = operation.end_time
+                ?? operation.start_time.addingTimeInterval(3 * 60 * 60)
+            if operation.start_time <= now, assumedEnd > now {
+                return (1, operation)
+            }
+            if operation.start_time > now {
+                return (2, operation)
+            }
+            return nil
+        }
+
+        guard let selected = candidates.min(by: { lhs, rhs in
+            lhs.0 == rhs.0
+                ? lhs.1.start_time < rhs.1.start_time
+                : lhs.0 < rhs.0
+        }) else {
+            return nil
+        }
+
+        let phase: AdminClassOperationalPhase
+        switch selected.0 {
+        case 0: phase = .attendanceDue
+        case 1: phase = .live
+        default: phase = .upcoming
+        }
+        return Self(operation: selected.1, phase: phase)
+    }
+}
+
 enum AdminDailyClassSetupIssueKind: String, Equatable, Hashable, CaseIterable {
     case missingCoach
     case missingLocation

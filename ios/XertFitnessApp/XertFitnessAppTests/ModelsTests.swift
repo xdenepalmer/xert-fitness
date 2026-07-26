@@ -1499,6 +1499,124 @@ final class ModelsTests: XCTestCase {
         ).issues.isEmpty)
     }
 
+    func testClassOperationalFocusPrioritisesDueAttendanceThenLiveThenUpcoming() {
+        let now = queenslandDate(2026, 7, 27, 9, 0)
+
+        func operation(
+            title: String,
+            startOffset: TimeInterval,
+            endOffset: TimeInterval? = nil,
+            status: String = "published",
+            attendanceDue: Bool = false
+        ) -> AdminDailyOperation {
+            AdminDailyOperation(
+                session_id: UUID(),
+                title: title,
+                class_type: "strength",
+                start_time: now.addingTimeInterval(startOffset),
+                end_time: endOffset.map { now.addingTimeInterval($0) },
+                status: status,
+                capacity: 10,
+                coach_name: "Coach",
+                location_zone: "Main floor",
+                booking_mode: "instant",
+                requested_count: 0,
+                confirmed_count: 5,
+                waitlist_count: 0,
+                attended_count: 0,
+                no_show_count: 0,
+                public_request_count: 0,
+                attendance_due: attendanceDue
+            )
+        }
+
+        let overdue = operation(
+            title: "Previous class",
+            startOffset: -7_200,
+            endOffset: -3_600,
+            attendanceDue: true
+        )
+        let live = operation(title: "Live class", startOffset: -900, endOffset: 2_700)
+        let upcoming = operation(title: "Next class", startOffset: 3_600, endOffset: 7_200)
+
+        var focus = AdminClassOperationalFocus.resolve(
+            operations: [upcoming, live, overdue],
+            sourceIsCurrent: true,
+            now: now
+        )
+        XCTAssertEqual(focus?.operation.id, overdue.id)
+        XCTAssertEqual(focus?.phase, .attendanceDue)
+
+        focus = AdminClassOperationalFocus.resolve(
+            operations: [upcoming, live],
+            sourceIsCurrent: true,
+            now: now
+        )
+        XCTAssertEqual(focus?.operation.id, live.id)
+        XCTAssertEqual(focus?.phase, .live)
+
+        focus = AdminClassOperationalFocus.resolve(
+            operations: [upcoming],
+            sourceIsCurrent: true,
+            now: now
+        )
+        XCTAssertEqual(focus?.operation.id, upcoming.id)
+        XCTAssertEqual(focus?.phase, .upcoming)
+    }
+
+    func testClassOperationalFocusRejectsStaleCancelledAndFinishedClasses() {
+        let now = queenslandDate(2026, 7, 27, 9, 0)
+        let cancelled = AdminDailyOperation(
+            session_id: UUID(),
+            title: "Cancelled",
+            class_type: "strength",
+            start_time: now.addingTimeInterval(3_600),
+            end_time: now.addingTimeInterval(7_200),
+            status: "cancelled",
+            capacity: 10,
+            coach_name: "Coach",
+            location_zone: "Main floor",
+            booking_mode: "instant",
+            requested_count: 0,
+            confirmed_count: 5,
+            waitlist_count: 0,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 0,
+            attendance_due: false
+        )
+        let finished = AdminDailyOperation(
+            session_id: UUID(),
+            title: "Finished",
+            class_type: "strength",
+            start_time: now.addingTimeInterval(-7_200),
+            end_time: now.addingTimeInterval(-3_600),
+            status: "published",
+            capacity: 10,
+            coach_name: "Coach",
+            location_zone: "Main floor",
+            booking_mode: "instant",
+            requested_count: 0,
+            confirmed_count: 5,
+            waitlist_count: 0,
+            attended_count: 0,
+            no_show_count: 0,
+            public_request_count: 0,
+            attendance_due: false
+        )
+
+        XCTAssertNil(AdminClassOperationalFocus.resolve(
+            operations: [cancelled, finished],
+            sourceIsCurrent: true,
+            now: now
+        ))
+        XCTAssertNil(AdminClassOperationalFocus.resolve(
+            operations: [finished],
+            sourceIsCurrent: false,
+            now: now
+        ))
+    }
+
     func testEmergencyPausePlanDiagnosesEveryLiveStateAndPreservesUnrelatedSettings() {
         let id = UUID()
         let settings = AdminPlatformSettings(

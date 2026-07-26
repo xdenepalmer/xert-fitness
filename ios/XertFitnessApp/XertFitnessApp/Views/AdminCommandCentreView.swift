@@ -811,6 +811,7 @@ struct AdminCommandCentreView: View {
                     }
                 }
                 priorityQueue
+                nextClassFocus
                 shiftBriefing
                 stripeLaunchRunway
                 incidentControl(session: session)
@@ -824,6 +825,7 @@ struct AdminCommandCentreView: View {
             }
             .frame(maxWidth: 880)
             .padding(.horizontal, 18)
+            .padding(.top, 12)
             .padding(.bottom, 32)
             .frame(maxWidth: .infinity)
         }
@@ -2333,6 +2335,170 @@ struct AdminCommandCentreView: View {
                 .accessibilityHint("Opens today's class desk")
             }
             todayClassContent
+        }
+    }
+
+    private var nextClassFocus: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            if let focus = AdminClassOperationalFocus.resolve(
+                operations: admin.dailyOperations,
+                sourceIsCurrent: dashboardDataState(for: "today's classes") == .current,
+                now: context.date
+            ) {
+                let operation = focus.operation
+                let setupIssues = dailyClassReadiness.issues(for: operation.id)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            nextClassHeading
+                            Spacer(minLength: 8)
+                            nextClassPhaseLabel(focus)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            nextClassHeading
+                            nextClassPhaseLabel(focus)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(operation.title)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color.xertOffWhite)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(nextClassScheduleLine(operation))
+                            .font(.subheadline)
+                            .foregroundStyle(Color.xertPale.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 18) {
+                            nextClassMetric(operation.confirmed_count, label: "Confirmed")
+                            nextClassMetric(
+                                operation.requested_count + operation.public_request_count,
+                                label: "Requested"
+                            )
+                            nextClassMetric(operation.waitlist_count, label: "Waiting")
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            nextClassMetric(operation.confirmed_count, label: "Confirmed")
+                            nextClassMetric(
+                                operation.requested_count + operation.public_request_count,
+                                label: "Requested"
+                            )
+                            nextClassMetric(operation.waitlist_count, label: "Waiting")
+                        }
+                    }
+
+                    if let setupSummary = dailyClassReadiness.summary(for: operation.id) {
+                        Label(setupSummary, systemImage: "wrench.and.screwdriver.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Button {
+                        let task: XertOwnerTask = setupIssues.isEmpty
+                            ? .classSession(operation.id)
+                            : .classSetup(operation.id)
+                        openOwnerRouteWithFeedback(XertOwnerRoute(task: task))
+                    } label: {
+                        Label(
+                            nextClassActionTitle(focus, hasSetupIssues: !setupIssues.isEmpty),
+                            systemImage: setupIssues.isEmpty
+                                ? (focus.phase == .attendanceDue ? "checklist" : "person.3")
+                                : "wrench.and.screwdriver.fill"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(setupIssues.isEmpty ? Color.xertSteel : Color.orange)
+                    .accessibilityHint(
+                        setupIssues.isEmpty
+                            ? "Opens the exact class roster"
+                            : "Opens the exact class setup editor"
+                    )
+                }
+                .padding(16)
+                .xertCardStyle()
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("owner.nextClassFocus")
+            }
+        }
+    }
+
+    private var nextClassHeading: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            adminHeading("Run next")
+            Text("The highest-priority class action right now")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.6))
+        }
+    }
+
+    private func nextClassPhaseLabel(_ focus: AdminClassOperationalFocus) -> some View {
+        let text: String
+        let icon: String
+        let colour: Color
+        switch focus.phase {
+        case .attendanceDue:
+            text = "ROLL CALL DUE"
+            icon = "checklist"
+            colour = .orange
+        case .live:
+            text = "IN PROGRESS"
+            icon = "figure.run"
+            colour = .green
+        case .upcoming:
+            text = focus.operation.start_time.formatted(.relative(presentation: .named))
+                .uppercased()
+            icon = "clock"
+            colour = Color.xertSteel
+        }
+        return Label(text, systemImage: icon)
+            .font(.caption2.weight(.black))
+            .foregroundStyle(colour)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(nextClassPhaseAccessibilityLabel(focus))
+    }
+
+    private func nextClassPhaseAccessibilityLabel(_ focus: AdminClassOperationalFocus) -> String {
+        switch focus.phase {
+        case .attendanceDue: return "Roll call due"
+        case .live: return "Class in progress"
+        case .upcoming:
+            return "Starts \(focus.operation.start_time.formatted(.relative(presentation: .named)))"
+        }
+    }
+
+    private func nextClassScheduleLine(_ operation: AdminDailyOperation) -> String {
+        let schedule = operation.start_time.formatted(date: .omitted, time: .shortened)
+        let assignment = classAssignmentSummary(operation)
+        return "\(schedule) · \(assignment)"
+    }
+
+    private func nextClassMetric(_ value: Int, label: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text("\(value)")
+                .font(.headline.weight(.black))
+                .foregroundStyle(Color.xertOffWhite)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.62))
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func nextClassActionTitle(
+        _ focus: AdminClassOperationalFocus,
+        hasSetupIssues: Bool
+    ) -> String {
+        if hasSetupIssues { return "Fix class setup" }
+        switch focus.phase {
+        case .attendanceDue: return "Complete roll call"
+        case .live: return "Open live roster"
+        case .upcoming: return "Open class roster"
         }
     }
 
@@ -4933,10 +5099,22 @@ private struct AdminClassesView: View {
     private var waitlistIsLoading: Bool {
         admin.isLoading && !admin.loadedSources.contains("waitlists")
     }
+    private var operationalFocus: AdminClassOperationalFocus? {
+        AdminClassOperationalFocus.resolve(
+            operations: admin.dailyOperations,
+            sourceIsCurrent: operationsAreCurrent
+        )
+    }
+    private var remainingOperations: [AdminDailyOperation] {
+        guard let focusID = operationalFocus?.operation.id else {
+            return admin.dailyOperations
+        }
+        return admin.dailyOperations.filter { $0.id != focusID }
+    }
 
     var body: some View {
         List {
-            Section("Today") {
+            Section(operationalFocus == nil ? "Today" : "Run next") {
                 if operationsAreLoading {
                     operationalLoadingRow("Loading today's classes…")
                 } else {
@@ -4950,22 +5128,19 @@ private struct AdminClassesView: View {
                     if admin.dailyOperations.isEmpty, operationsAreCurrent {
                         operationalEmptyRow("No classes are scheduled today.", icon: "calendar")
                     }
-                    ForEach(admin.dailyOperations) { item in
-                        NavigationLink {
-                            AdminClassRosterView(admin: admin, session: session, operation: item)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.title).font(.headline)
-                                Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
-                                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                                if item.attendance_due {
-                                    Label("Roll call is due", systemImage: "checklist")
-                                        .font(.caption.weight(.bold)).foregroundStyle(.orange)
-                                }
-                            }
-                            .foregroundStyle(Color.xertOffWhite)
+                    if let focus = operationalFocus {
+                        classDeskLink(focus.operation, focus: focus)
+                    } else {
+                        ForEach(admin.dailyOperations) { item in
+                            classDeskLink(item)
                         }
-                        .listRowBackground(Color.xertInk)
+                    }
+                }
+            }
+            if operationalFocus != nil, !remainingOperations.isEmpty {
+                Section("Later today") {
+                    ForEach(remainingOperations) { item in
+                        classDeskLink(item)
                     }
                 }
             }
@@ -5034,6 +5209,48 @@ private struct AdminClassesView: View {
             Button("Cancel", role: .cancel) {}
         } message: { item in
             Text("This confirms the next FIFO waitlisted member into \(item.title), reserves one available credit, and creates a private member notice. Apple push is requested for enabled devices.")
+        }
+    }
+
+    private func classDeskLink(
+        _ item: AdminDailyOperation,
+        focus: AdminClassOperationalFocus? = nil
+    ) -> some View {
+        NavigationLink {
+            AdminClassRosterView(admin: admin, session: session, operation: item)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                if let focus {
+                    Label(
+                        classDeskFocusLabel(focus),
+                        systemImage: focus.phase == .attendanceDue ? "checklist" : "clock"
+                    )
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(focus.phase == .attendanceDue ? Color.orange : Color.xertSteel)
+                }
+                Text(item.title).font(.headline)
+                Text("\(item.start_time.formatted(date: .omitted, time: .shortened)) · \(item.activeCount) active · \(item.waitlist_count) waiting")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+                if item.attendance_due, focus?.phase != .attendanceDue {
+                    Label("Roll call is due", systemImage: "checklist")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .foregroundStyle(Color.xertOffWhite)
+            .padding(.vertical, focus == nil ? 0 : 4)
+        }
+        .listRowBackground(Color.xertInk)
+        .accessibilityHint("Opens this class roster")
+    }
+
+    private func classDeskFocusLabel(_ focus: AdminClassOperationalFocus) -> String {
+        switch focus.phase {
+        case .attendanceDue: return "ROLL CALL DUE"
+        case .live: return "IN PROGRESS"
+        case .upcoming: return "UP NEXT"
         }
     }
 
