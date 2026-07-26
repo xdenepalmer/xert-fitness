@@ -328,7 +328,7 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   for (const label of ['Find a member', 'Create a class', 'Publish a notice', 'Create a session pack']) {
     assert.match(view, new RegExp(label));
   }
-  assert.match(view, /sheet\(item: \$presentedQuickAction\)/);
+  assert.match(view, /sheet\(item: \$presentedQuickAction, onDismiss:/);
   assert.match(
     view,
     /AdminClassEditor\([\s\S]*classSession: nil,[\s\S]*mutationAllowed: admin\.loadedSources\.contains\("full timetable"\)/,
@@ -597,6 +597,61 @@ test('native owner incident control performs a minimal verified emergency pause'
   assert.doesNotMatch(activationGuard, /new\.payments_enabled is false[\s\S]*raise exception/i);
   assert.match(contentAudit, /admin_settings_audit_admin_change/i);
   assert.doesNotMatch(bookingGuard, /delete from public\.session_bookings|update public\.session_bookings/i);
+});
+
+test('native emergency pause becomes a guarded communication and recovery runbook', async () => {
+  const [view, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+  const incident = view.slice(
+    view.indexOf('private func incidentControl(session: AuthSession)'),
+    view.indexOf('private var quickTools: some View'),
+  );
+  const composer = view.slice(
+    view.indexOf('private struct AdminAnnouncementComposer: View'),
+    view.indexOf('private enum AdminOwnerQuickAction'),
+  );
+  const template = models.slice(
+    models.indexOf('struct AdminAnnouncementDraft'),
+    models.indexOf('struct AdminAnnouncementPushSummary'),
+  );
+
+  assert.match(template, /static func memberOperationsPaused\(\) -> Self/);
+  assert.match(template, /static let memberOperationsPausedTitle = "Bookings and checkout temporarily paused"/);
+  assert.match(template, /Bookings and checkout temporarily paused/);
+  assert.match(template, /new bookings, waitlist joins and session-pack checkout/);
+  assert.match(template, /Existing bookings remain confirmed/);
+  assert.match(template, /draft\.tone = "urgent"/);
+  assert.doesNotMatch(template, /resolved|fixed|safe to book/i);
+
+  assert.match(view, /@State private var quickNoticeDraft: AdminAnnouncementDraft\?/);
+  assert.match(view, /\.sheet\(item: \$presentedQuickAction, onDismiss: \{\s*quickNoticeDraft = nil/);
+  assert.match(view, /private func presentNoticeQuickAction\(draft: AdminAnnouncementDraft\? = nil\)/);
+  assert.match(view, /initialDraft: quickNoticeDraft/);
+  assert.match(composer, /initialDraft: AdminAnnouncementDraft\? = nil/);
+  assert.match(composer, /announcement\.map\(AdminAnnouncementDraft\.init\)\s*\?\? initialDraft\s*\?\? AdminAnnouncementDraft\(\)/);
+  assert.match(composer, /Publish this member notice now\?/);
+  assert.match(composer, /Publish to members/);
+
+  assert.match(incident, /if plan\.state == \.paused \{\s*incidentRunbook/);
+  assert.match(incident, /INCIDENT RUNBOOK/);
+  assert.match(incident, /Member activity protected/);
+  assert.match(incident, /Tell members what changed/);
+  assert.match(incident, /Investigate the cause/);
+  assert.match(incident, /Reopen deliberately/);
+  assert.match(incident, /accessibilityIdentifier\("owner\.incidentRunbook"\)/);
+  assert.match(incident, /presentNoticeQuickAction\(draft: \.memberOperationsPaused\(\)\)/);
+  assert.match(incident, /private var memberOperationsPauseNoticeIsLive: Bool/);
+  assert.match(incident, /notice\.stateLabel == "Live"/);
+  assert.match(incident, /age >= 0, age <= 86_400/);
+  assert.match(incident, /Review live update/);
+  assert.match(incident, /openWorkspaceWithFeedback\(\.notices\)/);
+  assert.match(incident, /openWorkspaceWithFeedback\(\.health\)/);
+  assert.match(incident, /openWorkspaceWithFeedback\(\.controls\)/);
+  assert.match(incident, /Refresh notices/);
+  assert.match(incident, /Task \{ await admin\.refresh\(session: session\) \}/);
+  assert.doesNotMatch(incident, /publishAnnouncement|saveAnnouncement/);
 });
 
 test('native Admin Audit attributes operators and includes protected commerce recovery', async () => {

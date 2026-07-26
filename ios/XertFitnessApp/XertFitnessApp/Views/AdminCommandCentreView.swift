@@ -66,6 +66,7 @@ struct AdminCommandCentreView: View {
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
     @State private var presentedQuickAction: AdminOwnerQuickAction?
+    @State private var quickNoticeDraft: AdminAnnouncementDraft?
     @State private var platformDraftSnapshot: AdminPlatformSettings?
     @State private var pendingOwnerExitRequest: OwnerExitRequest?
     @State private var showingPlatformExitConfirmation = false
@@ -188,7 +189,9 @@ struct AdminCommandCentreView: View {
                 AdminOwnerTaskSheet(admin: admin, session: session, task: task)
             }
         }
-        .sheet(item: $presentedQuickAction) { action in
+        .sheet(item: $presentedQuickAction, onDismiss: {
+            quickNoticeDraft = nil
+        }) { action in
             if let session = authorizedOwnerSession {
                 quickActionSheet(action, session: session)
             }
@@ -610,6 +613,11 @@ struct AdminCommandCentreView: View {
         presentedQuickAction = action
     }
 
+    private func presentNoticeQuickAction(draft: AdminAnnouncementDraft? = nil) {
+        quickNoticeDraft = draft
+        presentQuickAction(.newNotice)
+    }
+
     private func refreshOwnerData(session: AuthSession, announcesResult: Bool = true) {
         guard !admin.isLoading, !admin.isSavingSettings, !isSavingPlatformExit else { return }
         XertHaptics.play(.softImpact)
@@ -657,6 +665,7 @@ struct AdminCommandCentreView: View {
         case .newNotice:
             AdminAnnouncementComposer(
                 announcement: nil,
+                initialDraft: quickNoticeDraft,
                 isSaving: admin.announcementMutationID != nil,
                 isPublishing: admin.isPublishingAnnouncement,
                 onSave: { draft in
@@ -1081,6 +1090,10 @@ struct AdminCommandCentreView: View {
                 .foregroundStyle(Color.xertPale.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
+            if plan.state == .paused {
+                incidentRunbook
+            }
+
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     incidentControlActions(plan: plan, session: session)
@@ -1180,15 +1193,155 @@ struct AdminCommandCentreView: View {
             .tint(Color.orange)
             .disabled(admin.isLoading || admin.isSavingSettings)
         } else {
+            if memberOperationsPauseNoticeIsLive {
+                Button {
+                    openWorkspaceWithFeedback(.notices)
+                } label: {
+                    Label("Review live update", systemImage: "checkmark.bubble.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.green)
+                .accessibilityHint("Opens the live member incident notice")
+            } else if quickMutationIsAvailable(source: "member notices") {
+                Button {
+                    presentNoticeQuickAction(draft: .memberOperationsPaused())
+                } label: {
+                    Label("Draft member update", systemImage: "bell.badge.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+                .accessibilityHint("Opens an editable incident notice without publishing it")
+            } else {
+                Button {
+                    Task { await admin.refresh(session: session) }
+                } label: {
+                    Label(
+                        admin.isLoading ? "Refreshing..." : "Refresh notices",
+                        systemImage: "arrow.clockwise"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.orange)
+                .disabled(admin.isLoading || admin.isSavingSettings)
+                .accessibilityHint("Refreshes live data before preparing a member update")
+            }
+
+            Button {
+                openWorkspaceWithFeedback(.health)
+            } label: {
+                Label("Investigate health", systemImage: "stethoscope")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.xertSteel)
+
             Button {
                 openWorkspaceWithFeedback(.controls)
             } label: {
-                Label("Review launch controls", systemImage: "switch.2")
+                Label("Reopen controls", systemImage: "switch.2")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)
             .tint(Color.xertSteel)
             .disabled(admin.isSavingSettings)
+        }
+    }
+
+    private var incidentRunbook: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("INCIDENT RUNBOOK")
+                .font(.caption2.weight(.black))
+                .foregroundStyle(Color.xertPale.opacity(0.48))
+
+            incidentRunbookStep(
+                icon: "checkmark.circle.fill",
+                color: .green,
+                title: "Member activity protected",
+                detail: "New bookings, waitlists and checkout are paused."
+            )
+            incidentRunbookStep(
+                icon: memberOperationsPauseNoticeIsLive ? "checkmark.circle.fill" : "2.circle.fill",
+                color: incidentNoticeStepColor,
+                title: incidentNoticeStepTitle,
+                detail: incidentNoticeStepDetail
+            )
+            incidentRunbookStep(
+                icon: "3.circle.fill",
+                color: Color.xertSteel,
+                title: "Investigate the cause",
+                detail: "Check schema, Stripe, webhook and Apple push health."
+            )
+            incidentRunbookStep(
+                icon: "4.circle.fill",
+                color: Color.xertSteel,
+                title: "Reopen deliberately",
+                detail: "Use Member App Controls only after live checks pass."
+            )
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("owner.incidentRunbook")
+    }
+
+    private var incidentNoticeStepColor: Color {
+        if memberOperationsPauseNoticeIsLive { return .green }
+        return quickMutationIsAvailable(source: "member notices") ? Color.xertSteel : .orange
+    }
+
+    private var incidentNoticeStepTitle: String {
+        memberOperationsPauseNoticeIsLive ? "Member update is live" : "Tell members what changed"
+    }
+
+    private var incidentNoticeStepDetail: String {
+        if memberOperationsPauseNoticeIsLive {
+            return "Review the live notice before publishing any follow-up."
+        }
+        return quickMutationIsAvailable(source: "member notices")
+            ? "Review the prepared update, then publish when accurate."
+            : "Refresh member notices before preparing an update."
+    }
+
+    private var memberOperationsPauseNoticeIsLive: Bool {
+        guard quickMutationIsAvailable(source: "member notices") else { return false }
+        let now = Date()
+        return admin.announcements.contains { notice in
+            guard notice.stateLabel == "Live",
+                  let publishedAt = notice.published_at else { return false }
+            let age = now.timeIntervalSince(publishedAt)
+            guard age >= 0, age <= 86_400 else { return false }
+            return notice.title.caseInsensitiveCompare(
+                AdminAnnouncementDraft.memberOperationsPausedTitle
+            ) == .orderedSame
+                || notice.body.localizedCaseInsensitiveContains(
+                    "temporarily paused new bookings, waitlist joins and session-pack checkout"
+                )
+        }
+    }
+
+    private func incidentRunbookStep(
+        icon: String,
+        color: Color,
+        title: String,
+        detail: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(color)
+                .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.xertOffWhite)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.56))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -1251,7 +1404,7 @@ struct AdminCommandCentreView: View {
                     icon: "bell.badge.fill",
                     isEnabled: quickMutationIsAvailable(source: "member notices")
                 ) {
-                    presentQuickAction(.newNotice)
+                    presentNoticeQuickAction()
                 }
                 AdminQuickToolButton(
                     title: "Create a session pack",
@@ -11977,13 +12130,16 @@ private struct AdminAnnouncementComposer: View {
 
     init(
         announcement: AdminAnnouncement?,
+        initialDraft: AdminAnnouncementDraft? = nil,
         publishesOnOpen: Bool = false,
         isSaving: Bool,
         isPublishing: Bool,
         onSave: @escaping (AdminAnnouncementDraft) -> Void,
         onPublish: @escaping (AdminAnnouncementDraft) -> Void
     ) {
-        let initial = announcement.map(AdminAnnouncementDraft.init) ?? AdminAnnouncementDraft()
+        let initial = announcement.map(AdminAnnouncementDraft.init)
+            ?? initialDraft
+            ?? AdminAnnouncementDraft()
         self.announcement = announcement
         self.publishesOnOpen = publishesOnOpen
         self.isSaving = isSaving

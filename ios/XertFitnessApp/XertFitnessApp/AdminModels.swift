@@ -2023,6 +2023,8 @@ struct AdminAnnouncement: Identifiable, Codable, Hashable {
 }
 
 struct AdminAnnouncementDraft: Equatable {
+    static let memberOperationsPausedTitle = "Bookings and checkout temporarily paused"
+
     var title = ""
     var body = ""
     var tone = "info"
@@ -2039,6 +2041,18 @@ struct AdminAnnouncementDraft: Equatable {
         ctaLabel = announcement.cta_label ?? ""
         ctaURL = announcement.cta_url ?? ""
         expiresAt = announcement.expires_at
+    }
+
+    static func memberOperationsPaused() -> Self {
+        var draft = Self()
+        draft.title = memberOperationsPausedTitle
+        draft.body = """
+        We have temporarily paused new bookings, waitlist joins and session-pack checkout while we complete a platform check.
+
+        Existing bookings remain confirmed. We will post another update as soon as new bookings and checkout resume.
+        """
+        draft.tone = "urgent"
+        return draft
     }
 
     func validationMessage(publishing: Bool, now: Date = Date()) -> String? {

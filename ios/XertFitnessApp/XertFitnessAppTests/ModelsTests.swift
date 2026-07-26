@@ -1342,6 +1342,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(unavailable.pausedSettings)
     }
 
+    func testEmergencyMemberUpdateTemplateIsPublishableAndMakesNoFalseRecoveryClaim() {
+        let draft = AdminAnnouncementDraft.memberOperationsPaused()
+
+        XCTAssertEqual(draft.title, AdminAnnouncementDraft.memberOperationsPausedTitle)
+        XCTAssertEqual(draft.tone, "urgent")
+        XCTAssertTrue(draft.body.contains("new bookings, waitlist joins and session-pack checkout"))
+        XCTAssertTrue(draft.body.contains("Existing bookings remain confirmed"))
+        XCTAssertTrue(draft.body.contains("another update"))
+        XCTAssertFalse(draft.body.localizedCaseInsensitiveContains("resolved"))
+        XCTAssertTrue(draft.ctaLabel.isEmpty)
+        XCTAssertTrue(draft.ctaURL.isEmpty)
+        XCTAssertNil(draft.expiresAt)
+        XCTAssertNil(draft.validationMessage(publishing: true))
+    }
+
     func testOperationalRefreshPolicyReportsHonestQueueFreshness() {
         let now = Date(timeIntervalSince1970: 10_000)
 
