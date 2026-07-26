@@ -273,6 +273,46 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testOwnerEditorExitCoordinatorRestoresTheUnderlyingDirtyDraft() {
+        let coordinator = XertOwnerEditorExitCoordinator()
+        let blackoutID = UUID()
+        let classID = UUID()
+
+        coordinator.report(
+            XertOwnerEditorExitState(
+                id: blackoutID,
+                title: "blackout changes",
+                isDirty: true,
+                isBusy: false
+            )
+        )
+        XCTAssertEqual(coordinator.active?.id, blackoutID)
+
+        coordinator.report(
+            XertOwnerEditorExitState(
+                id: classID,
+                title: "class changes",
+                isDirty: true,
+                isBusy: true
+            )
+        )
+        XCTAssertEqual(coordinator.active?.id, classID)
+        XCTAssertTrue(coordinator.active?.isBusy == true)
+
+        coordinator.clear(id: classID)
+        XCTAssertEqual(coordinator.active?.id, blackoutID)
+
+        coordinator.report(
+            XertOwnerEditorExitState(
+                id: blackoutID,
+                title: "blackout changes",
+                isDirty: false,
+                isBusy: false
+            )
+        )
+        XCTAssertNil(coordinator.active)
+    }
+
     func testOwnerRouteHistoryPreservesExactTasksForwardStateAndMigration() throws {
         let memberID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000091"))
         let orderID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000092"))

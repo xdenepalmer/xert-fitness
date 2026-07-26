@@ -1,4 +1,45 @@
 import Foundation
+import Combine
+
+struct XertOwnerEditorExitState: Equatable {
+    let id: UUID
+    let title: String
+    let isDirty: Bool
+    let isBusy: Bool
+}
+
+final class XertOwnerEditorExitCoordinator: ObservableObject {
+    @Published private(set) var active: XertOwnerEditorExitState?
+    private var states: [UUID: XertOwnerEditorExitState] = [:]
+    private var order: [UUID] = []
+
+    func report(_ state: XertOwnerEditorExitState) {
+        guard state.isDirty || state.isBusy else {
+            clear(id: state.id)
+            return
+        }
+        states[state.id] = state
+        order.removeAll { $0 == state.id }
+        order.append(state.id)
+        refreshActive()
+    }
+
+    func clear(id: UUID) {
+        states[id] = nil
+        order.removeAll { $0 == id }
+        refreshActive()
+    }
+
+    func clearAll() {
+        states.removeAll()
+        order.removeAll()
+        active = nil
+    }
+
+    private func refreshActive() {
+        active = order.reversed().compactMap { states[$0] }.first
+    }
+}
 
 enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
     case operate = "Operate"

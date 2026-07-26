@@ -510,7 +510,10 @@ test('native owner cross-workspace actions preserve compact workflow context', a
   assert.match(view, /private func requestOwnerExit\(_ request: OwnerExitRequest\)/);
   assert.match(view, /private func savePlatformDraftAndComplete\(_ request: OwnerExitRequest\)/);
   assert.match(view, /private func discardPlatformDraftAndComplete\(_ request: OwnerExitRequest\)/);
-  assert.match(view, /interactiveDismissDisabled\(hasUnsavedPlatformDraft \|\| admin\.isSavingSettings \|\| isSavingPlatformExit\)/);
+  assert.match(
+    view,
+    /interactiveDismissDisabled\([\s\S]*hasUnsavedPlatformDraft[\s\S]*admin\.isSavingSettings[\s\S]*isSavingPlatformExit/,
+  );
   assert.match(view, /let didSave = await admin\.saveSettings\(session: session, draft: draft\)[\s\S]*if didSave \{[\s\S]*performOwnerExit\(request\)/);
   assert.match(view, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
   assert.match(view, /Button \{ requestOwnerExit\(\.close\) \}/);
@@ -975,6 +978,60 @@ test('native schedule controls preserve mutation truth and preview blackout conf
   assert.match(scheduleView, /\.disabled\(!mutationAllowed \|\| !conflicts\.isEmpty/);
   assert.match(scheduleView, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(scheduleView, /frame\(maxWidth: \.infinity, minHeight: 44\)/);
+});
+
+test('native schedule editors protect dirty work across local and command-centre navigation', async () => {
+  const [view, ownerNavigation, swiftTests] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+    read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift'),
+  ]);
+  const ownerShell = view.slice(0, view.indexOf('private struct AdminWorkspaceSwitcher'));
+  const classEditor = view.slice(
+    view.indexOf('private struct AdminClassEditor'),
+    view.indexOf('private enum AdminScheduleRemoval'),
+  );
+  const scheduleEditors = view.slice(
+    view.indexOf('private struct AdminAvailabilityEditor'),
+    view.indexOf('private struct AdminRetentionView'),
+  );
+
+  assert.match(ownerNavigation, /final class XertOwnerEditorExitCoordinator: ObservableObject/);
+  assert.match(ownerNavigation, /private var states: \[UUID: XertOwnerEditorExitState\]/);
+  assert.match(ownerNavigation, /order\.reversed\(\)\.compactMap \{ states\[\$0\] \}\.first/);
+  assert.match(swiftTests, /testOwnerEditorExitCoordinatorRestoresTheUnderlyingDirtyDraft/);
+  assert.match(swiftTests, /coordinator\.clear\(id: classID\)[\s\S]*XCTAssertEqual\(coordinator\.active\?\.id, blackoutID\)/);
+  assert.match(ownerShell, /\.environment\(\\\.adminEditorExitCoordinator, editorExitCoordinator\)/);
+  assert.match(ownerShell, /editorExitCoordinator\.active\?\.isDirty == true/);
+  assert.match(ownerShell, /editorExitCoordinator\.active\?\.isBusy == true/);
+  assert.match(ownerShell, /Unsaved \\\(editorExitCoordinator\.active\?\.title/);
+  assert.match(ownerShell, /Discard changes and continue/);
+  assert.match(ownerShell, /if let activeEditor = editorExitCoordinator\.active/);
+  assert.match(ownerShell, /activeEditor\.isBusy[\s\S]*still saving/);
+  assert.match(ownerShell, /activeEditor\.isDirty[\s\S]*showingEditorExitConfirmation = true/);
+
+  for (const editor of [classEditor, scheduleEditors]) {
+    assert.match(editor, /@Environment\(\\\.adminEditorExitCoordinator\)/);
+    assert.match(editor, /@FocusState private var textInputFocused: Bool/);
+    assert.match(editor, /\.navigationBarBackButtonHidden\(true\)/);
+    assert.match(editor, /\.scrollDismissesKeyboard\(\.interactively\)/);
+    assert.match(editor, /ToolbarItemGroup\(placement: \.keyboard\)[\s\S]*Button\("Done"\)/);
+    assert.match(editor, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+    assert.match(editor, /editorExitCoordinator\?\.report\(/);
+    assert.match(editor, /frame\(width: 44, height: 44\)/);
+  }
+
+  assert.match(classEditor, /Discard unsaved class changes\?/);
+  assert.match(scheduleEditors, /Discard unsaved availability changes\?/);
+  assert.match(scheduleEditors, /Discard unsaved blackout changes\?/);
+  assert.equal(
+    (scheduleEditors.match(/\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/g) || []).length,
+    2,
+  );
+  assert.equal(
+    (scheduleEditors.match(/editorExitCoordinator\?\.clear\(id: exitStateID\)/g) || []).length >= 6,
+    true,
+  );
 });
 
 test('native intake desks never hide failed loads or lose confirmed mutation outcomes', async () => {

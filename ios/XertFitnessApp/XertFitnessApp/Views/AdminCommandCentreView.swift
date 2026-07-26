@@ -4,6 +4,17 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 
+private struct AdminEditorExitCoordinatorKey: EnvironmentKey {
+    static let defaultValue: XertOwnerEditorExitCoordinator? = nil
+}
+
+private extension EnvironmentValues {
+    var adminEditorExitCoordinator: XertOwnerEditorExitCoordinator? {
+        get { self[AdminEditorExitCoordinatorKey.self] }
+        set { self[AdminEditorExitCoordinatorKey.self] = newValue }
+    }
+}
+
 struct AdminCommandCentreView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -11,6 +22,7 @@ struct AdminCommandCentreView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var admin = AdminStore()
+    @StateObject private var editorExitCoordinator = XertOwnerEditorExitCoordinator()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
     @SceneStorage("xert.adminWorkspaceHistory") private var restoredWorkspaceHistory = ""
@@ -25,6 +37,8 @@ struct AdminCommandCentreView: View {
     @State private var platformDraftSnapshot: AdminPlatformSettings?
     @State private var pendingOwnerExitRequest: OwnerExitRequest?
     @State private var showingPlatformExitConfirmation = false
+    @State private var pendingEditorExitRequest: OwnerExitRequest?
+    @State private var showingEditorExitConfirmation = false
     @State private var isSavingPlatformExit = false
     let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
@@ -74,9 +88,16 @@ struct AdminCommandCentreView: View {
                 NavigationStack { accessDenied }
             }
         }
+        .environment(\.adminEditorExitCoordinator, editorExitCoordinator)
         .focusedSceneValue(\.xertNavigationCommandContext, ownerNavigationCommandContext)
         .background(Color.xertNavy.ignoresSafeArea())
-        .interactiveDismissDisabled(hasUnsavedPlatformDraft || admin.isSavingSettings || isSavingPlatformExit)
+        .interactiveDismissDisabled(
+            hasUnsavedPlatformDraft
+                || admin.isSavingSettings
+                || isSavingPlatformExit
+                || editorExitCoordinator.active?.isDirty == true
+                || editorExitCoordinator.active?.isBusy == true
+        )
         .task {
             guard let session = authorizedOwnerSession, let userID = session.user?.id else { return }
             prepareOwnerNavigation(for: userID)
@@ -162,6 +183,25 @@ struct AdminCommandCentreView: View {
         } message: { request in
             Text(platformExitMessage(for: request))
         }
+        .confirmationDialog(
+            "Unsaved \(editorExitCoordinator.active?.title ?? "owner changes")",
+            isPresented: $showingEditorExitConfirmation,
+            titleVisibility: .visible,
+            presenting: pendingEditorExitRequest
+        ) { request in
+            Button("Discard changes and continue", role: .destructive) {
+                editorExitCoordinator.clearAll()
+                performOwnerExit(request)
+            }
+            Button("Keep editing", role: .cancel) {
+                pendingEditorExitRequest = nil
+            }
+        } message: { request in
+            Text(
+                "This draft has not been saved. Discard it before opening "
+                    + "\(request.destinationTitle), or keep editing."
+            )
+        }
         .alert("Command Centre", isPresented: Binding(
             get: { admin.errorMessage != nil },
             set: { if !$0 { admin.errorMessage = nil } }
@@ -183,6 +223,11 @@ struct AdminCommandCentreView: View {
         .onChange(of: showingPlatformExitConfirmation) { isPresented in
             if !isPresented && !isSavingPlatformExit {
                 pendingOwnerExitRequest = nil
+            }
+        }
+        .onChange(of: showingEditorExitConfirmation) { isPresented in
+            if !isPresented {
+                pendingEditorExitRequest = nil
             }
         }
     }
@@ -281,8 +326,10 @@ struct AdminCommandCentreView: View {
         let isAvailable = authorizedOwnerSession != nil
             && !showingWorkspaceSwitcher
             && !showingPlatformExitConfirmation
+            && !showingEditorExitConfirmation
             && !admin.isSavingSettings
             && !isSavingPlatformExit
+            && editorExitCoordinator.active?.isBusy != true
         return XertNavigationCommandContext(
             isAvailable: isAvailable,
             scope: .owner(currentWorkspace),
@@ -312,6 +359,19 @@ struct AdminCommandCentreView: View {
 
     private func requestOwnerExit(_ request: OwnerExitRequest) {
         guard !isSavingPlatformExit else { return }
+        if let activeEditor = editorExitCoordinator.active {
+            guard !activeEditor.isBusy else {
+                admin.errorMessage = "\(activeEditor.title) is still saving. Wait for it to finish before leaving."
+                XertHaptics.play(.warning)
+                return
+            }
+            if activeEditor.isDirty {
+                pendingEditorExitRequest = request
+                showingEditorExitConfirmation = true
+                XertHaptics.play(.warning)
+                return
+            }
+        }
         let leavesPlatformControls = request.targetWorkspace != .controls
         guard leavesPlatformControls, hasUnsavedPlatformDraft else {
             performOwnerExit(request)
@@ -401,9 +461,12 @@ struct AdminCommandCentreView: View {
         presentedOwnerTask = nil
         presentedQuickAction = nil
         showingAllWorkspaces = false
+        editorExitCoordinator.clearAll()
         platformDraftSnapshot = nil
         pendingOwnerExitRequest = nil
         showingPlatformExitConfirmation = false
+        pendingEditorExitRequest = nil
+        showingEditorExitConfirmation = false
         isSavingPlatformExit = false
     }
 
@@ -3817,14 +3880,21 @@ private struct AdminClassCancellationFollowUpView: View {
 
 private struct AdminClassEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let classSession: AdminClassSession?
     let mutationAllowed: Bool
     private let baseline: AdminClassDraft
     @State private var draft: AdminClassDraft
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var textInputFocused: Bool
 
     private var isTerminal: Bool { classSession.map { ["cancelled", "completed"].contains($0.status) } ?? false }
+    private var isDirty: Bool { draft != baseline }
+    private var isBusy: Bool { admin.savingClassID != nil }
+    private var editorTitle: String { classSession == nil ? "new class" : "class changes" }
 
     init(
         admin: AdminStore,
@@ -3864,7 +3934,10 @@ private struct AdminClassEditor: View {
                     ForEach(AdminClassDraft.classTypes, id: \.self) { Text($0).tag($0) }
                 }
                 TextField("Title", text: $draft.title)
-                TextField("Description", text: $draft.description, axis: .vertical).lineLimit(2...6)
+                    .focused($textInputFocused)
+                TextField("Description", text: $draft.description, axis: .vertical)
+                    .lineLimit(2...6)
+                    .focused($textInputFocused)
                 Picker("Status", selection: $draft.status) {
                     Text("Draft").tag("draft")
                     Text("Published").tag("published")
@@ -3882,7 +3955,9 @@ private struct AdminClassEditor: View {
             }
             Section("Delivery") {
                 TextField("Coach", text: $draft.coachName)
+                    .focused($textInputFocused)
                 TextField("Location or zone", text: $draft.location)
+                    .focused($textInputFocused)
                 Picker("Intensity", selection: $draft.intensity) {
                     ForEach(AdminClassDraft.intensities, id: \.self) { Text($0).tag($0) }
                 }
@@ -3896,7 +3971,9 @@ private struct AdminClassEditor: View {
                     .disabled(draft.status != "published")
             }
             Section("Internal notes") {
-                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...6)
+                TextField("Notes", text: $draft.notes, axis: .vertical)
+                    .lineLimit(2...6)
+                    .focused($textInputFocused)
             }
             if !isTerminal {
                 Section {
@@ -3904,6 +3981,7 @@ private struct AdminClassEditor: View {
                         Task {
                             if await admin.saveClass(session: session, classSession: classSession, draft: draft) {
                                 XertHaptics.play(.success)
+                                editorExitCoordinator?.clear(id: exitStateID)
                                 dismiss()
                             } else {
                                 XertHaptics.play(.error)
@@ -3917,7 +3995,7 @@ private struct AdminClassEditor: View {
                             Spacer()
                         }
                     }
-                    .disabled(!mutationAllowed || admin.savingClassID != nil || draft == baseline)
+                    .disabled(!mutationAllowed || isBusy || !isDirty)
                     .listRowBackground(Color.xertSteel)
                     .foregroundStyle(Color.xertNavy)
                 }
@@ -3928,13 +4006,65 @@ private struct AdminClassEditor: View {
         .background(Color.xertNavy)
         .navigationTitle(classSession == nil ? "New Class" : "Edit Class")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .scrollDismissesKeyboard(.interactively)
         .toolbar {
-            if classSession == nil {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: requestDismiss) {
+                    Image(systemName: classSession == nil ? "xmark" : "chevron.left")
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(isBusy)
+                .accessibilityLabel(classSession == nil ? "Cancel" : "Back")
+                .accessibilityHint(isDirty ? "Asks before discarding unsaved class changes" : "Returns to the timetable")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { textInputFocused = false }
             }
         }
         .onChange(of: draft.status) { status in
             if status != "published" { draft.publicVisible = false }
+        }
+        .onAppear(perform: reportExitState)
+        .onChange(of: isDirty) { _ in reportExitState() }
+        .onChange(of: isBusy) { _ in reportExitState() }
+        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .interactiveDismissDisabled(isDirty || isBusy)
+        .confirmationDialog(
+            "Discard unsaved class changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) {
+                editorExitCoordinator?.clear(id: exitStateID)
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("This class draft has not been saved.")
+        }
+    }
+
+    private func reportExitState() {
+        editorExitCoordinator?.report(
+            XertOwnerEditorExitState(
+                id: exitStateID,
+                title: editorTitle,
+                isDirty: isDirty,
+                isBusy: isBusy
+            )
+        )
+    }
+
+    private func requestDismiss() {
+        textInputFocused = false
+        guard !isBusy else { return }
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            editorExitCoordinator?.clear(id: exitStateID)
+            dismiss()
         }
     }
 }
@@ -4207,12 +4337,20 @@ private struct AdminAvailabilityView: View {
 
 private struct AdminAvailabilityEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let block: AdminAvailabilityBlock?
     let mutationAllowed: Bool
     private let baseline: AdminAvailabilityDraft
     @State private var draft: AdminAvailabilityDraft
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var textInputFocused: Bool
+
+    private var isDirty: Bool { draft != baseline }
+    private var isBusy: Bool { admin.savingScheduleWindowID != nil }
+    private var editorTitle: String { block == nil ? "new availability" : "availability changes" }
 
     init(
         admin: AdminStore,
@@ -4246,33 +4384,115 @@ private struct AdminAvailabilityEditor: View {
                 DatePicker("Starts", selection: $draft.startTime)
                 DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
                 TextField("Coach (optional)", text: $draft.coachName)
+                    .focused($textInputFocused)
                 Toggle("Bookable", isOn: $draft.isBookable)
-                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
+                TextField("Notes", text: $draft.notes, axis: .vertical)
+                    .lineLimit(2...5)
+                    .focused($textInputFocused)
             }
             .disabled(!mutationAllowed)
             saveButton(label: block == nil ? "Create availability" : "Save availability") {
                 await admin.saveAvailability(session: session, block: block, draft: draft)
             }
         }
-        .scrollContentBackground(.hidden).background(Color.xertNavy)
-        .navigationTitle(block == nil ? "New Availability" : "Edit Availability").navigationBarTitleDisplayMode(.inline)
-        .toolbar { if block == nil { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(block == nil ? "New Availability" : "Edit Availability")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: requestDismiss) {
+                    Image(systemName: block == nil ? "xmark" : "chevron.left")
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(isBusy)
+                .accessibilityLabel(block == nil ? "Cancel" : "Back")
+                .accessibilityHint(isDirty ? "Asks before discarding unsaved availability changes" : "Returns to Schedule Controls")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { textInputFocused = false }
+            }
+        }
+        .onAppear(perform: reportExitState)
+        .onChange(of: isDirty) { _ in reportExitState() }
+        .onChange(of: isBusy) { _ in reportExitState() }
+        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .interactiveDismissDisabled(isDirty || isBusy)
+        .confirmationDialog(
+            "Discard unsaved availability changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) {
+                editorExitCoordinator?.clear(id: exitStateID)
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("This availability draft has not been saved.")
+        }
     }
 
     @ViewBuilder private func saveButton(label: String, action: @escaping () async -> Bool) -> some View {
-        Section { Button { Task { if await action() { dismiss() } } } label: { HStack { Spacer(); Text(label).fontWeight(.bold); Spacer() } }
-            .disabled(!mutationAllowed || admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+        Section {
+            Button {
+                Task {
+                    if await action() {
+                        editorExitCoordinator?.clear(id: exitStateID)
+                        dismiss()
+                    }
+                }
+            } label: {
+                HStack { Spacer(); Text(label).fontWeight(.bold); Spacer() }
+            }
+            .disabled(!mutationAllowed || isBusy || !isDirty)
+            .listRowBackground(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+        }
+    }
+
+    private func reportExitState() {
+        editorExitCoordinator?.report(
+            XertOwnerEditorExitState(
+                id: exitStateID,
+                title: editorTitle,
+                isDirty: isDirty,
+                isBusy: isBusy
+            )
+        )
+    }
+
+    private func requestDismiss() {
+        textInputFocused = false
+        guard !isBusy else { return }
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            editorExitCoordinator?.clear(id: exitStateID)
+            dismiss()
+        }
     }
 }
 
 private struct AdminBlackoutEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let period: AdminBlackoutPeriod?
     let mutationAllowed: Bool
     private let baseline: AdminBlackoutDraft
     @State private var draft: AdminBlackoutDraft
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var textInputFocused: Bool
+
+    private var isDirty: Bool { draft != baseline }
+    private var isBusy: Bool { admin.savingScheduleWindowID != nil }
+    private var editorTitle: String { period == nil ? "new blackout" : "blackout changes" }
 
     init(
         admin: AdminStore,
@@ -4310,7 +4530,9 @@ private struct AdminBlackoutEditor: View {
                 Picker("Affects", selection: $draft.affects) { ForEach(AdminBlackoutDraft.scopes, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) } }
                 DatePicker("Starts", selection: $draft.startTime)
                 DatePicker("Ends", selection: $draft.endTime, in: draft.startTime...)
-                TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...5)
+                TextField("Notes", text: $draft.notes, axis: .vertical)
+                    .lineLimit(2...5)
+                    .focused($textInputFocused)
             }
             .disabled(!mutationAllowed)
             if !conflicts.isEmpty {
@@ -4344,13 +4566,87 @@ private struct AdminBlackoutEditor: View {
                     }
                 }
             }
-            Section { Button { Task { if await admin.saveBlackout(session: session, period: period, draft: draft) { dismiss() } } } label: {
-                HStack { Spacer(); Text(period == nil ? "Create blackout" : "Save blackout").fontWeight(.bold); Spacer() }
-            }.disabled(!mutationAllowed || !conflicts.isEmpty || admin.savingScheduleWindowID != nil || draft == baseline).listRowBackground(Color.xertSteel).foregroundStyle(Color.xertNavy) }
+            Section {
+                Button {
+                    Task {
+                        if await admin.saveBlackout(session: session, period: period, draft: draft) {
+                            editorExitCoordinator?.clear(id: exitStateID)
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text(period == nil ? "Create blackout" : "Save blackout").fontWeight(.bold)
+                        Spacer()
+                    }
+                }
+                .disabled(!mutationAllowed || !conflicts.isEmpty || isBusy || !isDirty)
+                .listRowBackground(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+            }
         }
-        .scrollContentBackground(.hidden).background(Color.xertNavy)
-        .navigationTitle(period == nil ? "New Blackout" : "Edit Blackout").navigationBarTitleDisplayMode(.inline)
-        .toolbar { if period == nil { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
+        .scrollContentBackground(.hidden)
+        .background(Color.xertNavy)
+        .navigationTitle(period == nil ? "New Blackout" : "Edit Blackout")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: requestDismiss) {
+                    Image(systemName: period == nil ? "xmark" : "chevron.left")
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(isBusy)
+                .accessibilityLabel(period == nil ? "Cancel" : "Back")
+                .accessibilityHint(isDirty ? "Asks before discarding unsaved blackout changes" : "Returns to Schedule Controls")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { textInputFocused = false }
+            }
+        }
+        .onAppear(perform: reportExitState)
+        .onChange(of: isDirty) { _ in reportExitState() }
+        .onChange(of: isBusy) { _ in reportExitState() }
+        .onDisappear { editorExitCoordinator?.clear(id: exitStateID) }
+        .interactiveDismissDisabled(isDirty || isBusy)
+        .confirmationDialog(
+            "Discard unsaved blackout changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) {
+                editorExitCoordinator?.clear(id: exitStateID)
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("This blackout draft has not been saved.")
+        }
+    }
+
+    private func reportExitState() {
+        editorExitCoordinator?.report(
+            XertOwnerEditorExitState(
+                id: exitStateID,
+                title: editorTitle,
+                isDirty: isDirty,
+                isBusy: isBusy
+            )
+        )
+    }
+
+    private func requestDismiss() {
+        textInputFocused = false
+        guard !isBusy else { return }
+        if isDirty {
+            confirmingDiscard = true
+        } else {
+            editorExitCoordinator?.clear(id: exitStateID)
+            dismiss()
+        }
     }
 }
 
