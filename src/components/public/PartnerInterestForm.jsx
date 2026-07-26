@@ -89,7 +89,7 @@ export default function PartnerInterestForm() {
     try {
       await submitPartnerInterest(form);
       navigate('/thank-you');
-    } catch (e) {
+    } catch {
       setError('Submission failed. Please try again.');
     } finally {
       setLoading(false);

@@ -129,10 +129,61 @@ export async function stripeWebhookLedgerIsReady(admin) {
   return data?.capability === STRIPE_WEBHOOK_LEDGER_CAPABILITY;
 }
 
+function isMissingSignatureFailureLedger(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code)
+    || /stripe_webhook_signature_failures.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
+/**
+ * Probes that Operations Health also treats as not-ready: durable signature
+ * rejections (invisible to the event ledger) and paid orders newer than the
+ * newest ledger row ("no webhooks at all"). Missing signature-ledger schema
+ * degrades to zero so rolling upgrades do not pause checkout.
+ */
+export async function inspectWebhookDeliveryGaps(admin, now = new Date()) {
+  const nowTime = now instanceof Date ? now.getTime() : Number.NaN;
+  if (!Number.isFinite(nowTime)) {
+    return { signatureInstalled: false, signatureFailures: 0, deliveryGap: true };
+  }
+  const since = new Date(nowTime - 24 * 60 * 60 * 1000).toISOString();
+  const [signatureResult, newestLedgerResult] = await Promise.all([
+    admin
+      .from('stripe_webhook_signature_failures')
+      .select('id', { count: 'exact', head: true })
+      .gte('received_at', since),
+    admin
+      .from('stripe_webhook_events')
+      .select('last_received_at')
+      .order('last_received_at', { ascending: false })
+      .limit(1),
+  ]);
+  const signatureInstalled = !(signatureResult?.error && isMissingSignatureFailureLedger(signatureResult.error));
+  const signatureFailures = signatureResult?.error ? 0 : (signatureResult?.count || 0);
+  const newestLedgerAt = newestLedgerResult?.error
+    ? null
+    : (newestLedgerResult?.data?.[0]?.last_received_at || null);
+
+  let paidOrdersQuery = admin
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'paid');
+  if (newestLedgerAt) paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
+  const paidOrdersResult = await paidOrdersQuery;
+  const paidBeyondLedger = paidOrdersResult?.error ? 0 : (paidOrdersResult?.count || 0);
+
+  return {
+    signatureInstalled,
+    signatureFailures,
+    deliveryGap: paidBeyondLedger > 0,
+  };
+}
+
 /**
  * Stop new purchases when Stripe has already reported a paid Checkout Session
- * that XERT failed to settle. This limits one delivery outage to the members
- * already in flight instead of continuing to accept charges without credits.
+ * that XERT failed to settle — or when Operations Health would mark webhook
+ * delivery not-ready for signature failures / a paid-order delivery gap.
+ * This limits one delivery outage to the members already in flight instead of
+ * continuing to accept charges without credits.
  */
 export async function paymentFulfillmentDeliveryIsHealthy(admin, now = new Date()) {
   const nowTime = now instanceof Date ? now.getTime() : Number.NaN;
@@ -144,14 +195,17 @@ export async function paymentFulfillmentDeliveryIsHealthy(admin, now = new Date(
     .in('event_type', PAYMENT_FULFILLMENT_EVENT_TYPES)
     .eq('status', status);
   try {
-    const [failed, stalled] = await Promise.all([
+    const [failed, stalled, gaps] = await Promise.all([
       count('failed'),
       count('processing').lt('last_received_at', staleBefore),
+      inspectWebhookDeliveryGaps(admin, now),
     ]);
     return !failed.error
       && !stalled.error
       && failed.count === 0
-      && stalled.count === 0;
+      && stalled.count === 0
+      && gaps.signatureFailures === 0
+      && !gaps.deliveryGap;
   } catch {
     return false;
   }

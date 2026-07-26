@@ -135,6 +135,26 @@ test('every install_public_form_insert_policies definition keeps the health-cons
   }
 });
 
+test('no operator script recreates admin_cancel_class_session without the credit-safe refund', () => {
+  let checked = 0;
+  for (const { name, sql } of scripts()) {
+    if (!sql.includes('create or replace function public.admin_cancel_class_session')) continue;
+    checked += 1;
+    assert.match(
+      sql,
+      /status as previous_status/,
+      `${name} recreates admin_cancel_class_session without a pre-update status snapshot, `
+        + 'so re-running it would silently refund nothing again',
+    );
+    assert.match(
+      sql,
+      /previous_status in \('requested', 'confirmed', 'attended', 'no_show'\)/,
+      `${name} recreates admin_cancel_class_session without attended/no_show refunds`,
+    );
+  }
+  assert.ok(checked >= 3, 'bootstrap and fix scripts still define admin_cancel_class_session');
+});
+
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {
   const superseded = [
     {

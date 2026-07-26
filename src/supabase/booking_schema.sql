@@ -436,7 +436,9 @@ begin
   select orders.* into v_order from public.orders as orders
   where orders.stripe_checkout_session_id = p_checkout_session_id for update;
   if v_order.id is null then raise exception 'Stripe fulfillment requires a recorded pending order'; end if;
-  if v_order.user_id is distinct from p_user_id
+  -- A NULL user_id means the buyer deleted their account after this order was
+  -- recorded. Every other identity field must still match exactly.
+  if (v_order.user_id is not null and v_order.user_id is distinct from p_user_id)
      or v_order.product_id is distinct from p_product_id
      or v_order.amount_cents is distinct from p_amount_cents
      or lower(coalesce(v_order.currency, '')) <> lower(p_currency)
@@ -462,13 +464,16 @@ begin
     paid_at = coalesce(orders.paid_at, p_paid_at)
   where orders.id = v_order.id returning orders.* into v_order;
 
-  insert into public.credit_batches (user_id, product_id, order_id, total, remaining, expires_at)
-  values (
-    p_user_id, p_product_id, v_order.id, v_order.credit_total, v_order.credit_total,
-    v_order.paid_at + make_interval(days => v_order.credit_validity_days)
-  )
-  on conflict (order_id) do nothing;
-  get diagnostics v_credit_rows = row_count;
+  -- No account left to credit when the buyer has deleted their membership.
+  if v_order.user_id is not null then
+    insert into public.credit_batches (user_id, product_id, order_id, total, remaining, expires_at)
+    values (
+      v_order.user_id, p_product_id, v_order.id, v_order.credit_total, v_order.credit_total,
+      v_order.paid_at + make_interval(days => v_order.credit_validity_days)
+    )
+    on conflict (order_id) do nothing;
+    get diagnostics v_credit_rows = row_count;
+  end if;
   return query select v_order.id, v_order.status, v_credit_rows = 1;
 end;
 $$;
@@ -478,6 +483,10 @@ revoke execute on function public.fulfill_stripe_checkout(
 grant execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
 ) to service_role;
+-- Retire the pre-terms-snapshot overload so operator re-runs cannot resurrect it.
+drop function if exists public.fulfill_stripe_checkout(
+  text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
+);
 
 create table if not exists public.stripe_refunds (
   refund_id text primary key,
@@ -898,6 +907,47 @@ begin
 end; $$;
 
 
+create or replace function public.credit_batch_expires_at_after_refund(
+  p_expires_at timestamptz,
+  p_anchor timestamptz
+) returns timestamptz
+language sql
+stable
+parallel safe
+set search_path = public, pg_temp
+as $$
+  select case
+    when p_expires_at is not null and p_expires_at <= now()
+      then greatest(coalesce(p_anchor, now()), now() + interval '12 hours')
+    else p_expires_at
+  end;
+$$;
+
+create or replace function public.refund_credits_to_batch(
+  p_batch_id uuid,
+  p_count integer,
+  p_anchor timestamptz default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_batch_id is null or p_count is null or p_count <= 0 then
+    return;
+  end if;
+  update public.credit_batches
+     set remaining = remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
+   where id = p_batch_id;
+end;
+$$;
+
+revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
+  from public, anon, authenticated;
+
 -- Cancel a confirmed booking, pending request, or waitlist place. Waitlisted
 -- places have already released their credit and must never refund it twice.
 -- A timely cancel always restores the credit; if the pack has already expired,
@@ -926,14 +976,7 @@ begin
 
   if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours'))
      and v_batch is not null then
-    update credit_batches
-    set remaining = remaining + 1,
-        expires_at = case
-          when expires_at is not null and expires_at <= now()
-            then greatest(v_start, now() + interval '12 hours')
-          else expires_at
-        end
-    where id = v_batch;
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
 
@@ -1378,6 +1421,10 @@ create policy "xert_schema_capabilities_admin_read" on public.xert_schema_capabi
 insert into public.xert_schema_capabilities (capability)
 values ('booking_waitlist_withdrawal') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
+values ('credit_batch_refund_reactivation') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('cancel_booking_expired_batch_refund') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
 values ('member_waitlist_join') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('checkout_reconciliation') on conflict (capability) do nothing;
@@ -1387,6 +1434,8 @@ insert into public.xert_schema_capabilities (capability)
 values ('stripe_pending_order_guard') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('stripe_order_terms_snapshot') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('stripe_fulfillment_deleted_member') on conflict (capability) do nothing;
 -- Durable, retry-safe observability for verified Stripe webhook deliveries.
 create table if not exists public.stripe_webhook_events (
   event_id text primary key,

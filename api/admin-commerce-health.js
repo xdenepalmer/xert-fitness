@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady } from './checkout.js';
+import {
+  assertCheckoutProduct,
+  assertStripePriceMatchesProduct,
+  inspectWebhookDeliveryGaps,
+  paymentFulfillmentIsReady,
+} from './checkout.js';
 import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import {
   inspectCommerceRuntimeEnvironment,
@@ -446,51 +451,6 @@ export function stripeIncidentResolution(errorCode) {
   return null;
 }
 
-function isMissingSignatureFailureLedger(error) {
-  return ['42P01', 'PGRST205'].includes(error?.code)
-    || /stripe_webhook_signature_failures.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
-}
-
-/**
- * A broken signing secret rejects every delivery before the ledger is touched,
- * so it is invisible to the ledger-derived signals. Count durable signature
- * rejections and detect paid orders that arrived with no newer ledger row, so
- * "no webhooks at all" is distinguishable from "no traffic". Both
- * probes degrade to a safe zero when their objects are not installed yet.
- */
-async function inspectWebhookDeliveryGaps(admin, now, since) {
-  const [signatureResult, newestLedgerResult] = await Promise.all([
-    admin
-      .from('stripe_webhook_signature_failures')
-      .select('id', { count: 'exact', head: true })
-      .gte('received_at', since),
-    admin
-      .from('stripe_webhook_events')
-      .select('last_received_at')
-      .order('last_received_at', { ascending: false })
-      .limit(1),
-  ]);
-  const signatureInstalled = !(signatureResult?.error && isMissingSignatureFailureLedger(signatureResult.error));
-  const signatureFailures = signatureResult?.error ? 0 : (signatureResult?.count || 0);
-  const newestLedgerAt = newestLedgerResult?.error
-    ? null
-    : (newestLedgerResult?.data?.[0]?.last_received_at || null);
-
-  let paidOrdersQuery = admin
-    .from('orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'paid');
-  if (newestLedgerAt) paidOrdersQuery = paidOrdersQuery.gt('paid_at', newestLedgerAt);
-  const paidOrdersResult = await paidOrdersQuery;
-  const paidBeyondLedger = paidOrdersResult?.error ? 0 : (paidOrdersResult?.count || 0);
-
-  return {
-    signatureInstalled,
-    signatureFailures,
-    deliveryGap: paidBeyondLedger > 0,
-  };
-}
-
 export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const staleBefore = now.getTime() - 10 * 60 * 1000;
@@ -556,7 +516,7 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
         ...(resolution ? { resolution } : {}),
       };
     });
-  const { signatureFailures, deliveryGap } = await inspectWebhookDeliveryGaps(admin, now, since);
+  const { signatureFailures, deliveryGap } = await inspectWebhookDeliveryGaps(admin, now);
   const recentTruncated = rows.length === 500;
   const failedTruncated = rawFailed.length === 200;
   const processingTruncated = rawProcessing.length === 200;

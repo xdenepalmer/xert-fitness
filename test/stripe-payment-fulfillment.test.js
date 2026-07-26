@@ -46,13 +46,28 @@ test('refunds are terminal before any paid transition or credit insertion', asyn
 test('fulfillment validates immutable payment identity and is service-role only', async () => {
   for (const path of paths) {
     const sql = await readFile(new URL(path, import.meta.url), 'utf8');
-    assert.match(sql, /v_order\.user_id is distinct from p_user_id/i);
+    const fulfillment = fulfillmentFunction(sql);
+    const isHistoricalSnapshot = path.includes('20260716040000');
+    if (isHistoricalSnapshot) {
+      // Historical migration introduced terms snapshot; deleted-member
+      // tolerance is applied by the later overload-fix migration.
+      assert.match(fulfillment, /v_order\.user_id is distinct from p_user_id/i);
+    } else {
+      // Live install paths tolerate NULL orders.user_id without weakening
+      // every other identity field.
+      assert.match(
+        fulfillment,
+        /\(v_order\.user_id is not null and v_order\.user_id is distinct from p_user_id\)/i,
+      );
+      assert.doesNotMatch(fulfillment, /^\s*if v_order\.user_id is distinct from p_user_id/m);
+      assert.match(fulfillment, /if v_order\.user_id is not null then/i);
+    }
     assert.match(sql, /v_order\.product_id is distinct from p_product_id/i);
     assert.match(sql, /v_order\.amount_cents is distinct from p_amount_cents/i);
     assert.match(sql, /v_order\.credit_total is distinct from p_credit_total/i);
     assert.match(sql, /v_order\.credit_validity_days is distinct from p_credit_validity_days/i);
     assert.match(sql, /make_interval\(days => v_order\.credit_validity_days\)/i);
-    assert.doesNotMatch(fulfillmentFunction(sql), /p_expires_at/i);
+    assert.doesNotMatch(fulfillment, /p_expires_at/i);
     assert.match(sql, /v_order\.stripe_payment_intent_id[\s\S]*<> p_payment_intent_id/i);
     assert.match(sql, /revoke execute[\s\S]*from public, anon, authenticated/i);
     assert.match(sql, /grant execute[\s\S]*to service_role/i);

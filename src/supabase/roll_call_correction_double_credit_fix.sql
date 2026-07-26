@@ -1,37 +1,80 @@
 -- Stops a roll-call correction charging the member a second credit.
---
--- admin_set_booking_status treats any move into 'requested'/'confirmed' from a
--- status outside ('requested', 'confirmed') as taking a NEW place, so it
--- consumes a credit:
---
---   if p_status in ('requested', 'confirmed')
---      and v_current not in ('requested', 'confirmed') then
---     ... select a credit batch ... update credit_batches set remaining = remaining - 1
---
--- 'attended' and 'no_show' are only reachable FROM 'confirmed' (the function
--- enforces that), so a booking in either state has ALREADY consumed its credit
--- and was never refunded — the refund branch fires only for 'waitlisted',
--- 'declined' and 'cancelled'. Correcting a roll call back to 'confirmed'
--- therefore charged a second credit for the same class.
---
--- The window is ordinary front-desk behaviour: staff mark people in as they
--- arrive, before the class start time, then fix a mis-tap. Once start_time has
--- passed the same transition instead fails with SESSION_IN_PAST, so the web
--- roster dropdown (src/components/admin/ClassCalendarAdmin.jsx) offers an
--- option that either double-charges the member or errors confusingly.
---
--- Verified against PostgreSQL 16: a flip from 'attended' back to 'confirmed'
--- took a member from 9 remaining credits to 8; with this fix it stays at 9.
---
--- 'attended' and 'no_show' now count as already holding their place, for both
--- the credit charge and the waitlist-order check — the member never gave the
--- place up, so no one else can have queued ahead of them for it.
---
--- The refund branch is widened to match. Once 'attended'/'no_show' are treated
--- as holding a credit, cancelling or declining from those states has to return
--- it, or the credit is stranded: charged at confirmation and never given back.
--- That stranding already existed; making the charge side correct without the
--- refund side would have entrenched it.
+-- Operator re-run copy: also uses the shared expired-pack reactivation helper
+-- so a staff cancel/decline from attended/no_show returns a usable credit.
+-- The historical migration 20260726003000_* remains the original charge-side fix.
+
+create or replace function public.credit_batch_expires_at_after_refund(
+  p_expires_at timestamptz,
+  p_anchor timestamptz
+) returns timestamptz
+language sql
+stable
+parallel safe
+set search_path = public, pg_temp
+as $$
+  select case
+    when p_expires_at is not null and p_expires_at <= now()
+      then greatest(coalesce(p_anchor, now()), now() + interval '12 hours')
+    else p_expires_at
+  end;
+$$;
+
+create or replace function public.refund_credits_to_batch(
+  p_batch_id uuid,
+  p_count integer,
+  p_anchor timestamptz default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_batch_id is null or p_count is null or p_count <= 0 then
+    return;
+  end if;
+  update public.credit_batches
+     set remaining = remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
+   where id = p_batch_id;
+end;
+$$;
+
+revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
+  from public, anon, authenticated;
+
+create or replace function public.cancel_booking(p_booking_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_user   uuid := auth.uid();
+  v_batch  uuid;
+  v_start  timestamptz;
+  v_status text;
+begin
+  if v_user is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  select b.credit_batch_id, s.start_time, b.status
+    into v_batch, v_start, v_status
+    from public.session_bookings b
+    join public.class_sessions s on s.id = b.class_session_id
+    where b.id = p_booking_id and b.user_id = v_user
+    for update;
+  if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
+  if v_status not in ('requested', 'confirmed', 'waitlisted') then raise exception 'NOT_CANCELLABLE'; end if;
+
+  update public.session_bookings
+  set status = 'cancelled', cancelled_at = now()
+  where id = p_booking_id;
+
+  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours'))
+     and v_batch is not null then
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
+  end if;
+end; $$;
+
+revoke execute on function public.cancel_booking(uuid) from public, anon;
+grant execute on function public.cancel_booking(uuid) to authenticated;
 
 create or replace function public.admin_set_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
@@ -102,9 +145,16 @@ begin
 
   if p_status in ('waitlisted', 'declined', 'cancelled')
     and v_current in ('requested', 'confirmed', 'attended', 'no_show') and v_batch is not null then
-    update public.credit_batches set remaining = remaining + 1 where id = v_batch;
+    if v_start is null then
+      select start_time into v_start from public.class_sessions where id = v_session;
+    end if;
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
 
 revoke execute on function public.admin_set_booking_status(uuid, text) from public, anon;
 grant execute on function public.admin_set_booking_status(uuid, text) to authenticated;
+
+insert into public.xert_schema_capabilities (capability)
+values ('credit_batch_refund_reactivation') on conflict (capability) do nothing;
+

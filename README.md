@@ -191,7 +191,11 @@ The Supabase schema is defined in:
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
   refund so members get their credit back when staff cancel a class (the original refund
-  filtered on the post-update status and therefore always refunded nothing)
+  filtered on the post-update status and therefore always refunded nothing); the operator
+  copy also covers attended/no_show and expired-pack reactivation so re-runs cannot leave
+  production on the silent no-refund body
+- `src/supabase/credit_batch_refund_reactivation.sql` — shared refund helper that reactivates
+  expired packs, and class-cancel refunds for attended/no_show bookings that still hold a credit
 - `src/supabase/audit_immutability_account_deletion_fix.sql` — lets an account with audit
   history actually be deleted, by allowing the referential `on delete set null` update
   through the five audit-immutability triggers while still blocking any content change
@@ -200,6 +204,8 @@ The Supabase schema is defined in:
   requests, without weakening the general immutability guard
 - `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
   order from failing fulfilment forever and gating checkout for every other member
+  (targets the live `p_credit_validity_days` overload; drops the retired
+  `p_expires_at` overload if present)
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
 - `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
@@ -258,12 +264,17 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `member_booking_switch_guard_upgrade.sql`, then
 `member_onboarding_upgrade.sql`, then
 `supabase/migrations/20260721020000_member_activation_cockpit.sql`. Finally apply the July 2026 audit
-fixes in filename order: `public_form_staff_column_guard.sql`,
+fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
+`audit_immutability_account_deletion_fix.sql`,
+`stripe_fulfillment_deleted_member_fix.sql`,
+`roll_call_correction_double_credit_fix.sql`, `sql_drift_repair.sql`,
+`public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
+`credit_batch_refund_reactivation.sql`,
 `member_interest_health_consent.sql`,
 `class_session_optimistic_locking_upgrade.sql` and
 `audit_subject_pii_redaction_upgrade.sql`. This
@@ -304,12 +315,17 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `member_onboarding_upgrade.sql`, then
 `supabase/migrations/20260721020000_member_activation_cockpit.sql`, then
 `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql`. Finally apply the July 2026 audit
-fixes in filename order: `public_form_staff_column_guard.sql`,
+fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
+`audit_immutability_account_deletion_fix.sql`,
+`stripe_fulfillment_deleted_member_fix.sql`,
+`roll_call_correction_double_credit_fix.sql`, `sql_drift_repair.sql`,
+`public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
 `stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
 `roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
+`credit_batch_refund_reactivation.sql`,
 `member_interest_health_consent.sql`,
 `class_session_optimistic_locking_upgrade.sql` and
 `audit_subject_pii_redaction_upgrade.sql`. The

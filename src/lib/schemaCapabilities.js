@@ -55,11 +55,13 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   my_bookings_duration: 'Apply supabase/migrations/20260726013000_my_bookings_duration.sql in Supabase.',
   product_currency_aud_only: 'Apply supabase/migrations/20260726014000_product_currency_aud_only.sql in Supabase.',
   stripe_signature_failure_ledger: 'Apply supabase/migrations/20260726015000_stripe_signature_failure_ledger.sql in Supabase.',
+  stripe_fulfillment_deleted_member: 'Apply supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql in Supabase.',
   atomic_account_deletion: 'Apply supabase/migrations/20260726016000_atomic_account_deletion.sql in Supabase.',
   roll_call_releases_pending_requests: 'Apply supabase/migrations/20260726017000_roll_call_releases_pending_requests.sql in Supabase.',
   admin_policy_scalar_subquery: 'Apply supabase/migrations/20260726018000_admin_policy_scalar_subquery.sql in Supabase.',
   member_history_index: 'Apply supabase/migrations/20260726019000_member_history_index.sql in Supabase.',
   cancel_booking_expired_batch_refund: 'Apply supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql in Supabase.',
+  credit_batch_refund_reactivation: 'Apply supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql in Supabase.',
   member_interest_health_consent: 'Apply supabase/migrations/20260726103000_member_interest_health_consent.sql in Supabase.',
 });
 

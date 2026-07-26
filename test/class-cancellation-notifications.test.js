@@ -23,19 +23,22 @@ test('linked migration exactly installs targeted cancellation notices', () => {
   assert.match(source, /values \('class_cancellation_notifications'\)/i);
 });
 
-test('class cancellation saves targets before invalidating bookings and returning credits', () => {
+test('class cancellation notice targets credit-holding and waitlisted bookings', () => {
   const helperStart = source.indexOf('create or replace function public.create_class_cancellation_notice');
-  const cancellationStart = source.indexOf('create or replace function public.admin_cancel_class_session');
-  const cancellation = source.slice(cancellationStart);
-  assert.ok(helperStart > 0 && cancellationStart > helperStart);
+  assert.ok(helperStart > 0);
   assert.match(source, /source_kind[\s\S]*'class_cancellation'/i);
   assert.match(source, /'Choose another class'[\s\S]*'\/booking'/i);
-  assert.match(source, /insert into public\.member_announcement_targets[\s\S]*status in \('requested', 'confirmed', 'waitlisted'\)/i);
-  assert.ok(cancellation.indexOf('perform public.create_class_cancellation_notice') < cancellation.indexOf('update public.session_bookings'));
-  assert.match(cancellation, /set remaining = credits\.remaining \+ refunds\.credit_count/i);
+  assert.match(
+    source,
+    /insert into public\.member_announcement_targets[\s\S]*status in \('requested', 'confirmed', 'waitlisted', 'attended', 'no_show'\)/i,
+  );
+  // Cancel+refund is owned by later credit-refund scripts so re-running this
+  // upgrade cannot reinstall the silent RETURNING-status no-refund body.
+  assert.doesNotMatch(source, /create or replace function public\.admin_cancel_class_session/i);
   assert.match(source, /revoke all on function public\.create_class_cancellation_notice\(uuid\) from public, anon, authenticated/i);
   assert.match(read('../src/supabase/admin_cms_schema.sql'), /to_regprocedure\('public\.create_class_cancellation_notice\(uuid\)'\)/i);
   assert.match(read('../src/supabase/booking_modes_upgrade.sql'), /to_regprocedure\('public\.create_class_cancellation_notice\(uuid\)'\)/i);
+  assert.match(read('../src/supabase/credit_batch_refund_reactivation.sql'), /create or replace function public\.admin_cancel_class_session/i);
 });
 
 test('member RPC and direct-read policy exclude alerts targeted to another account', () => {

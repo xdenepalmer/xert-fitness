@@ -204,6 +204,47 @@ end; $$;
 
 -- A timely cancel always restores the credit; if the pack has already expired,
 -- reactivate the batch so the returned credit stays bookable.
+create or replace function public.credit_batch_expires_at_after_refund(
+  p_expires_at timestamptz,
+  p_anchor timestamptz
+) returns timestamptz
+language sql
+stable
+parallel safe
+set search_path = public, pg_temp
+as $$
+  select case
+    when p_expires_at is not null and p_expires_at <= now()
+      then greatest(coalesce(p_anchor, now()), now() + interval '12 hours')
+    else p_expires_at
+  end;
+$$;
+
+create or replace function public.refund_credits_to_batch(
+  p_batch_id uuid,
+  p_count integer,
+  p_anchor timestamptz default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_batch_id is null or p_count is null or p_count <= 0 then
+    return;
+  end if;
+  update public.credit_batches
+     set remaining = remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
+   where id = p_batch_id;
+end;
+$$;
+
+revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
+  from public, anon, authenticated;
+
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -229,14 +270,7 @@ begin
 
   if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours'))
      and v_batch is not null then
-    update public.credit_batches
-    set remaining = remaining + 1,
-        expires_at = case
-          when expires_at is not null and expires_at <= now()
-            then greatest(v_start, now() + interval '12 hours')
-          else expires_at
-        end
-    where id = v_batch;
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
 
@@ -295,7 +329,8 @@ begin
     raise exception 'STATUS_TRANSITION_NOT_ALLOWED';
   end if;
 
-  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+  if p_status in ('requested', 'confirmed')
+     and v_current not in ('requested', 'confirmed', 'attended', 'no_show') then
     select id into v_first_waitlisted
       from public.session_bookings
       where class_session_id = v_session and status = 'waitlisted'
@@ -307,7 +342,8 @@ begin
     end if;
   end if;
 
-  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+  if p_status in ('requested', 'confirmed')
+     and v_current not in ('requested', 'confirmed', 'attended', 'no_show') then
     select capacity, start_time, status into v_capacity, v_start, v_session_status
       from public.class_sessions
       where id = v_session
@@ -344,8 +380,11 @@ begin
   where id = p_booking_id;
 
   if p_status in ('waitlisted', 'declined', 'cancelled')
-    and v_current in ('requested', 'confirmed') and v_batch is not null then
-    update public.credit_batches set remaining = remaining + 1 where id = v_batch;
+    and v_current in ('requested', 'confirmed', 'attended', 'no_show') and v_batch is not null then
+    if v_start is null then
+      select start_time into v_start from public.class_sessions where id = v_session;
+    end if;
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
 
@@ -369,18 +408,19 @@ begin
 end; $$;
 
 -- When XERT cancels a class, outstanding member bookings are invalidated and
--- requested/confirmed bookings return their reserved credit. The session row
--- is locked first so a concurrent booking cannot slip in during cancellation.
+-- credit-holding bookings return their reserved credit. The session row is
+-- locked first so a concurrent booking cannot slip in during cancellation.
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer language plpgsql security definer set search_path = public as $$
 declare
   v_status text;
+  v_start timestamptz;
   v_cancelled_count integer := 0;
   v_enquiry_cancelled_count integer := 0;
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
 
-  select status into v_status
+  select status, start_time into v_status, v_start
     from public.class_sessions
     where id = p_session_id
     for update;
@@ -391,19 +431,27 @@ begin
     perform public.create_class_cancellation_notice(p_session_id);
   end if;
 
-  with cancelled_bookings as (
-    update public.session_bookings
-       set status = 'cancelled', cancelled_at = now()
+  with targets as (
+    select id, credit_batch_id, status as previous_status
+      from public.session_bookings
      where class_session_id = p_session_id
-       and status in ('requested', 'confirmed', 'waitlisted')
-     returning credit_batch_id, status
+       and status in ('requested', 'confirmed', 'waitlisted', 'attended', 'no_show')
+     for update
+  ), cancelled_bookings as (
+    update public.session_bookings booking
+       set status = 'cancelled', cancelled_at = now()
+      from targets
+     where booking.id = targets.id
+     returning targets.credit_batch_id as credit_batch_id,
+               targets.previous_status as previous_status
   ), restored_credits as (
     update public.credit_batches credits
-       set remaining = credits.remaining + refunds.credit_count
+       set remaining = credits.remaining + refunds.credit_count,
+           expires_at = public.credit_batch_expires_at_after_refund(credits.expires_at, v_start)
       from (
         select credit_batch_id, count(*)::integer as credit_count
           from cancelled_bookings
-         where status in ('requested', 'confirmed')
+         where previous_status in ('requested', 'confirmed', 'attended', 'no_show')
            and credit_batch_id is not null
          group by credit_batch_id
       ) refunds

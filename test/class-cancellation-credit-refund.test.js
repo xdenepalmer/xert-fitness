@@ -35,12 +35,19 @@ test('waitlisted places are still excluded from the refund', async () => {
     'waitlisted bookings never consumed a credit, so must not be refunded');
 });
 
-test('the superseded cancel function is the one being replaced', async () => {
+test('the historical refund fix replaces the cancel signature the notifications file used to own', async () => {
   const original = await readFile(ORIGINAL_CANCEL, 'utf8');
   const fixed = await readFile(REFUND_FIX, 'utf8');
   const name = 'create or replace function public.admin_cancel_class_session(p_session_id uuid)';
-  assert.ok(original.includes(name), 'baseline migration defines the function');
-  assert.ok(fixed.includes(name), 'fix must replace the same function signature');
+  // Notifications no longer recreates cancel (that reinstalled the silent
+  // no-refund). The 20260726000000 fix still owns that signature until the
+  // later credit_batch_refund_reactivation migration supersedes it.
+  assert.match(
+    original,
+    /admin_cancel_class_session is owned by the credit-refund migrations/,
+    'baseline must refuse to recreate the dangerous cancel body',
+  );
+  assert.ok(fixed.includes(name), 'RETURNING-status fix must replace the cancel signature');
 });
 
 test('every audit guard permits the referential SET NULL from account deletion', async () => {

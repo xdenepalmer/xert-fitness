@@ -31,7 +31,10 @@ for (const path of [
     );
 
     assert.match(sql, /session_bookings_waitlist_order_idx[\s\S]*class_session_id, created_at, id[\s\S]*status = 'waitlisted'/i);
-    assert.match(statusFunction, /p_status in \('requested', 'confirmed'\)[\s\S]*v_current not in \('requested', 'confirmed'\)[\s\S]*order by created_at, id[\s\S]*WAITLIST_ORDER_REQUIRED/i);
+    assert.match(
+      statusFunction,
+      /p_status in \('requested', 'confirmed'\)[\s\S]*v_current not in \('requested', 'confirmed'(?:, 'attended', 'no_show')?\)[\s\S]*order by created_at, id[\s\S]*WAITLIST_ORDER_REQUIRED/i,
+    );
     assert.match(promotionFunction, /if not public\.is_admin\(\)/i);
     assert.match(promotionFunction, /status = 'waitlisted'[\s\S]*order by created_at, id[\s\S]*for update/i);
     assert.match(promotionFunction, /admin_set_booking_status\(v_booking_id, 'confirmed'\)/i);

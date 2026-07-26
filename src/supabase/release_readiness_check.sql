@@ -58,11 +58,13 @@ with required (capability, migration) as (
     ('my_bookings_duration', 'supabase/migrations/20260726013000_my_bookings_duration.sql'),
     ('product_currency_aud_only', 'supabase/migrations/20260726014000_product_currency_aud_only.sql'),
     ('stripe_signature_failure_ledger', 'supabase/migrations/20260726015000_stripe_signature_failure_ledger.sql'),
+    ('stripe_fulfillment_deleted_member', 'supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql'),
     ('atomic_account_deletion', 'supabase/migrations/20260726016000_atomic_account_deletion.sql'),
     ('roll_call_releases_pending_requests', 'supabase/migrations/20260726017000_roll_call_releases_pending_requests.sql'),
     ('admin_policy_scalar_subquery', 'supabase/migrations/20260726018000_admin_policy_scalar_subquery.sql'),
     ('member_history_index', 'supabase/migrations/20260726019000_member_history_index.sql'),
     ('cancel_booking_expired_batch_refund', 'supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql'),
+    ('credit_batch_refund_reactivation', 'supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql'),
     ('member_interest_health_consent', 'supabase/migrations/20260726103000_member_interest_health_consent.sql'),
     ('audit_subject_pii_redaction', 'supabase/migrations/20260726105000_audit_subject_pii_redaction.sql')
 ), readiness as (

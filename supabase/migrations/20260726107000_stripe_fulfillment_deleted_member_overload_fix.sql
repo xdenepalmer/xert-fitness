@@ -1,48 +1,17 @@
--- Atomically settle a verified Stripe Checkout Session without allowing an
--- older webhook retry to reverse a later refund or duplicate member credits.
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.credit_batches'::regclass
-      and conname = 'credit_batches_order_id_key'
-  ) then
-    alter table public.credit_batches
-      add constraint credit_batches_order_id_key unique (order_id);
-  end if;
-end $$;
-
-alter table public.orders
-  add column if not exists credit_total integer,
-  add column if not exists credit_validity_days integer;
-
-alter table public.orders drop constraint if exists orders_credit_total_check;
-alter table public.orders add constraint orders_credit_total_check
-  check (credit_total is null or credit_total > 0) not valid;
-alter table public.orders drop constraint if exists orders_credit_validity_days_check;
-alter table public.orders add constraint orders_credit_validity_days_check
-  check (credit_validity_days is null or credit_validity_days > 0) not valid;
-
-create or replace function public.guard_stripe_order_terms()
-returns trigger language plpgsql set search_path = '' as $$
-begin
-  if tg_op = 'INSERT' and new.stripe_checkout_session_id is not null
-     and (new.credit_total is null or new.credit_validity_days is null) then
-    raise exception 'Stripe orders require a purchased credit terms snapshot';
-  end if;
-  if tg_op = 'UPDATE' and (
-    new.credit_total is distinct from old.credit_total
-    or new.credit_validity_days is distinct from old.credit_validity_days
-  ) then
-    raise exception 'Stripe order credit terms are immutable';
-  end if;
-  return new;
-end;
-$$;
-drop trigger if exists guard_stripe_order_terms_trigger on public.orders;
-create trigger guard_stripe_order_terms_trigger
-before insert or update on public.orders
-for each row execute function public.guard_stripe_order_terms();
+-- Repair: 20260726002000 accidentally CREATE OR REPLACEd the retired
+-- p_expires_at overload of fulfill_stripe_checkout. Postgres treats different
+-- argument lists as separate functions, so the live
+-- (..., integer, integer) / p_credit_validity_days overload — the one
+-- api/stripe-webhook.js calls via checkoutFulfillmentRPCPayload — never
+-- received the deleted-member tolerance.
+--
+-- Result: a NULL orders.user_id (ON DELETE SET NULL after account deletion)
+-- still raised 'Stripe fulfillment does not match the recorded order', the
+-- webhook ledger stayed failed, and paymentFulfillmentDeliveryIsHealthy()
+-- paused checkout for every member.
+--
+-- This migration drops the dead overload and applies the null-user settle
+-- behaviour to the authoritative live signature only.
 
 drop function if exists public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
@@ -92,6 +61,7 @@ begin
   if v_order.id is null then
     raise exception 'Stripe fulfillment requires a recorded pending order';
   end if;
+
   -- A NULL user_id means the buyer deleted their account after this order was
   -- recorded. Every other identity field must still match exactly.
   if (v_order.user_id is not null and v_order.user_id is distinct from p_user_id)
@@ -105,8 +75,6 @@ begin
     raise exception 'Stripe fulfillment does not match the recorded order';
   end if;
 
-  -- Refund is terminal. A delayed success delivery must never restore the
-  -- order or recreate a credit batch after refund reconciliation.
   if v_order.status = 'refunded' then
     return query select v_order.id, v_order.status, false;
     return;
@@ -123,7 +91,8 @@ begin
   where orders.id = v_order.id
   returning orders.* into v_order;
 
-  -- No account left to credit when the buyer has deleted their membership.
+  -- No account left to credit. The payment is still settled above so the order
+  -- and the webhook ledger stay accurate and checkout is not gated.
   if v_order.user_id is not null then
     insert into public.credit_batches (
       user_id, product_id, order_id, total, remaining, expires_at
@@ -146,16 +115,6 @@ grant execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer
 ) to service_role;
 
-create table if not exists public.xert_schema_capabilities (
-  capability text primary key,
-  installed_at timestamptz not null default now()
-);
-alter table public.xert_schema_capabilities enable row level security;
 insert into public.xert_schema_capabilities (capability)
-values ('stripe_payment_fulfillment') on conflict (capability) do nothing;
-insert into public.xert_schema_capabilities (capability)
-values ('stripe_pending_order_guard') on conflict (capability) do nothing;
-insert into public.xert_schema_capabilities (capability)
-values ('stripe_order_terms_snapshot') on conflict (capability) do nothing;
-insert into public.xert_schema_capabilities (capability)
-values ('stripe_fulfillment_deleted_member') on conflict (capability) do nothing;
+values ('stripe_fulfillment_deleted_member')
+on conflict (capability) do update set installed_at = excluded.installed_at;

@@ -92,7 +92,7 @@ export default function TrainerInterestForm() {
     try {
       await submitTrainerInterest(form);
       navigate('/thank-you');
-    } catch (e) {
+    } catch {
       setError('Submission failed. Please try again.');
     } finally {
       setLoading(false);

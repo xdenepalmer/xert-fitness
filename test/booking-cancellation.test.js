@@ -37,6 +37,11 @@ test('both booking schema paths let members leave a waitlist without double-refu
     assert.match(sql, /status in \('requested', 'confirmed', 'waitlisted'\)/i);
     // Timely cancel must restore credit even after the pack expires.
     assert.doesNotMatch(sql, /where id = v_batch and \(expires_at is null or expires_at > now\(\)\)/i);
-    assert.match(sql, /greatest\(v_start, now\(\) \+ interval '12 hours'\)/i);
+    // Expired packs are reactivated through the shared helper (p_anchor) or the
+    // older inline form that used the class start time directly.
+    assert.match(
+      sql,
+      /greatest\((?:coalesce\()?p_anchor|v_start(?:, now\(\))?\)?, now\(\) \+ interval '12 hours'\)/i,
+    );
   }
 });

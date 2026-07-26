@@ -75,7 +75,11 @@ test('waitlisted places still never refund and late confirmed cancels still forf
 test('fresh schema and booking-modes upgrade carry the same refund policy', async () => {
   for (const url of [BOOKING_SCHEMA, BOOKING_MODES]) {
     const text = await executableBody(url);
-    assert.match(text, /greatest\(v_start, now\(\) \+ interval '12 hours'\)/);
+    assert.match(text, /refund_credits_to_batch\(v_batch, 1, v_start\)/);
+    assert.match(
+      text,
+      /greatest\(coalesce\(p_anchor, now\(\)\), now\(\) \+ interval '12 hours'\)/,
+    );
     assert.doesNotMatch(
       text,
       /where id = v_batch and \(expires_at is null or expires_at > now\(\)\)/,

@@ -1,3 +1,12 @@
+-- SUPERSEDED by 20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql
+-- (and src/supabase/stripe_fulfillment_deleted_member_fix.sql).
+--
+-- This file accidentally CREATE OR REPLACEd the retired p_expires_at overload
+-- instead of the live p_credit_validity_days overload that the API calls.
+-- Do not re-run it: it recreates a dead function and leaves the live one
+-- rejecting NULL orders.user_id. Apply 20260726107000 instead.
+--
+-- Original intent (kept for history):
 -- Stops a single deleted member from taking the whole store's checkout offline.
 --
 -- public.orders.user_id is `references auth.users(id) on delete set null`, so

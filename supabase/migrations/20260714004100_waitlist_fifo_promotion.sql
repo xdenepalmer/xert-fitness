@@ -149,7 +149,8 @@ begin
     raise exception 'STATUS_TRANSITION_NOT_ALLOWED';
   end if;
 
-  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+  if p_status in ('requested', 'confirmed')
+     and v_current not in ('requested', 'confirmed', 'attended', 'no_show') then
     select id into v_first_waitlisted
       from public.session_bookings
       where class_session_id = v_session and status = 'waitlisted'
@@ -160,7 +161,8 @@ begin
     end if;
   end if;
 
-  if p_status in ('requested', 'confirmed') and v_current not in ('requested', 'confirmed') then
+  if p_status in ('requested', 'confirmed')
+     and v_current not in ('requested', 'confirmed', 'attended', 'no_show') then
     select capacity, start_time, status into v_capacity, v_start, v_session_status
       from public.class_sessions where id = v_session for update;
     if not found then raise exception 'SESSION_NOT_FOUND'; end if;
@@ -187,8 +189,18 @@ begin
     where id = p_booking_id;
 
   if p_status in ('waitlisted', 'declined', 'cancelled')
-    and v_current in ('requested', 'confirmed') and v_batch is not null then
-    update public.credit_batches set remaining = remaining + 1 where id = v_batch;
+    and v_current in ('requested', 'confirmed', 'attended', 'no_show') and v_batch is not null then
+    if v_start is null then
+      select start_time into v_start from public.class_sessions where id = v_session;
+    end if;
+    update public.credit_batches
+       set remaining = remaining + 1,
+           expires_at = case
+             when expires_at is not null and expires_at <= now()
+               then greatest(coalesce(v_start, now()), now() + interval '12 hours')
+             else expires_at
+           end
+     where id = v_batch;
   end if;
 end; $$;
 

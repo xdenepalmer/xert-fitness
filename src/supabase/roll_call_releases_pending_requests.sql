@@ -1,33 +1,47 @@
 -- Returns the credit held by a booking request nobody ever actioned.
---
--- book_session spends the credit and writes the booking as 'requested' in one
--- transaction, so a request-to-book class holds a real credit from the moment a
--- member asks for a place. Roll call counts only
---
---   status in ('confirmed', 'attended', 'no_show')
---
--- when it decides whether the register is complete, so an unactioned
--- 'requested' booking never blocks INCOMPLETE_ROLL_CALL. The class was then
--- flipped to 'completed' with that booking still open and its credit still
--- spent.
---
--- After that the member has no way back. rosterStatusOptions makes the roster
--- read-only for any session that is no longer published, Account files a past
--- booking under history where there is no cancel control, and the iOS app
--- requires start_time in the future. The RPC underneath still accepts the
--- transition, so the credit was recoverable — but only by someone who knew to
--- call it by hand.
---
--- Roll call now releases those requests itself, as part of the same
--- transaction that completes the class, using the refund shape
--- admin_set_booking_status already uses: return the credit to the batch the
--- booking took it from. A request that was never actioned is not a no-show;
--- the member was never given a place, so they should not be charged for it.
---
--- Everything else is unchanged: the register must still cover every confirmed,
--- attended and no-show booking exactly once, attendance is still only reachable
--- from a session that has started, and the returned count is still the number
--- of attendance rows written.
+-- Operator re-run copy: restores remaining AND reactivates expired packs via
+-- the shared helper. Historical migration 20260726017000_* is unchanged.
+
+create or replace function public.credit_batch_expires_at_after_refund(
+  p_expires_at timestamptz,
+  p_anchor timestamptz
+) returns timestamptz
+language sql
+stable
+parallel safe
+set search_path = public, pg_temp
+as $$
+  select case
+    when p_expires_at is not null and p_expires_at <= now()
+      then greatest(coalesce(p_anchor, now()), now() + interval '12 hours')
+    else p_expires_at
+  end;
+$$;
+
+create or replace function public.refund_credits_to_batch(
+  p_batch_id uuid,
+  p_count integer,
+  p_anchor timestamptz default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_batch_id is null or p_count is null or p_count <= 0 then
+    return;
+  end if;
+  update public.credit_batches
+     set remaining = remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
+   where id = p_batch_id;
+end;
+$$;
+
+revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
+  from public, anon, authenticated;
 
 create or replace function public.admin_record_session_attendance(
   p_session_id uuid,
@@ -89,7 +103,8 @@ begin
   get diagnostics v_updated_count = row_count;
 
   update public.credit_batches batch
-     set remaining = batch.remaining + released.credits
+     set remaining = batch.remaining + released.credits,
+         expires_at = public.credit_batch_expires_at_after_refund(batch.expires_at, v_start_time)
     from (
       select credit_batch_id, count(*) as credits
       from public.session_bookings
@@ -117,3 +132,6 @@ grant execute on function public.admin_record_session_attendance(uuid, uuid[], u
 
 insert into public.xert_schema_capabilities (capability)
 values ('roll_call_releases_pending_requests') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('credit_batch_refund_reactivation') on conflict (capability) do nothing;
+

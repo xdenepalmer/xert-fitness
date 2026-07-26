@@ -82,6 +82,10 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/booking_schema.sql', 'stripe_order_terms_snapshot'],
     ['../src/supabase/stripe_payment_fulfillment_upgrade.sql', 'stripe_order_terms_snapshot'],
     ['../supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql', 'stripe_order_terms_snapshot'],
+    ['../src/supabase/booking_schema.sql', 'stripe_fulfillment_deleted_member'],
+    ['../src/supabase/stripe_payment_fulfillment_upgrade.sql', 'stripe_fulfillment_deleted_member'],
+    ['../src/supabase/stripe_fulfillment_deleted_member_fix.sql', 'stripe_fulfillment_deleted_member'],
+    ['../supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql', 'stripe_fulfillment_deleted_member'],
     ['../src/supabase/booking_schema.sql', 'stripe_webhook_ledger'],
     ['../src/supabase/stripe_webhook_ledger_upgrade.sql', 'stripe_webhook_ledger'],
     ['../supabase/migrations/20260716050000_stripe_webhook_ledger.sql', 'stripe_webhook_ledger'],
@@ -141,6 +145,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/booking_decision_notifications_upgrade.sql', 'booking_decision_notifications'],
     ['../supabase/migrations/20260722000000_booking_decision_notifications.sql', 'booking_decision_notifications'],
     ['../supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql', 'owner_stripe_price_provisioning'],
+    ['../src/supabase/credit_batch_refund_reactivation.sql', 'credit_batch_refund_reactivation'],
+    ['../supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql', 'credit_batch_refund_reactivation'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -277,11 +283,13 @@ test('read-only production check reports every release capability and migration'
     'my_bookings_duration',
     'product_currency_aud_only',
     'stripe_signature_failure_ledger',
+    'stripe_fulfillment_deleted_member',
     'atomic_account_deletion',
     'roll_call_releases_pending_requests',
     'admin_policy_scalar_subquery',
     'member_history_index',
     'cancel_booking_expired_batch_refund',
+    'credit_batch_refund_reactivation',
     'member_interest_health_consent',
   ];
 

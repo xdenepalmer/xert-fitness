@@ -163,15 +163,63 @@ test('checkout fails closed until Stripe delivery monitoring is installed', asyn
   assert.match(source, /payment delivery monitoring is being installed[\s\S]*503/);
 });
 
-function paymentDeliveryAdmin(results) {
-  let resultIndex = 0;
+function paymentDeliveryAdmin({
+  failed = 0,
+  stalled = 0,
+  signatureFailures = 0,
+  paidBeyondLedger = 0,
+  failedError = null,
+  stalledError = null,
+  signatureFailureError = null,
+  ordersError = null,
+  newestLedgerAt = '2026-07-17T00:15:00.000Z',
+} = {}) {
   const calls = [];
   return {
     calls,
     admin: {
       from(table) {
-        const result = results[resultIndex];
-        resultIndex += 1;
+        calls.push(['from', table]);
+        if (table === 'stripe_webhook_signature_failures') {
+          const query = {
+            select() { return query; },
+            gte(field, value) {
+              calls.push(['gte', field, value]);
+              return query;
+            },
+            then(resolve) {
+              return resolve({
+                data: null,
+                count: signatureFailures,
+                error: signatureFailureError,
+              });
+            },
+          };
+          return query;
+        }
+        if (table === 'orders') {
+          const query = {
+            select() { return query; },
+            eq(field, value) {
+              calls.push(['eq', field, value]);
+              return query;
+            },
+            gt(field, value) {
+              calls.push(['gt', field, value]);
+              return query;
+            },
+            then(resolve) {
+              return resolve({
+                data: null,
+                count: paidBeyondLedger,
+                error: ordersError,
+              });
+            },
+          };
+          return query;
+        }
+        assert.equal(table, 'stripe_webhook_events');
+        let status = null;
         const query = {
           select(fields, options) {
             calls.push(['select', table, fields, options]);
@@ -183,14 +231,28 @@ function paymentDeliveryAdmin(results) {
           },
           eq(field, value) {
             calls.push(['eq', field, value]);
+            if (field === 'status') status = value;
             return query;
           },
           lt(field, value) {
             calls.push(['lt', field, value]);
             return query;
           },
+          order(field, options) {
+            calls.push(['order', field, options]);
+            return query;
+          },
+          limit(n) {
+            calls.push(['limit', n]);
+            return Promise.resolve({
+              data: newestLedgerAt ? [{ last_received_at: newestLedgerAt }] : [],
+              error: null,
+            });
+          },
           then(resolve, reject) {
-            return Promise.resolve(result).then(resolve, reject);
+            const count = status === 'failed' ? failed : stalled;
+            const error = status === 'failed' ? failedError : stalledError;
+            return Promise.resolve({ count, error }).then(resolve, reject);
           },
         };
         return query;
@@ -201,15 +263,17 @@ function paymentDeliveryAdmin(results) {
 
 test('checkout pauses when paid Stripe fulfillment is failed or stalled', async () => {
   const now = new Date('2026-07-17T00:20:00.000Z');
-  const healthy = paymentDeliveryAdmin([
-    { count: 0, error: null },
-    { count: 0, error: null },
-  ]);
+  const healthy = paymentDeliveryAdmin();
   assert.equal(await paymentFulfillmentDeliveryIsHealthy(healthy.admin, now), true);
-  assert.deepEqual(healthy.calls.filter(([method]) => method === 'eq'), [
-    ['eq', 'status', 'failed'],
-    ['eq', 'status', 'processing'],
-  ]);
+  assert.deepEqual(
+    healthy.calls.filter(([method, field, value]) => (
+      method === 'eq' && field === 'status' && (value === 'failed' || value === 'processing')
+    )),
+    [
+      ['eq', 'status', 'failed'],
+      ['eq', 'status', 'processing'],
+    ],
+  );
   assert.deepEqual(healthy.calls.filter(([method]) => method === 'in'), [
     ['in', 'event_type', [
       'checkout.session.completed',
@@ -224,22 +288,36 @@ test('checkout pauses when paid Stripe fulfillment is failed or stalled', async 
     ['lt', 'last_received_at', '2026-07-17T00:10:00.000Z'],
   ]);
 
-  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
-    { count: 1, error: null },
-    { count: 0, error: null },
-  ]).admin, now), false);
-  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
-    { count: 0, error: null },
-    { count: 1, error: null },
-  ]).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    failed: 1,
+  }).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    stalled: 1,
+  }).admin, now), false);
+});
+
+test('checkout pauses when Operations Health would mark signature or delivery gaps', async () => {
+  const now = new Date('2026-07-17T00:20:00.000Z');
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    signatureFailures: 2,
+  }).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    paidBeyondLedger: 1,
+  }).admin, now), false);
+  // Missing signature ledger must not pause checkout during a rolling upgrade.
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    signatureFailureError: {
+      code: 'PGRST205',
+      message: 'stripe_webhook_signature_failures not found in schema cache',
+    },
+  }).admin, now), true);
 });
 
 test('checkout delivery circuit breaker fails closed on uncertain ledger health', async () => {
   const now = new Date('2026-07-17T00:20:00.000Z');
-  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin([
-    { count: null, error: new Error('ledger unavailable') },
-    { count: 0, error: null },
-  ]).admin, now), false);
+  assert.equal(await paymentFulfillmentDeliveryIsHealthy(paymentDeliveryAdmin({
+    failedError: new Error('ledger unavailable'),
+  }).admin, now), false);
   assert.equal(await paymentFulfillmentDeliveryIsHealthy({
     from() {
       throw new Error('database unavailable');
