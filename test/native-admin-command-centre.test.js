@@ -2150,7 +2150,7 @@ test('native site CMS cannot publish defaults over an unavailable live snapshot'
   assert.match(cms, /private func refreshAuthoritativeSnapshot\(\) async/);
   assert.match(cms, /let draftAtRefreshStart = draft[\s\S]*let wasDirtyAtRefreshStart = dirty[\s\S]*loadSiteContent\(session: session, force: true\)/);
   assert.match(cms, /let preserveDraft = wasDirtyAtRefreshStart \|\| draft != draftAtRefreshStart/);
-  assert.match(cms, /baseline = authoritative[\s\S]*if !preserveDraft \{[\s\S]*draft = authoritative/);
+  assert.match(cms, /baseline = authoritative[\s\S]*if !preserveDraft \{[\s\S]*replaceDraft\(with: authoritative\)/);
   assert.match(cms, /\.scrollDismissesKeyboard\(\.interactively\)/);
   assert.match(cms, /\.safeAreaInset\(edge: \.bottom, spacing: 0\) \{ publishBar \}/);
   assert.match(cms, /owner\.siteContentEditor\.publish/);

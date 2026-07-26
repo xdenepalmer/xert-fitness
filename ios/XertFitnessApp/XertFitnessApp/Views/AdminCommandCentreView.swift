@@ -8857,6 +8857,8 @@ private struct AdminSiteContentEditor: View {
     @State private var expectedUpdatedAt: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoURL = ""
+    @State private var photoItemIDs: [UUID]
+    @State private var paragraphItemIDs: [UUID]
     @FocusState private var editorIsFocused: Bool
 
     private var ownerID: UUID? { session.user?.id }
@@ -8867,12 +8869,15 @@ private struct AdminSiteContentEditor: View {
         self.section = section
         self.row = row
         let live = (row?.data ?? AdminSiteContentData()).merged(over: .defaults(for: section))
-        _baseline = State(initialValue: live)
-        _draft = State(initialValue: AdminSiteContentDraftStore.load(
+        let initialDraft = AdminSiteContentDraftStore.load(
             section,
             ownerID: session.user?.id
-        ) ?? live)
+        ) ?? live
+        _baseline = State(initialValue: live)
+        _draft = State(initialValue: initialDraft)
         _expectedUpdatedAt = State(initialValue: row?.updated_at)
+        _photoItemIDs = State(initialValue: (initialDraft.photos ?? []).map { _ in UUID() })
+        _paragraphItemIDs = State(initialValue: (initialDraft.paragraphs ?? []).map { _ in UUID() })
     }
 
     private var dirty: Bool { draft != baseline }
@@ -8945,14 +8950,15 @@ private struct AdminSiteContentEditor: View {
 
             Section {
                 Button {
-                    draft = .defaults(for: section)
+                    editorIsFocused = false
+                    replaceDraft(with: .defaults(for: section))
                 } label: {
                     Label("Restore original copy", systemImage: "arrow.counterclockwise")
                 }
                 if dirty {
                     Button("Discard draft", role: .destructive) {
                         editorIsFocused = false
-                        draft = baseline
+                        replaceDraft(with: baseline)
                         AdminSiteContentDraftStore.clear(section, ownerID: ownerID)
                     }
                 }
@@ -9047,7 +9053,7 @@ private struct AdminSiteContentEditor: View {
             ) {
                 let authoritative = saved.data.merged(over: .defaults(for: section))
                 baseline = authoritative
-                draft = authoritative
+                replaceDraft(with: authoritative)
                 expectedUpdatedAt = saved.updated_at
                 XertHaptics.play(.success)
             } else {
@@ -9074,7 +9080,7 @@ private struct AdminSiteContentEditor: View {
         expectedUpdatedAt = refreshed?.updated_at
         let preserveDraft = wasDirtyAtRefreshStart || draft != draftAtRefreshStart
         if !preserveDraft {
-            draft = authoritative
+            replaceDraft(with: authoritative)
         }
         XertHaptics.play(.success)
     }
@@ -9089,8 +9095,8 @@ private struct AdminSiteContentEditor: View {
                 TextField("Supporting line", text: textBinding(\.supporting), axis: .vertical).lineLimit(3...8).focused($editorIsFocused)
             }
             Section("Rotating photos") {
-                ForEach((draft.photos ?? []).indices, id: \.self) { index in
-                    heroPhotoRow(index: index)
+                ForEach(photoItemIDs, id: \.self) { itemID in
+                    heroPhotoRow(itemID: itemID)
                 }
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
                     Label(admin.isUploadingSiteImage ? "Uploading..." : "Upload photo", systemImage: "photo.badge.plus")
@@ -9109,6 +9115,7 @@ private struct AdminSiteContentEditor: View {
                     Button {
                         guard !photoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                         draft.photos = (draft.photos ?? []) + [photoURL]
+                        photoItemIDs.append(UUID())
                         photoURL = ""
                     } label: {
                         Image(systemName: "plus.circle.fill")
@@ -9127,11 +9134,12 @@ private struct AdminSiteContentEditor: View {
             }
         case .about:
             Section("About paragraphs") {
-                ForEach((draft.paragraphs ?? []).indices, id: \.self) { index in
-                    editableTextListRow(index: index)
+                ForEach(paragraphItemIDs, id: \.self) { itemID in
+                    editableTextListRow(itemID: itemID)
                 }
                 Button {
                     draft.paragraphs = (draft.paragraphs ?? []) + [""]
+                    paragraphItemIDs.append(UUID())
                 } label: {
                     Label("Add paragraph", systemImage: "plus")
                         .frame(minHeight: 44)
@@ -9171,8 +9179,9 @@ private struct AdminSiteContentEditor: View {
     }
 
     @ViewBuilder
-    private func heroPhotoRow(index: Int) -> some View {
-        if let value = value(at: index, in: draft.photos) {
+    private func heroPhotoRow(itemID: UUID) -> some View {
+        if let index = photoItemIDs.firstIndex(of: itemID),
+           let value = value(at: index, in: draft.photos) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
                     if let url = publicImageURL(value) {
@@ -9191,11 +9200,11 @@ private struct AdminSiteContentEditor: View {
                         .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
-                    draft.photos = movingElement(from: from, to: to, in: draft.photos)
+                reorderButtons(index: index, count: photoItemIDs.count) { _, to in
+                    movePhoto(id: itemID, to: to)
                 } remove: {
                     editorIsFocused = false
-                    draft.photos = removingElement(at: index, from: draft.photos)
+                    removePhoto(id: itemID)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -9203,19 +9212,21 @@ private struct AdminSiteContentEditor: View {
     }
 
     @ViewBuilder
-    private func editableTextListRow(index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Paragraph \(index + 1)").font(.caption.weight(.bold))
-            reorderButtons(index: index, count: draft.paragraphs?.count ?? 0) { from, to in
-                draft.paragraphs = movingElement(from: from, to: to, in: draft.paragraphs)
-            } remove: {
-                editorIsFocused = false
-                draft.paragraphs = removingElement(at: index, from: draft.paragraphs)
+    private func editableTextListRow(itemID: UUID) -> some View {
+        if let index = paragraphItemIDs.firstIndex(of: itemID) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Paragraph \(index + 1)").font(.caption.weight(.bold))
+                reorderButtons(index: index, count: paragraphItemIDs.count) { _, to in
+                    moveParagraph(id: itemID, to: to)
+                } remove: {
+                    editorIsFocused = false
+                    removeParagraph(id: itemID)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                TextField("Paragraph", text: paragraphBinding(itemID), axis: .vertical)
+                    .lineLimit(5...14)
+                    .focused($editorIsFocused)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            TextField("Paragraph", text: paragraphBinding(index), axis: .vertical)
-                .lineLimit(5...14)
-                .focused($editorIsFocused)
         }
     }
 
@@ -9240,10 +9251,14 @@ private struct AdminSiteContentEditor: View {
         }
     }
 
-    private func paragraphBinding(_ index: Int) -> Binding<String> {
+    private func paragraphBinding(_ itemID: UUID) -> Binding<String> {
         Binding(
-            get: { value(at: index, in: draft.paragraphs) ?? "" },
+            get: {
+                guard let index = paragraphItemIDs.firstIndex(of: itemID) else { return "" }
+                return value(at: index, in: draft.paragraphs) ?? ""
+            },
             set: { value in
+                guard let index = paragraphItemIDs.firstIndex(of: itemID) else { return }
                 guard draft.paragraphs?.indices.contains(index) == true else { return }
                 draft.paragraphs?[index] = value
             }
@@ -9270,6 +9285,38 @@ private struct AdminSiteContentEditor: View {
     private func moveFAQItem(id: UUID, to destination: Int) {
         guard let source = draft.items?.firstIndex(where: { $0.id == id }) else { return }
         draft.items = movingElement(from: source, to: destination, in: draft.items)
+    }
+
+    private func movePhoto(id: UUID, to destination: Int) {
+        guard let source = photoItemIDs.firstIndex(of: id),
+              photoItemIDs.indices.contains(destination) else { return }
+        draft.photos = movingElement(from: source, to: destination, in: draft.photos)
+        photoItemIDs.swapAt(source, destination)
+    }
+
+    private func removePhoto(id: UUID) {
+        guard let index = photoItemIDs.firstIndex(of: id) else { return }
+        draft.photos = removingElement(at: index, from: draft.photos)
+        photoItemIDs.remove(at: index)
+    }
+
+    private func moveParagraph(id: UUID, to destination: Int) {
+        guard let source = paragraphItemIDs.firstIndex(of: id),
+              paragraphItemIDs.indices.contains(destination) else { return }
+        draft.paragraphs = movingElement(from: source, to: destination, in: draft.paragraphs)
+        paragraphItemIDs.swapAt(source, destination)
+    }
+
+    private func removeParagraph(id: UUID) {
+        guard let index = paragraphItemIDs.firstIndex(of: id) else { return }
+        draft.paragraphs = removingElement(at: index, from: draft.paragraphs)
+        paragraphItemIDs.remove(at: index)
+    }
+
+    private func replaceDraft(with value: AdminSiteContentData) {
+        draft = value
+        photoItemIDs = (value.photos ?? []).map { _ in UUID() }
+        paragraphItemIDs = (value.paragraphs ?? []).map { _ in UUID() }
     }
 
     private func value<Element>(at index: Int, in values: [Element]?) -> Element? {
@@ -9348,6 +9395,7 @@ private struct AdminSiteContentEditor: View {
             fileExtension: "jpg"
         ) {
             draft.photos = (draft.photos ?? []) + [url]
+            photoItemIDs.append(UUID())
         }
     }
 

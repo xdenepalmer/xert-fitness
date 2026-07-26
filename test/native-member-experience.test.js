@@ -48,6 +48,22 @@ test('native account prioritizes member activity and fully supports keyboard and
   assert.match(source, /hasBookingMutation = store\.bookingSessionID != nil \|\| store\.cancellingBookingID != nil/);
 });
 
+test('native member authentication explains disabled credential actions', async () => {
+  const account = await readView('AccountView');
+  const signedOut = account.slice(
+    account.indexOf('// MARK: - Signed-out member access'),
+    account.indexOf('private func bookingRows('),
+  );
+
+  assert.match(signedOut, /private var credentialValidationMessage: String\?/);
+  assert.match(signedOut, /Use at least 8 characters for your password/);
+  assert.match(signedOut, /Password confirmation does not match/);
+  assert.match(signedOut, /Enter at least 6 password characters to sign in/);
+  assert.match(signedOut, /accessibilityIdentifier\("member\.authentication\.validation"\)/);
+  assert.match(signedOut, /\.accessibilityHint\(authenticationActionHint\)/);
+  assert.match(signedOut, /Agree to the Terms and acknowledge the Privacy Policy/);
+});
+
 test('native events avoids repeated formatter work and exposes precise action state', async () => {
   const [source, store] = await Promise.all([
     readView('EventsView'),

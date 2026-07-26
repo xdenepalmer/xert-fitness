@@ -1123,6 +1123,15 @@ struct AccountView: View {
             .frame(maxWidth: .infinity)
 
             credentialFields
+
+            if let credentialValidationMessage {
+                Label(credentialValidationMessage, systemImage: "exclamationmark.circle")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("member.authentication.validation")
+            }
         }
     }
 
@@ -1211,6 +1220,7 @@ struct AccountView: View {
         .disabled(authActionDisabled)
         .opacity(authActionDisabled ? 0.55 : 1)
         .accessibilityValue(isSubmittingAuthentication ? "In progress" : "")
+        .accessibilityHint(authenticationActionHint)
     }
 
     private var forgotPasswordControls: some View {
@@ -1263,6 +1273,39 @@ struct AccountView: View {
             return isCreatingAccount ? "Creating Account…" : "Signing In…"
         }
         return isCreatingAccount ? "Create Account" : "Sign In"
+    }
+
+    private var credentialValidationMessage: String? {
+        if isCreatingAccount {
+            if !password.isEmpty, password.count < 8 {
+                return "Use at least 8 characters for your password."
+            }
+            if !passwordConfirmation.isEmpty, passwordConfirmation != password {
+                return "Password confirmation does not match."
+            }
+            return nil
+        }
+        if !password.isEmpty, password.count < 6 {
+            return "Enter at least 6 password characters to sign in."
+        }
+        return nil
+    }
+
+    private var authenticationActionHint: String {
+        if isSubmittingAuthentication { return authenticationActionTitle }
+        if let credentialValidationMessage { return credentialValidationMessage }
+        if email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your member email."
+        }
+        if password.isEmpty { return "Enter your password." }
+        if isCreatingAccount,
+           fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your full name."
+        }
+        if isCreatingAccount, !acceptedAccountTerms {
+            return "Agree to the Terms and acknowledge the Privacy Policy."
+        }
+        return isCreatingAccount ? "Creates your XERT member account." : "Signs in to your XERT member account."
     }
 
     private func submitAuthentication() {
