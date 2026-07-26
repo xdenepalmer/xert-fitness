@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllCoaches, createCoach, updateCoach, deleteCoach } from '@/lib/adminData';
@@ -43,6 +43,9 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Disabled Save only re-renders after paint — lock before await so a double-click
+  // cannot insert two team rows (or race two writes of the same profile).
+  const saveLockRef = useRef(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const dirty = Object.keys(EMPTY_COACH).some(key => form[key] !== baseline[key]);
 
@@ -70,6 +73,8 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
   }, [requestCancel]);
 
   const handleSave = async () => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = normalizeCoachInput(form);
@@ -80,6 +85,7 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
@@ -170,6 +176,7 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
   const [editing, setEditing] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const deleteLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -193,7 +200,8 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
 
   const handleDelete = async () => {
     const coach = pendingDelete;
-    if (!coach) return;
+    if (!coach || deleteLockRef.current || deletingId !== null) return;
+    deleteLockRef.current = true;
     setPendingDelete(null);
     setDeletingId(coach.id);
     try {
@@ -204,6 +212,7 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setDeletingId(null);
+      deleteLockRef.current = false;
     }
   };
 
@@ -263,7 +272,13 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
       )}
 
       {showEditor && (
-        <CoachEditor coach={editing} onSave={() => { setShowEditor(false); load(); }} onCancel={() => setShowEditor(false)} onDirtyChange={onDirtyChange} />
+        <CoachEditor
+          key={editing?.id ?? 'new'}
+          coach={editing}
+          onSave={() => { setShowEditor(false); load(); }}
+          onCancel={() => setShowEditor(false)}
+          onDirtyChange={onDirtyChange}
+        />
       )}
       <AdminConfirmDialog
         open={Boolean(pendingDelete)}

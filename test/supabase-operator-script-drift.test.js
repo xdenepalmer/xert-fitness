@@ -310,7 +310,17 @@ test('README operator apply order includes the newest Ops Health migrations', ()
       `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
     );
   }
-  // Fresh + already-deployed apply sequences both end with the waitlist skip notice fix.
+  // Fresh + already-deployed apply sequences both provision Stripe prices before the
+  // July 2026 audit fixes, and both end with the waitlist skip notice fix.
+  assert.match(
+    readme,
+    /member_activation_cockpit\.sql`, then\n`supabase\/migrations\/20260722010000_owner_stripe_price_provisioning\.sql`\. Finally apply the July 2026 audit/,
+  );
+  assert.equal(
+    (readme.match(/20260722010000_owner_stripe_price_provisioning\.sql`\. Finally apply the July 2026 audit/g) || []).length,
+    2,
+    'fresh and already-deployed apply sequences must both include owner_stripe_price_provisioning',
+  );
   assert.match(
     readme,
     /member_onboarding_booking_gate\.sql` and\n`waitlist_skip_notice_accuracy\.sql`\. This/,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Mail, Phone, Target, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAllEvents, createEvent, updateEvent, deleteEvent, getEventGoalCounts, getEventGoalMembers, seedXertEventCalendar } from '@/lib/adminData';
@@ -37,6 +37,9 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Disabled Save only re-renders after paint — lock before await so a double-click
+  // cannot create two calendar rows (or race two publishes of the same edit).
+  const saveLockRef = useRef(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const dirty = Object.keys(EMPTY_EVENT).some(key => form[key] !== baseline[key]);
 
@@ -64,6 +67,8 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
   }, [requestCancel]);
 
   const handleSave = async () => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = normalizeEventInput(form);
@@ -78,6 +83,7 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
       });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
@@ -284,6 +290,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
   const [rosterError, setRosterError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const deleteLockRef = useRef(false);
 
   useEffect(() => {
     if (!rosterEvent) return undefined;
@@ -339,7 +346,8 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
 
   const handleDelete = async () => {
     const event = pendingDelete;
-    if (!event) return;
+    if (!event || deleteLockRef.current || deletingId !== null) return;
+    deleteLockRef.current = true;
     setPendingDelete(null);
     setDeletingId(event.id);
     try {
@@ -354,6 +362,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
       });
     } finally {
       setDeletingId(null);
+      deleteLockRef.current = false;
     }
   };
 

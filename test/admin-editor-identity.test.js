@@ -40,6 +40,11 @@ test('the event editor is remounted per subject', () => {
   assert.match(events, /<EventEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
 });
 
+test('the coach editor is remounted per subject', () => {
+  const coaches = readSource('../src/components/admin/CoachesManager.jsx');
+  assert.match(coaches, /<CoachEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
+});
+
 test('section navigation consults the unsaved-changes guard before navigating', () => {
   assert.match(commandCentre, /export function planAdminNavigation/);
   assert.match(commandCentre, /if \(hasUnsavedChanges\) return \{ prompt: true, switchedSection: false \};/);

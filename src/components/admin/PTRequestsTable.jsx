@@ -42,6 +42,10 @@ export default function PTRequestsTable() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
   const requestIdRef = useRef(0);
+  // Disabled buttons only re-render after paint — lock before the first await so a
+  // double confirm (or double Approve) cannot apply the same status transition twice.
+  const bulkLockRef = useRef(false);
+  const updateLockRef = useRef(false);
 
   const load = useCallback(async (targetPage = 1) => {
     const requestId = ++requestIdRef.current;
@@ -144,6 +148,8 @@ export default function PTRequestsTable() {
   };
 
   const handleUpdate = async (id, status, adminNotes) => {
+    if (updateLockRef.current || updatingId !== null || bulkLockRef.current || bulkSaving) return;
+    updateLockRef.current = true;
     setUpdatingId(id);
     try {
       await updatePTRequestStatus(id, status, adminNotes);
@@ -156,29 +162,39 @@ export default function PTRequestsTable() {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingId(null);
+      updateLockRef.current = false;
     }
   };
 
   const handleBulkUpdate = async () => {
+    if (bulkLockRef.current || bulkSaving || updateLockRef.current || updatingId !== null) return;
     if (!bulkStatus || selectedRequests.length === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
+    const selected = selectedRequests;
+    const nextStatus = bulkStatus;
+    bulkLockRef.current = true;
     setBulkSaving(true);
-    const results = await settleAdminMutations(selectedRequests, request => updatePTRequestStatus(request.id, bulkStatus));
-    const failedIds = new Set();
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') failedIds.add(selectedRequests[index].id);
-    });
-    const updatedCount = selectedRequests.length - failedIds.size;
-    if (updatedCount > 0) {
-      toast({ title: 'PT requests updated', description: `${updatedCount} request${updatedCount === 1 ? '' : 's'} moved to ${bulkStatus.replace(/_/g, ' ')}.` });
-      await load(page);
+    setBulkConfirmationOpen(false);
+    try {
+      const results = await settleAdminMutations(selected, request => updatePTRequestStatus(request.id, nextStatus));
+      const failedIds = new Set();
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') failedIds.add(selected[index].id);
+      });
+      const updatedCount = selected.length - failedIds.size;
+      if (updatedCount > 0) {
+        toast({ title: 'PT requests updated', description: `${updatedCount} request${updatedCount === 1 ? '' : 's'} moved to ${nextStatus.replace(/_/g, ' ')}.` });
+        await load(page);
+      }
+      setSelectedIds(failedIds);
+      if (failedIds.size > 0) {
+        toast({ title: 'Some updates failed', description: `${failedIds.size} request${failedIds.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
+      } else {
+        setBulkStatus('');
+      }
+    } finally {
+      setBulkSaving(false);
+      bulkLockRef.current = false;
     }
-    setSelectedIds(failedIds);
-    if (failedIds.size > 0) {
-      toast({ title: 'Some updates failed', description: `${failedIds.size} request${failedIds.size === 1 ? '' : 's'} remain selected so you can retry.`, variant: 'destructive' });
-    } else {
-      setBulkStatus('');
-    }
-    setBulkSaving(false);
   };
 
   return (

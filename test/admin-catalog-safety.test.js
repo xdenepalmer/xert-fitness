@@ -44,6 +44,20 @@ test('coach, event and pack mutations carry the version originally loaded', () =
   assert.match(products, /updateProduct\(product\.id, updates, baselineProduct\.updated_at\)/);
 });
 
+test('coach and event editors lock save/delete against same-paint double submits', () => {
+  for (const source of [coaches, events]) {
+    assert.match(source, /const saveLockRef = useRef\(false\)/);
+    assert.match(source, /if \(saveLockRef\.current \|\| saving\) return/);
+    assert.match(source, /saveLockRef\.current = true/);
+    assert.match(source, /const deleteLockRef = useRef\(false\)/);
+    assert.match(source, /if \(!\w+ \|\| deleteLockRef\.current \|\| deletingId !== null\) return/);
+    assert.match(source, /deleteLockRef\.current = true/);
+  }
+  // Create-intent while an edit is open must remount a fresh empty form.
+  assert.match(coaches, /<CoachEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
+  assert.match(events, /<EventEditor\s+key=\{editing\?\.id \?\? 'new'\}/);
+});
+
 test('all catalog editors protect drafts locally and through admin navigation', () => {
   const classCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
   const members = read('../src/components/admin/MembersManager.jsx');

@@ -284,7 +284,8 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `admin_settings_singleton_upgrade.sql`, then
 `member_booking_switch_guard_upgrade.sql`, then
 `member_onboarding_upgrade.sql`, then
-`supabase/migrations/20260721020000_member_activation_cockpit.sql`. Finally apply the July 2026 audit
+`supabase/migrations/20260721020000_member_activation_cockpit.sql`, then
+`supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql`. Finally apply the July 2026 audit
 fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `audit_immutability_account_deletion_fix.sql`,
 `stripe_fulfillment_deleted_member_fix.sql`,

@@ -52,7 +52,11 @@ test('destructive admin bulk updates use the accessible confirmation surface', (
     assert.match(source, /adminBulkConfirmation/);
     assert.doesNotMatch(source, /window\.confirm/);
   }
-  assert.match(bookings, /const bulkLockRef = useRef\(false\)/);
-  assert.match(bookings, /if \(bulkLockRef\.current \|\| bulkSaving\) return/);
-  assert.match(bookings, /setBulkConfirmationOpen\(false\)/);
+  for (const source of [bookings, ptRequests]) {
+    assert.match(source, /const bulkLockRef = useRef\(false\)/);
+    assert.match(source, /if \(bulkLockRef\.current \|\| bulkSaving/);
+    assert.match(source, /setBulkConfirmationOpen\(false\)/);
+  }
+  assert.match(ptRequests, /const updateLockRef = useRef\(false\)/);
+  assert.match(ptRequests, /if \(updateLockRef\.current \|\| updatingId !== null/);
 });
