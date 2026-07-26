@@ -1737,6 +1737,15 @@ final class ModelsTests: XCTestCase {
         """.utf8))
         XCTAssertTrue(request.isPending)
         XCTAssertEqual(request.displayName, "Alex")
+        XCTAssertTrue(request.searchableText.contains("strength"))
+        XCTAssertEqual(request.allowedNextStatuses, ["approved", "reschedule_requested", "declined"])
+
+        let report = AdminPTRequestReport(rows: [request])
+        XCTAssertEqual(report.requestedCount, 1)
+        XCTAssertTrue(report.csv.contains("\"Alex\""))
+        XCTAssertTrue(report.csv.contains("\"Personal training\""))
+        XCTAssertFalse(report.csv.contains("Strength"))
+        XCTAssertFalse(report.csv.contains("Intermediate"))
 
         let announcement = try decoder.decode(AdminAnnouncement.self, from: Data("""
         {"id":"00000000-0000-0000-0000-000000000004","title":"Class update","body":"Tonight's class starts at six.","tone":"info","audience":"all","cta_label":null,"cta_url":null,"published_at":"2026-07-14T06:00:00Z","expires_at":null,"archived_at":null,"created_at":"2026-07-14T05:00:00Z","updated_at":"2026-07-14T06:00:00.123456+00:00"}

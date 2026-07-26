@@ -930,6 +930,57 @@ struct AdminPTRequest: Identifiable, Codable, Hashable {
 
     var displayName: String { full_name?.nilIfBlank ?? email?.nilIfBlank ?? "PT enquiry" }
     var isPending: Bool { ["requested", "reschedule_requested"].contains(status) }
+    var searchableText: String {
+        let fields: [String?] = [
+            displayName, email, phone, requested_session_type, preferred_day,
+            preferred_time, training_goal, experience_level, admin_notes
+        ]
+        return fields.compactMap { $0?.lowercased() }.joined(separator: " ")
+    }
+    var allowedNextStatuses: [String] {
+        switch status {
+        case "requested": return ["approved", "reschedule_requested", "declined"]
+        case "reschedule_requested": return ["approved", "declined"]
+        case "approved": return ["completed", "cancelled"]
+        default: return []
+        }
+    }
+}
+
+struct AdminPTRequestReport {
+    let rows: [AdminPTRequest]
+
+    var requestedCount: Int { rows.filter { $0.status == "requested" }.count }
+    var approvedCount: Int { rows.filter { $0.status == "approved" }.count }
+    var completedCount: Int { rows.filter { $0.status == "completed" }.count }
+
+    var csv: String {
+        let header = [
+            "Name", "Email", "Phone", "Session Type", "Preferred Day",
+            "Preferred Time", "Status", "Submitted"
+        ].joined(separator: ",")
+        let formatter = ISO8601DateFormatter()
+        let body = rows.map { request in
+            [
+                request.displayName,
+                request.email ?? "",
+                request.phone ?? "",
+                request.requested_session_type,
+                request.preferred_day ?? "",
+                request.preferred_time ?? "",
+                request.status,
+                formatter.string(from: request.created_at)
+            ]
+            .map(Self.escape)
+            .joined(separator: ",")
+        }
+        return ([header] + body).joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return "\"\(escaped)\""
+    }
 }
 
 enum AdminLeadPipeline: String, CaseIterable, Identifiable, Codable, Hashable {

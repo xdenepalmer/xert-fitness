@@ -933,15 +933,24 @@ final class XertAPI {
     }
 
     func adminPTRequests(session auth: AuthSession) async throws -> [AdminPTRequest] {
-        try await restRequest(
-            path: "/rest/v1/private_session_requests",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,full_name,email,phone,requested_session_type,preferred_day,preferred_time,training_goal,experience_level,notes,admin_notes,status,created_at"),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "limit", value: "100")
-            ],
-            auth: auth
-        )
+        let pageSize = 500
+        var offset = 0
+        var requests: [AdminPTRequest] = []
+        while true {
+            let page: [AdminPTRequest] = try await restRequest(
+                path: "/rest/v1/private_session_requests",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,full_name,email,phone,requested_session_type,preferred_day,preferred_time,training_goal,experience_level,notes,admin_notes,status,created_at"),
+                    URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            requests.append(contentsOf: page)
+            if page.count < pageSize { return requests }
+            offset += pageSize
+        }
     }
 
     func adminLeads(session auth: AuthSession, pipeline: AdminLeadPipeline) async throws -> [AdminLead] {

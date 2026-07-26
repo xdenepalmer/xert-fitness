@@ -5050,6 +5050,10 @@ private struct AdminBookingRequestsView: View {
     @State private var confirmingBulk = false
 
     private let statuses = ["requested", "confirmed", "waitlisted", "cancelled", "declined", "attended", "no_show"]
+    private var requestsAreCurrent: Bool { admin.bookingRequestsAreCurrent }
+    private var requestsAreLoading: Bool {
+        admin.isLoadingBookingRequests && !admin.hasLoadedBookingRequests
+    }
 
     private var filteredRequests: [AdminBookingRequest] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -5075,6 +5079,13 @@ private struct AdminBookingRequestsView: View {
 
     var body: some View {
         List {
+            if let message = admin.bookingRequestStatusMessage {
+                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
             if let warning = admin.bookingDecisionNoticeWarning {
                 Section("Member notification") {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -5103,11 +5114,40 @@ private struct AdminBookingRequestsView: View {
             }
             .listRowBackground(Color.xertInk)
 
-            Section("Matching workload") {
-                metricRow("Matching", filteredRequests.count)
-                metricRow("Requested", filteredRequests.filter { $0.status == "requested" }.count)
-                metricRow("Confirmed", filteredRequests.filter { $0.status == "confirmed" }.count)
-                metricRow("Attended", filteredRequests.filter { $0.status == "attended" }.count)
+            if !requestsAreCurrent && !requestsAreLoading {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        admin.hasLoadedBookingRequests
+                            ? "Showing the last booking-request snapshot. Decisions are paused until refresh succeeds."
+                            : "Booking requests could not be loaded. No empty queue assumption is being made.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await admin.loadBookingRequests(session: session, force: true) }
+                    } label: {
+                        Label(
+                            admin.isLoadingBookingRequests ? "Retrying..." : "Retry booking requests",
+                            systemImage: "arrow.clockwise"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(admin.isLoadingBookingRequests)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if admin.hasLoadedBookingRequests {
+                Section(requestsAreCurrent ? "Matching workload" : "Last matching workload") {
+                    metricRow("Matching", filteredRequests.count)
+                    metricRow("Requested", filteredRequests.filter { $0.status == "requested" }.count)
+                    metricRow("Confirmed", filteredRequests.filter { $0.status == "confirmed" }.count)
+                    metricRow("Attended", filteredRequests.filter { $0.status == "attended" }.count)
+                }
             }
 
             if !selectedIDs.isEmpty {
@@ -5128,17 +5168,17 @@ private struct AdminBookingRequestsView: View {
                         Button { confirmingBulk = true } label: {
                             Label(admin.updatingBookingRequestIDs.isEmpty ? "Apply booking update" : "Updating bookings...", systemImage: "arrow.triangle.2.circlepath")
                         }
-                        .disabled(bulkStatus.isEmpty || !admin.updatingBookingRequestIDs.isEmpty)
+                        .disabled(!requestsAreCurrent || bulkStatus.isEmpty || !admin.updatingBookingRequestIDs.isEmpty)
                     }
                 }
                 .listRowBackground(Color.xertInk)
             }
 
             Section("Booking operations") {
-                if admin.isLoadingBookingRequests && admin.bookingRequests.isEmpty {
+                if requestsAreLoading {
                     HStack { ProgressView(); Text("Loading booking requests...") }
                         .listRowBackground(Color.xertInk)
-                } else if filteredRequests.isEmpty {
+                } else if requestsAreCurrent && filteredRequests.isEmpty {
                     AdminEmptyState(icon: "tray", text: admin.bookingRequests.isEmpty ? "No booking requests yet." : "No matching bookings.")
                         .listRowBackground(Color.xertInk)
                 }
@@ -5149,7 +5189,10 @@ private struct AdminBookingRequestsView: View {
                                 .font(.title3).foregroundStyle(Color.xertSteel)
                         }
                         .buttonStyle(.plain)
-                        .disabled(selectedIDs.count >= 50 && !selectedIDs.contains(booking.id))
+                        .disabled(
+                            !requestsAreCurrent
+                                || (selectedIDs.count >= 50 && !selectedIDs.contains(booking.id))
+                        )
                         .accessibilityLabel(selectedIDs.contains(booking.id) ? "Deselect \(booking.fullName)" : "Select \(booking.fullName)")
 
                         Button { selectedRequest = booking } label: {
@@ -5196,7 +5239,12 @@ private struct AdminBookingRequestsView: View {
         .onChange(of: days) { _ in resetSelection() }
         .sheet(item: $selectedRequest) { booking in
             NavigationStack {
-                AdminBookingRequestDetailView(admin: admin, session: session, booking: booking)
+                AdminBookingRequestDetailView(
+                    admin: admin,
+                    session: session,
+                    booking: booking,
+                    mutationAllowed: requestsAreCurrent
+                )
             }
         }
         .confirmationDialog("Update \(selectedRequests.count) bookings?", isPresented: $confirmingBulk, titleVisibility: .visible) {
@@ -5207,6 +5255,7 @@ private struct AdminBookingRequestsView: View {
                     if selectedIDs.isEmpty { bulkStatus = "" }
                 }
             }
+            .disabled(!requestsAreCurrent)
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(bulkStatus == "cancelled" ? "Confirmed member bookings follow the server credit-return policy." : "Every selected enquiry and member booking will be updated.")
@@ -5245,13 +5294,20 @@ private struct AdminBookingRequestDetailView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let booking: AdminBookingRequest
+    let mutationAllowed: Bool
     @State private var notes: String
     @State private var pendingStatus: String?
 
-    init(admin: AdminStore, session: AuthSession, booking: AdminBookingRequest) {
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        booking: AdminBookingRequest,
+        mutationAllowed: Bool
+    ) {
         self.admin = admin
         self.session = session
         self.booking = booking
+        self.mutationAllowed = mutationAllowed
         _notes = State(initialValue: booking.adminNotes ?? "")
     }
 
@@ -5259,6 +5315,16 @@ private struct AdminBookingRequestDetailView: View {
 
     var body: some View {
         List {
+            if !mutationAllowed {
+                Label(
+                    "This booking snapshot is not current. Contact and class details remain available, but decisions and staff notes are read-only.",
+                    systemImage: "lock.trianglebadge.exclamationmark"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowBackground(Color.xertInk)
+            }
             Section("Booking") {
                 detailRow("Member", booking.fullName)
                 detailRow("Source", booking.source.label)
@@ -5286,7 +5352,7 @@ private struct AdminBookingRequestDetailView: View {
                         } label: {
                             Label(statusLabel(next), systemImage: statusIcon(next))
                         }
-                        .disabled(isUpdating)
+                        .disabled(!mutationAllowed || isUpdating)
                     }
                 }
             }
@@ -5300,8 +5366,9 @@ private struct AdminBookingRequestDetailView: View {
                             if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) { dismiss() }
                         }
                     } label: { Label(isUpdating ? "Saving..." : "Save notes", systemImage: "note.text") }
-                    .disabled(isUpdating || notes.count > 5_000)
+                    .disabled(!mutationAllowed || isUpdating || notes.count > 5_000)
                 }
+                .disabled(!mutationAllowed)
             }
         }
         .scrollContentBackground(.hidden)
@@ -5884,6 +5951,11 @@ private struct AdminLeadsView: View {
     @State private var bulkStatus = ""
 
     private var leads: [AdminLead] { admin.leads(for: pipeline) }
+    private var pipelineIsLoaded: Bool { admin.loadedLeadPipelines.contains(pipeline) }
+    private var pipelineIsCurrent: Bool { admin.leadPipelineIsCurrent(pipeline) }
+    private var pipelineIsLoading: Bool {
+        admin.loadingLeadPipeline == pipeline && !pipelineIsLoaded
+    }
     private var filteredLeads: [AdminLead] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return leads.filter { lead in
@@ -5894,6 +5966,14 @@ private struct AdminLeadsView: View {
 
     var body: some View {
         List {
+            if let message = admin.leadPipelineStatusMessage,
+               admin.unavailableLeadPipelines.contains(pipeline) {
+                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
             Section {
                 Picker("Lead pipeline", selection: $pipeline) {
                     ForEach(AdminLeadPipeline.allCases) { option in
@@ -5901,6 +5981,7 @@ private struct AdminLeadsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .disabled(admin.loadingLeadPipeline != nil)
 
                 Picker("Status", selection: $status) {
                     Text("All statuses").tag("all")
@@ -5912,6 +5993,33 @@ private struct AdminLeadsView: View {
                 .tint(Color.xertSteel)
             }
             .listRowBackground(Color.xertInk)
+
+            if !pipelineIsCurrent && !pipelineIsLoading {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        pipelineIsLoaded
+                            ? "Showing the last \(pipeline.title.lowercased()) snapshot. Changes are paused until refresh succeeds."
+                            : "\(pipeline.title) could not be loaded. No empty pipeline assumption is being made.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await admin.loadLeads(session: session, pipeline: pipeline, force: true) }
+                    } label: {
+                        Label(
+                            admin.loadingLeadPipeline == pipeline ? "Retrying..." : "Retry pipeline",
+                            systemImage: "arrow.clockwise"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(admin.loadingLeadPipeline != nil)
+                }
+                .listRowBackground(Color.xertInk)
+            }
 
             if !selectedIDs.isEmpty {
                 Section("Bulk update") {
@@ -5937,16 +6045,16 @@ private struct AdminLeadsView: View {
                     } label: {
                         Label(admin.savingLeadIDs.isEmpty ? "Apply bulk status" : "Updating leads...", systemImage: "person.2.badge.gearshape")
                     }
-                    .disabled(bulkStatus.isEmpty || !admin.savingLeadIDs.isEmpty)
+                    .disabled(!pipelineIsCurrent || bulkStatus.isEmpty || !admin.savingLeadIDs.isEmpty)
                 }
                 .listRowBackground(Color.xertInk)
             }
 
             Section(pipeline.title) {
-                if admin.loadingLeadPipeline == pipeline && leads.isEmpty {
+                if pipelineIsLoading {
                     HStack { ProgressView(); Text("Loading pipeline...") }
                         .listRowBackground(Color.xertInk)
-                } else if filteredLeads.isEmpty {
+                } else if pipelineIsCurrent && filteredLeads.isEmpty {
                     AdminEmptyState(icon: "person.crop.circle.badge.questionmark", text: leads.isEmpty ? "No leads yet." : "No matching leads.")
                         .listRowBackground(Color.xertInk)
                 }
@@ -5958,7 +6066,10 @@ private struct AdminLeadsView: View {
                                 .font(.title3).foregroundStyle(Color.xertSteel)
                         }
                         .buttonStyle(.plain)
-                        .disabled(selectedIDs.count >= 100 && !selectedIDs.contains(lead.id))
+                        .disabled(
+                            !pipelineIsCurrent
+                                || (selectedIDs.count >= 100 && !selectedIDs.contains(lead.id))
+                        )
                         .accessibilityLabel(selectedIDs.contains(lead.id) ? "Deselect \(lead.displayName)" : "Select \(lead.displayName)")
 
                         Button { selectedLead = lead } label: {
@@ -6005,9 +6116,21 @@ private struct AdminLeadsView: View {
             selectedLead = nil
             Task { await admin.loadLeads(session: session, pipeline: newPipeline) }
         }
+        .onChange(of: admin.unavailableLeadPipelines) { unavailable in
+            if unavailable.contains(pipeline) {
+                selectedIDs = []
+                bulkStatus = ""
+            }
+        }
         .sheet(item: $selectedLead) { lead in
             NavigationStack {
-                AdminLeadDetailView(admin: admin, session: session, pipeline: pipeline, lead: lead)
+                AdminLeadDetailView(
+                    admin: admin,
+                    session: session,
+                    pipeline: pipeline,
+                    lead: lead,
+                    mutationAllowed: pipelineIsCurrent
+                )
             }
         }
     }
@@ -6037,14 +6160,22 @@ private struct AdminLeadDetailView: View {
     let session: AuthSession
     let pipeline: AdminLeadPipeline
     let lead: AdminLead
+    let mutationAllowed: Bool
     @State private var status: String
     @State private var notes: String
 
-    init(admin: AdminStore, session: AuthSession, pipeline: AdminLeadPipeline, lead: AdminLead) {
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        pipeline: AdminLeadPipeline,
+        lead: AdminLead,
+        mutationAllowed: Bool
+    ) {
         self.admin = admin
         self.session = session
         self.pipeline = pipeline
         self.lead = lead
+        self.mutationAllowed = mutationAllowed
         _status = State(initialValue: lead.effectiveStatus)
         _notes = State(initialValue: lead.admin_notes ?? "")
     }
@@ -6053,6 +6184,16 @@ private struct AdminLeadDetailView: View {
 
     var body: some View {
         List {
+            if !mutationAllowed {
+                Label(
+                    "This pipeline snapshot is not current. Contact details remain available, but status and notes are read-only.",
+                    systemImage: "lock.trianglebadge.exclamationmark"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowBackground(Color.xertInk)
+            }
             Section("Contact") {
                 detailRow("Name", lead.displayName)
                 if let email = nonBlank(lead.email), let url = URL(string: "mailto:\(email)") {
@@ -6109,8 +6250,9 @@ private struct AdminLeadDetailView: View {
                 } label: {
                     Label(isSaving ? "Saving..." : "Save pipeline changes", systemImage: "checkmark.circle")
                 }
-                .disabled(isSaving || notes.count > 5_000)
+                .disabled(!mutationAllowed || isSaving || notes.count > 5_000)
             }
+            .disabled(!mutationAllowed)
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
@@ -6145,77 +6287,219 @@ private struct AdminLeadDetailView: View {
 private struct AdminPTRequestsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
-    @State private var filter = "active"
+    @State private var query = ""
+    @State private var statusFilter = "active"
+    @State private var sessionTypeFilter = "all"
+    @State private var ageFilter = "30"
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var bulkStatus = ""
+    @State private var confirmingBulkUpdate = false
     @State private var notesRequest: AdminPTRequest?
+    @State private var exportDocument: AdminPTCSVDocument?
+    @State private var isExporting = false
+    @State private var exportError: String?
+
+    private var requestsAreCurrent: Bool { admin.ptRequestsAreCurrent }
+    private var requestsAreLoading: Bool {
+        (admin.isLoading || admin.isRefreshingOperations)
+            && !admin.loadedSources.contains("PT requests")
+    }
+    private var isMutating: Bool {
+        admin.updatingPTRequestID != nil || !admin.bulkUpdatingPTRequestIDs.isEmpty
+    }
+    private var sessionTypes: [String] {
+        Array(Set(admin.ptRequests.map(\.requested_session_type)))
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
 
     private var rows: [AdminPTRequest] {
-        switch filter {
-        case "active": return admin.ptRequests.filter { ["requested", "reschedule_requested", "approved"].contains($0.status) }
-        case "completed": return admin.ptRequests.filter { $0.status == "completed" }
-        default: return admin.ptRequests
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cutoff: Date? = {
+            switch ageFilter {
+            case "30": return Calendar.current.date(byAdding: .day, value: -30, to: Date())
+            case "90": return Calendar.current.date(byAdding: .day, value: -90, to: Date())
+            default: return nil
+            }
+        }()
+        return admin.ptRequests.filter { request in
+            let matchesStatus: Bool
+            switch statusFilter {
+            case "active":
+                matchesStatus = ["requested", "reschedule_requested", "approved"].contains(request.status)
+            case "all":
+                matchesStatus = true
+            default:
+                matchesStatus = request.status == statusFilter
+            }
+            return matchesStatus
+                && (sessionTypeFilter == "all" || request.requested_session_type == sessionTypeFilter)
+                && (cutoff.map { request.created_at >= $0 } ?? true)
+                && (needle.isEmpty || request.searchableText.contains(needle))
         }
+    }
+    private var selectedRequests: [AdminPTRequest] {
+        admin.ptRequests.filter { selectedIDs.contains($0.id) }
+    }
+    private var bulkOptions: [String] {
+        guard let first = selectedRequests.first,
+              selectedRequests.allSatisfy({ $0.status == first.status }) else { return [] }
+        return first.allowedNextStatuses
+    }
+    private var report: AdminPTRequestReport { AdminPTRequestReport(rows: rows) }
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
     }
 
     var body: some View {
         List {
-            Section {
-                Picker("Request filter", selection: $filter) {
+            if let message = admin.ptRequestStatusMessage {
+                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
+            Section("Filters") {
+                Picker("Status", selection: $statusFilter) {
                     Text("Active").tag("active")
-                    Text("Completed").tag("completed")
-                    Text("All").tag("all")
+                    Text("All statuses").tag("all")
+                    ForEach(["requested", "reschedule_requested", "approved", "completed", "declined", "cancelled"], id: \.self) {
+                        Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0)
+                    }
+                }
+                Picker("Session type", selection: $sessionTypeFilter) {
+                    Text("All session types").tag("all")
+                    ForEach(sessionTypes, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("Submitted", selection: $ageFilter) {
+                    Text("30 days").tag("30")
+                    Text("90 days").tag("90")
+                    Text("All time").tag("all")
                 }
                 .pickerStyle(.segmented)
             }
             .listRowBackground(Color.xertNavy)
 
-            if rows.isEmpty {
+            if requestsAreLoading {
+                HStack(spacing: 10) {
+                    ProgressView().tint(Color.xertSteel)
+                    Text("Loading PT requests...")
+                }
+                .frame(minHeight: 44)
+                .listRowBackground(Color.xertInk)
+            } else if !requestsAreCurrent {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        admin.loadedSources.contains("PT requests")
+                            ? "Showing the last PT request snapshot. Updates are paused until refresh succeeds."
+                            : "PT Requests could not be loaded. No empty queue assumption is being made.",
+                        systemImage: "wifi.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await admin.refreshPTRequests(session: session) }
+                    } label: {
+                        Label(
+                            admin.isLoading || admin.isRefreshingOperations ? "Retrying..." : "Retry PT requests",
+                            systemImage: "arrow.clockwise"
+                        )
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(admin.isLoading || admin.isRefreshingOperations)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if admin.loadedSources.contains("PT requests") {
+                Section(requestsAreCurrent ? "Matching workload" : "Last matching workload") {
+                    HStack(spacing: 0) {
+                        ptMetric("Total", rows.count)
+                        ptMetric("New", report.requestedCount)
+                        ptMetric("Approved", report.approvedCount)
+                        ptMetric("Done", report.completedCount)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if !selectedIDs.isEmpty {
+                Section("Bulk action") {
+                    Text("\(selectedIDs.count) request\(selectedIDs.count == 1 ? "" : "s") selected")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                    if bulkOptions.isEmpty {
+                        Label(
+                            "Select requests with the same actionable status.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                    } else {
+                        Picker("Move selected to", selection: $bulkStatus) {
+                            Text("Choose status").tag("")
+                            ForEach(bulkOptions, id: \.self) {
+                                Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0)
+                            }
+                        }
+                        Button {
+                            confirmingBulkUpdate = true
+                        } label: {
+                            Label("Update selected", systemImage: "arrow.triangle.2.circlepath")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.xertSteel)
+                        .disabled(!requestsAreCurrent || bulkStatus.isEmpty || isMutating)
+                    }
+                    Button("Clear selection", role: .cancel) { selectedIDs = [] }
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if requestsAreCurrent && rows.isEmpty {
                 Text("No matching PT requests.")
                     .listRowBackground(Color.xertInk)
             }
             ForEach(rows) { request in
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(request.displayName).font(.headline)
-                            Text(request.requested_session_type)
-                                .font(.caption.weight(.bold)).foregroundStyle(Color.xertSteel)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top) {
+                            selectionButton(for: request)
+                            ptRequestHeading(request)
+                            Spacer()
+                            ptStatus(request)
                         }
-                        Spacer()
-                        Text(request.status.replacingOccurrences(of: "_", with: " ").uppercased())
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(request.isPending ? Color.orange : Color.xertPale.opacity(0.65))
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .top) {
+                                selectionButton(for: request)
+                                ptRequestHeading(request)
+                                Spacer()
+                            }
+                            ptStatus(request)
+                                .padding(.leading, 44)
+                        }
                     }
                     Text([request.preferred_day, request.preferred_time].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                    Text("Submitted \(request.created_at.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(Color.xertPale.opacity(0.48))
                     if let goal = request.training_goal, !goal.isEmpty {
                         Text("Goal: \(goal)").font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
                     }
-                    HStack(spacing: 8) {
-                        if let phone = request.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                            Link(destination: url) { Image(systemName: "phone") }.buttonStyle(.bordered)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            ptActions(for: request, expands: false)
                         }
-                        if let email = request.email, let url = URL(string: "mailto:\(email)") {
-                            Link(destination: url) { Image(systemName: "envelope") }.buttonStyle(.bordered)
+                        VStack(spacing: 8) {
+                            ptActions(for: request, expands: true)
                         }
-                        Menu {
-                            if request.isPending {
-                                requestAction("Approve", status: "approved", request: request)
-                                requestAction("Request reschedule", status: "reschedule_requested", request: request)
-                                requestAction("Decline", status: "declined", request: request)
-                            }
-                            if request.status == "approved" {
-                                requestAction("Mark complete", status: "completed", request: request)
-                                requestAction("Cancel", status: "cancelled", request: request)
-                            }
-                        } label: {
-                            Label("Update", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(.borderedProminent).tint(Color.xertSteel)
-                        .disabled(admin.updatingPTRequestID != nil)
-
-                        Button { notesRequest = request } label: { Image(systemName: "note.text") }
-                            .buttonStyle(.bordered)
-                            .accessibilityLabel("Edit admin notes")
                     }
                     .font(.caption.weight(.bold))
                 }
@@ -6227,8 +6511,75 @@ private struct AdminPTRequestsView: View {
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("PT Requests")
+        .searchable(text: $query, prompt: "Name, contact, goal or notes")
+        .refreshable { await admin.refreshPTRequests(session: session) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminPTCSVDocument(csv: report.csv)
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(rows.isEmpty || !requestsAreCurrent)
+                .accessibilityLabel("Export filtered PT requests")
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-pt-requests-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result {
+                exportError = error.localizedDescription
+            }
+            exportDocument = nil
+        }
+        .alert("Export failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "The PT request report could not be exported.")
+        }
+        .confirmationDialog(
+            "Update \(selectedIDs.count) PT requests?",
+            isPresented: $confirmingBulkUpdate,
+            titleVisibility: .visible
+        ) {
+            Button("Move to \(bulkStatus.replacingOccurrences(of: "_", with: " ").capitalized)") {
+                let requests = selectedRequests
+                Task {
+                    selectedIDs = await admin.bulkUpdatePTRequests(
+                        session: session,
+                        requests: requests,
+                        status: bulkStatus
+                    )
+                    if selectedIDs.isEmpty { bulkStatus = "" }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only requests that fail will remain selected for retry.")
+        }
+        .task {
+            if !admin.loadedSources.contains("PT requests") {
+                await admin.refreshPTRequests(session: session)
+            }
+        }
+        .onChange(of: admin.refreshUnavailableSources) { unavailable in
+            if unavailable.contains("PT requests") {
+                notesRequest = nil
+            }
+        }
+        .onChange(of: statusFilter) { _ in resetSelection() }
+        .onChange(of: sessionTypeFilter) { _ in resetSelection() }
+        .onChange(of: ageFilter) { _ in resetSelection() }
+        .onChange(of: query) { _ in resetSelection() }
         .sheet(item: $notesRequest) { request in
-            AdminPTNotesEditor(request: request) { notes in
+            AdminPTNotesEditor(request: request, mutationAllowed: requestsAreCurrent) { notes in
                 Task {
                     _ = await admin.updatePTRequest(
                         session: session,
@@ -6243,6 +6594,106 @@ private struct AdminPTRequestsView: View {
         }
     }
 
+    private func ptRequestHeading(_ request: AdminPTRequest) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(request.displayName).font(.headline)
+            Text(request.requested_session_type)
+                .font(.caption.weight(.bold)).foregroundStyle(Color.xertSteel)
+        }
+    }
+
+    private func ptStatus(_ request: AdminPTRequest) -> some View {
+        Text(request.status.replacingOccurrences(of: "_", with: " ").uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(request.isPending ? Color.orange : Color.xertPale.opacity(0.65))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func selectionButton(for request: AdminPTRequest) -> some View {
+        Button {
+            if selectedIDs.contains(request.id) {
+                selectedIDs.remove(request.id)
+            } else if selectedIDs.count < 50 {
+                selectedIDs.insert(request.id)
+            }
+            bulkStatus = ""
+        } label: {
+            Image(systemName: selectedIDs.contains(request.id) ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(selectedIDs.contains(request.id) ? Color.xertSteel : Color.xertPale.opacity(0.5))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(!requestsAreCurrent || isMutating)
+        .accessibilityLabel(selectedIDs.contains(request.id) ? "Deselect \(request.displayName)" : "Select \(request.displayName)")
+    }
+
+    private func ptMetric(_ label: String, _ value: Int) -> some View {
+        VStack(spacing: 3) {
+            Text(value.formatted())
+                .font(.headline.monospacedDigit())
+                .foregroundStyle(Color.xertOffWhite)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+    }
+
+    private func resetSelection() {
+        selectedIDs = []
+        bulkStatus = ""
+    }
+
+    @ViewBuilder
+    private func ptActions(for request: AdminPTRequest, expands: Bool) -> some View {
+        HStack(spacing: 8) {
+            if let phone = request.phone,
+               let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                Link(destination: url) {
+                    Image(systemName: "phone")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Call \(request.displayName)")
+            }
+            if let email = request.email, let url = URL(string: "mailto:\(email)") {
+                Link(destination: url) {
+                    Image(systemName: "envelope")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Email \(request.displayName)")
+            }
+        }
+
+        Menu {
+            ForEach(request.allowedNextStatuses, id: \.self) { next in
+                requestAction(
+                    next.replacingOccurrences(of: "_", with: " ").capitalized,
+                    status: next,
+                    request: request
+                )
+            }
+        } label: {
+            Label("Update", systemImage: "arrow.triangle.2.circlepath")
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.xertSteel)
+        .disabled(!requestsAreCurrent || isMutating || request.allowedNextStatuses.isEmpty)
+
+        Button { notesRequest = request } label: {
+            Label("Notes", systemImage: "note.text")
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!requestsAreCurrent || isMutating)
+        .accessibilityLabel("Edit admin notes for \(request.displayName)")
+    }
+
     @ViewBuilder
     private func requestAction(_ title: String, status: String, request: AdminPTRequest) -> some View {
         Button(title) {
@@ -6251,14 +6702,39 @@ private struct AdminPTRequestsView: View {
     }
 }
 
+private struct AdminPTCSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    let csv: String
+
+    init(csv: String) { self.csv = csv }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let value = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        csv = value
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(csv.utf8))
+    }
+}
+
 private struct AdminPTNotesEditor: View {
     @Environment(\.dismiss) private var dismiss
     let request: AdminPTRequest
+    let mutationAllowed: Bool
     let onSave: (String) -> Void
     @State private var notes: String
 
-    init(request: AdminPTRequest, onSave: @escaping (String) -> Void) {
+    init(
+        request: AdminPTRequest,
+        mutationAllowed: Bool,
+        onSave: @escaping (String) -> Void
+    ) {
         self.request = request
+        self.mutationAllowed = mutationAllowed
         self.onSave = onSave
         _notes = State(initialValue: request.admin_notes ?? "")
     }
@@ -6266,10 +6742,21 @@ private struct AdminPTNotesEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !mutationAllowed {
+                    Section {
+                        Label(
+                            "PT Requests must refresh before owner notes can be changed.",
+                            systemImage: "lock.trianglebadge.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                    }
+                }
                 Section("Private owner notes") {
                     TextEditor(text: $notes).frame(minHeight: 160)
                     Text("\(notes.count)/5000").font(.caption).foregroundStyle(.secondary)
                 }
+                .disabled(!mutationAllowed)
             }
             .navigationTitle(request.displayName)
             .navigationBarTitleDisplayMode(.inline)
@@ -6277,6 +6764,7 @@ private struct AdminPTNotesEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { onSave(String(notes.prefix(5_000))) }
+                        .disabled(!mutationAllowed)
                 }
             }
         }
@@ -6694,7 +7182,6 @@ private struct AdminCommunicationsView: View {
                     .listRowBackground(Color.xertInk)
                 }
             }
-
             if let status = admin.announcementStatusMessage {
                 Section {
                     Label(status, systemImage: "checkmark.circle.fill")
@@ -6794,6 +7281,7 @@ private struct AdminCommunicationsView: View {
                             .lineLimit(2)
                     }
                 }
+                .disabled(!mutationAllowed)
                 .foregroundStyle(Color.xertOffWhite)
                 .padding(.vertical, 7)
                 .contentShape(Rectangle())

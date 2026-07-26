@@ -104,6 +104,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
+    @Published private(set) var bulkUpdatingPTRequestIDs: Set<UUID> = []
     @Published private(set) var isPublishingAnnouncement = false
     @Published private(set) var announcementMutationID: UUID?
     @Published private(set) var announcementStatusMessage: String?
@@ -129,6 +130,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
+    @Published private(set) var loadedLeadPipelines: Set<AdminLeadPipeline> = []
+    @Published private(set) var unavailableLeadPipelines: Set<AdminLeadPipeline> = []
+    @Published private(set) var leadPipelineStatusMessage: String?
     @Published private(set) var isLoadingCampaignAttribution = false
     @Published private(set) var hasLoadedSiteContent = false
     @Published private(set) var isLoadingSiteContent = false
@@ -136,7 +140,11 @@ final class AdminStore: ObservableObject {
     @Published private(set) var isUploadingSiteImage = false
     @Published private(set) var savingLeadIDs: Set<AdminLeadIdentifier> = []
     @Published private(set) var isLoadingBookingRequests = false
+    @Published private(set) var hasLoadedBookingRequests = false
+    @Published private(set) var bookingRequestsUnavailable = false
+    @Published private(set) var bookingRequestStatusMessage: String?
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
+    @Published private(set) var ptRequestStatusMessage: String?
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var operationalUpdatedAt: Date?
@@ -280,7 +288,12 @@ final class AdminStore: ObservableObject {
         catch { failures.append("orders"); queueFailures.append("orders") }
         do { settings = try await settingsRequest; successfulSources.insert("platform controls"); loadedSource = true }
         catch { failures.append("platform controls") }
-        do { ptRequests = try await ptRequest; successfulSources.insert("PT requests"); loadedSource = true }
+        do {
+            ptRequests = try await ptRequest
+            successfulSources.insert("PT requests")
+            ptRequestStatusMessage = nil
+            loadedSource = true
+        }
         catch { failures.append("PT requests"); queueFailures.append("PT requests") }
         do { announcements = try await announcementRequest; successfulSources.insert("member notices"); loadedSource = true }
         catch { failures.append("member notices") }
@@ -361,6 +374,7 @@ final class AdminStore: ObservableObject {
               promotingSessionID == nil,
               loggingFollowUpMemberID == nil,
               updatingPTRequestID == nil,
+              bulkUpdatingPTRequestIDs.isEmpty,
               updatingBookingID == nil,
               updatingBookingRequestIDs.isEmpty,
               recordingAttendanceSessionID == nil,
@@ -439,6 +453,7 @@ final class AdminStore: ObservableObject {
             guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
             ptRequests = next
             successfulSources.insert("PT requests")
+            ptRequestStatusMessage = nil
         } catch {
             guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
             failures.append("PT requests")
@@ -1094,16 +1109,42 @@ final class AdminStore: ObservableObject {
         }
     }
 
+    func leadPipelineIsCurrent(_ pipeline: AdminLeadPipeline) -> Bool {
+        loadedLeadPipelines.contains(pipeline) && !unavailableLeadPipelines.contains(pipeline)
+    }
+
+    private func refreshLeadPipelineAfterMutation(
+        session: AuthSession,
+        pipeline: AdminLeadPipeline,
+        completedAction: String
+    ) async {
+        do {
+            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            loadedLeadPipelines.insert(pipeline)
+            unavailableLeadPipelines.remove(pipeline)
+            leadPipelineStatusMessage = nil
+        } catch {
+            unavailableLeadPipelines.insert(pipeline)
+            leadPipelineStatusMessage = "\(completedAction), but the latest pipeline could not be loaded. Refresh before making another change."
+        }
+    }
+
     func loadLeads(session: AuthSession, pipeline: AdminLeadPipeline, force: Bool = false) async {
         guard loadingLeadPipeline == nil else { return }
-        if !force, leadsByPipeline[pipeline] != nil { return }
+        if !force,
+           loadedLeadPipelines.contains(pipeline),
+           !unavailableLeadPipelines.contains(pipeline) { return }
         loadingLeadPipeline = pipeline
         defer { loadingLeadPipeline = nil }
         do {
             leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            loadedLeadPipelines.insert(pipeline)
+            unavailableLeadPipelines.remove(pipeline)
+            leadPipelineStatusMessage = nil
             lastUpdatedAt = Date()
         } catch {
-            errorMessage = error.localizedDescription
+            unavailableLeadPipelines.insert(pipeline)
+            leadPipelineStatusMessage = "Could not refresh \(pipeline.title.lowercased()). Last loaded leads remain read-only."
         }
     }
 
@@ -1115,6 +1156,10 @@ final class AdminStore: ObservableObject {
         notes: String
     ) async -> Bool {
         guard savingLeadIDs.isEmpty else { return false }
+        guard leadPipelineIsCurrent(pipeline) else {
+            errorMessage = "Refresh \(pipeline.title.lowercased()) before changing this lead."
+            return false
+        }
         savingLeadIDs = [lead.id]
         defer { savingLeadIDs = [] }
         do {
@@ -1125,7 +1170,11 @@ final class AdminStore: ObservableObject {
                 status: status,
                 notes: notes
             )
-            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            await refreshLeadPipelineAfterMutation(
+                session: session,
+                pipeline: pipeline,
+                completedAction: "\(lead.displayName) was updated"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1141,6 +1190,10 @@ final class AdminStore: ObservableObject {
         status: String
     ) async -> Bool {
         guard savingLeadIDs.isEmpty else { return false }
+        guard leadPipelineIsCurrent(pipeline) else {
+            errorMessage = "Refresh \(pipeline.title.lowercased()) before updating selected leads."
+            return false
+        }
         savingLeadIDs = ids
         defer { savingLeadIDs = [] }
         do {
@@ -1150,7 +1203,11 @@ final class AdminStore: ObservableObject {
                 leadIDs: Array(ids),
                 status: status
             )
-            leadsByPipeline[pipeline] = try await api.adminLeads(session: session, pipeline: pipeline)
+            await refreshLeadPipelineAfterMutation(
+                session: session,
+                pipeline: pipeline,
+                completedAction: "\(ids.count) lead\(ids.count == 1 ? " was" : "s were") updated"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1161,15 +1218,23 @@ final class AdminStore: ObservableObject {
 
     func loadBookingRequests(session: AuthSession, force: Bool = false) async {
         guard !isLoadingBookingRequests else { return }
-        if !force, !bookingRequests.isEmpty { return }
+        if !force, hasLoadedBookingRequests, !bookingRequestsUnavailable { return }
         isLoadingBookingRequests = true
         defer { isLoadingBookingRequests = false }
         do {
             bookingRequests = try await api.adminBookingRequests(session: session)
+            hasLoadedBookingRequests = true
+            bookingRequestsUnavailable = false
+            bookingRequestStatusMessage = nil
             lastUpdatedAt = Date()
         } catch {
-            errorMessage = error.localizedDescription
+            bookingRequestsUnavailable = true
+            bookingRequestStatusMessage = "Booking requests could not refresh. Last loaded requests remain read-only."
         }
+    }
+
+    var bookingRequestsAreCurrent: Bool {
+        hasLoadedBookingRequests && !bookingRequestsUnavailable
     }
 
     func updateBookingRequest(
@@ -1178,13 +1243,20 @@ final class AdminStore: ObservableObject {
         status: String
     ) async -> Bool {
         guard updatingBookingRequestIDs.isEmpty else { return false }
+        guard bookingRequestsAreCurrent else {
+            errorMessage = "Refresh Booking Requests before changing a booking."
+            return false
+        }
         updatingBookingRequestIDs = [booking.id]
         defer { updatingBookingRequestIDs = [] }
         do {
             bookingDecisionNoticeWarning = nil
             let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
             bookingDecisionNoticeWarning = warning
-            try await refreshBookingOperationsSnapshot(session: session)
+            await refreshBookingOperationsAfterMutation(
+                session: session,
+                completedAction: "\(booking.fullName)'s booking was updated"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1199,6 +1271,10 @@ final class AdminStore: ObservableObject {
         status: String
     ) async -> Set<String> {
         guard updatingBookingRequestIDs.isEmpty else { return Set(bookings.map(\.id)) }
+        guard bookingRequestsAreCurrent else {
+            errorMessage = "Refresh Booking Requests before updating selected bookings."
+            return Set(bookings.map(\.id))
+        }
         updatingBookingRequestIDs = Set(bookings.map(\.id))
         defer { updatingBookingRequestIDs = [] }
         var failed: Set<String> = []
@@ -1209,11 +1285,13 @@ final class AdminStore: ObservableObject {
             }
             catch { failed.insert(booking.id) }
         }
-        do {
-            try await refreshBookingOperationsSnapshot(session: session)
+        let succeeded = bookings.count - failed.count
+        if succeeded > 0 {
+            await refreshBookingOperationsAfterMutation(
+                session: session,
+                completedAction: "\(succeeded) booking\(succeeded == 1 ? " was" : "s were") updated"
+            )
             lastUpdatedAt = Date()
-        } catch {
-            errorMessage = error.localizedDescription
         }
         if !failed.isEmpty {
             errorMessage = "\(failed.count) booking update\(failed.count == 1 ? "" : "s") failed and remain selected. Review class capacity, credits, or current status."
@@ -1221,14 +1299,45 @@ final class AdminStore: ObservableObject {
         return failed
     }
 
-    private func refreshBookingOperationsSnapshot(session: AuthSession) async throws {
+    private func refreshBookingOperationsAfterMutation(
+        session: AuthSession,
+        completedAction: String
+    ) async {
         async let bookingRequest = api.adminBookingRequests(session: session)
         async let operationsRequest = api.adminDailyOperations(session: session)
         async let waitlistRequest = api.adminWaitlist(session: session)
-        let snapshot = try await (bookingRequest, operationsRequest, waitlistRequest)
-        bookingRequests = snapshot.0
-        dailyOperations = snapshot.1
-        waitlist = snapshot.2
+        var failures: [String] = []
+        do {
+            bookingRequests = try await bookingRequest
+            hasLoadedBookingRequests = true
+            bookingRequestsUnavailable = false
+        } catch {
+            bookingRequestsUnavailable = true
+            failures.append("booking requests")
+        }
+        do {
+            dailyOperations = try await operationsRequest
+            loadedSources.insert("today's classes")
+            refreshUnavailableSources.removeAll { $0 == "today's classes" }
+        } catch {
+            failures.append("today's classes")
+            if !refreshUnavailableSources.contains("today's classes") {
+                refreshUnavailableSources.append("today's classes")
+            }
+        }
+        do {
+            waitlist = try await waitlistRequest
+            loadedSources.insert("waitlists")
+            refreshUnavailableSources.removeAll { $0 == "waitlists" }
+        } catch {
+            failures.append("waitlists")
+            if !refreshUnavailableSources.contains("waitlists") {
+                refreshUnavailableSources.append("waitlists")
+            }
+        }
+        bookingRequestStatusMessage = failures.isEmpty
+            ? nil
+            : "\(completedAction), but \(failures.joined(separator: " and ")) could not refresh."
     }
 
     func saveLegacyBookingNotes(
@@ -1237,11 +1346,18 @@ final class AdminStore: ObservableObject {
         notes: String
     ) async -> Bool {
         guard updatingBookingRequestIDs.isEmpty else { return false }
+        guard bookingRequestsAreCurrent else {
+            errorMessage = "Refresh Booking Requests before changing staff notes."
+            return false
+        }
         updatingBookingRequestIDs = [booking.id]
         defer { updatingBookingRequestIDs = [] }
         do {
             try await api.adminUpdateLegacyBookingNotes(session: session, booking: booking, notes: notes)
-            bookingRequests = try await api.adminBookingRequests(session: session)
+            await refreshBookingOperationsAfterMutation(
+                session: session,
+                completedAction: "Staff notes were saved"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
@@ -1501,7 +1617,15 @@ final class AdminStore: ObservableObject {
         notes: String? = nil,
         updateNotes: Bool = false
     ) async -> Bool {
-        guard updatingPTRequestID == nil else { return false }
+        guard updatingPTRequestID == nil, bulkUpdatingPTRequestIDs.isEmpty else { return false }
+        guard ptRequestsAreCurrent else {
+            errorMessage = "Refresh PT Requests before changing this request."
+            return false
+        }
+        guard updateNotes || request.allowedNextStatuses.contains(status) else {
+            errorMessage = "This PT request cannot move from \(request.status) to \(status)."
+            return false
+        }
         updatingPTRequestID = request.id
         defer { updatingPTRequestID = nil }
         do {
@@ -1512,12 +1636,108 @@ final class AdminStore: ObservableObject {
                 adminNotes: notes,
                 updateNotes: updateNotes
             )
-            ptRequests = try await api.adminPTRequests(session: session)
+            await refreshPTRequestsAfterMutation(
+                session: session,
+                completedAction: "\(request.displayName)'s PT request was updated"
+            )
             lastUpdatedAt = Date()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    func bulkUpdatePTRequests(
+        session: AuthSession,
+        requests: [AdminPTRequest],
+        status: String
+    ) async -> Set<UUID> {
+        guard updatingPTRequestID == nil, bulkUpdatingPTRequestIDs.isEmpty else {
+            return Set(requests.map(\.id))
+        }
+        guard ptRequestsAreCurrent else {
+            errorMessage = "Refresh PT Requests before changing selected requests."
+            return Set(requests.map(\.id))
+        }
+
+        let boundedRequests = Array(requests.prefix(50))
+        guard !boundedRequests.isEmpty else { return [] }
+        guard boundedRequests.allSatisfy({ $0.allowedNextStatuses.contains(status) }) else {
+            errorMessage = "Selected PT requests do not share a valid next status."
+            return Set(requests.map(\.id))
+        }
+        bulkUpdatingPTRequestIDs = Set(boundedRequests.map(\.id))
+        defer { bulkUpdatingPTRequestIDs = [] }
+
+        var mutationFailures = Set<UUID>()
+        for request in boundedRequests {
+            do {
+                try await api.adminUpdatePTRequest(
+                    session: session,
+                    requestID: request.id,
+                    status: status,
+                    adminNotes: nil,
+                    updateNotes: false
+                )
+            } catch {
+                mutationFailures.insert(request.id)
+            }
+        }
+
+        let succeededCount = boundedRequests.count - mutationFailures.count
+        let failures = mutationFailures.union(requests.dropFirst(50).map(\.id))
+        if succeededCount > 0 {
+            await refreshPTRequestsAfterMutation(
+                session: session,
+                completedAction: "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated"
+            )
+            lastUpdatedAt = Date()
+        }
+        if !failures.isEmpty {
+            errorMessage = "\(failures.count) selected PT request\(failures.count == 1 ? "" : "s") could not be updated. They remain selected for retry."
+        }
+        return failures
+    }
+
+    var ptRequestsAreCurrent: Bool {
+        loadedSources.contains("PT requests")
+            && !refreshUnavailableSources.contains("PT requests")
+    }
+
+    func refreshPTRequests(session: AuthSession) async {
+        guard updatingPTRequestID == nil,
+              bulkUpdatingPTRequestIDs.isEmpty,
+              !isLoading,
+              !isRefreshingOperations else { return }
+        do {
+            ptRequests = try await api.adminPTRequests(session: session)
+            loadedSources.insert("PT requests")
+            refreshUnavailableSources.removeAll { $0 == "PT requests" }
+            ptRequestStatusMessage = nil
+            lastUpdatedAt = Date()
+        } catch {
+            if !refreshUnavailableSources.contains("PT requests") {
+                refreshUnavailableSources.append("PT requests")
+            }
+            ptRequestStatusMessage = "PT Requests could not refresh. Last loaded requests remain read-only."
+        }
+    }
+
+    private func refreshPTRequestsAfterMutation(
+        session: AuthSession,
+        completedAction: String
+    ) async {
+        do {
+            ptRequests = try await api.adminPTRequests(session: session)
+            loadedSources.insert("PT requests")
+            refreshUnavailableSources.removeAll { $0 == "PT requests" }
+            ptRequestStatusMessage = nil
+        } catch {
+            if !refreshUnavailableSources.contains("PT requests") {
+                refreshUnavailableSources.append("PT requests")
+            }
+            ptRequestStatusMessage = "\(completedAction), but the latest queue could not be loaded. Refresh before making another change."
         }
     }
 
@@ -1956,7 +2176,10 @@ final class AdminStore: ObservableObject {
             }
             do {
                 bookingRequests = try await api.adminBookingRequests(session: session)
+                hasLoadedBookingRequests = true
+                bookingRequestsUnavailable = false
             } catch {
+                bookingRequestsUnavailable = true
                 refreshWarnings.append("booking requests")
             }
 

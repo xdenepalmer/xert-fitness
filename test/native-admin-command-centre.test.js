@@ -532,11 +532,11 @@ test('owner queue freshness and booking mutations keep dashboard counts trustwor
   assert.doesNotMatch(store, /catch \{ failures\.append\("Stripe health"\); queueFailures\.append/);
   assert.doesNotMatch(store, /catch \{ failures\.append\("push health"\); queueFailures\.append/);
   assert.match(store, /queueFailures\.isEmpty[\s\S]*\.ready[\s\S]*\.partial\(unavailableSources: queueFailures\)/);
-  assert.match(store, /private func refreshBookingOperationsSnapshot/);
+  assert.match(store, /private func refreshBookingOperationsAfterMutation/);
   assert.match(store, /async let bookingRequest = api\.adminBookingRequests/);
   assert.match(store, /async let operationsRequest = api\.adminDailyOperations/);
   assert.match(store, /async let waitlistRequest = api\.adminWaitlist/);
-  assert.ok((store.match(/try await refreshBookingOperationsSnapshot\(session: session\)/g) || []).length >= 2);
+  assert.ok((store.match(/await refreshBookingOperationsAfterMutation\(/g) || []).length >= 3);
   assert.match(view, /AdminRefreshDataWarning\(/);
   assert.match(view, /Retry unavailable data/);
   assert.match(view, /Task \{ await admin\.refresh\(session: session\) \}/);
@@ -919,4 +919,67 @@ test('native schedule controls preserve mutation truth and preview blackout conf
   assert.match(scheduleView, /\.disabled\(!mutationAllowed \|\| !conflicts\.isEmpty/);
   assert.match(scheduleView, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(scheduleView, /frame\(maxWidth: \.infinity, minHeight: 44\)/);
+});
+
+test('native intake desks never hide failed loads or lose confirmed mutation outcomes', async () => {
+  const [store, api, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(store, /@Published private\(set\) var loadedLeadPipelines: Set<AdminLeadPipeline>/);
+  assert.match(store, /@Published private\(set\) var unavailableLeadPipelines: Set<AdminLeadPipeline>/);
+  assert.match(store, /func leadPipelineIsCurrent\(_ pipeline: AdminLeadPipeline\)/);
+  assert.match(store, /guard leadPipelineIsCurrent\(pipeline\)/);
+  assert.match(store, /refreshLeadPipelineAfterMutation[\s\S]*latest pipeline could not be loaded/);
+  assert.match(store, /@Published private\(set\) var hasLoadedBookingRequests = false/);
+  assert.match(store, /var bookingRequestsAreCurrent: Bool/);
+  assert.match(store, /guard bookingRequestsAreCurrent/);
+  assert.match(store, /refreshBookingOperationsAfterMutation[\s\S]*bookingRequestsUnavailable = true/);
+  assert.match(store, /completedAction[\s\S]*could not refresh/);
+  assert.match(store, /var ptRequestsAreCurrent: Bool/);
+  assert.match(store, /guard ptRequestsAreCurrent/);
+  assert.match(store, /refreshPTRequestsAfterMutation[\s\S]*latest queue could not be loaded/);
+  assert.match(store, /func bulkUpdatePTRequests/);
+  assert.match(store, /Array\(requests\.prefix\(50\)\)/);
+  assert.match(store, /They remain selected for retry/);
+
+  const ptLoader = api.slice(
+    api.indexOf('func adminPTRequests'),
+    api.indexOf('func adminLeads'),
+  );
+  assert.match(ptLoader, /let pageSize = 500/);
+  assert.match(ptLoader, /created_at\.desc,id\.desc/);
+  assert.match(ptLoader, /while true[\s\S]*offset \+= pageSize/);
+
+  const bookingView = view.slice(
+    view.indexOf('private struct AdminBookingRequestsView'),
+    view.indexOf('private struct AdminSiteContentView'),
+  );
+  assert.match(bookingView, /private var requestsAreCurrent: Bool/);
+  assert.match(bookingView, /No empty queue assumption is being made/);
+  assert.match(bookingView, /if admin\.hasLoadedBookingRequests[\s\S]*Last matching workload/);
+  assert.match(bookingView, /mutationAllowed: requestsAreCurrent/);
+  assert.match(bookingView, /decisions and staff notes are read-only/);
+
+  const intakeViews = view.slice(
+    view.indexOf('private struct AdminLeadsView'),
+    view.indexOf('private struct AdminPlatformView'),
+  );
+  assert.match(intakeViews, /private var pipelineIsCurrent: Bool/);
+  assert.match(intakeViews, /No empty pipeline assumption is being made/);
+  assert.match(intakeViews, /Contact details remain available, but status and notes are read-only/);
+  assert.match(intakeViews, /private var requestsAreCurrent: Bool \{ admin\.ptRequestsAreCurrent \}/);
+  assert.match(intakeViews, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(intakeViews, /Submitted \\\(request\.created_at\.formatted/);
+  assert.match(intakeViews, /frame\(width: 44, height: 44\)/);
+  assert.match(intakeViews, /\.searchable\(text: \$query, prompt: "Name, contact, goal or notes"\)/);
+  assert.match(intakeViews, /Picker\("Session type", selection: \$sessionTypeFilter\)/);
+  assert.match(intakeViews, /Section\(requestsAreCurrent \? "Matching workload" : "Last matching workload"\)/);
+  assert.match(intakeViews, /selectedIDs = await admin\.bulkUpdatePTRequests/);
+  assert.match(intakeViews, /Only requests that fail will remain selected for retry/);
+  assert.match(intakeViews, /AdminPTCSVDocument\(csv: report\.csv\)/);
+  assert.match(intakeViews, /defaultFilename: "xert-pt-requests-/);
+  assert.match(intakeViews, /PT Requests must refresh before owner notes can be changed/);
 });
