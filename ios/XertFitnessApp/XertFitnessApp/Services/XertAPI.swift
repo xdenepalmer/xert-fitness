@@ -1002,6 +1002,33 @@ final class XertAPI {
         }
     }
 
+    func adminLeadActionCounts(session auth: AuthSession) async throws -> AdminLeadActionCounts {
+        async let memberLeads = adminLeadCount(session: auth, pipeline: .members, status: "new")
+        async let trainerApplicants = adminLeadCount(session: auth, pipeline: .trainers, status: "new")
+        async let partnerEnquiries = adminLeadCount(session: auth, pipeline: .partners, status: "new")
+        let counts = try await (memberLeads, trainerApplicants, partnerEnquiries)
+        return AdminLeadActionCounts(
+            memberLeads: counts.0,
+            trainerApplicants: counts.1,
+            partnerEnquiries: counts.2
+        )
+    }
+
+    private func adminLeadCount(
+        session auth: AuthSession,
+        pipeline: AdminLeadPipeline,
+        status: String
+    ) async throws -> Int {
+        try await restCount(
+            path: "/rest/v1/\(pipeline.rawValue)",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id"),
+                URLQueryItem(name: "status", value: "eq.\(status)")
+            ],
+            auth: auth
+        )
+    }
+
     private func adminLeadSelect(for pipeline: AdminLeadPipeline) -> String {
         let common = "id,full_name,email,phone,status,admin_notes,created_at,utm_source,utm_medium,utm_campaign"
         switch pipeline {
@@ -2531,6 +2558,27 @@ final class XertAPI {
         return try await decode(request)
     }
 
+    private func restCount(
+        path: String,
+        queryItems: [URLQueryItem],
+        auth: AuthSession
+    ) async throws -> Int {
+        var request = try request(baseURL: AppConfig.supabaseURL, path: path, queryItems: queryItems)
+        request.httpMethod = "HEAD"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("count=exact", forHTTPHeaderField: "Prefer")
+        let (_, response) = try await validatedResponse(for: request)
+        guard
+            let contentRange = response.value(forHTTPHeaderField: "Content-Range"),
+            let totalText = contentRange.split(separator: "/").last,
+            let total = Int(totalText)
+        else {
+            throw APIError(message: "XERT could not verify the lead action count.")
+        }
+        return total
+    }
+
     private func rpc<T: Decodable, Body: Encodable>(
         path: String,
         body: Body,
@@ -2600,6 +2648,10 @@ final class XertAPI {
     }
 
     private func responseData(for request: URLRequest) async throws -> Data {
+        try await validatedResponse(for: request).0
+    }
+
+    private func validatedResponse(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
@@ -2615,12 +2667,13 @@ final class XertAPI {
             throw APIError(message: "Invalid network response.")
         }
         guard (200..<300).contains(http.statusCode) else {
+            let rawMessage = String(data: data, encoding: .utf8)
             let message = (try? decoder.decode(SupabaseErrorResponse.self, from: data))?.displayMessage
-                ?? String(data: data, encoding: .utf8)
+                ?? (rawMessage?.isEmpty == false ? rawMessage : nil)
                 ?? "Request failed."
             throw APIError(message: message, statusCode: http.statusCode)
         }
-        return data
+        return (data, http)
     }
 }
 

@@ -669,6 +669,15 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testLeadActionCountsCombineOnlyFreshPipelineWork() {
+        let counts = AdminLeadActionCounts(
+            memberLeads: 4,
+            trainerApplicants: 2,
+            partnerEnquiries: 1
+        )
+        XCTAssertEqual(counts.total, 7)
+    }
+
     func testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped() throws {
         let suiteName = "XertOwnerWorkspacePinsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

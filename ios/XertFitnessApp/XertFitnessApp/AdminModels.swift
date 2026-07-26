@@ -1542,6 +1542,14 @@ enum AdminLeadPipeline: String, CaseIterable, Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminLeadActionCounts: Equatable {
+    let memberLeads: Int
+    let trainerApplicants: Int
+    let partnerEnquiries: Int
+
+    var total: Int { memberLeads + trainerApplicants + partnerEnquiries }
+}
+
 struct AdminLeadIdentifier: Codable, Hashable {
     let value: String
 

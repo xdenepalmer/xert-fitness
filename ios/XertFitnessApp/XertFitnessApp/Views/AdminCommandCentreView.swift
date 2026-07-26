@@ -2072,6 +2072,13 @@ struct AdminCommandCentreView: View {
                 task: singleActivationTask
             ),
             AdminPriorityAction(
+                title: "New lead enquiries",
+                detail: leadActionPriorityDetail,
+                icon: "person.2.badge.plus",
+                count: admin.leadActionCounts?.total ?? 0,
+                workspace: .leads
+            ),
+            AdminPriorityAction(
                 title: "Retention follow-ups",
                 detail: "Contact members who need support",
                 icon: "phone.arrow.up.right",
@@ -2171,6 +2178,13 @@ struct AdminCommandCentreView: View {
         guard admin.activationQueue.count == 1,
               let member = admin.activationQueue.first else { return nil }
         return .member(member.id)
+    }
+
+    private var leadActionPriorityDetail: String {
+        guard let counts = admin.leadActionCounts else {
+            return "Member, trainer and partner intake"
+        }
+        return "\(counts.memberLeads) members · \(counts.trainerApplicants) trainers · \(counts.partnerEnquiries) partners"
     }
 
     private var singleRetentionTask: XertOwnerTask? {
@@ -2561,6 +2575,8 @@ struct AdminCommandCentreView: View {
             return admin.pendingPTRequests
         case .retention:
             return admin.activationQueue.count + admin.followUps.count
+        case .leads:
+            return admin.leadActionCounts?.total
         case .notices:
             return admin.liveAnnouncements
         case .orders:

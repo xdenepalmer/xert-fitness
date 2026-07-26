@@ -342,6 +342,29 @@ test('native owner priorities open the exact protected task when one workload is
   assert.match(view, /case \.retention:[\s\S]*admin\.activationQueue\.count \+ admin\.followUps\.count/);
 });
 
+test('native owner overview counts fresh lead work without downloading lead histories', async () => {
+  const [view, store, api, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  assert.match(models, /struct AdminLeadActionCounts: Equatable[\s\S]*var total: Int/);
+  assert.match(api, /func adminLeadActionCounts[\s\S]*pipeline: \.members, status: "new"[\s\S]*pipeline: \.trainers, status: "new"[\s\S]*pipeline: \.partners, status: "new"/);
+  assert.match(api, /private func restCount[\s\S]*request\.httpMethod = "HEAD"[\s\S]*"count=exact"[\s\S]*"Content-Range"/);
+  assert.ok(
+    (store.match(/async let leadActionCountRequest = api\.adminLeadActionCounts/g) || []).length === 2,
+    'only the main and operational dashboard refreshes should request lead counts',
+  );
+  assert.match(store, /leadActionCounts = try await leadActionCountRequest[\s\S]*successfulSources\.insert\("lead actions"\)/);
+  assert.match(store, /let next = try await leadActionCountRequest[\s\S]*generation == operationalRefreshGeneration[\s\S]*leadActionCounts = next/);
+  assert.match(store, /"activation actions", "orders", "PT requests", "lead actions"/);
+  assert.match(view, /title: "New lead enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads/);
+  assert.match(view, /counts\.memberLeads[\s\S]*counts\.trainerApplicants[\s\S]*counts\.partnerEnquiries/);
+  assert.match(view, /case \.leads:[\s\S]*admin\.leadActionCounts\?\.total/);
+});
+
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {
   const [view, store] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),

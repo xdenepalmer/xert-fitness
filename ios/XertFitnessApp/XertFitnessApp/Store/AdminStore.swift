@@ -107,6 +107,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var availabilityBlocks: [AdminAvailabilityBlock] = []
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
+    @Published private(set) var leadActionCounts: AdminLeadActionCounts?
     @Published private(set) var campaignAttributionRows: [AdminCampaignAttributionRow] = []
     @Published private(set) var siteContentRows: [AdminSiteContentRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
@@ -305,6 +306,7 @@ final class AdminStore: ObservableObject {
         async let classSessionRequest = api.adminClassSessions(session: session)
         async let availabilityRequest = api.adminAvailabilityBlocks(session: session)
         async let blackoutRequest = api.adminBlackoutPeriods(session: session)
+        async let leadActionCountRequest = api.adminLeadActionCounts(session: session)
 
         var failures: [String] = []
         var queueFailures: [String] = []
@@ -445,6 +447,12 @@ final class AdminStore: ObservableObject {
         do { blackoutPeriods = try await blackoutRequest; successfulSources.insert("blackouts"); loadedSource = true }
         catch { failures.append("blackouts") }
 
+        do {
+            leadActionCounts = try await leadActionCountRequest
+            successfulSources.insert("lead actions")
+            loadedSource = true
+        } catch { failures.append("lead actions"); queueFailures.append("lead actions") }
+
         if loadedSource {
             lastUpdatedAt = Date()
         }
@@ -501,6 +509,7 @@ final class AdminStore: ObservableObject {
         async let activationRequest = api.adminMemberActivationQueue(session: session)
         async let orderRequest = api.adminOrders(session: session)
         async let ptRequest = api.adminPTRequests(session: session)
+        async let leadActionCountRequest = api.adminLeadActionCounts(session: session)
 
         var failures: [String] = []
         var successfulSources = Set<String>()
@@ -561,11 +570,21 @@ final class AdminStore: ObservableObject {
             failures.append("PT requests")
         }
 
+        do {
+            let next = try await leadActionCountRequest
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            leadActionCounts = next
+            successfulSources.insert("lead actions")
+        } catch {
+            guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
+            failures.append("lead actions")
+        }
+
         guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
         loadedSources.formUnion(successfulSources)
         let operationalSources: Set<String> = [
             "today's classes", "waitlists", "retention",
-            "activation actions", "orders", "PT requests"
+            "activation actions", "orders", "PT requests", "lead actions"
         ]
         refreshUnavailableSources.removeAll { operationalSources.contains($0) }
         refreshUnavailableSources.append(contentsOf: failures)
