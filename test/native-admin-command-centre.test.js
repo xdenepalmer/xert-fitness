@@ -1031,3 +1031,40 @@ test('native event and team catalogues preserve mutation truth and never fake em
   assert.match(models, /struct AdminEventRosterReport/);
   assert.match(models, /Event,Member,Email,Phone,Joined/);
 });
+
+test('native site CMS cannot publish defaults over an unavailable live snapshot', async () => {
+  const [models, store, api, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(store, /@Published private\(set\) var siteContentUnavailable = false/);
+  assert.match(store, /var siteContentIsCurrent: Bool/);
+  assert.match(store, /if !force, siteContentIsCurrent \{ return \}/);
+  assert.match(store, /Site Content could not refresh\. Last loaded sections remain read-only/);
+  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Site Content before publishing/);
+  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Site Content before uploading public media/);
+  assert.match(store, /siteContentRows\.append\(saved\)[\s\S]*siteContentUnavailable = false/);
+  assert.match(api, /rows\.count == 1, saved\.key == section\.rawValue/);
+
+  const cms = view.slice(
+    view.indexOf('private struct AdminSiteContentView'),
+    view.indexOf('private struct AdminCampaignAttributionView'),
+  );
+  assert.match(cms, /Built-in defaults are not being treated as the server state/);
+  assert.match(cms, /if admin\.hasLoadedSiteContent \{[\s\S]*Section\("Public sections"\)/);
+  assert.match(cms, /private var mutationAllowed: Bool/);
+  assert.match(cms, /let authoritative = saved\.data\.merged\(over: \.defaults\(for: section\)\)/);
+  assert.match(cms, /validationMessage != nil/);
+  assert.match(cms, /Hero photography is limited to 12 images/);
+  assert.match(cms, /kCGImageSourceThumbnailMaxPixelSize: 2_400/);
+  assert.match(cms, /jpegData\(compressionQuality: 0\.86\)/);
+  assert.match(cms, /frame\(width: 44, height: 44\)/);
+
+  assert.match(models, /Hero photography is limited to 12 images/);
+  assert.match(models, /The About page is limited to 12 paragraphs/);
+  assert.match(models, /The homepage is limited to 20 FAQ items/);
+  assert.match(models, /Public media URLs must be 2,048 characters or fewer/);
+});

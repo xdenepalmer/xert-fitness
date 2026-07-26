@@ -3406,6 +3406,18 @@ final class ModelsTests: XCTestCase {
             photos: ["javascript:alert(1)"]
         ).normalized(for: .hero))
         XCTAssertThrowsError(try AdminSiteContentData(email: "not-an-email").normalized(for: .contact))
+        XCTAssertThrowsError(try AdminSiteContentData(
+            headline: String(repeating: "x", count: 161)
+        ).normalized(for: .hero))
+        XCTAssertThrowsError(try AdminSiteContentData(
+            photos: Array(repeating: "/assets/hero.jpg", count: 13)
+        ).normalized(for: .hero))
+        XCTAssertThrowsError(try AdminSiteContentData(
+            paragraphs: Array(repeating: "Training with purpose.", count: 13)
+        ).normalized(for: .about))
+        XCTAssertThrowsError(try AdminSiteContentData(
+            items: Array(repeating: AdminFAQItem(q: "Question?", a: "Answer."), count: 21)
+        ).normalized(for: .faq))
     }
 
     func testSiteContentDraftRoundTripsWithoutPersistingFAQIdentity() throws {

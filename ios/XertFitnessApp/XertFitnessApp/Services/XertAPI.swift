@@ -1064,7 +1064,7 @@ final class XertAPI {
             : try JSONEncoder().encode(AdminSiteContentUpdatePayload(data: normalized))
         do {
             let rows: [AdminSiteContentRow] = try await decode(request)
-            guard let saved = rows.first else {
+            guard let saved = rows.first, rows.count == 1, saved.key == section.rawValue else {
                 throw APIError(message: "Site content changed elsewhere. Refresh and review the latest version.")
             }
             return saved

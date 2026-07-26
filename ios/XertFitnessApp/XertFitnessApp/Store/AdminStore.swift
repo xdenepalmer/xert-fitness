@@ -141,6 +141,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var leadPipelineStatusMessage: String?
     @Published private(set) var isLoadingCampaignAttribution = false
     @Published private(set) var hasLoadedSiteContent = false
+    @Published private(set) var siteContentUnavailable = false
+    @Published private(set) var siteContentStatusMessage: String?
     @Published private(set) var isLoadingSiteContent = false
     @Published private(set) var savingSiteContentSection: AdminSiteContentSection?
     @Published private(set) var isUploadingSiteImage = false
@@ -1063,17 +1065,24 @@ final class AdminStore: ObservableObject {
         siteContentRows.first { $0.key == section.rawValue }
     }
 
+    var siteContentIsCurrent: Bool {
+        hasLoadedSiteContent && !siteContentUnavailable
+    }
+
     func loadSiteContent(session: AuthSession, force: Bool = false) async {
         guard !isLoadingSiteContent else { return }
-        if !force, hasLoadedSiteContent { return }
+        if !force, siteContentIsCurrent { return }
         isLoadingSiteContent = true
         defer { isLoadingSiteContent = false }
         do {
             siteContentRows = try await api.adminSiteContent(session: session)
             hasLoadedSiteContent = true
+            siteContentUnavailable = false
+            siteContentStatusMessage = nil
             lastUpdatedAt = Date()
         } catch {
-            errorMessage = error.localizedDescription
+            siteContentUnavailable = true
+            siteContentStatusMessage = "Site Content could not refresh. Last loaded sections remain read-only."
         }
     }
 
@@ -1083,7 +1092,13 @@ final class AdminStore: ObservableObject {
         expectedUpdatedAt: String?,
         draft: AdminSiteContentData
     ) async -> AdminSiteContentRow? {
-        guard savingSiteContentSection == nil else { return nil }
+        guard savingSiteContentSection == nil,
+              !isLoadingSiteContent,
+              !isUploadingSiteImage else { return nil }
+        guard siteContentIsCurrent else {
+            errorMessage = "Refresh Site Content before publishing website changes."
+            return nil
+        }
         savingSiteContentSection = section
         defer { savingSiteContentSection = nil }
         do {
@@ -1095,10 +1110,15 @@ final class AdminStore: ObservableObject {
             )
             siteContentRows.removeAll { $0.key == section.rawValue }
             siteContentRows.append(saved)
+            siteContentRows.sort { $0.key < $1.key }
+            siteContentUnavailable = false
+            siteContentStatusMessage = nil
             AdminSiteContentDraftStore.clear(section)
             lastUpdatedAt = Date()
             return saved
         } catch {
+            siteContentUnavailable = true
+            siteContentStatusMessage = "Site Content changed or could not be verified. Refresh and review the latest live section before publishing again."
             errorMessage = error.localizedDescription
             return nil
         }
@@ -1110,7 +1130,13 @@ final class AdminStore: ObservableObject {
         mimeType: String,
         fileExtension: String
     ) async -> String? {
-        guard !isUploadingSiteImage else { return nil }
+        guard !isUploadingSiteImage,
+              savingSiteContentSection == nil,
+              !isLoadingSiteContent else { return nil }
+        guard siteContentIsCurrent else {
+            errorMessage = "Refresh Site Content before uploading public media."
+            return nil
+        }
         isUploadingSiteImage = true
         defer { isUploadingSiteImage = false }
         do {

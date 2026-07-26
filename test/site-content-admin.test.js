@@ -25,3 +25,26 @@ test('rejects incomplete FAQs and unsafe public links', () => {
   assert.throws(() => normalizeSiteContent('hero', { photos: ['javascript:alert(1)'] }), /HTTPS or HTTP/);
   assert.throws(() => normalizeSiteContent('contact', { email: 'not-an-email' }), /valid public contact email/);
 });
+
+test('bounds launch-facing copy, collections, and media URLs', () => {
+  assert.throws(
+    () => normalizeSiteContent('hero', { headline: 'x'.repeat(161) }),
+    /Headline must be 160 characters or fewer/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('hero', { photos: Array(13).fill('/assets/hero.jpg') }),
+    /limited to 12 images/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('about', { paragraphs: Array(13).fill('Train with purpose.') }),
+    /limited to 12 paragraphs/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('faq', { items: Array(21).fill({ q: 'When?', a: 'Now.' }) }),
+    /limited to 20 FAQ items/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('hero', { photos: [`https://example.com/${'x'.repeat(2050)}`] }),
+    /2,048 characters or fewer/,
+  );
+});

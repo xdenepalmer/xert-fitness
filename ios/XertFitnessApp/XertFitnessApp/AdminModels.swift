@@ -1331,36 +1331,49 @@ struct AdminSiteContentData: Codable, Hashable {
     func normalized(for section: AdminSiteContentSection) throws -> AdminSiteContentData {
         switch section {
         case .hero:
+            guard (photos ?? []).count <= 12 else {
+                throw APIError(message: "Hero photography is limited to 12 images.")
+            }
             return AdminSiteContentData(
-                headline: Self.clean(headline),
-                subheading: Self.clean(subheading),
-                supporting: Self.clean(supporting),
+                headline: try Self.bounded(headline, maximum: 160, label: "Headline"),
+                subheading: try Self.bounded(subheading, maximum: 1_000, label: "Subheading"),
+                supporting: try Self.bounded(supporting, maximum: 1_000, label: "Supporting line"),
                 photos: try Self.cleanURLs(photos, allowLocal: true)
             )
         case .booking:
-            return AdminSiteContentData(intro: Self.clean(intro))
+            return AdminSiteContentData(
+                intro: try Self.bounded(intro, maximum: 3_000, label: "Booking introduction")
+            )
         case .about:
-            let values = paragraphs?.compactMap { Self.clean($0) }
+            guard (paragraphs ?? []).count <= 12 else {
+                throw APIError(message: "The About page is limited to 12 paragraphs.")
+            }
+            let values = try paragraphs?.compactMap {
+                try Self.bounded($0, maximum: 4_000, label: "About paragraph")
+            }
             return AdminSiteContentData(paragraphs: values?.isEmpty == false ? values : nil)
         case .contact:
-            let cleanEmail = Self.clean(email)
+            let cleanEmail = try Self.bounded(email, maximum: 254, label: "Email")
             if let cleanEmail,
                cleanEmail.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) == nil {
                 throw APIError(message: "Enter a valid public contact email.")
             }
             let instagramURL = try Self.cleanURLs(instagram_url.map { [$0] }, allowLocal: false)?.first
             return AdminSiteContentData(
-                intro: Self.clean(intro),
+                intro: try Self.bounded(intro, maximum: 3_000, label: "Contact introduction"),
                 email: cleanEmail,
-                phone: Self.clean(phone),
-                address: Self.clean(address),
-                instagram_handle: Self.clean(instagram_handle),
+                phone: try Self.bounded(phone, maximum: 80, label: "Phone"),
+                address: try Self.bounded(address, maximum: 500, label: "Address"),
+                instagram_handle: try Self.bounded(instagram_handle, maximum: 100, label: "Instagram handle"),
                 instagram_url: instagramURL
             )
         case .faq:
-            let entered = (items ?? []).compactMap { item -> AdminFAQItem? in
-                let question = Self.clean(item.q)
-                let answer = Self.clean(item.a)
+            guard (items ?? []).count <= 20 else {
+                throw APIError(message: "The homepage is limited to 20 FAQ items.")
+            }
+            let entered = try (items ?? []).compactMap { item -> AdminFAQItem? in
+                let question = try Self.bounded(item.q, maximum: 300, label: "FAQ question")
+                let answer = try Self.bounded(item.a, maximum: 3_000, label: "FAQ answer")
                 return question == nil && answer == nil ? nil : AdminFAQItem(id: item.id, q: question ?? "", a: answer ?? "")
             }
             guard entered.allSatisfy({ !$0.q.isEmpty && !$0.a.isEmpty }) else {
@@ -1416,10 +1429,21 @@ struct AdminSiteContentData: Codable, Hashable {
         return cleaned.isEmpty ? nil : cleaned
     }
 
+    private static func bounded(_ value: String?, maximum: Int, label: String) throws -> String? {
+        guard let cleaned = clean(value) else { return nil }
+        guard cleaned.count <= maximum else {
+            throw APIError(message: "\(label) must be \(maximum.formatted()) characters or fewer.")
+        }
+        return cleaned
+    }
+
     private static func cleanURLs(_ values: [String]?, allowLocal: Bool) throws -> [String]? {
         var result: [String] = []
         for value in values ?? [] {
             guard let cleaned = clean(value) else { continue }
+            guard cleaned.count <= 2_048 else {
+                throw APIError(message: "Public media URLs must be 2,048 characters or fewer.")
+            }
             if allowLocal, cleaned.hasPrefix("/"), !cleaned.hasPrefix("//") {
                 result.append(cleaned)
                 continue
