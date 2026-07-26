@@ -598,6 +598,142 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     var activeCount: Int { requested_count + confirmed_count }
 }
 
+enum AdminDailyClassSetupIssueKind: String, Equatable, Hashable, CaseIterable {
+    case missingCoach
+    case missingLocation
+    case invalidCapacity
+    case overCapacity
+
+    var title: String {
+        switch self {
+        case .missingCoach: return "Coach not assigned"
+        case .missingLocation: return "Training area missing"
+        case .invalidCapacity: return "Capacity not configured"
+        case .overCapacity: return "Roster exceeds capacity"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .missingCoach: return "person.crop.circle.badge.exclamationmark"
+        case .missingLocation: return "mappin.slash"
+        case .invalidCapacity: return "person.2.slash"
+        case .overCapacity: return "exclamationmark.triangle.fill"
+        }
+    }
+}
+
+struct AdminDailyClassSetupIssue: Identifiable, Equatable {
+    let sessionID: UUID
+    let classTitle: String
+    let kind: AdminDailyClassSetupIssueKind
+    let detail: String
+
+    var id: String { "\(sessionID.uuidString.lowercased()):\(kind.rawValue)" }
+    var isCritical: Bool { kind == .overCapacity }
+}
+
+struct AdminDailyClassReadiness: Equatable {
+    let operations: [AdminDailyOperation]
+    let sourceIsCurrent: Bool
+    let now: Date
+
+    init(
+        operations: [AdminDailyOperation],
+        sourceIsCurrent: Bool,
+        now: Date = Date()
+    ) {
+        self.operations = operations
+        self.sourceIsCurrent = sourceIsCurrent
+        self.now = now
+    }
+
+    var issues: [AdminDailyClassSetupIssue] {
+        guard sourceIsCurrent else { return [] }
+        return operations
+            .filter(isActionable)
+            .flatMap(issues(for:))
+    }
+
+    var affectedClassIDs: [UUID] {
+        var seen = Set<UUID>()
+        return issues.compactMap { issue in
+            seen.insert(issue.sessionID).inserted ? issue.sessionID : nil
+        }
+    }
+
+    var affectedClassCount: Int { affectedClassIDs.count }
+    var singleAffectedClassID: UUID? {
+        affectedClassIDs.count == 1 ? affectedClassIDs[0] : nil
+    }
+
+    func issues(for sessionID: UUID) -> [AdminDailyClassSetupIssue] {
+        issues.filter { $0.sessionID == sessionID }
+    }
+
+    func summary(for sessionID: UUID) -> String? {
+        let titles = issues(for: sessionID).map(\.kind.title)
+        guard !titles.isEmpty else { return nil }
+        return titles.joined(separator: " · ")
+    }
+
+    private func isActionable(_ operation: AdminDailyOperation) -> Bool {
+        guard ["published", "full"].contains(operation.status.lowercased()) else {
+            return false
+        }
+        let assumedEnd = operation.end_time
+            ?? operation.start_time.addingTimeInterval(3 * 60 * 60)
+        return assumedEnd > now
+    }
+
+    private func issues(for operation: AdminDailyOperation) -> [AdminDailyClassSetupIssue] {
+        var result: [AdminDailyClassSetupIssue] = []
+        if operation.coach_name?.nilIfBlank == nil {
+            result.append(issue(
+                operation,
+                kind: .missingCoach,
+                detail: "Assign a coach before members arrive."
+            ))
+        }
+        if operation.location_zone?.nilIfBlank == nil {
+            result.append(issue(
+                operation,
+                kind: .missingLocation,
+                detail: "Add the training area so staff and members know where to meet."
+            ))
+        }
+        guard let capacity = operation.capacity, capacity > 0 else {
+            result.append(issue(
+                operation,
+                kind: .invalidCapacity,
+                detail: "Set a capacity of at least one before accepting bookings."
+            ))
+            return result
+        }
+        if operation.confirmed_count > capacity {
+            result.append(issue(
+                operation,
+                kind: .overCapacity,
+                detail: "\(operation.confirmed_count) confirmed members exceed the \(capacity)-place capacity."
+            ))
+        }
+        return result
+    }
+
+    private func issue(
+        _ operation: AdminDailyOperation,
+        kind: AdminDailyClassSetupIssueKind,
+        detail: String
+    ) -> AdminDailyClassSetupIssue {
+        AdminDailyClassSetupIssue(
+            sessionID: operation.id,
+            classTitle: operation.title,
+            kind: kind,
+            detail: detail
+        )
+    }
+}
+
 struct AdminShiftClassBrief: Identifiable, Equatable {
     let id: UUID
     let title: String
@@ -631,6 +767,7 @@ struct AdminShiftBriefing: Equatable {
     let retentionFollowUps: Int
     let pendingPTRequests: Int
     let recoverableOrders: Int
+    let classSetupGaps: Int
     let unavailableSources: [String]
 
     var openActionCount: Int {
@@ -641,6 +778,7 @@ struct AdminShiftBriefing: Equatable {
             + retentionFollowUps
             + pendingPTRequests
             + recoverableOrders
+            + classSetupGaps
     }
 
     var summary: String {
@@ -664,7 +802,8 @@ struct AdminShiftBriefing: Equatable {
             ("Member activation actions", activationActions),
             ("Retention follow-ups", retentionFollowUps),
             ("PT requests", pendingPTRequests),
-            ("Payments needing recovery", recoverableOrders)
+            ("Payments needing recovery", recoverableOrders),
+            ("Classes needing setup", classSetupGaps)
         ].filter { $0.1 > 0 }
         if actions.isEmpty {
             lines.append("- No open queue actions")

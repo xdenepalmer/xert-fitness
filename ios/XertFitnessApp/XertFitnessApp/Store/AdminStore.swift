@@ -788,6 +788,11 @@ final class AdminStore: ObservableObject {
             guard !members.contains(where: { $0.id == memberID }) else { return }
         case .classSession(let sessionID):
             guard !dailyOperations.contains(where: { $0.id == sessionID }) else { return }
+        case .classSetup(let sessionID):
+            let timetableIsCurrent = loadedSources.contains("full timetable")
+                && !refreshUnavailableSources.contains("full timetable")
+            guard !classSessions.contains(where: { $0.id == sessionID })
+                    || !timetableIsCurrent else { return }
         case .product(let productID):
             guard !products.contains(where: { $0.id == productID }) else { return }
         case .order(let orderID):
@@ -810,6 +815,12 @@ final class AdminStore: ObservableObject {
                 dailyOperations = operations
                 loadedSources.insert("today's classes")
                 refreshUnavailableSources.removeAll { $0 == "today's classes" }
+            case .classSetup(let sessionID):
+                let timetable = try await api.adminClassSessions(session: session)
+                guard timetable.contains(where: { $0.id == sessionID }) else { return }
+                classSessions = timetable
+                loadedSources.insert("full timetable")
+                refreshUnavailableSources.removeAll { $0 == "full timetable" }
             case .product(let productID):
                 let refreshedProducts = try await api.adminProducts(session: session)
                 guard refreshedProducts.contains(where: { $0.id == productID }) else { return }

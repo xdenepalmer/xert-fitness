@@ -430,6 +430,7 @@ enum XertOwnerWorkspacePinsStore {
 enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case member(UUID)
     case classSession(UUID)
+    case classSetup(UUID)
     case order(UUID)
     case product(UUID)
     case event(UUID)
@@ -441,6 +442,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member: return .members
         case .classSession: return .classDesk
+        case .classSetup: return .timetable
         case .order: return .orders
         case .product: return .products
         case .event: return .events
@@ -452,6 +454,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member: return "Member Record"
         case .classSession: return "Class Roster"
+        case .classSetup: return "Class Setup"
         case .order: return "Order Detail"
         case .product: return "Session Pack"
         case .event: return "Event Detail"
@@ -463,6 +466,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch self {
         case .member(let id): return "member/\(id.uuidString.lowercased())"
         case .classSession(let id): return "class/\(id.uuidString.lowercased())"
+        case .classSetup(let id): return "class-setup/\(id.uuidString.lowercased())"
         case .order(let id): return "order/\(id.uuidString.lowercased())"
         case .product(let id): return "product/\(id.uuidString.lowercased())"
         case .event(let id): return "event/\(id.uuidString.lowercased())"
@@ -479,6 +483,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         switch (workspace, kind) {
         case (.members, "member"): return .member(id)
         case (.classDesk, "class"): return .classSession(id)
+        case (.timetable, "class-setup"): return .classSetup(id)
         case (.orders, "order"), (.finance, "order"): return .order(id)
         case (.products, "product"): return .product(id)
         case (.events, "event"): return .event(id)

@@ -519,6 +519,8 @@ test('native owner overview creates a privacy-safe current-only shift handoff', 
 
   assert.match(model, /struct AdminShiftBriefing: Equatable/);
   assert.match(model, /var openActionCount: Int/);
+  assert.match(model, /let classSetupGaps: Int/);
+  assert.match(model, /"Classes needing setup", classSetupGaps/);
   assert.match(model, /XERT OWNER SHIFT BRIEF/);
   assert.match(model, /TODAY'S CLASSES/);
   assert.match(model, /DATA WARNING/);
@@ -526,6 +528,7 @@ test('native owner overview creates a privacy-safe current-only shift handoff', 
   assert.doesNotMatch(model, /full_name|email|phone|member_id|payment_intent/);
 
   assert.match(briefing, /AdminShiftBriefing\(/);
+  assert.match(briefing, /classSetupGaps: dailyClassReadiness\.affectedClassCount/);
   assert.match(briefing, /admin\.operationalQueueState == \.ready/);
   assert.match(briefing, /freshness == \.current/);
   assert.match(briefing, /No member names, contact details, notes or payment identifiers are included\./);
@@ -536,6 +539,51 @@ test('native owner overview creates a privacy-safe current-only shift handoff', 
   assert.match(briefing, /Refresh operational queues before copying or sharing this handoff\./);
   assert.match(briefing, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(briefing, /frame\(maxWidth: \.infinity, minHeight: 58/);
+});
+
+test('native owner overview detects today setup defects and opens the exact class editor', async () => {
+  const [view, models, navigation, store, swiftTests] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift'),
+  ]);
+
+  const readiness = models.slice(
+    models.indexOf('enum AdminDailyClassSetupIssueKind'),
+    models.indexOf('struct AdminShiftClassBrief'),
+  );
+  const overview = view.slice(
+    view.indexOf('private var operationalPriorities: [AdminPriorityAction]'),
+    view.indexOf('private var managementDirectory: some View'),
+  );
+
+  for (const issue of ['missingCoach', 'missingLocation', 'invalidCapacity', 'overCapacity']) {
+    assert.match(readiness, new RegExp(`case ${issue}`));
+  }
+  assert.match(readiness, /guard sourceIsCurrent else \{ return \[\] \}/);
+  assert.match(readiness, /\["published", "full"\]\.contains\(operation\.status\.lowercased\(\)\)/);
+  assert.match(readiness, /operation\.confirmed_count > capacity/);
+  assert.match(readiness, /var affectedClassCount: Int/);
+  assert.match(readiness, /var singleAffectedClassID: UUID\?/);
+
+  assert.match(overview, /title: "Class setup gaps"/);
+  assert.match(overview, /task: dailyClassReadiness\.singleAffectedClassID\.map \{ \.classSetup\(\$0\) \}/);
+  assert.ok(overview.includes('dailyClassReadiness.issues.contains(where: \\.isCritical)'));
+  assert.match(overview, /classCapacitySummary\(item\)/);
+  assert.match(overview, /classAssignmentSummary\(item\)/);
+  assert.match(overview, /todayClassActions\(item, hasSetupIssues: !setupIssues\.isEmpty\)/);
+  assert.match(overview, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(overview, /Label\("Fix setup", systemImage: "wrench\.and\.screwdriver\.fill"\)/);
+  assert.match(overview, /XertOwnerRoute\(task: \.classSetup\(item\.id\)\)/);
+  assert.match(overview, /XertOwnerRoute\(task: \.classSession\(item\.id\)\)/);
+
+  assert.match(navigation, /case classSetup\(UUID\)/);
+  assert.match(navigation, /case \.classSetup: return \.timetable/);
+  assert.match(navigation, /case \(\.timetable, "class-setup"\): return \.classSetup\(id\)/);
+  assert.match(store, /case \.classSetup\(let sessionID\):[\s\S]*timetableIsCurrent[\s\S]*api\.adminClassSessions/);
+  assert.match(swiftTests, /testDailyClassReadinessFindsOnlyCurrentActionableSetupDefects/);
 });
 
 test('native owner incident control performs a minimal verified emergency pause', async () => {

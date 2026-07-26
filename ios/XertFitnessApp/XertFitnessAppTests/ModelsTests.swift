@@ -110,6 +110,7 @@ final class ModelsTests: XCTestCase {
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
             XertOwnerRoute(task: .classSession(classID)),
+            XertOwnerRoute(task: .classSetup(classID)),
             XertOwnerRoute(task: .order(orderID)),
             XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
@@ -135,9 +136,14 @@ final class ModelsTests: XCTestCase {
 
         XCTAssertNil(XertOwnerRoute.restore("owner/finance/member/\(memberID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/timetable/class/\(classID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/classdesk/class-setup/\(classID.uuidString)"))
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/classdesk/class/\(classID.uuidString)"),
             XertOwnerRoute(task: .classSession(classID))
+        )
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/timetable/class-setup/\(classID.uuidString)"),
+            XertOwnerRoute(task: .classSetup(classID))
         )
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
@@ -1281,21 +1287,108 @@ final class ModelsTests: XCTestCase {
             retentionFollowUps: 3,
             pendingPTRequests: 1,
             recoverableOrders: 1,
+            classSetupGaps: 1,
             unavailableSources: ["orders", "waitlists"]
         )
 
         XCTAssertEqual(briefing.classes.first?.requested, 3)
-        XCTAssertEqual(briefing.openActionCount, 12)
-        XCTAssertEqual(briefing.summary, "1 class | 12 open actions")
+        XCTAssertEqual(briefing.openActionCount, 13)
+        XCTAssertEqual(briefing.summary, "1 class | 13 open actions")
         XCTAssertTrue(briefing.text.contains("XERT OWNER SHIFT BRIEF"))
         XCTAssertTrue(briefing.text.contains("Class booking requests: 3"))
         XCTAssertTrue(briefing.text.contains("XERT Engine"))
         XCTAssertTrue(briefing.text.contains("7 confirmed | 3 requested | 1 waiting"))
         XCTAssertTrue(briefing.text.contains("ATTENDANCE DUE"))
+        XCTAssertTrue(briefing.text.contains("Classes needing setup: 1"))
         XCTAssertTrue(briefing.text.contains("Unavailable: orders, waitlists"))
         XCTAssertFalse(briefing.text.lowercased().contains("email"))
         XCTAssertFalse(briefing.text.lowercased().contains("phone"))
         XCTAssertFalse(briefing.text.lowercased().contains("member name"))
+    }
+
+    func testDailyClassReadinessFindsOnlyCurrentActionableSetupDefects() {
+        let now = queenslandDate(2026, 7, 27, 9, 0)
+
+        func operation(
+            id: UUID = UUID(),
+            title: String,
+            startOffset: TimeInterval = 3_600,
+            status: String = "published",
+            capacity: Int? = 8,
+            coach: String? = "Coach",
+            location: String? = "Main floor",
+            confirmed: Int = 3
+        ) -> AdminDailyOperation {
+            let start = now.addingTimeInterval(startOffset)
+            return AdminDailyOperation(
+                session_id: id,
+                title: title,
+                class_type: "strength",
+                start_time: start,
+                end_time: start.addingTimeInterval(3_600),
+                status: status,
+                capacity: capacity,
+                coach_name: coach,
+                location_zone: location,
+                booking_mode: "instant_book",
+                requested_count: 0,
+                confirmed_count: confirmed,
+                waitlist_count: 0,
+                attended_count: 0,
+                no_show_count: 0,
+                public_request_count: 0,
+                attendance_due: false
+            )
+        }
+
+        let setupID = UUID()
+        let capacityID = UUID()
+        let setup = operation(
+            id: setupID,
+            title: "Engine",
+            capacity: 2,
+            coach: " ",
+            location: nil,
+            confirmed: 3
+        )
+        let invalidCapacity = operation(
+            id: capacityID,
+            title: "Strength",
+            capacity: 0
+        )
+        let ignored = [
+            operation(title: "Draft", status: "draft", coach: nil),
+            operation(title: "Cancelled", status: "cancelled", location: nil),
+            operation(title: "Elapsed", startOffset: -7_200, coach: nil),
+        ]
+        let readiness = AdminDailyClassReadiness(
+            operations: [setup, invalidCapacity] + ignored,
+            sourceIsCurrent: true,
+            now: now
+        )
+
+        XCTAssertEqual(readiness.affectedClassCount, 2)
+        XCTAssertNil(readiness.singleAffectedClassID)
+        XCTAssertEqual(
+            Set(readiness.issues(for: setupID).map(\.kind)),
+            Set([.missingCoach, .missingLocation, .overCapacity])
+        )
+        XCTAssertEqual(
+            readiness.issues(for: capacityID).map(\.kind),
+            [.invalidCapacity]
+        )
+        XCTAssertTrue(readiness.issues.contains(where: \.isCritical))
+        XCTAssertTrue(readiness.summary(for: setupID)?.contains("Coach not assigned") == true)
+        XCTAssertTrue(AdminDailyClassReadiness(
+            operations: [setup],
+            sourceIsCurrent: true,
+            now: now
+        ).singleAffectedClassID == setupID)
+        XCTAssertTrue(AdminDailyClassReadiness(
+            operations: [setup],
+            sourceIsCurrent: false,
+            now: now
+        ).issues.isEmpty)
     }
 
     func testEmergencyPausePlanDiagnosesEveryLiveStateAndPreservesUnrelatedSettings() {

@@ -1736,6 +1736,7 @@ struct AdminCommandCentreView: View {
                 retentionFollowUps: admin.followUps.count,
                 pendingPTRequests: admin.pendingPTRequests,
                 recoverableOrders: admin.orders.lazy.filter(\.isRecoverable).count,
+                classSetupGaps: dailyClassReadiness.affectedClassCount,
                 unavailableSources: unavailableSources
             )
             let canShare = freshness == .current && admin.operationalQueueState == .ready
@@ -1986,6 +1987,15 @@ struct AdminCommandCentreView: View {
                 workspace: .bookingRequests
             ),
             AdminPriorityAction(
+                title: "Class setup gaps",
+                detail: dailyClassSetupPriorityDetail,
+                icon: "calendar.badge.exclamationmark",
+                count: dailyClassReadiness.affectedClassCount,
+                workspace: .timetable,
+                task: dailyClassReadiness.singleAffectedClassID.map { .classSetup($0) },
+                isCritical: dailyClassReadiness.issues.contains(where: \.isCritical)
+            ),
+            AdminPriorityAction(
                 title: "PT enquiries",
                 detail: "Respond to coaching requests",
                 icon: "figure.strengthtraining.traditional",
@@ -2028,6 +2038,25 @@ struct AdminCommandCentreView: View {
             if $0.isCritical != $1.isCritical { return $0.isCritical }
             return $0.count > $1.count
         }
+    }
+
+    private var dailyClassReadiness: AdminDailyClassReadiness {
+        AdminDailyClassReadiness(
+            operations: admin.dailyOperations,
+            sourceIsCurrent: admin.loadedSources.contains("today's classes")
+                && !admin.refreshUnavailableSources.contains("today's classes")
+        )
+    }
+
+    private var dailyClassSetupPriorityDetail: String {
+        let readiness = dailyClassReadiness
+        guard readiness.affectedClassCount > 0 else {
+            return "Today's published classes are ready"
+        }
+        if readiness.issues.contains(where: \.isCritical) {
+            return "Resolve over-capacity rosters and missing class setup"
+        }
+        return "Assign coaches, training areas or valid capacity"
     }
 
     private var pricingAttentionCount: Int {
@@ -2215,9 +2244,8 @@ struct AdminCommandCentreView: View {
 
     private var todayClassRows: some View {
         ForEach(admin.dailyOperations.prefix(4)) { item in
-            Button {
-                openOwnerRouteWithFeedback(XertOwnerRoute(task: .classSession(item.id)))
-            } label: {
+            let setupIssues = dailyClassReadiness.issues(for: item.id)
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {
                     VStack(spacing: 2) {
                         Text(item.start_time.formatted(date: .omitted, time: .shortened))
@@ -2232,27 +2260,97 @@ struct AdminCommandCentreView: View {
                         Text(item.title)
                             .font(.headline)
                             .foregroundStyle(Color.xertOffWhite)
-                        Text("\(item.confirmed_count) confirmed · \(item.requested_count) requested · \(item.waitlist_count) waiting")
+                        Text(classCapacitySummary(item))
                             .font(.caption)
                             .foregroundStyle(Color.xertPale.opacity(0.6))
                             .fixedSize(horizontal: false, vertical: true)
+                        Label(
+                            classAssignmentSummary(item),
+                            systemImage: setupIssues.isEmpty
+                                ? "person.crop.circle.badge.checkmark"
+                                : "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(setupIssues.isEmpty ? Color.xertSteel : Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
-                    Image(systemName: item.attendance_due ? "exclamationmark.circle.fill" : "chevron.right")
-                        .foregroundStyle(item.attendance_due ? Color.orange : Color.xertSteel)
+                    if item.attendance_due {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(Color.orange)
+                            .accessibilityLabel("Attendance due")
+                    }
                 }
-                .padding(14)
-                .xertCardStyle()
-                .contentShape(Rectangle())
+
+                if let setupSummary = dailyClassReadiness.summary(for: item.id) {
+                    Label(setupSummary, systemImage: "wrench.and.screwdriver.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        todayClassActions(item, hasSetupIssues: !setupIssues.isEmpty)
+                    }
+                    VStack(spacing: 10) {
+                        todayClassActions(item, hasSetupIssues: !setupIssues.isEmpty)
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                "\(item.title), \(item.start_time.formatted(date: .omitted, time: .shortened)), "
-                    + "\(item.confirmed_count) confirmed, \(item.requested_count) requested, "
-                    + "\(item.waitlist_count) waiting\(item.attendance_due ? ", attendance due" : "")"
-            )
-            .accessibilityHint("Opens this class roster and roll call")
+            .padding(14)
+            .xertCardStyle()
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("owner.todayClass.\(item.id.uuidString.lowercased())")
         }
+    }
+
+    @ViewBuilder
+    private func todayClassActions(
+        _ item: AdminDailyOperation,
+        hasSetupIssues: Bool
+    ) -> some View {
+        Button {
+            openOwnerRouteWithFeedback(XertOwnerRoute(task: .classSession(item.id)))
+        } label: {
+            Label(
+                item.attendance_due ? "Open roll call" : "Open roster",
+                systemImage: item.attendance_due ? "checklist" : "person.3"
+            )
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.xertSteel)
+        .accessibilityHint("Opens bookings, waitlist and attendance for this class")
+
+        if hasSetupIssues {
+            Button {
+                openOwnerRouteWithFeedback(XertOwnerRoute(task: .classSetup(item.id)))
+            } label: {
+                Label("Fix setup", systemImage: "wrench.and.screwdriver.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .accessibilityHint("Opens this exact class editor")
+        }
+    }
+
+    private func classCapacitySummary(_ item: AdminDailyOperation) -> String {
+        let capacity = item.capacity.map { "\($0) capacity" } ?? "capacity missing"
+        return "\(item.confirmed_count) confirmed / \(capacity) · "
+            + "\(item.requested_count + item.public_request_count) requested · "
+            + "\(item.waitlist_count) waiting"
+    }
+
+    private func classAssignmentSummary(_ item: AdminDailyOperation) -> String {
+        let coach = item.coach_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let location = item.location_zone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let values = [
+            coach.flatMap { $0.isEmpty ? nil : $0 },
+            location.flatMap { $0.isEmpty ? nil : $0 },
+        ].compactMap { $0 }
+        return values.isEmpty ? "Coach and training area not assigned" : values.joined(separator: " · ")
     }
 
     private var managementDirectory: some View {
@@ -2791,6 +2889,18 @@ private struct AdminOwnerTaskSheet: View {
                     .toolbar { closeToolbar }
             } else {
                 resolutionView(recordName: "class")
+            }
+        case .classSetup(let id):
+            if let classSession = admin.classSessions.first(where: { $0.id == id }) {
+                AdminClassEditor(
+                    admin: admin,
+                    session: session,
+                    classSession: classSession,
+                    mutationAllowed: admin.loadedSources.contains("full timetable")
+                        && !admin.refreshUnavailableSources.contains("full timetable")
+                )
+            } else {
+                resolutionView(recordName: "class setup")
             }
         case .order(let id):
             if let order = admin.orders.first(where: { $0.id == id }) {

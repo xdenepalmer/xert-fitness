@@ -271,11 +271,13 @@ test('owner deep links open exact protected native records without weakening wor
 
   assert.match(ownerNavigation, /enum XertOwnerTask: Equatable, Hashable, Identifiable/);
   assert.match(ownerNavigation, /case member\(UUID\)/);
+  assert.match(ownerNavigation, /case classSetup\(UUID\)/);
   assert.match(ownerNavigation, /case order\(UUID\)/);
   assert.match(ownerNavigation, /case product\(UUID\)/);
   assert.match(ownerNavigation, /case event\(UUID\)/);
   assert.match(ownerNavigation, /case announcement\(UUID\)/);
   assert.match(ownerNavigation, /case \(\.members, "member"\): return \.member\(id\)/);
+  assert.match(ownerNavigation, /case \(\.timetable, "class-setup"\): return \.classSetup\(id\)/);
   assert.match(ownerNavigation, /case \(\.orders, "order"\), \(\.finance, "order"\): return \.order\(id\)/);
   assert.match(ownerNavigation, /case \(\.products, "product"\): return \.product\(id\)/);
   assert.match(ownerNavigation, /case \(\.events, "event"\): return \.event\(id\)/);
@@ -287,6 +289,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /\.sheet\(item: \$presentedOwnerTask, onDismiss: closePresentedOwnerTask\)/);
   assert.match(ownerView, /AdminOwnerTaskSheet/);
   assert.match(ownerView, /admin\.members\.first\(where: \{ \$0\.id == id \}\)/);
+  assert.match(ownerView, /admin\.classSessions\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.orders\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.products\.first\(where: \{ \$0\.id == id \}\)/);
   assert.match(ownerView, /admin\.events\.first\(where: \{ \$0\.id == id \}\)/);
@@ -308,6 +311,7 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(api, /guard rows\.count == 1, rows\[0\]\.id == id/);
   assert.match(adminStore, /func resolveOwnerTask\(session: AuthSession, task: XertOwnerTask\)/);
   assert.match(adminStore, /members\.insert\(member, at: 0\)/);
+  assert.match(adminStore, /case \.classSetup\(let sessionID\):[\s\S]*api\.adminClassSessions[\s\S]*classSessions = timetable/);
   assert.match(adminStore, /case \.announcement\(let announcementID\):[\s\S]*api\.adminAnnouncement\([\s\S]*mergeAnnouncement\(announcement\)/);
   assert.match(modelsTests, /testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound/);
   assert.match(modelsTests, /owner\/finance\/member/);
