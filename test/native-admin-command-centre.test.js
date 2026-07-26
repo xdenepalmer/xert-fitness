@@ -746,6 +746,86 @@ test('high-consequence owner drafts share command-centre exit protection', async
   assert.ok((view.match(/\.adminOwnerExitState\(/g) || []).length >= 10);
 });
 
+test('native intake notes remain retryable and cannot be discarded through sheet exits', async () => {
+  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const memberDetail = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private enum AdminMemberHistoryTab'),
+  );
+  const bookingDetail = view.slice(
+    view.indexOf('private struct AdminBookingRequestDetailView'),
+    view.indexOf('private struct AdminSiteContentView'),
+  );
+  const leadDetail = view.slice(
+    view.indexOf('private struct AdminLeadDetailView'),
+    view.indexOf('private struct AdminPTRequestsView'),
+  );
+  const ptNotes = view.slice(
+    view.indexOf('private struct AdminPTNotesEditor'),
+    view.indexOf('private struct AdminPlatformView'),
+  );
+
+  assert.match(memberDetail, /private var hasNoteDraft: Bool/);
+  assert.match(memberDetail, /Button\("Close", action: requestDismiss\)/);
+  assert.match(memberDetail, /Discard staff note\?/);
+  assert.match(memberDetail, /title: "staff note for \\\(current\.displayName\)"/);
+
+  for (const editor of [bookingDetail, leadDetail, ptNotes]) {
+    assert.match(editor, /baselineNotes/);
+    assert.match(editor, /private var isDirty: Bool/);
+    assert.match(editor, /@State private var exitStateID = UUID\(\)/);
+    assert.match(editor, /\.adminOwnerExitState\(/);
+    assert.match(editor, /\.interactiveDismissDisabled\(isDirty \|\| is[A-Z][A-Za-z]+\)/);
+    assert.match(editor, /ToolbarItemGroup\(placement: \.keyboard\)/);
+    assert.match(editor, /confirmationDialog\(/);
+    assert.match(editor, /XertHaptics\.play\(\.success\)/);
+    assert.match(editor, /XertHaptics\.play\(\.error\)/);
+  }
+
+  assert.match(bookingDetail, /Save or discard the staff-note draft before changing this booking's status/);
+  assert.match(bookingDetail, /\.disabled\(!mutationAllowed \|\| isUpdating \|\| isDirty\)/);
+  assert.match(leadDetail, /status != baselineStatus \|\| notes != baselineNotes/);
+  assert.match(ptNotes, /let didSave = await admin\.updatePTRequest/);
+  assert.match(ptNotes, /if didSave \{[\s\S]*dismiss\(\)[\s\S]*\} else \{[\s\S]*XertHaptics\.play\(\.error\)/);
+  assert.doesNotMatch(ptNotes, /let onSave:/);
+  assert.ok((view.match(/\.adminOwnerExitState\(/g) || []).length >= 14);
+});
+
+test('native intake desks export the same filtered operational records as desktop', async () => {
+  const [models, view, swiftTests] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift'),
+  ]);
+  const bookingDesk = view.slice(
+    view.indexOf('private struct AdminBookingRequestsView'),
+    view.indexOf('private struct AdminBookingRequestDetailView'),
+  );
+  const leadDesk = view.slice(
+    view.indexOf('private struct AdminLeadsView'),
+    view.indexOf('private struct AdminLeadDetailView'),
+  );
+
+  assert.match(models, /struct AdminLeadReport/);
+  assert.match(models, /case \.members:[\s\S]*"Suburb \/ town"[\s\S]*"Campaign source"/);
+  assert.match(models, /case \.trainers:[\s\S]*"Qualifications"/);
+  assert.match(models, /case \.partners:[\s\S]*"Business", "Profession"/);
+  assert.match(models, /struct AdminBookingRequestReport/);
+  assert.match(models, /"Requested", "Source", "Status", "Name", "Email", "Phone"/);
+  assert.match(models, /booking\.source == \.member \? "Member credit booking" : "Enquiry form"/);
+
+  assert.match(bookingDesk, /AdminBookingRequestReport\(rows: filteredRequests\)\.csv/);
+  assert.match(bookingDesk, /defaultFilename: "xert-bookings-/);
+  assert.match(bookingDesk, /\.disabled\(filteredRequests\.isEmpty \|\| !requestsAreCurrent\)/);
+  assert.match(leadDesk, /AdminLeadReport\(pipeline: pipeline, rows: filteredLeads\)\.csv/);
+  assert.match(leadDesk, /defaultFilename: "xert-\\\(pipeline\.rawValue\)-/);
+  assert.match(leadDesk, /\.disabled\(filteredLeads\.isEmpty \|\| !pipelineIsCurrent\)/);
+  assert.match(view, /private struct AdminIntakeCSVDocument: FileDocument/);
+
+  assert.match(swiftTests, /AdminLeadReport\(pipeline: \.members, rows: \[lead\]\)/);
+  assert.match(swiftTests, /AdminBookingRequestReport\(rows: \[booking\]\)/);
+});
+
 test('native class desk never presents unavailable operational data as an empty queue', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const desk = view.slice(
@@ -1159,7 +1239,7 @@ test('native intake desks never hide failed loads or lose confirmed mutation out
   assert.match(intakeViews, /Section\(requestsAreCurrent \? "Matching workload" : "Last matching workload"\)/);
   assert.match(intakeViews, /selectedIDs = await admin\.bulkUpdatePTRequests/);
   assert.match(intakeViews, /Only requests that fail will remain selected for retry/);
-  assert.match(intakeViews, /AdminPTCSVDocument\(csv: report\.csv\)/);
+  assert.match(intakeViews, /AdminIntakeCSVDocument\(csv: report\.csv\)/);
   assert.match(intakeViews, /defaultFilename: "xert-pt-requests-/);
   assert.match(intakeViews, /PT Requests must refresh before owner notes can be changed/);
 });

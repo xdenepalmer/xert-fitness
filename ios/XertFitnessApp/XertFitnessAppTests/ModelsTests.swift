@@ -3369,6 +3369,12 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(AdminLeadPipeline.members.statuses.contains("foundation_offer_sent"))
         XCTAssertTrue(AdminLeadPipeline.trainers.statuses.contains("hired"))
         XCTAssertTrue(AdminLeadPipeline.partners.statuses.contains("approved"))
+
+        let report = AdminLeadReport(pipeline: .members, rows: [lead])
+        XCTAssertTrue(report.csv.contains("\"Suburb / town\""))
+        XCTAssertTrue(report.csv.contains("\"Campaign source\""))
+        XCTAssertTrue(report.csv.contains("\"instagram\""))
+        XCTAssertFalse(report.csv.contains("Foundation offer next."))
     }
 
     func testUnifiedBookingRequestKeepsCreditWorkflowAndAllowedTransitions() {
@@ -3392,6 +3398,12 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(booking.searchableText.contains("xert engine"))
         XCTAssertEqual(booking.allowedNextStatuses, ["attended", "no_show", "cancelled"])
         XCTAssertTrue(booking.id.hasPrefix("member:"))
+
+        let report = AdminBookingRequestReport(rows: [booking])
+        XCTAssertTrue(report.csv.contains("\"Member credit booking\""))
+        XCTAssertTrue(report.csv.contains("\"Credit reserved\""))
+        XCTAssertTrue(report.csv.contains("\"Yes\""))
+        XCTAssertTrue(report.csv.contains("\"XERT Engine\""))
     }
 
     func testCampaignAttributionMatchesQueenslandReportingAndPrivacySafeExport() {

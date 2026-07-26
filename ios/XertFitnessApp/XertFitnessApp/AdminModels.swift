@@ -1070,6 +1070,56 @@ struct AdminLead: Identifiable, Codable, Hashable {
     }
 }
 
+struct AdminLeadReport {
+    let pipeline: AdminLeadPipeline
+    let rows: [AdminLead]
+
+    var csv: String {
+        let commonHeader = ["Submitted", "Status", "Name", "Email", "Phone"]
+        let pipelineHeader: [String]
+        switch pipeline {
+        case .members:
+            pipelineHeader = ["Suburb / town", "Campaign source", "Campaign medium", "Campaign name"]
+        case .trainers:
+            pipelineHeader = ["Qualifications"]
+        case .partners:
+            pipelineHeader = ["Business", "Profession"]
+        }
+
+        let formatter = ISO8601DateFormatter()
+        let body = rows.map { lead in
+            let common = [
+                formatter.string(from: lead.created_at),
+                lead.effectiveStatus,
+                lead.full_name ?? "",
+                lead.email ?? "",
+                lead.phone ?? ""
+            ]
+            let pipelineValues: [String]
+            switch pipeline {
+            case .members:
+                pipelineValues = [
+                    lead.suburb_town ?? "",
+                    lead.utm_source ?? "",
+                    lead.utm_medium ?? "",
+                    lead.utm_campaign ?? ""
+                ]
+            case .trainers:
+                pipelineValues = [lead.qualifications ?? ""]
+            case .partners:
+                pipelineValues = [lead.business_name ?? "", lead.profession ?? ""]
+            }
+            return (common + pipelineValues).map(Self.escape).joined(separator: ",")
+        }
+        return ([commonHeader + pipelineHeader].map { $0.map(Self.escape).joined(separator: ",") } + body)
+            .joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
 struct AdminCampaignAttributionRow: Identifiable, Codable, Hashable {
     let id: AdminLeadIdentifier
     let utm_source: String?
@@ -1548,6 +1598,40 @@ struct AdminBookingRequest: Identifiable, Hashable {
         case "confirmed": return ["attended", "no_show", "cancelled"]
         default: return []
         }
+    }
+}
+
+struct AdminBookingRequestReport {
+    let rows: [AdminBookingRequest]
+
+    var csv: String {
+        let header = [
+            "Requested", "Source", "Status", "Name", "Email", "Phone",
+            "Class", "Class start", "Coach", "Location", "Credit reserved"
+        ]
+        let formatter = ISO8601DateFormatter()
+        let body = rows.map { booking in
+            [
+                formatter.string(from: booking.createdAt),
+                booking.source == .member ? "Member credit booking" : "Enquiry form",
+                booking.status,
+                booking.fullName,
+                booking.email ?? "",
+                booking.phone ?? "",
+                booking.session?.title ?? "",
+                (booking.session?.start_time).map { formatter.string(from: $0) } ?? "",
+                booking.session?.coach_name ?? "",
+                booking.session?.location_zone ?? "",
+                booking.creditBatchID == nil ? "No" : "Yes"
+            ]
+            .map(Self.escape)
+            .joined(separator: ",")
+        }
+        return ([header.map(Self.escape).joined(separator: ",")] + body).joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 }
 

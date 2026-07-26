@@ -2084,7 +2084,6 @@ private struct AdminOwnerTaskSheet: View {
         case .member(let id):
             if let member = admin.members.first(where: { $0.id == id }) {
                 AdminMemberDetailView(admin: admin, session: session, member: member)
-                    .toolbar { closeToolbar }
             } else {
                 resolutionView(recordName: "member")
             }
@@ -2230,6 +2229,7 @@ private struct AdminMembersView: View {
 }
 
 private struct AdminMemberDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let member: AdminMemberSummary
@@ -2239,8 +2239,15 @@ private struct AdminMemberDetailView: View {
     @State private var showingNoticeComposer = false
     @State private var pendingRole: String?
     @State private var historyTab = AdminMemberHistoryTab.credits
+    @State private var confirmingDiscardNote = false
+    @State private var exitStateID = UUID()
+    @FocusState private var noteFocused: Bool
 
     private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
+    private var hasNoteDraft: Bool {
+        !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    private var isBusy: Bool { admin.servicingMemberID == current.id }
 
     var body: some View {
         List {
@@ -2302,11 +2309,17 @@ private struct AdminMemberDetailView: View {
                     Text("General").tag("general"); Text("Coaching").tag("coaching")
                     Text("Follow-up").tag("follow_up"); Text("Billing").tag("billing")
                 }
-                TextField("Operational context", text: $noteBody, axis: .vertical).lineLimit(3...7)
+                TextField("Operational context", text: $noteBody, axis: .vertical)
+                    .lineLimit(3...7)
+                    .focused($noteFocused)
                 Button("Add note") {
+                    noteFocused = false
                     Task {
                         if await admin.addMemberNote(session: session, memberID: current.id, category: noteCategory, body: noteBody) {
                             noteBody = ""
+                            XertHaptics.play(.success)
+                        } else {
+                            XertHaptics.play(.error)
                         }
                     }
                 }
@@ -2351,9 +2364,27 @@ private struct AdminMemberDetailView: View {
         }
         .scrollContentBackground(.hidden).background(Color.xertNavy)
         .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close", action: requestDismiss)
+                    .disabled(isBusy)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { noteFocused = false }
+            }
+        }
         .task { await admin.loadMemberDetail(session: session, memberID: current.id) }
         .refreshable { await admin.loadMemberDetail(session: session, memberID: current.id) }
         .onDisappear { admin.clearMemberDetail(memberID: current.id) }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "staff note for \(current.displayName)",
+            isDirty: hasNoteDraft,
+            isBusy: isBusy
+        )
+        .interactiveDismissDisabled(hasNoteDraft || isBusy)
         .sheet(isPresented: $showingGrant) {
             AdminCreditGrantView(admin: admin, session: session, member: current)
         }
@@ -2388,6 +2419,25 @@ private struct AdminMemberDetailView: View {
             Button("Cancel", role: .cancel) { pendingRole = nil }
         } message: { role in
             Text(role == "admin" ? "This person will gain full owner command-centre access." : "This person will lose all administrative access. The final administrator cannot be removed.")
+        }
+        .confirmationDialog(
+            "Discard staff note?",
+            isPresented: $confirmingDiscardNote,
+            titleVisibility: .visible
+        ) {
+            Button("Discard note", role: .destructive) { dismiss() }
+            Button("Keep writing", role: .cancel) {}
+        } message: {
+            Text("The unsaved note for \(current.displayName) will be lost.")
+        }
+    }
+
+    private func requestDismiss() {
+        noteFocused = false
+        if hasNoteDraft {
+            confirmingDiscardNote = true
+        } else if !isBusy {
+            dismiss()
         }
     }
 
@@ -4890,11 +4940,6 @@ private struct AdminRetentionView: View {
         .sheet(item: $presentedMember) { member in
             NavigationStack {
                 AdminMemberDetailView(admin: admin, session: session, member: member)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { presentedMember = nil }
-                        }
-                    }
             }
         }
         .confirmationDialog(
@@ -5491,6 +5536,9 @@ private struct AdminBookingRequestsView: View {
     @State private var selectedIDs: Set<String> = []
     @State private var bulkStatus = ""
     @State private var confirmingBulk = false
+    @State private var exportDocument: AdminIntakeCSVDocument?
+    @State private var isExporting = false
+    @State private var exportError: String?
 
     private let statuses = ["requested", "confirmed", "waitlisted", "cancelled", "declined", "attended", "no_show"]
     private var requestsAreCurrent: Bool { admin.bookingRequestsAreCurrent }
@@ -5518,6 +5566,9 @@ private struct AdminBookingRequestsView: View {
         let selected = selectedRequests
         guard let first = selected.first, selected.allSatisfy({ $0.status == first.status }) else { return [] }
         return first.allowedNextStatuses
+    }
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
     }
 
     var body: some View {
@@ -5676,6 +5727,44 @@ private struct AdminBookingRequestsView: View {
         .navigationTitle("Booking Requests")
         .searchable(text: $query, prompt: "Member, contact, class or coach")
         .refreshable { await admin.loadBookingRequests(session: session, force: true) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminIntakeCSVDocument(
+                        csv: AdminBookingRequestReport(rows: filteredRequests).csv
+                    )
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(filteredRequests.isEmpty || !requestsAreCurrent)
+                .accessibilityLabel("Export filtered booking requests")
+                .accessibilityHint(
+                    requestsAreCurrent
+                        ? "Exports the current filtered booking operations report"
+                        : "Refresh booking requests before exporting"
+                )
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-bookings-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result {
+                exportError = error.localizedDescription
+            }
+            exportDocument = nil
+        }
+        .alert("Export failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "The booking operations report could not be exported.")
+        }
         .task { await admin.loadBookingRequests(session: session) }
         .onChange(of: status) { _ in resetSelection() }
         .onChange(of: source) { _ in resetSelection() }
@@ -5738,8 +5827,12 @@ private struct AdminBookingRequestDetailView: View {
     let session: AuthSession
     let booking: AdminBookingRequest
     let mutationAllowed: Bool
+    private let baselineNotes: String
     @State private var notes: String
     @State private var pendingStatus: String?
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var notesFocused: Bool
 
     init(
         admin: AdminStore,
@@ -5751,10 +5844,13 @@ private struct AdminBookingRequestDetailView: View {
         self.session = session
         self.booking = booking
         self.mutationAllowed = mutationAllowed
-        _notes = State(initialValue: booking.adminNotes ?? "")
+        let initialNotes = booking.adminNotes ?? ""
+        baselineNotes = initialNotes
+        _notes = State(initialValue: initialNotes)
     }
 
     private var isUpdating: Bool { admin.updatingBookingRequestIDs.contains(booking.id) }
+    private var isDirty: Bool { notes != baselineNotes }
 
     var body: some View {
         List {
@@ -5789,27 +5885,44 @@ private struct AdminBookingRequestDetailView: View {
             }
             if !booking.allowedNextStatuses.isEmpty {
                 Section("Decision") {
+                    if isDirty {
+                        Label(
+                            "Save or discard the staff-note draft before changing this booking's status.",
+                            systemImage: "note.text.badge.plus"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(booking.allowedNextStatuses, id: \.self) { next in
                         Button(role: next == "cancelled" || next == "declined" ? .destructive : nil) {
                             pendingStatus = next
                         } label: {
                             Label(statusLabel(next), systemImage: statusIcon(next))
                         }
-                        .disabled(!mutationAllowed || isUpdating)
+                        .disabled(!mutationAllowed || isUpdating || isDirty)
                     }
                 }
             }
             if booking.source == .enquiry {
                 Section("Staff notes") {
-                    TextEditor(text: $notes).frame(minHeight: 120)
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 120)
+                        .focused($notesFocused)
                     Text("\(notes.count)/5,000").font(.caption2)
                         .foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
                     Button {
+                        notesFocused = false
                         Task {
-                            if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) { dismiss() }
+                            if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) {
+                                XertHaptics.play(.success)
+                                dismiss()
+                            } else {
+                                XertHaptics.play(.error)
+                            }
                         }
                     } label: { Label(isUpdating ? "Saving..." : "Save notes", systemImage: "note.text") }
-                    .disabled(!mutationAllowed || isUpdating || notes.count > 5_000)
+                    .disabled(!mutationAllowed || !isDirty || isUpdating || notes.count > 5_000)
                 }
                 .disabled(!mutationAllowed)
             }
@@ -5818,7 +5931,24 @@ private struct AdminBookingRequestDetailView: View {
         .background(Color.xertNavy)
         .navigationTitle("Booking Detail")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isUpdating) } }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close", action: requestDismiss)
+                    .disabled(isUpdating)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { notesFocused = false }
+            }
+        }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "booking notes for \(booking.fullName)",
+            isDirty: isDirty,
+            isBusy: isUpdating
+        )
+        .interactiveDismissDisabled(isDirty || isUpdating)
         .confirmationDialog("Move booking to \(statusLabel(pendingStatus ?? ""))?", isPresented: Binding(
             get: { pendingStatus != nil },
             set: { if !$0 { pendingStatus = nil } }
@@ -5826,7 +5956,12 @@ private struct AdminBookingRequestDetailView: View {
             if let pendingStatus {
                 Button(statusLabel(pendingStatus), role: pendingStatus == "cancelled" || pendingStatus == "declined" ? .destructive : nil) {
                     Task {
-                        if await admin.updateBookingRequest(session: session, booking: booking, status: pendingStatus) { dismiss() }
+                        if await admin.updateBookingRequest(session: session, booking: booking, status: pendingStatus) {
+                            XertHaptics.play(.success)
+                            dismiss()
+                        } else {
+                            XertHaptics.play(.error)
+                        }
                     }
                 }
             }
@@ -5835,6 +5970,25 @@ private struct AdminBookingRequestDetailView: View {
             Text(pendingStatus == "cancelled" && booking.source == .member
                 ? "The server will return the reserved class credit according to the cancellation policy."
                 : "This change is recorded in the permanent admin request audit.")
+        }
+        .confirmationDialog(
+            "Discard booking notes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard notes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The unsaved staff notes for \(booking.fullName) will be lost.")
+        }
+    }
+
+    private func requestDismiss() {
+        notesFocused = false
+        if isDirty {
+            confirmingDiscard = true
+        } else if !isUpdating {
+            dismiss()
         }
     }
 
@@ -6581,6 +6735,9 @@ private struct AdminLeadsView: View {
     @State private var selectedLead: AdminLead?
     @State private var selectedIDs: Set<AdminLeadIdentifier> = []
     @State private var bulkStatus = ""
+    @State private var exportDocument: AdminIntakeCSVDocument?
+    @State private var isExporting = false
+    @State private var exportError: String?
 
     private var leads: [AdminLead] { admin.leads(for: pipeline) }
     private var pipelineIsLoaded: Bool { admin.loadedLeadPipelines.contains(pipeline) }
@@ -6594,6 +6751,9 @@ private struct AdminLeadsView: View {
             (status == "all" || lead.effectiveStatus == status)
                 && (needle.isEmpty || lead.searchableText.contains(needle))
         }
+    }
+    private var exportDateStamp: String {
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))
     }
 
     var body: some View {
@@ -6739,6 +6899,44 @@ private struct AdminLeadsView: View {
         .navigationTitle("Lead Pipelines")
         .searchable(text: $query, prompt: "Name, email, phone or source")
         .refreshable { await admin.loadLeads(session: session, pipeline: pipeline, force: true) }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    exportDocument = AdminIntakeCSVDocument(
+                        csv: AdminLeadReport(pipeline: pipeline, rows: filteredLeads).csv
+                    )
+                    isExporting = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(filteredLeads.isEmpty || !pipelineIsCurrent)
+                .accessibilityLabel("Export filtered \(pipeline.title.lowercased())")
+                .accessibilityHint(
+                    pipelineIsCurrent
+                        ? "Exports every current lead matching the active pipeline filters"
+                        : "Refresh this lead pipeline before exporting"
+                )
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "xert-\(pipeline.rawValue)-\(exportDateStamp)"
+        ) { result in
+            if case .failure(let error) = result {
+                exportError = error.localizedDescription
+            }
+            exportDocument = nil
+        }
+        .alert("Export failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "The lead pipeline report could not be exported.")
+        }
         .task { await admin.loadLeads(session: session, pipeline: pipeline) }
         .onChange(of: pipeline) { newPipeline in
             query = ""
@@ -6793,8 +6991,13 @@ private struct AdminLeadDetailView: View {
     let pipeline: AdminLeadPipeline
     let lead: AdminLead
     let mutationAllowed: Bool
+    private let baselineStatus: String
+    private let baselineNotes: String
     @State private var status: String
     @State private var notes: String
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var notesFocused: Bool
 
     init(
         admin: AdminStore,
@@ -6808,11 +7011,18 @@ private struct AdminLeadDetailView: View {
         self.pipeline = pipeline
         self.lead = lead
         self.mutationAllowed = mutationAllowed
-        _status = State(initialValue: lead.effectiveStatus)
-        _notes = State(initialValue: lead.admin_notes ?? "")
+        let initialStatus = lead.effectiveStatus
+        let initialNotes = lead.admin_notes ?? ""
+        baselineStatus = initialStatus
+        baselineNotes = initialNotes
+        _status = State(initialValue: initialStatus)
+        _notes = State(initialValue: initialNotes)
     }
 
     private var isSaving: Bool { admin.savingLeadIDs.contains(lead.id) }
+    private var isDirty: Bool {
+        status != baselineStatus || notes != baselineNotes
+    }
 
     var body: some View {
         List {
@@ -6866,6 +7076,7 @@ private struct AdminLeadDetailView: View {
                 }
                 TextEditor(text: $notes)
                     .frame(minHeight: 120)
+                    .focused($notesFocused)
                     .overlay(alignment: .topLeading) {
                         if notes.isEmpty {
                             Text("Internal notes").foregroundStyle(Color.xertPale.opacity(0.35)).padding(.top, 8).allowsHitTesting(false)
@@ -6874,15 +7085,19 @@ private struct AdminLeadDetailView: View {
                 Text("\(notes.count)/5,000")
                     .font(.caption2).foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
                 Button {
+                    notesFocused = false
                     Task {
                         if await admin.saveLead(session: session, pipeline: pipeline, lead: lead, status: status, notes: notes) {
+                            XertHaptics.play(.success)
                             dismiss()
+                        } else {
+                            XertHaptics.play(.error)
                         }
                     }
                 } label: {
                     Label(isSaving ? "Saving..." : "Save pipeline changes", systemImage: "checkmark.circle")
                 }
-                .disabled(!mutationAllowed || isSaving || notes.count > 5_000)
+                .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
             }
             .disabled(!mutationAllowed)
         }
@@ -6890,7 +7105,43 @@ private struct AdminLeadDetailView: View {
         .background(Color.xertNavy)
         .navigationTitle(lead.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isSaving) } }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close", action: requestDismiss)
+                    .disabled(isSaving)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { notesFocused = false }
+            }
+        }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "\(pipeline.shortLabel.lowercased()) lead changes",
+            isDirty: isDirty,
+            isBusy: isSaving
+        )
+        .interactiveDismissDisabled(isDirty || isSaving)
+        .confirmationDialog(
+            "Discard lead changes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The unsaved status or notes for \(lead.displayName) will be lost.")
+        }
+    }
+
+    private func requestDismiss() {
+        notesFocused = false
+        if isDirty {
+            confirmingDiscard = true
+        } else if !isSaving {
+            dismiss()
+        }
     }
 
     @ViewBuilder
@@ -6927,7 +7178,7 @@ private struct AdminPTRequestsView: View {
     @State private var bulkStatus = ""
     @State private var confirmingBulkUpdate = false
     @State private var notesRequest: AdminPTRequest?
-    @State private var exportDocument: AdminPTCSVDocument?
+    @State private var exportDocument: AdminIntakeCSVDocument?
     @State private var isExporting = false
     @State private var exportError: String?
 
@@ -7148,7 +7399,7 @@ private struct AdminPTRequestsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    exportDocument = AdminPTCSVDocument(csv: report.csv)
+                    exportDocument = AdminIntakeCSVDocument(csv: report.csv)
                     isExporting = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
@@ -7211,18 +7462,12 @@ private struct AdminPTRequestsView: View {
         .onChange(of: ageFilter) { _ in resetSelection() }
         .onChange(of: query) { _ in resetSelection() }
         .sheet(item: $notesRequest) { request in
-            AdminPTNotesEditor(request: request, mutationAllowed: requestsAreCurrent) { notes in
-                Task {
-                    _ = await admin.updatePTRequest(
-                        session: session,
-                        request: request,
-                        status: request.status,
-                        notes: notes,
-                        updateNotes: true
-                    )
-                    notesRequest = nil
-                }
-            }
+            AdminPTNotesEditor(
+                admin: admin,
+                session: session,
+                request: request,
+                mutationAllowed: requestsAreCurrent
+            )
         }
     }
 
@@ -7334,7 +7579,7 @@ private struct AdminPTRequestsView: View {
     }
 }
 
-private struct AdminPTCSVDocument: FileDocument {
+private struct AdminIntakeCSVDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.commaSeparatedText] }
     let csv: String
 
@@ -7355,21 +7600,33 @@ private struct AdminPTCSVDocument: FileDocument {
 
 private struct AdminPTNotesEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
     let request: AdminPTRequest
     let mutationAllowed: Bool
-    let onSave: (String) -> Void
+    private let baselineNotes: String
     @State private var notes: String
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
+    @FocusState private var notesFocused: Bool
 
     init(
+        admin: AdminStore,
+        session: AuthSession,
         request: AdminPTRequest,
-        mutationAllowed: Bool,
-        onSave: @escaping (String) -> Void
+        mutationAllowed: Bool
     ) {
+        self.admin = admin
+        self.session = session
         self.request = request
         self.mutationAllowed = mutationAllowed
-        self.onSave = onSave
-        _notes = State(initialValue: request.admin_notes ?? "")
+        let initialNotes = request.admin_notes ?? ""
+        baselineNotes = initialNotes
+        _notes = State(initialValue: initialNotes)
     }
+
+    private var isDirty: Bool { notes != baselineNotes }
+    private var isSaving: Bool { admin.updatingPTRequestID == request.id }
 
     var body: some View {
         NavigationStack {
@@ -7385,20 +7642,77 @@ private struct AdminPTNotesEditor: View {
                     }
                 }
                 Section("Private owner notes") {
-                    TextEditor(text: $notes).frame(minHeight: 160)
-                    Text("\(notes.count)/5000").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 160)
+                        .focused($notesFocused)
+                    Text("\(notes.count)/5,000")
+                        .font(.caption)
+                        .foregroundStyle(notes.count > 5_000 ? Color.red : .secondary)
                 }
                 .disabled(!mutationAllowed)
             }
             .navigationTitle(request.displayName)
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: requestDismiss)
+                        .disabled(isSaving)
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { onSave(String(notes.prefix(5_000))) }
-                        .disabled(!mutationAllowed)
+                    Button(isSaving ? "Saving..." : "Save", action: save)
+                        .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { notesFocused = false }
                 }
             }
+        }
+        .adminOwnerExitState(
+            id: exitStateID,
+            title: "PT notes for \(request.displayName)",
+            isDirty: isDirty,
+            isBusy: isSaving
+        )
+        .interactiveDismissDisabled(isDirty || isSaving)
+        .confirmationDialog(
+            "Discard PT notes?",
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard notes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The unsaved private notes for \(request.displayName) will be lost.")
+        }
+    }
+
+    private func save() {
+        notesFocused = false
+        Task {
+            let didSave = await admin.updatePTRequest(
+                session: session,
+                request: request,
+                status: request.status,
+                notes: notes,
+                updateNotes: true
+            )
+            if didSave {
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
+        }
+    }
+
+    private func requestDismiss() {
+        notesFocused = false
+        if isDirty {
+            confirmingDiscard = true
+        } else if !isSaving {
+            dismiss()
         }
     }
 }
