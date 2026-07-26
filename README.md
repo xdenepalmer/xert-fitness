@@ -170,6 +170,8 @@ The Supabase schema is defined in:
   through the five audit-immutability triggers while still blocking any content change
 - `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
   order from failing fulfilment forever and gating checkout for every other member
+- `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
+  correction from charging the member a second credit for the same class
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
