@@ -245,6 +245,9 @@ The Supabase schema is defined in:
   members for the same freed place
 - `src/supabase/pt_rehab_goal_health_consent.sql` — requires health-information
   consent when a public PT request selects the Rehab / return to fitness goal
+- `src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql` — keeps deleted
+  buyers de-identified on late Stripe settlement and refuses to restore credits
+  onto packs that Stripe has already refunded
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -290,8 +293,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
 `account_deletion_public_lead_cleanup.sql`,
 `request_notes_health_consent.sql`,
-`waitlist_skip_concurrency_upgrade.sql` and
-`pt_rehab_goal_health_consent.sql`. This
+`waitlist_skip_concurrency_upgrade.sql`,
+`pt_rehab_goal_health_consent.sql` and
+`fulfillment_erasure_and_refunded_pack_guard.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -345,8 +349,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
 `account_deletion_public_lead_cleanup.sql`,
 `request_notes_health_consent.sql`,
-`waitlist_skip_concurrency_upgrade.sql` and
-`pt_rehab_goal_health_consent.sql`. The
+`waitlist_skip_concurrency_upgrade.sql`,
+`pt_rehab_goal_health_consent.sql` and
+`fulfillment_erasure_and_refunded_pack_guard.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

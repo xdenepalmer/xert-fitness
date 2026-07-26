@@ -39,14 +39,8 @@ begin
 
   if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours'))
      and v_batch is not null then
-    update public.credit_batches
-    set remaining = remaining + 1,
-        expires_at = case
-          when expires_at is not null and expires_at <= now()
-            then greatest(v_start, now() + interval '12 hours')
-          else expires_at
-        end
-    where id = v_batch;
+    -- Shared helper owns expiry reactivation and refuses Stripe-refunded packs.
+    perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
 

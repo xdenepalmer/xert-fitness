@@ -151,6 +151,10 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql', 'owner_stripe_price_provisioning'],
     ['../src/supabase/credit_batch_refund_reactivation.sql', 'credit_batch_refund_reactivation'],
     ['../supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql', 'credit_batch_refund_reactivation'],
+    ['../src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql', 'stripe_fulfillment_deleted_email_erasure'],
+    ['../supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql', 'stripe_fulfillment_deleted_email_erasure'],
+    ['../src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql', 'refund_skips_stripe_refunded_batches'],
+    ['../supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql', 'refund_skips_stripe_refunded_batches'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -299,6 +303,8 @@ test('read-only production check reports every release capability and migration'
     'request_notes_health_consent',
     'waitlist_skip_concurrency',
     'pt_rehab_goal_health_consent',
+    'stripe_fulfillment_deleted_email_erasure',
+    'refund_skips_stripe_refunded_batches',
   ];
 
   for (const capability of capabilities) {

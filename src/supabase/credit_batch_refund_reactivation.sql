@@ -41,10 +41,16 @@ begin
   if p_batch_id is null or p_count is null or p_count <= 0 then
     return;
   end if;
-  update public.credit_batches
-     set remaining = remaining + p_count,
-         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
-   where id = p_batch_id;
+  update public.credit_batches batch
+     set remaining = batch.remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(batch.expires_at, p_anchor)
+   where batch.id = p_batch_id
+     and not exists (
+       select 1
+         from public.orders o
+        where o.id = batch.order_id
+          and o.status = 'refunded'
+     );
 end;
 $$;
 
@@ -234,7 +240,13 @@ begin
         and credit_batch_id is not null
       group by credit_batch_id
     ) as released
-   where batch.id = released.credit_batch_id;
+   where batch.id = released.credit_batch_id
+     and not exists (
+       select 1
+         from public.orders o
+        where o.id = batch.order_id
+          and o.status = 'refunded'
+     );
 
   update public.session_bookings
      set status = 'cancelled', cancelled_at = now()
@@ -378,6 +390,12 @@ begin
          group by credit_batch_id
       ) refunds
      where credits.id = refunds.credit_batch_id
+       and not exists (
+         select 1
+           from public.orders o
+          where o.id = credits.order_id
+            and o.status = 'refunded'
+       )
      returning credits.id
   )
   select count(*) into v_cancelled_count from cancelled_bookings;

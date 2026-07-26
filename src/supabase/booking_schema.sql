@@ -459,7 +459,13 @@ begin
 
   update public.orders as orders set
     status = 'paid',
-    email = coalesce(nullif(btrim(p_email), ''), orders.email),
+    -- Account deletion nulls email; never re-attach Stripe's address onto an
+    -- orphaned financial row, and clear any leftover address if auth was
+    -- removed outside delete_member_account.
+    email = case
+      when orders.user_id is null then null
+      else coalesce(nullif(btrim(p_email), ''), orders.email)
+    end,
     stripe_payment_intent_id = coalesce(orders.stripe_payment_intent_id, p_payment_intent_id),
     paid_at = coalesce(orders.paid_at, p_paid_at)
   where orders.id = v_order.id returning orders.* into v_order;
@@ -936,10 +942,16 @@ begin
   if p_batch_id is null or p_count is null or p_count <= 0 then
     return;
   end if;
-  update public.credit_batches
-     set remaining = remaining + p_count,
-         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
-   where id = p_batch_id;
+  update public.credit_batches batch
+     set remaining = batch.remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(batch.expires_at, p_anchor)
+   where batch.id = p_batch_id
+     and not exists (
+       select 1
+         from public.orders o
+        where o.id = batch.order_id
+          and o.status = 'refunded'
+     );
 end;
 $$;
 
@@ -1436,6 +1448,10 @@ insert into public.xert_schema_capabilities (capability)
 values ('stripe_order_terms_snapshot') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('stripe_fulfillment_deleted_member') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('stripe_fulfillment_deleted_email_erasure') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('refund_skips_stripe_refunded_batches') on conflict (capability) do nothing;
 -- Durable, retry-safe observability for verified Stripe webhook deliveries.
 create table if not exists public.stripe_webhook_events (
   event_id text primary key,

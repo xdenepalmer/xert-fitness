@@ -122,17 +122,18 @@ test('execute stays restricted to the service role on the live overload', async 
   );
 });
 
-test('operator mirror matches the migration repair', async () => {
-  const [migration, operator] = await Promise.all([
-    readFile(FIX, 'utf8'),
-    readFile(OPERATOR, 'utf8'),
-  ]);
-  const stripComments = text => text.replace(/^--.*$/gm, '').trim();
-  // Capability upsert style may differ slightly; compare the function body.
-  const body = text => {
-    const start = text.indexOf('create or replace function public.fulfill_stripe_checkout');
-    const end = text.indexOf('insert into public.xert_schema_capabilities', start);
-    return stripComments(text.slice(start, end));
-  };
-  assert.equal(body(operator), body(migration));
+test('operator mirror keeps deleted-member settlement and email erasure', async () => {
+  // Operator file is ahead of the historical overload-repair migration so a
+  // re-run cannot restore the unguarded Stripe email write.
+  const operator = await readFile(OPERATOR, 'utf8');
+  assert.match(
+    operator,
+    /\(v_order\.user_id is not null and v_order\.user_id is distinct from p_user_id\)/,
+  );
+  assert.match(
+    operator,
+    /email = case\s+when orders\.user_id is null then null/s,
+  );
+  assert.match(operator, /p_credit_validity_days integer/);
+  assert.doesNotMatch(operator, /p_expires_at timestamptz/);
 });

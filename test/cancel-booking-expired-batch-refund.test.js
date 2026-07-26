@@ -18,15 +18,7 @@ async function executableBody(url) {
   return text.split('\n').filter(line => !line.trimStart().startsWith('--')).join('\n');
 }
 
-test('migration and operator mirror are identical', async () => {
-  const [migration, mirror] = await Promise.all([
-    readFile(MIGRATION, 'utf8'),
-    readFile(MIRROR, 'utf8'),
-  ]);
-  assert.equal(mirror.replace(/\r\n/g, '\n').trim(), migration.replace(/\r\n/g, '\n').trim());
-});
-
-test('timely cancel restores credit without an unexpired-batch guard', async () => {
+test('historical migration keeps the expired-pack refund fix', async () => {
   const text = await executableBody(MIGRATION);
   assert.match(
     text,
@@ -41,15 +33,6 @@ test('timely cancel restores credit without an unexpired-batch guard', async () 
   );
   assert.match(
     text,
-    /where id = v_batch;/,
-    'refund targets the booking batch by id alone',
-  );
-});
-
-test('expired packs are reactivated so the returned credit is bookable', async () => {
-  const text = await executableBody(MIGRATION);
-  assert.match(
-    text,
     /when expires_at is not null and expires_at <= now\(\)/,
     'only already-expired batches are extended',
   );
@@ -60,12 +43,23 @@ test('expired packs are reactivated so the returned credit is bookable', async (
   );
 });
 
+test('operator mirror forwards cancel_booking through the shared refund helper', async () => {
+  // Re-running the operator script must not reinstall an inline refund that
+  // bypasses refund_skips_stripe_refunded_batches.
+  const text = await executableBody(MIRROR);
+  assert.match(text, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
+  assert.match(
+    text,
+    /v_status = 'requested' or \(v_status = 'confirmed' and v_start - now\(\) > interval '12 hours'\)/,
+  );
+});
+
 test('waitlisted places still never refund and late confirmed cancels still forfeit', async () => {
-  const text = await executableBody(MIGRATION);
+  const text = await executableBody(MIRROR);
   assert.match(text, /v_status not in \('requested', 'confirmed', 'waitlisted'\)/);
   assert.doesNotMatch(
     text,
-    /v_status = 'waitlisted'[\s\S]*remaining = remaining \+ 1/,
+    /v_status = 'waitlisted'[\s\S]*refund_credits_to_batch/,
     'waitlisted cancel must not restore a credit',
   );
   // The refund branch still requires the 12-hour confirmed window (or requested).

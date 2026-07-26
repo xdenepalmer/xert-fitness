@@ -117,7 +117,13 @@ begin
 
   update public.orders as orders
   set status = 'paid',
-      email = coalesce(nullif(btrim(p_email), ''), orders.email),
+      -- Account deletion nulls email; never re-attach Stripe's address onto an
+      -- orphaned financial row, and clear any leftover address if auth was
+      -- removed outside delete_member_account.
+      email = case
+        when orders.user_id is null then null
+        else coalesce(nullif(btrim(p_email), ''), orders.email)
+      end,
       stripe_payment_intent_id = coalesce(orders.stripe_payment_intent_id, p_payment_intent_id),
       paid_at = coalesce(orders.paid_at, p_paid_at)
   where orders.id = v_order.id

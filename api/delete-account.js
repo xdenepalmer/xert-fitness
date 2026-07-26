@@ -24,6 +24,11 @@ export function isMissingAccountDeletionRoutine(error) {
     || /delete_member_account.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
 }
 
+export function isMissingAuditSubjectRedactionRoutine(error) {
+  return ['42883', 'PGRST202'].includes(error?.code)
+    || /redact_audit_subject_pii.*(?:not found|schema cache|does not exist)/i.test(error?.message || '');
+}
+
 /** Matches SQL `lower(btrim(email))` used by delete_member_account. */
 export function normalizeAccountEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -96,6 +101,15 @@ export async function deleteMemberAccountLegacy(admin, userId, email) {
       if (leadError && !['42P01', 'PGRST205'].includes(leadError.code)) {
         throw leadError;
       }
+    }
+
+    // Match delete_member_account: scrub denormalised subject email from
+    // immutable audit tables before Auth (and the email key) disappear.
+    const { error: redactError } = await admin.rpc('redact_audit_subject_pii', {
+      p_subject_email: normalizedEmail,
+    });
+    if (redactError && !isMissingAuditSubjectRedactionRoutine(redactError)) {
+      throw redactError;
     }
   }
 

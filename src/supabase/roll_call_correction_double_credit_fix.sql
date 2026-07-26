@@ -32,10 +32,16 @@ begin
   if p_batch_id is null or p_count is null or p_count <= 0 then
     return;
   end if;
-  update public.credit_batches
-     set remaining = remaining + p_count,
-         expires_at = public.credit_batch_expires_at_after_refund(expires_at, p_anchor)
-   where id = p_batch_id;
+  update public.credit_batches batch
+     set remaining = batch.remaining + p_count,
+         expires_at = public.credit_batch_expires_at_after_refund(batch.expires_at, p_anchor)
+   where batch.id = p_batch_id
+     and not exists (
+       select 1
+         from public.orders o
+        where o.id = batch.order_id
+          and o.status = 'refunded'
+     );
 end;
 $$;
 

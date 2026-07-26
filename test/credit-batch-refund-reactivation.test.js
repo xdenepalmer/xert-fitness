@@ -24,23 +24,23 @@ async function executableBody(url) {
   return text.split('\n').filter(line => !line.trimStart().startsWith('--')).join('\n');
 }
 
-test('migration and operator mirror are identical', async () => {
+test('operator mirror keeps reactivation behaviour and refuses Stripe-refunded packs', async () => {
+  // Mirror is intentionally ahead of the historical migration so re-runs cannot
+  // strip refund_skips_stripe_refunded_batches.
   const [migration, mirror] = await Promise.all([
-    readFile(MIGRATION, 'utf8'),
-    readFile(MIRROR, 'utf8'),
+    executableBody(MIGRATION),
+    executableBody(MIRROR),
   ]);
-  assert.equal(mirror.replace(/\r\n/g, '\n').trim(), migration.replace(/\r\n/g, '\n').trim());
-});
-
-test('shared helper reactivates expired packs with the cancel_booking rule', async () => {
-  const text = await executableBody(MIGRATION);
-  assert.match(text, /create or replace function public\.credit_batch_expires_at_after_refund/);
-  assert.match(text, /create or replace function public\.refund_credits_to_batch/);
-  assert.match(
-    text,
-    /greatest\(coalesce\(p_anchor, now\(\)\), now\(\) \+ interval '12 hours'\)/,
-  );
-  assert.match(text, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
+  for (const text of [migration, mirror]) {
+    assert.match(text, /create or replace function public\.credit_batch_expires_at_after_refund/);
+    assert.match(text, /create or replace function public\.refund_credits_to_batch/);
+    assert.match(
+      text,
+      /greatest\(coalesce\(p_anchor, now\(\)\), now\(\) \+ interval '12 hours'\)/,
+    );
+    assert.match(text, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
+  }
+  assert.match(mirror, /o\.status = 'refunded'/);
 });
 
 test('class cancel refunds attended and no_show that still hold a credit', async () => {

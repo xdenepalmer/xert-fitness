@@ -67,6 +67,8 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   request_notes_health_consent: 'Apply supabase/migrations/20260726109000_request_notes_health_consent.sql in Supabase.',
   waitlist_skip_concurrency: 'Apply supabase/migrations/20260726110000_waitlist_skip_concurrency.sql in Supabase.',
   pt_rehab_goal_health_consent: 'Apply supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql in Supabase.',
+  stripe_fulfillment_deleted_email_erasure: 'Apply supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql in Supabase.',
+  refund_skips_stripe_refunded_batches: 'Apply supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {
