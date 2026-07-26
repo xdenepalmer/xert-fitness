@@ -45,6 +45,7 @@ test('web promotion confirms the exact FIFO member and reports durable notificat
   );
   assert.match(promoteHandler, /Member promoted and notified/);
   assert.match(promoteHandler, /Waitlist refresh needed/);
+  assert.match(promoteHandler, /refreshWaitlistOverview\(\{ quiet: true \}\)/);
   assert.ok(
     promoteHandler.indexOf('Member promoted and notified')
       < promoteHandler.indexOf('refreshWaitlistOverview'),

@@ -99,7 +99,15 @@ export const SupabaseAuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     requireSupabaseConfiguration();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
+    if (error) {
+      // Preserve GoTrue status/code so AdminLogin can map rate limits instead of
+      // treating every failure as a bad password.
+      const wrapped = new Error(error.message || 'Sign in failed.');
+      wrapped.name = error.name || 'AuthError';
+      wrapped.status = error.status;
+      wrapped.code = error.code;
+      throw wrapped;
+    }
   };
 
   const signOut = async () => {

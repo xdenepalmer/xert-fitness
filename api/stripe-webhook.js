@@ -7,6 +7,9 @@ import {
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import { matchingFullRefundForOrder } from './admin-refund-order.js';
 
+// Fulfilment + refund reconcile can include multiple Stripe round-trips (20s each).
+export const config = { maxDuration: 60 };
+
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
 //

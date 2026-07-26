@@ -996,10 +996,17 @@ final class AdminStore: ObservableObject {
                 expectedBookingID: expectedBookingID,
                 requestID: requestID
             )
+            // Skip (+ notice / push) already happened. A desk refresh failure must
+            // still return success so the UI cannot claim the skip failed and
+            // invite a second confirm against a moved queue.
             bookingDecisionNoticeWarning = outcome.warning
-            waitlist = try await api.adminWaitlist(session: session)
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            lastUpdatedAt = Date()
+            do {
+                waitlist = try await api.adminWaitlist(session: session)
+                dailyOperations = try await api.adminDailyOperations(session: session)
+                lastUpdatedAt = Date()
+            } catch {
+                errorMessage = "The member was removed from the waitlist. Reload before the next action."
+            }
             return true
         } catch {
             let message = error.localizedDescription

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Lock, AlertCircle } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
+import { describeAdminSignInError } from '@/lib/adminSignInError';
 
 export default function AdminLogin() {
   const { signIn, serviceReady } = useSupabaseAuth();
@@ -8,16 +9,45 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownRemainingSec, setCooldownRemainingSec] = useState(0);
+  const cooldownTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownRemainingSec(0);
+      return undefined;
+    }
+    const tick = () => {
+      const remainingMs = Math.max(0, cooldownUntil - Date.now());
+      setCooldownRemainingSec(Math.ceil(remainingMs / 1000));
+      if (remainingMs <= 0) {
+        setCooldownUntil(0);
+      }
+    };
+    tick();
+    cooldownTimerRef.current = window.setInterval(tick, 250);
+    return () => {
+      if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current);
+    };
+  }, [cooldownUntil]);
+
+  const coolingDown = cooldownRemainingSec > 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting || coolingDown || !serviceReady) return;
     setError('');
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
       // On success the auth listener updates the session and AdminRoute renders the panel.
     } catch (err) {
-      setError(err.message || 'Sign in failed. Check your email and password.');
+      const described = describeAdminSignInError(err);
+      setError(described.message);
+      if (described.cooldownMs > 0) {
+        setCooldownUntil(Date.now() + described.cooldownMs);
+      }
       setSubmitting(false);
     }
   };
@@ -46,7 +76,8 @@ export default function AdminLogin() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               autoComplete="email"
-              className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors"
+              disabled={submitting || coolingDown}
+              className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors disabled:opacity-50"
               style={{ backgroundColor: 'rgba(50,72,90,0.2)', border: '1px solid rgba(123,167,188,0.2)' }}
               onFocus={e => e.currentTarget.style.borderColor = '#7BA7BC'}
               onBlur={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'}
@@ -62,7 +93,8 @@ export default function AdminLogin() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors"
+              disabled={submitting || coolingDown}
+              className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors disabled:opacity-50"
               style={{ backgroundColor: 'rgba(50,72,90,0.2)', border: '1px solid rgba(123,167,188,0.2)' }}
               onFocus={e => e.currentTarget.style.borderColor = '#7BA7BC'}
               onBlur={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'}
@@ -70,7 +102,7 @@ export default function AdminLogin() {
           </div>
 
           {(error || !serviceReady) && (
-            <div className="flex items-start gap-2 p-3" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)' }}>
+            <div className="flex items-start gap-2 p-3" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)' }} role="alert">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#f87171' }} />
               <p className="font-body text-xs" style={{ color: '#fca5a5' }}>
                 {serviceReady ? error : 'XERT services are temporarily unavailable.'}
@@ -80,11 +112,15 @@ export default function AdminLogin() {
 
           <button
             type="submit"
-            disabled={submitting || !serviceReady}
+            disabled={submitting || coolingDown || !serviceReady}
             className="w-full py-3.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
           >
-            {submitting ? 'Signing in…' : 'Sign in'}
+            {submitting
+              ? 'Signing in…'
+              : coolingDown
+                ? `Try again in ${cooldownRemainingSec}s`
+                : 'Sign in'}
           </button>
         </form>
 

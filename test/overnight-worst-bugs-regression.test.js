@@ -239,7 +239,8 @@ test('waitlist skip refuses to cancel when the expected booking is no longer FIF
     view.indexOf('const handleSkipWaitlistHead'),
     view.indexOf('const handleDuplicate'),
   );
-  assert.match(skipHandler, /refreshWaitlistOverview\(\)/);
+  assert.match(skipHandler, /refreshWaitlistOverview\(\{ quiet: true \}\)/);
+  assert.match(skipHandler, /Waitlist refresh needed/);
 });
 
 /**

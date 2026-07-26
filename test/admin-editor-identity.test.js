@@ -124,6 +124,25 @@ test('class roster refresh is generation-scoped so late class A responses cannot
   assert.match(classCalendar, /const sessionId = attendanceSession\.id;\s*if \(loadedRosterSessionId !== sessionId\)/);
 });
 
+test('waitlist desk overview refresh is generation-scoped and quiet after promote/skip', () => {
+  assert.match(classCalendar, /waitlistOverviewGenerationRef/);
+  assert.match(
+    classCalendar,
+    /const generation = \+\+waitlistOverviewGenerationRef\.current;[\s\S]*?if \(generation !== waitlistOverviewGenerationRef\.current\)/,
+  );
+  assert.match(classCalendar, /refreshWaitlistOverview = async \(\{ quiet = false \} = \{\}\)/);
+  const promoteHandler = classCalendar.slice(
+    classCalendar.indexOf('const handlePromoteNext'),
+    classCalendar.indexOf('const handleSkipWaitlistHead'),
+  );
+  const skipHandler = classCalendar.slice(
+    classCalendar.indexOf('const handleSkipWaitlistHead'),
+    classCalendar.indexOf('const handleDuplicate'),
+  );
+  assert.match(promoteHandler, /refreshWaitlistOverview\(\{ quiet: true \}\)/);
+  assert.match(skipHandler, /refreshWaitlistOverview\(\{ quiet: true \}\)/);
+});
+
 test('roster and booking status mutations skip refresh after the operator switches class', () => {
   const rosterHandler = classCalendar.slice(
     classCalendar.indexOf('const handleRosterStatus'),

@@ -7,6 +7,9 @@ import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
+// Stripe session retrieve + fulfilment RPC need headroom beyond a short default.
+export const config = { maxDuration: 60 };
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

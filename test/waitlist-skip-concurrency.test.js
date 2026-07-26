@@ -39,8 +39,16 @@ test('web skip uses the FIFO concurrency RPC and refreshes after a race', () => 
     view.indexOf('const handleSkipWaitlistHead'),
     view.indexOf('const handleDuplicate')
   );
-  assert.match(skipHandler, /refreshWaitlistOverview\(\)/);
+  // Desk refresh must not rewrite a successful skip as "Could not remove".
+  assert.match(skipHandler, /Removed from waitlist/);
+  assert.match(skipHandler, /Waitlist refresh needed/);
+  assert.match(skipHandler, /refreshWaitlistOverview\(\{ quiet: true \}\)/);
   assert.match(skipHandler, /Could not remove waitlisted member/);
+  assert.ok(
+    skipHandler.indexOf('Removed from waitlist')
+      < skipHandler.indexOf('refreshWaitlistOverview'),
+    'success toast must fire before the desk refresh',
+  );
 });
 
 test('native skip carries the same expected-member concurrency contract', () => {
@@ -55,6 +63,17 @@ test('native skip carries the same expected-member concurrency contract', () => 
   assert.match(store, /The queue changed before this skip\. Refresh and review the waitlist\./);
   assert.match(view, /admin\.skipWaitlistHead\(/);
   assert.match(view, /expectedBookingID: item\.next_booking_id/);
+  const skipFn = store.slice(
+    store.indexOf('func skipWaitlistHead('),
+    store.indexOf('func loadClassRoster('),
+  );
+  assert.match(skipFn, /The member was removed from the waitlist\. Reload before the next action\./);
+  assert.match(skipFn, /return true/);
+  assert.ok(
+    skipFn.indexOf('bookingDecisionNoticeWarning = outcome.warning')
+      < skipFn.indexOf('adminWaitlist'),
+    'skip success must be recorded before the waitlist refresh',
+  );
   const skipDialog = view.slice(
     view.indexOf('Remove \\(skipCandidate'),
     view.indexOf('private func operationalLoadingRow')

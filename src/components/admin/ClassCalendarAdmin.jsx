@@ -549,6 +549,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [roster, setRoster] = useState([]);
   const [loadedRosterSessionId, setLoadedRosterSessionId] = useState(null);
   const bookingsRefreshGenerationRef = useRef(0);
+  const waitlistOverviewGenerationRef = useRef(0);
   const [waitlistOverview, setWaitlistOverview] = useState([]);
   const [waitlistOverviewAvailable, setWaitlistOverviewAvailable] = useState(true);
   const [waitlistOverviewError, setWaitlistOverviewError] = useState('');
@@ -570,19 +571,33 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const attendanceSaveLockRef = useRef(false);
 
-  const refreshWaitlistOverview = async () => {
-    setWaitlistOverviewLoading(true);
+  // Generation-scoped: a late mount/retry response must not repaint a desk that
+  // already reflects a newer promote/skip. Quiet mode keeps the current rows
+  // visible after a mutation instead of wiping the desk to a skeleton.
+  const refreshWaitlistOverview = async ({ quiet = false } = {}) => {
+    const generation = ++waitlistOverviewGenerationRef.current;
+    if (!quiet) setWaitlistOverviewLoading(true);
     setWaitlistOverviewError('');
     try {
       const result = await adminWaitlistOverview(20);
+      if (generation !== waitlistOverviewGenerationRef.current) {
+        return { applied: false, ok: false };
+      }
       setWaitlistOverview(result.rows);
       setWaitlistOverviewAvailable(result.available);
+      return { applied: true, ok: true, available: result.available };
     } catch (error) {
+      if (generation !== waitlistOverviewGenerationRef.current) {
+        return { applied: false, ok: false };
+      }
       setWaitlistOverview([]);
       setWaitlistOverviewAvailable(true);
       setWaitlistOverviewError(error.message || 'Check the waitlist overview permissions.');
+      return { applied: true, ok: false, error };
     } finally {
-      setWaitlistOverviewLoading(false);
+      if (generation === waitlistOverviewGenerationRef.current) {
+        setWaitlistOverviewLoading(false);
+      }
     }
   };
 
@@ -758,10 +773,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           : 'Their credit is reserved and a private notice is waiting in their member account.');
       toast({ title: 'Member promoted and notified', description: delivery });
       try {
-        await Promise.all([
-          refreshWaitlistOverview(),
+        const [overviewResult] = await Promise.all([
+          refreshWaitlistOverview({ quiet: true }),
           ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
         ]);
+        if (overviewResult?.ok === false) {
+          toast({
+            title: 'Waitlist refresh needed',
+            description: overviewResult.error?.message || 'The member was promoted. Reload the waitlist desk before the next action.',
+            variant: 'destructive',
+          });
+        }
       } catch (refreshError) {
         toast({
           title: 'Waitlist refresh needed',
@@ -782,11 +804,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     setSkippingSessionId(candidate.session_id);
     try {
       // Same concurrency contract as Promote: expected id must still be waitlisted FIFO head.
+      // Skip + notice (+ push) must stay the success signal. A later desk refresh
+      // failure must not report "Could not remove" after the member is already gone.
       const result = await adminSkipWaitlistedHead(candidate.session_id, candidate.next_booking_id);
-      await Promise.all([
-        refreshWaitlistOverview(),
-        ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
-      ]);
       toast({
         title: 'Removed from waitlist',
         description: result?.notice_created
@@ -796,9 +816,28 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
               : 'Their private notice is live. Promote the next credited member when ready.'))
           : 'No credit was charged or refunded. Promote the next credited member when ready.',
       });
+      try {
+        const [overviewResult] = await Promise.all([
+          refreshWaitlistOverview({ quiet: true }),
+          ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
+        ]);
+        if (overviewResult?.ok === false) {
+          toast({
+            title: 'Waitlist refresh needed',
+            description: overviewResult.error?.message || 'The member was removed. Reload the waitlist desk before the next action.',
+            variant: 'destructive',
+          });
+        }
+      } catch (refreshError) {
+        toast({
+          title: 'Waitlist refresh needed',
+          description: refreshError.message || 'The member was removed. Reload the waitlist desk before the next action.',
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       try {
-        await refreshWaitlistOverview();
+        await refreshWaitlistOverview({ quiet: true });
       } catch {
         // Keep the skip error primary; desk refresh is best-effort after a race.
       }

@@ -17,6 +17,9 @@ import {
 } from '../src/lib/paymentActivation.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
+// Stripe client timeout is 20s with retries; keep headroom beyond the project default.
+export const config = { maxDuration: 60 };
+
 // Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
 // signed-in member so the webhook can grant their credits after payment.

@@ -8,6 +8,12 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Waitlist desk Skip no longer reports failure after a successful remove when
+  the desk refresh glitches; promote/skip keep a quiet generation-scoped desk
+  refresh so a late mount response cannot restore the old FIFO head. Admin
+  sign-in maps GoTrue rate limits to a one-minute cooldown. Checkout, Stripe
+  webhook, refund, reconcile and account-delete declare a 60s Vercel
+  `maxDuration` (same as announcement push).
 - Bookings inbox status / notes refuse same-paint double submits (parity with
   PT desk) so Confirmed→Waitlisted cannot both land with a fresh `request_id`
   each click; Orders full-refund matches reconcile’s lock; Members private
@@ -280,6 +286,15 @@ Migration / operator mirror:
 
 No new migration for this batch (app-only tip after `4c4a424`). Apply through **26116** remains current.
 
+### 21. This batch — waitlist desk refresh, AdminLogin rate-limit UX, API maxDuration
+| Area | Defect | Fix |
+|---|---|---|
+| ClassCalendarAdmin waitlist Skip | Successful skip + failed roster/desk refresh reported “Could not remove”; stale overview race could repaint a pre-skip queue | Success toast first; quiet generation-scoped desk refresh; refresh failure → “Waitlist refresh needed” (promote parity; iOS skip same) |
+| AdminLogin | GoTrue 429 / rate-limit codes were stripped to bare `Error(message)`; owner could hammer Sign in with opaque copy | Preserve `status`/`code`; map to cooldown copy + disable submit ~60s |
+| Vercel Stripe / erasure APIs | Only announce declared `maxDuration: 60` while checkout / webhook / refund / reconcile / delete used Stripe 20s timeouts without declared headroom | `export const config = { maxDuration: 60 }` on those routes |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -287,6 +302,28 @@ No new migration for this batch (app-only tip after `4c4a424`). Apply through **
 Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
+
+### Copy-paste ordered filenames (overnight catch-up through 26116)
+
+Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
+
+```
+supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql
+supabase/migrations/20260726103000_member_interest_health_consent.sql
+supabase/migrations/20260726104000_class_session_optimistic_locking.sql
+supabase/migrations/20260726105000_audit_subject_pii_redaction.sql
+supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql
+supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql
+supabase/migrations/20260726108000_account_deletion_public_lead_cleanup.sql
+supabase/migrations/20260726109000_request_notes_health_consent.sql
+supabase/migrations/20260726110000_waitlist_skip_concurrency.sql
+supabase/migrations/20260726111000_pt_rehab_goal_health_consent.sql
+supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql
+supabase/migrations/20260726113000_public_booking_switch_gate.sql
+supabase/migrations/20260726114000_member_onboarding_booking_gate.sql
+supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql
+supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
+```
 
 ### Production apply checklist (examples — no secrets)
 
@@ -299,6 +336,11 @@ supabase link --project-ref <YOUR_PROJECT_REF>
 
 # Apply any missing overnight migrations in timestamp order
 supabase db push
+
+# Or apply each missing file from the copy-paste list above, e.g.:
+# while IFS= read -r f; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done <<'EOF'
+# …paste the 15 lines…
+# EOF
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \

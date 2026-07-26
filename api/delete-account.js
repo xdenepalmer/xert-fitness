@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { createRequestTrace, requestHeader, requestJson } from './http.js';
 
+// Account erasure fans out across auth, leads, bookings and audit redaction.
+export const config = { maxDuration: 60 };
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

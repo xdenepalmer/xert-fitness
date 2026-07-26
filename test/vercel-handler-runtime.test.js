@@ -46,6 +46,25 @@ test('Hobby deployment stays within the twelve-function ceiling', () => {
   assert.equal(functions.length, 12);
 });
 
+test('Stripe and long-running API routes declare a 60s maxDuration', async () => {
+  const { readFileSync } = await import('node:fs');
+  for (const name of [
+    'checkout.js',
+    'stripe-webhook.js',
+    'admin-refund-order.js',
+    'admin-reconcile-order.js',
+    'admin-publish-announcement.js',
+    'delete-account.js',
+  ]) {
+    const source = readFileSync(new URL(`../api/${name}`, import.meta.url), 'utf8');
+    assert.match(
+      source,
+      /export const config = \{ maxDuration: 60 \}/,
+      `${name} must keep a 60s Vercel maxDuration for Stripe / fan-out work`,
+    );
+  }
+});
+
 for (const [name, handler, method] of [
   ['checkout', checkoutHandler, 'GET'],
   ['delete account', deleteAccountHandler, 'GET'],

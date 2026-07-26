@@ -3,6 +3,9 @@ import { createRequestTrace, requestHeader, requestJson } from './http.js';
 import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 
+// Stripe refund lookup + create need the same headroom as checkout / webhook.
+export const config = { maxDuration: 60 };
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REFUND_REASONS = new Set(['requested_by_customer', 'duplicate']);
