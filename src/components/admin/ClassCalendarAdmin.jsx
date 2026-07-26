@@ -569,6 +569,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [skipCandidate, setSkipCandidate] = useState(null);
   const [sessionToCancel, setSessionToCancel] = useState(null);
   const [isCancellingSession, setIsCancellingSession] = useState(false);
+  // Custom cancel dialog (not AdminConfirmDialog) — same-paint double Confirm
+  // races two admin_cancel_class_session + notify paths before React paints busy.
+  const cancelClassLockRef = useRef(false);
   const [cancellationFollowUp, setCancellationFollowUp] = useState(null);
   const [duplicatingSessionId, setDuplicatingSessionId] = useState(null);
   const [attendanceSession, setAttendanceSession] = useState(null);
@@ -865,7 +868,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
   const handleCancel = async () => {
     const session = sessionToCancel;
-    if (!session) return;
+    if (!session || cancelClassLockRef.current || isCancellingSession) return;
+    cancelClassLockRef.current = true;
     setIsCancellingSession(true);
     try {
       const contactResults = await Promise.allSettled([
@@ -914,6 +918,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' });
     } finally {
       setIsCancellingSession(false);
+      cancelClassLockRef.current = false;
     }
   };
 

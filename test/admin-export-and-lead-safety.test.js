@@ -32,6 +32,21 @@ test('CampaignStats and AdminAuditLog refuse CSV export while a load is in fligh
   assert.match(audit, /disabled=\{loading \|\| events\.length === 0\}/);
 });
 
+test('Members and PT request CSV exports lock against same-paint double downloads', async () => {
+  const [members, pt] = await Promise.all([
+    read('../src/components/admin/MembersManager.jsx'),
+    read('../src/components/admin/PTRequestsTable.jsx'),
+  ]);
+  assert.match(members, /const exportLockRef = useRef\(false\)/);
+  assert.match(members, /if \(exportLockRef\.current \|\| exporting \|\| loading \|\| searchPending\) return/);
+  assert.match(members, /exportLockRef\.current = true/);
+  assert.match(members, /disabled=\{total === 0 \|\| exporting \|\| loading \|\| searchPending\}/);
+  assert.match(pt, /const exportLockRef = useRef\(false\)/);
+  assert.match(pt, /if \(exportLockRef\.current \|\| exporting \|\| loading\) return/);
+  assert.match(pt, /exportLockRef\.current = true/);
+  assert.match(pt, /disabled=\{total === 0 \|\| exporting \|\| loading\}/);
+});
+
 test('native platform settings freeze edits while payment-activation confirm is open', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const platform = view.slice(

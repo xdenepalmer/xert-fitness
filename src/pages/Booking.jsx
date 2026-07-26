@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Check, Loader2, RefreshCw, Ticket, Users } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
@@ -55,6 +55,12 @@ export default function Booking() {
   const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
+  // Stripe checkout / book_session are not safe to fire twice before React paints
+  // `buyingSlug` / `bookingId` — same-paint double-click (or a second pack/class
+  // while the first is still minting) can open two Checkout sessions or reserve
+  // two credits. iOS guards with bookingSessionID; web needs a ref lock.
+  const buyLockRef = useRef(false);
+  const bookLockRef = useRef(false);
   const [bookingId, setBookingId] = useState(null);
   const [loadErrors, setLoadErrors] = useState([]);
   const requestedSession = searchParams.get('session');
@@ -159,6 +165,7 @@ export default function Booking() {
   ]);
 
   const handleBuy = async (product) => {
+    if (buyLockRef.current || buyingSlug || bookLockRef.current || bookingId) return;
     if (!paymentsEnabled) {
       toast({ title: 'Pack purchases are paused', description: 'XERT will reopen secure checkout when the next release checks are complete.' });
       return;
@@ -168,16 +175,19 @@ export default function Booking() {
       navigate('/register');
       return;
     }
+    buyLockRef.current = true;
     setBuyingSlug(product.slug);
     try {
       await startCheckout(product.slug); // redirects on success
     } catch (e) {
       toast({ title: 'Checkout unavailable', description: e.message, variant: 'destructive' });
       setBuyingSlug(null);
+      buyLockRef.current = false;
     }
   };
 
   const handleBook = async (s) => {
+    if (bookLockRef.current || bookingId || buyLockRef.current || buyingSlug) return;
     if (!bookingsEnabled) {
       toast({
         title: 'Online bookings are paused',
@@ -190,6 +200,7 @@ export default function Booking() {
       navigate('/login');
       return;
     }
+    bookLockRef.current = true;
     setBookingId(s.id);
     try {
       const joiningWaitlist = s.spots_left !== null && s.spots_left <= 0;
@@ -209,6 +220,7 @@ export default function Booking() {
       toast({ title: 'Booking failed', description: e.message, variant: 'destructive' });
     } finally {
       setBookingId(null);
+      bookLockRef.current = false;
     }
   };
 
@@ -333,7 +345,7 @@ export default function Booking() {
                   </div>
                   <button
                     onClick={() => handleBuy(pack)}
-                    disabled={!paymentsEnabled || buyingSlug === pack.slug}
+                    disabled={!paymentsEnabled || Boolean(buyingSlug) || Boolean(bookingId)}
                     className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
                     {!paymentsEnabled
                       ? 'Purchases Paused'
@@ -477,7 +489,7 @@ export default function Booking() {
                             ) : (
                               <button
                                 onClick={() => handleBook(s)}
-                                disabled={Boolean(existingBooking) || Boolean(timeConflict) || bookingId === s.id}
+                                disabled={Boolean(existingBooking) || Boolean(timeConflict) || Boolean(bookingId) || Boolean(buyingSlug)}
                                 aria-describedby={timeConflict ? `booking-conflict-${s.id}` : undefined}
                                 className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide disabled:opacity-40 shrink-0">
                                 {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}

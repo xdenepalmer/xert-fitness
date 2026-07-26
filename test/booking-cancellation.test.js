@@ -45,3 +45,12 @@ test('both booking schema paths let members leave a waitlist without double-refu
     );
   }
 });
+
+test('web Account booking cancel confirm locks against same-paint double submits', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const account = await readFile(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8');
+  assert.match(account, /const cancelBookingLockRef = useRef\(false\)/);
+  assert.match(account, /if \(!cancellationTarget \|\| cancelBookingLockRef\.current \|\| cancellingId\) return/);
+  assert.match(account, /cancelBookingLockRef\.current = true/);
+  assert.match(account, /cancelBookingLockRef\.current = false/);
+});

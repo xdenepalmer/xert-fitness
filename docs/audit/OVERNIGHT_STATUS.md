@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Public `/booking` Buy pack / Book class refuse same-paint double submits and
+  freeze every other pack/class CTA while one checkout or booking is in flight
+  (iPhone `bookingSessionID` parity) so two Stripe sessions or two credit
+  reserves cannot mint before re-render. Member Account cancel-booking confirm
+  and admin Cancel class (custom dialogs, not AdminConfirmDialog) take the same
+  lock. Members + PT request CSV export match LeadTable: no same-paint double
+  download and no export while the desk is still loading.
 - Soft Launch Settings holds `saveLock` through the pack-checkout confirm
   (ref, not just React state) and freezes toggles/inputs/Discard while the
   dialog is open (iPhone Member App Controls parity). Public Home hero, final
@@ -318,6 +325,17 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 23. This batch — booking/checkout cancel locks + member/PT CSV export
+| Area | Defect | Fix |
+|---|---|---|
+| Public `/booking` Buy | Only `buyingSlug === pack.slug` disabled the clicked pack — same-paint double-click or a second pack CTA could mint two Checkout sessions before re-render | `buyLockRef` + disable every pack CTA while any buy/book is in flight |
+| Public `/booking` Book | Only `bookingId === s.id` disabled the clicked class — second class (or double-tap) could reserve two credits | `bookLockRef` + disable every Book CTA while any book/buy is in flight (iOS `bookingSessionID` parity) |
+| Account cancel booking | Custom confirm dialog (not AdminConfirmDialog) had no confirm lock — same-paint double Confirm raced `cancel_booking` | `cancelBookingLockRef` |
+| Class Calendar Cancel | Custom cancel dialog had no lock — same-paint double Confirm raced `admin_cancel_class_session` + notify | `cancelClassLockRef` |
+| Members / PT CSV | Export stayed enabled during desk load (members) and had no same-paint lock (both) — PII could download twice or against a mid-refresh filter | `exportLockRef` + `disabled` while `loading` (LeadTable parity) |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -471,3 +489,7 @@ show `installed = true` and `release_ready = true`, including
     and Discard stay disabled; Cancel unlocks; Confirm persists once.
 25. **iOS Explore interest** — Double-tap Submit on member/trainer/partner form
     stays single-flight; with bookings off, About shows Register interest.
+26. **Booking Buy/Book + cancel locks** — Double-click Buy pack / Book class on
+    `/booking` stays single-flight and freezes sibling CTAs; Account cancel
+    booking and admin Cancel class ignore a second same-paint Confirm; Members
+    / PT CSV stay off while loading and refuse double download.

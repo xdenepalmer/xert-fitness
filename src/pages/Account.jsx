@@ -97,6 +97,9 @@ export default function Account() {
   );
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
+  // Custom cancel dialog (not AdminConfirmDialog) — same-paint double Confirm
+  // can fire cancel_booking twice before `cancellingId` re-renders.
+  const cancelBookingLockRef = useRef(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   // applySession runs for every auth event (token refresh, refocus) and hands us
@@ -440,12 +443,14 @@ export default function Account() {
       });
     } finally {
       setCancellingId(null);
+      cancelBookingLockRef.current = false;
     }
   };
 
   const confirmCancellation = () => {
-    if (!cancellationTarget) return;
+    if (!cancellationTarget || cancelBookingLockRef.current || cancellingId) return;
     const booking = cancellationTarget;
+    cancelBookingLockRef.current = true;
     setCancellationTarget(null);
     void handleCancel(booking);
   };
@@ -1470,8 +1475,9 @@ export default function Account() {
               <button
                 type="button"
                 autoFocus
+                disabled={Boolean(cancellingId)}
                 onClick={() => setCancellationTarget(null)}
-                className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider transition-colors"
+                className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
                 style={{
                   borderColor: 'rgba(123,167,188,0.3)',
                   color: 'rgba(209,221,230,0.65)'
@@ -1479,8 +1485,14 @@ export default function Account() {
               >
                 Keep booking
               </button>
-              <button type="button" onClick={confirmCancellation} className="px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
-                Cancel booking
+              <button
+                type="button"
+                disabled={Boolean(cancellingId)}
+                onClick={confirmCancellation}
+                className="px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#c94e44', color: '#fff' }}
+              >
+                {cancellingId ? 'Cancelling…' : 'Cancel booking'}
               </button>
             </div>
           </div>

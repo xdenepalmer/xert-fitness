@@ -31,8 +31,17 @@ test('web and native purchase surfaces fail closed before checkout', async () =>
   assert.match(webData, /admin_settings[\s\S]*select\('payments_enabled'\)[\s\S]*limit\(2\)/);
   assert.match(webData, /data\?\.length === 1/);
   assert.match(webBooking, /getSessionPackPaymentAvailability\(\)/);
-  assert.match(webBooking, /disabled=\{!paymentsEnabled \|\| buyingSlug === pack\.slug\}/);
+  assert.match(webBooking, /disabled=\{!paymentsEnabled \|\| Boolean\(buyingSlug\) \|\| Boolean\(bookingId\)\}/);
   assert.match(webBooking, /Pack purchases are paused/);
+  // Same-paint / second-pack checkout must not mint two Stripe sessions.
+  assert.match(webBooking, /const buyLockRef = useRef\(false\)/);
+  assert.match(webBooking, /if \(buyLockRef\.current \|\| buyingSlug \|\| bookLockRef\.current \|\| bookingId\) return/);
+  assert.match(webBooking, /buyLockRef\.current = true/);
+  // Same-paint / second-class book must not reserve two credits.
+  assert.match(webBooking, /const bookLockRef = useRef\(false\)/);
+  assert.match(webBooking, /if \(bookLockRef\.current \|\| bookingId \|\| buyLockRef\.current \|\| buyingSlug\) return/);
+  assert.match(webBooking, /bookLockRef\.current = true/);
+  assert.match(webBooking, /disabled=\{Boolean\(existingBooking\) \|\| Boolean\(timeConflict\) \|\| Boolean\(bookingId\) \|\| Boolean\(buyingSlug\)\}/);
 
   assert.match(nativeModels, /struct PublicPlatformSettings[\s\S]*let payments_enabled: Bool/);
   assert.match(nativeAPI, /func publicPlatformSettings[\s\S]*payments_enabled/);

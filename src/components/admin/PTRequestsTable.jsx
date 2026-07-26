@@ -46,6 +46,9 @@ export default function PTRequestsTable() {
   // double confirm (or double Approve) cannot apply the same status transition twice.
   const bulkLockRef = useRef(false);
   const updateLockRef = useRef(false);
+  // PT request CSV is contact PII — same-paint double download + export-while-loading
+  // blocked (LeadTable parity).
+  const exportLockRef = useRef(false);
 
   const load = useCallback(async (targetPage = 1) => {
     const requestId = ++requestIdRef.current;
@@ -117,6 +120,8 @@ export default function PTRequestsTable() {
   };
 
   const handleExport = async () => {
+    if (exportLockRef.current || exporting || loading) return;
+    exportLockRef.current = true;
     setExporting(true);
     try {
       const rows = await collectAdminPages(targetPage => getPTRequests({
@@ -144,6 +149,7 @@ export default function PTRequestsTable() {
       toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
     } finally {
       setExporting(false);
+      exportLockRef.current = false;
     }
   };
 

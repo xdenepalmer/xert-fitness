@@ -902,6 +902,9 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
   const [page, setPage] = useState(1);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [exporting, setExporting] = useState(false);
+  // Member directory CSV is PII — refuse same-paint double download and export
+  // while a list load is still in flight (LeadTable / CampaignStats parity).
+  const exportLockRef = useRef(false);
   const [followUps, setFollowUps] = useState([]);
   const [followUpsAvailable, setFollowUpsAvailable] = useState(true);
   const [followUpsLoading, setFollowUpsLoading] = useState(true);
@@ -1068,6 +1071,8 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
   }, [initialMemberId, onIntentHandled]);
 
   const handleExport = async () => {
+    if (exportLockRef.current || exporting || loading || searchPending) return;
+    exportLockRef.current = true;
     setExporting(true);
     try {
       const rows = await adminExportMembers({ search: debouncedSearch, role: roleFilter, credit: creditFilter });
@@ -1081,6 +1086,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
       toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
     } finally {
       setExporting(false);
+      exportLockRef.current = false;
     }
   };
 
@@ -1119,7 +1125,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
           <button type="button" onClick={refresh} disabled={loading} title="Refresh members" aria-label="Refresh members" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <button
             onClick={() => void handleExport()}
-            disabled={total === 0 || exporting || searchPending}
+            disabled={total === 0 || exporting || loading || searchPending}
             className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
             <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
           </button>

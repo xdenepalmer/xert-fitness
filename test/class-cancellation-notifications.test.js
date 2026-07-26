@@ -61,6 +61,12 @@ test('admin cancellation attempts bounded targeted APNs and retains contact fall
   assert.match(apns, /TARGET_USER_BATCH_SIZE = 100/);
   assert.match(apns, /if \(userBatch\) query = query\.in\('user_id', userBatch\)/);
   assert.doesNotMatch(apns, /targetUserIds\.filter\(Boolean\)\)\]\.slice/);
+  // Custom cancel dialog (not AdminConfirmDialog) needs its own same-paint lock
+  // so credit return + notify cannot race twice before busy re-renders.
+  assert.match(adminCalendar, /const cancelClassLockRef = useRef\(false\)/);
+  assert.match(flow, /if \(!session \|\| cancelClassLockRef\.current \|\| isCancellingSession\) return/);
+  assert.match(flow, /cancelClassLockRef\.current = true/);
+  assert.match(flow, /cancelClassLockRef\.current = false/);
 });
 
 test('delivery retries do not send a second push after an audited attempt', () => {
