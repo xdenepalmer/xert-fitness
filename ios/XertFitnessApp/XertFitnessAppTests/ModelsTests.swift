@@ -1291,6 +1291,57 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(briefing.text.lowercased().contains("member name"))
     }
 
+    func testEmergencyPausePlanDiagnosesEveryLiveStateAndPreservesUnrelatedSettings() {
+        let id = UUID()
+        let settings = AdminPlatformSettings(
+            id: id,
+            target_launch_date: "2026-08-01",
+            countdown_enabled: true,
+            bookings_enabled: true,
+            payments_enabled: true,
+            announcement_banner_text: "Training as scheduled",
+            announcement_banner_enabled: true,
+            updated_at: "2026-07-27T08:00:00Z"
+        )
+
+        let live = AdminEmergencyPausePlan(settings: settings, sourceIsCurrent: true)
+        XCTAssertEqual(live.state, .liveCommerce)
+        XCTAssertTrue(live.canPause)
+        XCTAssertEqual(live.title, "Bookings and checkout are live")
+        XCTAssertTrue(live.detail.contains("session-pack checkout"))
+        XCTAssertEqual(live.pausedSettings?.id, id)
+        XCTAssertEqual(live.pausedSettings?.bookings_enabled, false)
+        XCTAssertEqual(live.pausedSettings?.payments_enabled, false)
+        XCTAssertEqual(live.pausedSettings?.announcement_banner_text, "Training as scheduled")
+        XCTAssertEqual(live.pausedSettings?.updated_at, settings.updated_at)
+
+        var bookingsOnly = settings
+        bookingsOnly.payments_enabled = false
+        XCTAssertEqual(
+            AdminEmergencyPausePlan(settings: bookingsOnly, sourceIsCurrent: true).state,
+            .bookingsOpen
+        )
+
+        var inconsistent = settings
+        inconsistent.bookings_enabled = false
+        XCTAssertEqual(
+            AdminEmergencyPausePlan(settings: inconsistent, sourceIsCurrent: true).state,
+            .inconsistent
+        )
+
+        inconsistent.payments_enabled = false
+        let paused = AdminEmergencyPausePlan(settings: inconsistent, sourceIsCurrent: true)
+        XCTAssertEqual(paused.state, .paused)
+        XCTAssertFalse(paused.canPause)
+        XCTAssertNil(paused.pausedSettings)
+        XCTAssertTrue(paused.detail.contains("Existing bookings"))
+
+        let unavailable = AdminEmergencyPausePlan(settings: settings, sourceIsCurrent: false)
+        XCTAssertEqual(unavailable.state, .unavailable)
+        XCTAssertFalse(unavailable.canPause)
+        XCTAssertNil(unavailable.pausedSettings)
+    }
+
     func testOperationalRefreshPolicyReportsHonestQueueFreshness() {
         let now = Date(timeIntervalSince1970: 10_000)
 

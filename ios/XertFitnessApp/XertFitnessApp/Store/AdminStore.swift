@@ -1819,6 +1819,40 @@ final class AdminStore: ObservableObject {
         }
     }
 
+    func pauseMemberOperations(session: AuthSession) async -> Bool {
+        guard !isSavingSettings else { return false }
+        let sourceIsCurrent = loadedSources.contains("platform controls")
+            && !refreshUnavailableSources.contains("platform controls")
+            && !isLoading
+        let plan = AdminEmergencyPausePlan(
+            settings: settings,
+            sourceIsCurrent: sourceIsCurrent
+        )
+        guard let pausedSettings = plan.pausedSettings else {
+            errorMessage = plan.state == .paused
+                ? "New member bookings and checkout are already paused."
+                : "Refresh Platform Controls before using the emergency pause."
+            return false
+        }
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        isSavingSettings = true
+        defer { isSavingSettings = false }
+        do {
+            settings = try await api.adminPauseMemberOperations(
+                session: session,
+                settings: pausedSettings
+            )
+            loadedSources.insert("platform controls")
+            refreshUnavailableSources.removeAll { $0 == "platform controls" }
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func resolveStripeReview(
         session: AuthSession,
         incident: AdminCommerceHealth.WebhookDelivery.Incident

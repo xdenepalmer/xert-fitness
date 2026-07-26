@@ -2091,6 +2091,41 @@ final class XertAPI {
         return updated
     }
 
+    func adminPauseMemberOperations(
+        session auth: AuthSession,
+        settings: AdminPlatformSettings
+    ) async throws -> AdminPlatformSettings {
+        var request = try request(
+            baseURL: AppConfig.supabaseURL,
+            path: "/rest/v1/admin_settings",
+            queryItems: [
+                URLQueryItem(name: "id", value: "eq.\(settings.id.uuidString)"),
+                URLQueryItem(name: "updated_at", value: "eq.\(settings.updated_at)")
+            ]
+        )
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(AdminEmergencyPauseUpdate(
+            bookings_enabled: false,
+            payments_enabled: false,
+            updated_at: ISO8601DateFormatter.standard.string(from: Date())
+        ))
+        let rows: [AdminPlatformSettings] = try await decode(request)
+        guard
+            rows.count == 1,
+            let updated = rows.first,
+            updated.id == settings.id,
+            !updated.bookings_enabled,
+            !updated.payments_enabled
+        else {
+            throw APIError(message: "Emergency pause could not be confirmed. Refresh Platform Controls and try again.")
+        }
+        return updated
+    }
+
     func adminActivatePlatformPayments(
         session auth: AuthSession,
         settings: AdminPlatformSettings
@@ -2635,6 +2670,11 @@ private struct AdminSettingsUpdate: Encodable {
     let payments_enabled: Bool
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
+    let updated_at: String
+}
+private struct AdminEmergencyPauseUpdate: Encodable {
+    let bookings_enabled: Bool
+    let payments_enabled: Bool
     let updated_at: String
 }
 private struct AdminPaymentActivationSettings: Encodable {

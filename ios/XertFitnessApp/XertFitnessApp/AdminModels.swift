@@ -1211,6 +1211,68 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     }
 }
 
+enum AdminMemberOperationsState: Equatable {
+    case unavailable
+    case paused
+    case bookingsOpen
+    case liveCommerce
+    case inconsistent
+}
+
+struct AdminEmergencyPausePlan: Equatable {
+    let settings: AdminPlatformSettings?
+    let sourceIsCurrent: Bool
+
+    var state: AdminMemberOperationsState {
+        guard sourceIsCurrent, let settings else { return .unavailable }
+        switch (settings.bookings_enabled, settings.payments_enabled) {
+        case (false, false): return .paused
+        case (true, false): return .bookingsOpen
+        case (true, true): return .liveCommerce
+        case (false, true): return .inconsistent
+        }
+    }
+
+    var canPause: Bool {
+        switch state {
+        case .bookingsOpen, .liveCommerce, .inconsistent: return true
+        case .unavailable, .paused: return false
+        }
+    }
+
+    var title: String {
+        switch state {
+        case .unavailable: return "Incident controls unavailable"
+        case .paused: return "New member activity paused"
+        case .bookingsOpen: return "Member bookings are open"
+        case .liveCommerce: return "Bookings and checkout are live"
+        case .inconsistent: return "Checkout exposure detected"
+        }
+    }
+
+    var detail: String {
+        switch state {
+        case .unavailable:
+            return "Refresh live platform settings before relying on the emergency control."
+        case .paused:
+            return "New bookings, waitlist joins and checkout are paused. Existing bookings and owner operations remain available."
+        case .bookingsOpen:
+            return "New bookings and waitlist joins are open. Session-pack checkout is already paused."
+        case .liveCommerce:
+            return "New bookings, waitlist joins and session-pack checkout are accepting member activity."
+        case .inconsistent:
+            return "Checkout reports live while bookings are paused. Pause both switches now, then review Operations Health."
+        }
+    }
+
+    var pausedSettings: AdminPlatformSettings? {
+        guard canPause, var paused = settings else { return nil }
+        paused.bookings_enabled = false
+        paused.payments_enabled = false
+        return paused
+    }
+}
+
 struct AdminPTRequest: Identifiable, Codable, Hashable {
     let id: UUID
     let full_name: String?

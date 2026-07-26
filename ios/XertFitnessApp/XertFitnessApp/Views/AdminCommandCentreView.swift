@@ -73,6 +73,7 @@ struct AdminCommandCentreView: View {
     @State private var showingEditorExitConfirmation = false
     @State private var isSavingPlatformExit = false
     @State private var shiftBriefCopyFeedbackID: UUID?
+    @State private var confirmingEmergencyPause = false
     let requestedRoute: XertOwnerRoute?
     var onClose: (() -> Void)? = nil
 
@@ -784,6 +785,7 @@ struct AdminCommandCentreView: View {
                 priorityQueue
                 shiftBriefing
                 stripeLaunchRunway
+                incidentControl(session: session)
                 quickTools
                 attentionGrid
                 businessPulse
@@ -1048,6 +1050,178 @@ struct AdminCommandCentreView: View {
         case .unavailable, .catalogBlocked, .healthBlocked, .controlsBlocked: return Color.orange
         case .readyToOpenBookings, .readyToActivate: return Color.xertSteel
         case .live: return Color.green
+        }
+    }
+
+    private func incidentControl(session: AuthSession) -> some View {
+        let sourceIsCurrent = admin.loadedSources.contains("platform controls")
+            && !admin.refreshUnavailableSources.contains("platform controls")
+            && !admin.isLoading
+        let plan = AdminEmergencyPausePlan(
+            settings: admin.settings,
+            sourceIsCurrent: sourceIsCurrent
+        )
+        let color = incidentControlColor(plan.state)
+
+        return VStack(alignment: .leading, spacing: 13) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    incidentControlHeading
+                    Spacer(minLength: 8)
+                    incidentControlStatus(plan: plan, color: color)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    incidentControlHeading
+                    incidentControlStatus(plan: plan, color: color)
+                }
+            }
+
+            Text(plan.detail)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    incidentControlActions(plan: plan, session: session)
+                }
+                VStack(spacing: 10) {
+                    incidentControlActions(plan: plan, session: session)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.xertInk)
+        .overlay(Rectangle().stroke(color.opacity(0.38), lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("owner.incidentControl")
+        .confirmationDialog(
+            "Pause new member activity?",
+            isPresented: $confirmingEmergencyPause,
+            titleVisibility: .visible
+        ) {
+            Button("Pause new activity now", role: .destructive) {
+                pauseMemberOperations(session: session)
+            }
+            Button("Keep activity live", role: .cancel) {}
+        } message: {
+            Text("This immediately stops new bookings, waitlist joins and session-pack checkout. Existing bookings, class rosters, member records and owner tools remain available.")
+        }
+    }
+
+    private var incidentControlHeading: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.shield")
+                .font(.title3)
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 34, height: 34)
+                .background(Color.xertSteel.opacity(0.1))
+            VStack(alignment: .leading, spacing: 2) {
+                adminHeading("Incident control")
+                Text("Fast protection for member-facing operations")
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+            }
+        }
+    }
+
+    private func incidentControlStatus(
+        plan: AdminEmergencyPausePlan,
+        color: Color
+    ) -> some View {
+        Text(incidentControlStatusLabel(plan.state))
+            .font(.caption2.weight(.black))
+            .foregroundStyle(color)
+            .padding(.horizontal, 9)
+            .frame(minHeight: 30)
+            .background(color.opacity(0.1))
+            .overlay(Rectangle().stroke(color.opacity(0.32), lineWidth: 1))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private func incidentControlActions(
+        plan: AdminEmergencyPausePlan,
+        session: AuthSession
+    ) -> some View {
+        if plan.canPause {
+            Button {
+                XertHaptics.play(.warning)
+                confirmingEmergencyPause = true
+            } label: {
+                Label("Pause bookings & checkout", systemImage: "pause.circle.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.red)
+            .disabled(admin.isSavingSettings)
+            .accessibilityHint("Opens a confirmation before pausing new member activity")
+
+            Button {
+                openWorkspaceWithFeedback(.controls)
+            } label: {
+                Label("Review controls", systemImage: "switch.2")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.xertSteel)
+            .disabled(admin.isSavingSettings)
+        } else if plan.state == .unavailable {
+            Button {
+                Task { await admin.refresh(session: session) }
+            } label: {
+                Label(
+                    admin.isLoading ? "Refreshing..." : "Refresh to unlock",
+                    systemImage: "arrow.clockwise"
+                )
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+            .disabled(admin.isLoading || admin.isSavingSettings)
+        } else {
+            Button {
+                openWorkspaceWithFeedback(.controls)
+            } label: {
+                Label("Review launch controls", systemImage: "switch.2")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.xertSteel)
+            .disabled(admin.isSavingSettings)
+        }
+    }
+
+    private func pauseMemberOperations(session: AuthSession) {
+        Task {
+            if await admin.pauseMemberOperations(session: session) {
+                platformDraftSnapshot = admin.settings
+                XertHaptics.play(.success)
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "New member bookings and checkout paused"
+                )
+            } else {
+                XertHaptics.play(.error)
+            }
+        }
+    }
+
+    private func incidentControlColor(_ state: AdminMemberOperationsState) -> Color {
+        switch state {
+        case .unavailable, .bookingsOpen, .liveCommerce: return .orange
+        case .paused: return .green
+        case .inconsistent: return .red
+        }
+    }
+
+    private func incidentControlStatusLabel(_ state: AdminMemberOperationsState) -> String {
+        switch state {
+        case .unavailable: return "REFRESH REQUIRED"
+        case .paused: return "PROTECTED"
+        case .bookingsOpen: return "BOOKINGS LIVE"
+        case .liveCommerce: return "COMMERCE LIVE"
+        case .inconsistent: return "ACTION REQUIRED"
         }
     }
 

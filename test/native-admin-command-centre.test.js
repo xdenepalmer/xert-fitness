@@ -520,6 +520,85 @@ test('native owner overview creates a privacy-safe current-only shift handoff', 
   assert.match(briefing, /frame\(maxWidth: \.infinity, minHeight: 58/);
 });
 
+test('native owner incident control performs a minimal verified emergency pause', async () => {
+  const [view, models, store, api, activationGuard, contentAudit, bookingGuard] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../src/supabase/payment_activation_drift_guard_upgrade.sql'),
+    read('../src/supabase/content_change_audit_upgrade.sql'),
+    read('../src/supabase/member_booking_switch_guard_upgrade.sql'),
+  ]);
+  const incident = view.slice(
+    view.indexOf('private func incidentControl(session: AuthSession)'),
+    view.indexOf('private var quickTools: some View'),
+  );
+  const plan = models.slice(
+    models.indexOf('enum AdminMemberOperationsState'),
+    models.indexOf('struct AdminPTRequest'),
+  );
+  const storePause = store.slice(
+    store.indexOf('func pauseMemberOperations('),
+    store.indexOf('func resolveStripeReview('),
+  );
+  const apiPause = api.slice(
+    api.indexOf('func adminPauseMemberOperations('),
+    api.indexOf('func adminActivatePlatformPayments('),
+  );
+  const pausePayload = api.slice(
+    api.indexOf('private struct AdminEmergencyPauseUpdate'),
+    api.indexOf('private struct AdminPaymentActivationSettings'),
+  );
+
+  assert.match(plan, /case unavailable/);
+  assert.match(plan, /case paused/);
+  assert.match(plan, /case bookingsOpen/);
+  assert.match(plan, /case liveCommerce/);
+  assert.match(plan, /case inconsistent/);
+  assert.match(plan, /case \(false, true\): return \.inconsistent/);
+  assert.match(plan, /guard canPause, var paused = settings/);
+  assert.match(plan, /paused\.bookings_enabled = false/);
+  assert.match(plan, /paused\.payments_enabled = false/);
+
+  assert.match(view, /stripeLaunchRunway\s+incidentControl\(session: session\)\s+quickTools/);
+  assert.match(incident, /ViewThatFits\(in: \.horizontal\)/);
+  assert.match(incident, /Pause bookings & checkout/);
+  assert.match(incident, /Pause new member activity\?/);
+  assert.match(incident, /Existing bookings, class rosters, member records and owner tools remain available\./);
+  assert.match(incident, /admin\.pauseMemberOperations\(session: session\)/);
+  assert.match(incident, /platformDraftSnapshot = admin\.settings/);
+  assert.match(incident, /UIAccessibility\.post\(/);
+  assert.match(incident, /Refresh to unlock/);
+  assert.match(incident, /accessibilityIdentifier\("owner\.incidentControl"\)/);
+
+  assert.match(storePause, /loadedSources\.contains\("platform controls"\)/);
+  assert.match(storePause, /refreshUnavailableSources\.contains\("platform controls"\)/);
+  assert.match(storePause, /AdminEmergencyPausePlan\(/);
+  assert.match(storePause, /guard let pausedSettings = plan\.pausedSettings/);
+  assert.match(storePause, /api\.adminPauseMemberOperations/);
+  assert.match(storePause, /loadedSources\.insert\("platform controls"\)/);
+  assert.doesNotMatch(storePause, /saveSettings\(/);
+
+  assert.match(apiPause, /path: "\/rest\/v1\/admin_settings"/);
+  assert.ok(apiPause.includes('URLQueryItem(name: "id", value: "eq.\\(settings.id.uuidString)")'));
+  assert.ok(apiPause.includes('URLQueryItem(name: "updated_at", value: "eq.\\(settings.updated_at)")'));
+  assert.match(apiPause, /request\.httpMethod = "PATCH"/);
+  assert.match(apiPause, /AdminEmergencyPauseUpdate\(/);
+  assert.match(apiPause, /updated\.id == settings\.id/);
+  assert.match(apiPause, /!updated\.bookings_enabled/);
+  assert.match(apiPause, /!updated\.payments_enabled/);
+  assert.doesNotMatch(apiPause, /target_launch_date|announcement_banner|adminActivatePlatformPayments/);
+  assert.match(pausePayload, /let bookings_enabled: Bool/);
+  assert.match(pausePayload, /let payments_enabled: Bool/);
+  assert.match(pausePayload, /let updated_at: String/);
+  assert.doesNotMatch(pausePayload, /target_launch_date|announcement/);
+
+  assert.doesNotMatch(activationGuard, /new\.payments_enabled is false[\s\S]*raise exception/i);
+  assert.match(contentAudit, /admin_settings_audit_admin_change/i);
+  assert.doesNotMatch(bookingGuard, /delete from public\.session_bookings|update public\.session_bookings/i);
+});
+
 test('native protected order and event routes resolve records outside the initial snapshot', async () => {
   const [store, api] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
