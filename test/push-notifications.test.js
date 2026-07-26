@@ -357,3 +357,38 @@ test('broadcast publish UI surfaces swallowed APNs failures instead of claiming 
     /Vercel push secrets/,
   );
 });
+
+test('private notice and class-cancel UI surface swallowed APNs failures instead of claiming no devices', async () => {
+  const {
+    describeTargetedMemberNoticePush,
+    describeClassCancellationPush,
+  } = await import('../src/lib/memberAnnouncements.js');
+  assert.match(
+    describeTargetedMemberNoticePush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'stream closed' }),
+    /Apple push delivery failed \(stream closed\)/i,
+  );
+  assert.doesNotMatch(
+    describeTargetedMemberNoticePush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'stream closed' }),
+    /No active device received a push/i,
+  );
+  assert.match(
+    describeClassCancellationPush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'BadDeviceToken' }),
+    /Apple push delivery failed \(BadDeviceToken\)/i,
+  );
+  assert.doesNotMatch(
+    describeClassCancellationPush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'BadDeviceToken' }),
+    /No enabled Apple device was registered/i,
+  );
+
+  const members = read('../src/components/admin/MembersManager.jsx');
+  const calendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const iosApi = read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift');
+  const iosStore = read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
+  assert.match(members, /describeTargetedMemberNoticePush\(result\.push\)/);
+  assert.match(calendar, /describeClassCancellationPush\(followUp\.notification\.push\)/);
+  assert.match(iosApi, /targetedPushWarning\(/);
+  assert.match(iosApi, /broadcastPushWarning\(push: response\.push\)/);
+  assert.match(iosApi, /AdminAnnouncementPublishResponse/);
+  assert.match(iosStore, /let pushWarning = try await api\.adminPublishAnnouncement/);
+  assert.match(iosStore, /if let pushWarning \{\s*errorMessage = pushWarning/s);
+});

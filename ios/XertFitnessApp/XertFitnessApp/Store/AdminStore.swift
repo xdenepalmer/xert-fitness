@@ -1340,9 +1340,17 @@ final class AdminStore: ObservableObject {
         isPublishingAnnouncement = true
         defer { isPublishingAnnouncement = false }
         do {
-            try await api.adminPublishAnnouncement(session: session, title: title, body: body, tone: tone)
+            let pushWarning = try await api.adminPublishAnnouncement(
+                session: session,
+                title: title,
+                body: body,
+                tone: tone
+            )
             announcements = try await api.adminAnnouncements(session: session)
             lastUpdatedAt = Date()
+            if let pushWarning {
+                errorMessage = pushWarning
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription

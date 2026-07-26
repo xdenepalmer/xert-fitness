@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Activity, Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
 import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { describeTargetedMemberNoticePush } from '@/lib/memberAnnouncements';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
 import { creditGrantValidationError } from '@/lib/memberAdmin';
@@ -135,13 +136,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
     setNoticeError('');
     try {
       const result = await adminSendMemberNotice(member.id, noticeDraft);
-      const push = result.push;
-      const description = result.warning
-        || (!push?.configured
-          ? 'It is available in the member app. APNs push is not configured.'
-          : push.delivered > 0
-            ? 'It is available in the member app and the push notification was delivered.'
-            : 'It is available in the member app. No active device received a push.');
+      const description = result.warning || describeTargetedMemberNoticePush(result.push);
       toast({ title: 'Private notice sent', description });
       setNoticeDraft(emptyNoticeDraft());
       loadDetail();

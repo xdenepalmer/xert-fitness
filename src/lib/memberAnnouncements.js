@@ -80,3 +80,61 @@ export function describeAnnouncementPublishPush(push) {
   }
   return 'Members can see it now. No enabled iOS devices were registered.';
 }
+
+// Private / targeted notices use the same push.failed contract. Never describe a
+// real APNs outage as "no active device" — operators must see the failure reason.
+export function describeTargetedMemberNoticePush(push) {
+  if (!push || typeof push !== 'object') {
+    return 'It is available in the member app. Push delivery status was not returned.';
+  }
+  if (push.configured === false) {
+    return 'It is available in the member app. APNs push is not configured.';
+  }
+  const attempted = Number(push.attempted) || 0;
+  const delivered = Number(push.delivered) || 0;
+  const failed = Number(push.failed) || 0;
+  const reason = String(push.reason || '').trim();
+  if (delivered > 0 && !failed) {
+    return 'It is available in the member app and the push notification was delivered.';
+  }
+  if (delivered > 0 && failed > 0) {
+    return `It is available in the member app. ${delivered} device notification${delivered === 1 ? '' : 's'} delivered; ${failed} failed${reason ? ` (${reason})` : ''}.`;
+  }
+  if (failed > 0) {
+    return reason
+      ? `It is available in the member app, but Apple push delivery failed (${reason}).`
+      : 'It is available in the member app, but Apple push delivery failed.';
+  }
+  if (attempted > 0) {
+    return 'It is available in the member app. Apple push was attempted but did not reach a registered device.';
+  }
+  return 'It is available in the member app. No active device received a push.';
+}
+
+export function describeClassCancellationPush(push) {
+  if (!push || typeof push !== 'object') {
+    return 'Push delivery status was not returned. Use the contact fallback below.';
+  }
+  if (push.configured === false) {
+    return 'The notice is available in XERT, but Apple push delivery is not configured. Use the contact fallback below.';
+  }
+  const attempted = Number(push.attempted) || 0;
+  const delivered = Number(push.delivered) || 0;
+  const failed = Number(push.failed) || 0;
+  const reason = String(push.reason || '').trim();
+  if (delivered > 0 && !failed) {
+    return `${delivered} Apple push ${delivered === 1 ? 'notification was' : 'notifications were'} delivered.`;
+  }
+  if (delivered > 0 && failed > 0) {
+    return `${delivered} Apple push ${delivered === 1 ? 'notification was' : 'notifications were'} delivered; ${failed} failed${reason ? ` (${reason})` : ''}. Use the contact fallback below for anyone still missing the alert.`;
+  }
+  if (failed > 0) {
+    return reason
+      ? `Apple push delivery failed (${reason}). Use the contact fallback below.`
+      : 'Apple push delivery failed. Use the contact fallback below.';
+  }
+  if (attempted > 0) {
+    return 'Apple push delivery was attempted but did not reach a registered device. Use the contact fallback below.';
+  }
+  return 'No enabled Apple device was registered. The notice remains available when the member opens XERT.';
+}

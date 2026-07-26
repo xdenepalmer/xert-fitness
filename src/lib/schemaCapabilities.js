@@ -86,6 +86,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   public_booking_switch_gate: 'Apply src/supabase/public_booking_switch_gate.sql in Supabase.',
   waitlist_skip_notice_accuracy: 'Apply src/supabase/waitlist_skip_notice_accuracy.sql in Supabase.',
   member_interest_health_reveal_authz: 'Apply src/supabase/member_interest_health_reveal_authz.sql in Supabase.',
+  session_capacity_concurrency_guard: 'Apply src/supabase/session_capacity_concurrency_guard.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

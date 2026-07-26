@@ -751,15 +751,30 @@ struct RootView: View {
         source: XertNavigationSource
     ) -> Bool {
         claimMemberNavigation()
-        let intent = XertNavigationIntent(route: route, source: source)
+        // Soft-launch: deep links / reminders / quick actions must not open Book
+        // while bookings are paused — match Home / Account Register interest.
+        let resolvedRoute = softLaunchMemberRoute(route)
+        let intent = XertNavigationIntent(route: resolvedRoute, source: source)
         guard intent.disposition(isSignedIn: store.isSignedIn) == .open else {
             pendingProtectedNavigation = intent
             navigation.open(.account, source: source)
             return false
         }
         pendingProtectedNavigation = nil
-        navigation.open(route, source: source)
+        navigation.open(resolvedRoute, source: source)
         return true
+    }
+
+    /// While soft-launch bookings are paused, booking / packs / class deep links
+    /// fail closed to Explore interest. Purchase confirmation stays so an
+    /// in-flight Stripe return can still settle.
+    private func softLaunchMemberRoute(_ route: XertMemberRoute) -> XertMemberRoute {
+        switch route {
+        case .booking, .classSession, .sessionPacks:
+            return store.memberBookingsEnabled ? route : .explore
+        default:
+            return route
+        }
     }
 
     private func restoreMemberWorkspaceWhenReady() {
@@ -783,8 +798,9 @@ struct RootView: View {
     private func resumePendingProtectedNavigation() {
         guard store.isSignedIn, let intent = pendingProtectedNavigation else { return }
         pendingProtectedNavigation = nil
-        navigation.open(intent.route, source: intent.source)
-        if intent.route == .purchaseConfirmation {
+        let route = softLaunchMemberRoute(intent.route)
+        navigation.open(route, source: intent.source)
+        if route == .purchaseConfirmation {
             Task { await store.reconcilePendingCheckout() }
         }
     }

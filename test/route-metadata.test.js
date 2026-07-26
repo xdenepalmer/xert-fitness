@@ -44,5 +44,6 @@ test('sitemap contains indexable routes and excludes private screens', async () 
   }
   assert.doesNotMatch(sitemap, /\/admin|\/account|\/checkout-return/);
   assert.match(robots, /Disallow: \/admin/);
+  assert.match(robots, /Disallow: \/open/);
   assert.match(robots, /Sitemap: https:\/\/xert-fitness\.vercel\.app\/sitemap\.xml/);
 });

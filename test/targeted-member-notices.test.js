@@ -66,6 +66,7 @@ test('member drawer composes, protects and reports private notices', () => {
   const members = read('../src/components/admin/MembersManager.jsx');
   assert.match(members, /Private notices/);
   assert.match(members, /adminSendMemberNotice\(member\.id, noticeDraft\)/);
+  assert.match(members, /describeTargetedMemberNoticePush\(result\.push\)/);
   assert.match(members, /Discard private notice draft\?/);
   assert.match(members, /pendingSubjectSwitch/);
   assert.match(members, /Switching members permanently discards/);

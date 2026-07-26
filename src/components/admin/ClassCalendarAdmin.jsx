@@ -6,6 +6,7 @@ import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionValidationError, repeatedClassSessionCopies, toDateTimeLocalInput } from '@/lib/scheduling';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
+import { describeClassCancellationPush } from '@/lib/memberAnnouncements';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
@@ -191,13 +192,7 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
                   Private in-app notice created for {followUp.notification.recipients} member {followUp.notification.recipients === 1 ? 'account' : 'accounts'}.
                 </p>
                 <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">
-                  {followUp.notification.push?.delivered > 0
-                    ? `${followUp.notification.push.delivered} Apple push ${followUp.notification.push.delivered === 1 ? 'notification was' : 'notifications were'} delivered.`
-                    : followUp.notification.push?.configured === false
-                      ? 'The notice is available in XERT, but Apple push delivery is not configured. Use the contact fallback below.'
-                      : followUp.notification.push?.attempted > 0
-                        ? 'Apple push delivery was attempted but did not reach a registered device. Use the contact fallback below.'
-                        : 'No enabled Apple device was registered. The notice remains available when the member opens XERT.'}
+                  {describeClassCancellationPush(followUp.notification.push)}
                 </p>
               </div>
             </div>

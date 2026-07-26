@@ -172,6 +172,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../supabase/migrations/20260726115000_waitlist_skip_notice_accuracy.sql', 'waitlist_skip_notice_accuracy'],
     ['../src/supabase/member_interest_health_reveal_authz.sql', 'member_interest_health_reveal_authz'],
     ['../supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql', 'member_interest_health_reveal_authz'],
+    ['../src/supabase/session_capacity_concurrency_guard.sql', 'session_capacity_concurrency_guard'],
+    ['../supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql', 'session_capacity_concurrency_guard'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -297,6 +299,7 @@ test('read-only production check reports every release capability and migration'
     'member_onboarding_booking_gate',
     'waitlist_skip_notice_accuracy',
     'member_interest_health_reveal_authz',
+    'session_capacity_concurrency_guard',
   ];
 
   for (const capability of capabilities) {

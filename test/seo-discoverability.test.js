@@ -87,5 +87,6 @@ test('robots.txt guards private areas and advertises the sitemap', () => {
   const robots = read('../public/robots.txt');
   assert.match(robots, /^Disallow: \/admin$/m);
   assert.match(robots, /^Disallow: \/account$/m);
+  assert.match(robots, /^Disallow: \/open$/m);
   assert.ok(robots.includes(`Sitemap: ${ORIGIN}/sitemap.xml`));
 });

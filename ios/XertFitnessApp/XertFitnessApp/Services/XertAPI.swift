@@ -572,9 +572,10 @@ final class XertAPI {
             return AdminBookingDecisionOutcome(
                 decision: decision,
                 pushDelivered: (response.push?.delivered ?? 0) > 0,
-                warning: response.push?.configured == false
-                    ? "The booking was updated and the member's private notice is live, but Apple push is not configured."
-                    : nil
+                warning: targetedPushWarning(
+                    prefix: "The booking was updated and the member's private notice is live",
+                    push: response.push
+                )
             )
         } catch {
             return AdminBookingDecisionOutcome(
@@ -1624,7 +1625,7 @@ final class XertAPI {
         title: String,
         body: String,
         tone: String
-    ) async throws {
+    ) async throws -> String? {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (3...120).contains(normalizedTitle.count) else {
@@ -1636,7 +1637,9 @@ final class XertAPI {
         guard ["info", "action", "urgent"].contains(tone) else {
             throw APIError(message: "Choose a valid announcement priority.")
         }
-        let _: EmptyObject = try await vercelRequest(
+        // Publish returns 200 even when APNs fails after the row is saved; surface
+        // push.failed / push.reason so operators retry instead of assuming success.
+        let response: AdminAnnouncementPublishResponse = try await vercelRequest(
             path: "/api/admin-publish-announcement",
             body: AdminAnnouncementPublishRequest(
                 id: nil,
@@ -1652,6 +1655,7 @@ final class XertAPI {
             ),
             auth: auth
         )
+        return broadcastPushWarning(push: response.push)
     }
 
     func adminUpdatePTRequest(
@@ -1808,9 +1812,10 @@ final class XertAPI {
             return AdminBookingDecisionOutcome(
                 decision: decision,
                 pushDelivered: (response.push?.delivered ?? 0) > 0,
-                warning: response.push?.configured == false
-                    ? "They were removed from the waitlist and their private notice is live, but Apple push is not configured."
-                    : nil
+                warning: targetedPushWarning(
+                    prefix: "They were removed from the waitlist and their private notice is live",
+                    push: response.push
+                )
             )
         } catch {
             return AdminBookingDecisionOutcome(
@@ -1853,9 +1858,10 @@ final class XertAPI {
             return AdminWaitlistPromotionOutcome(
                 promotion: promotion,
                 pushDelivered: (response.push?.delivered ?? 0) > 0,
-                warning: response.push?.configured == false
-                    ? "The member is confirmed and their private notice is live, but Apple push is not configured."
-                    : nil
+                warning: targetedPushWarning(
+                    prefix: "The member is confirmed and their private notice is live",
+                    push: response.push
+                )
             )
         } catch {
             return AdminWaitlistPromotionOutcome(
@@ -2256,11 +2262,51 @@ private struct AdminTargetedNoticeRequest: Encodable {
 private struct AdminTargetedNoticeResponse: Decodable {
     let push: AdminTargetedPushSummary?
 }
+private struct AdminAnnouncementPublishResponse: Decodable {
+    let push: AdminTargetedPushSummary?
+}
 private struct AdminTargetedPushSummary: Decodable {
     let configured: Bool
     let attempted: Int
     let delivered: Int
     let failed: Int
+    let reason: String?
+}
+
+private func targetedPushWarning(prefix: String, push: AdminTargetedPushSummary?) -> String? {
+    guard let push else { return nil }
+    if push.configured == false {
+        return "\(prefix), but Apple push is not configured."
+    }
+    if push.failed > 0 {
+        let reason = push.reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !reason.isEmpty {
+            return "\(prefix), but Apple push delivery failed (\(reason))."
+        }
+        return "\(prefix), but Apple push delivery needs attention."
+    }
+    return nil
+}
+
+private func broadcastPushWarning(push: AdminTargetedPushSummary?) -> String? {
+    guard let push else {
+        return "The announcement is live. Push delivery status was not returned."
+    }
+    if push.configured == false {
+        return "The announcement is live, but Apple push needs the Vercel APNs secrets."
+    }
+    if push.failed > 0 {
+        let reason = push.reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if push.attempted > 0 {
+            return reason.isEmpty
+                ? "The announcement is live. \(push.delivered) device notification\(push.delivered == 1 ? "" : "s") delivered; \(push.failed) failed."
+                : "The announcement is live. \(push.delivered) device notification\(push.delivered == 1 ? "" : "s") delivered; \(push.failed) failed (\(reason))."
+        }
+        return reason.isEmpty
+            ? "The announcement is live, but Apple push delivery failed. Publish again to retry devices that still need a delivery."
+            : "The announcement is live, but Apple push delivery failed (\(reason)). Publish again to retry devices that still need a delivery."
+    }
+    return nil
 }
 private struct AdminAvailabilityPayload: Encodable {
     let start_time: String

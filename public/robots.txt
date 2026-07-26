@@ -2,7 +2,12 @@ User-agent: *
 Allow: /
 Disallow: /account
 Disallow: /admin
+Disallow: /open
 Disallow: /checkout-return
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
 Disallow: /reset-password
+Disallow: /thank-you
 
 Sitemap: https://xert-fitness.vercel.app/sitemap.xml

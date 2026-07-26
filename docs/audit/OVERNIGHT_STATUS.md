@@ -3,11 +3,25 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726116000_member_interest_health_reveal_authz.sql` (**26116**). Tip
+`20260726117000_session_capacity_concurrency_guard.sql` (**26117**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Concurrent class capacity: `enforce_session_capacity` BEFORE ROW trigger
+  re-locks `class_sessions` and raises `SESSION_FULL` if a new
+  requested/confirmed place would overfill — defence for concurrent
+  `book_session` / waitlist confirmation paths. Capability
+  `session_capacity_concurrency_guard` (**26117**).
+- APNs error surfacing: private member notices, class-cancel follow-up, iOS
+  booking/waitlist decisions, and iOS broadcast publish no longer describe a
+  real `push.failed` outage as “no devices”; reason is shown so operators retry.
+- SEO: `X-Robots-Tag: noindex, nofollow` on `/admin`, `/account`, `/open/*`,
+  auth/checkout paths (static scrapers otherwise inherited indexable home tags
+  from the SPA rewrite); `robots.txt` also Disallows `/open` and auth screens.
+- iPhone soft-launch deep links: `xertfitness://booking`, class/packs URLs,
+  reminders and Book quick actions fail closed to Explore while bookings are
+  paused (Home/Account Register interest parity); purchase confirmation stays.
 - Privacy deletion re-runs: historical `260160` atomic delete and `261050`
   audit-subject redaction now skip-if-newer so they cannot strip
   `delete_member_account` public-lead cleanup (`member_interest` / trainer /
