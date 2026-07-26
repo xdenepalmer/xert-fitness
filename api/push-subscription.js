@@ -14,6 +14,13 @@ export function normalizePushSubscription(body) {
   return { action, deviceToken, environment };
 }
 
+export function pushSubscriptionClaim(existing, userId) {
+  if (!existing) return 'insert';
+  if (existing.user_id === userId) return 'refresh';
+  if (existing.enabled === false) return 'reassign';
+  throw new Error('PUSH_TOKEN_OWNED');
+}
+
 export default async function handler(request, response) {
   const json = (body, status = 200) => sendJson(response, body, status);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -39,18 +46,47 @@ export default async function handler(request, response) {
       return json({ registered: false });
     }
 
-    const { error } = await admin.from('push_subscriptions').upsert({
-      user_id: user.id,
-      device_token: subscription.deviceToken,
-      environment: subscription.environment,
-      enabled: true,
-      last_seen_at: new Date().toISOString(),
-    }, { onConflict: 'device_token,environment' });
-    if (error) throw error;
+    const { data: existing, error: existingError } = await admin
+      .from('push_subscriptions')
+      .select('id,user_id,enabled')
+      .eq('device_token', subscription.deviceToken)
+      .eq('environment', subscription.environment)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    const claim = pushSubscriptionClaim(existing, user.id);
+    const now = new Date().toISOString();
+    if (claim === 'insert') {
+      const { error } = await admin.from('push_subscriptions').insert({
+        user_id: user.id,
+        device_token: subscription.deviceToken,
+        environment: subscription.environment,
+        enabled: true,
+        last_seen_at: now,
+      });
+      if (error?.code === '23505') throw new Error('PUSH_TOKEN_OWNED');
+      if (error) throw error;
+    } else {
+      let update = admin
+        .from('push_subscriptions')
+        .update({ user_id: user.id, enabled: true, last_seen_at: now })
+        .eq('id', existing.id);
+      update = claim === 'refresh'
+        ? update.eq('user_id', user.id)
+        : update.eq('enabled', false);
+      const { data: updated, error } = await update.select('id').maybeSingle();
+      if (error) throw error;
+      if (!updated) throw new Error('PUSH_TOKEN_OWNED');
+    }
     return json({ registered: true });
   } catch (error) {
     if (['PUSH_ACTION_INVALID', 'PUSH_TOKEN_INVALID', 'PUSH_ENVIRONMENT_INVALID'].includes(error.message)) {
       return json({ error: 'Push subscription is invalid.' }, 400);
+    }
+    if (error.message === 'PUSH_TOKEN_OWNED') {
+      return json({
+        error: 'This device is still linked to another XERT account. Sign out of that account on this device, then try again.',
+      }, 409);
     }
     return json({ error: 'Push subscription could not be updated.' }, 500);
   }

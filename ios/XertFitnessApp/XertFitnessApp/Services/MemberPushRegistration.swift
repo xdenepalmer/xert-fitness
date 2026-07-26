@@ -7,6 +7,14 @@ struct DevicePushToken: Codable, Equatable {
     let environment: String
 }
 
+enum MemberPushDeliveryState: Equatable {
+    case off
+    case awaitingDeviceToken
+    case registering
+    case registered
+    case failed
+}
+
 enum MemberPushPreference {
     static let enabledKey = "xert.memberPush.enabled"
 

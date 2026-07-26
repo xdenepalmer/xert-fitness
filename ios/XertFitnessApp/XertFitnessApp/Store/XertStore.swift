@@ -44,6 +44,8 @@ final class XertStore: ObservableObject {
     @Published private(set) var classReminderLeadTime = ClassReminderPreference.leadTime()
     @Published private(set) var classReminderSyncState: ClassReminderSyncState = .off
     @Published private(set) var memberPushEnabled = MemberPushPreference.isEnabled()
+    @Published private(set) var memberPushDeliveryState: MemberPushDeliveryState =
+        MemberPushPreference.isEnabled() ? .awaitingDeviceToken : .off
     @Published private(set) var isUpdatingMemberPush = false
     @Published private(set) var isUpdatingReminderPreference = false
     @Published private(set) var isReconcilingCheckout = false
@@ -827,15 +829,18 @@ final class XertStore: ObservableObject {
         }
 
         if enabled {
+            memberPushDeliveryState = .registering
             guard await MemberPushRegistration.requestAndRegister() else {
                 MemberPushPreference.setEnabled(false)
                 memberPushEnabled = false
+                memberPushDeliveryState = .failed
                 errorMessage = "Notifications are disabled for XERT. Allow them in Settings to receive member notices."
                 XertHaptics.play(.warning)
                 return
             }
             MemberPushPreference.setEnabled(true)
             memberPushEnabled = true
+            memberPushDeliveryState = .awaitingDeviceToken
             await syncMemberPushToken()
         } else {
             if let token = PushDeviceTokenStore.load() {
@@ -854,6 +859,7 @@ final class XertStore: ObservableObject {
             }
             MemberPushPreference.setEnabled(false)
             memberPushEnabled = false
+            memberPushDeliveryState = .off
             UIApplication.shared.unregisterForRemoteNotifications()
         }
         guard memberStateVersion.isCurrent(memberVersion) else { return }
@@ -861,34 +867,74 @@ final class XertStore: ObservableObject {
     }
 
     func syncMemberPushToken(_ token: DevicePushToken? = nil) async {
-        guard memberPushEnabled, let token = token ?? PushDeviceTokenStore.load() else { return }
+        guard memberPushEnabled else {
+            memberPushDeliveryState = .off
+            return
+        }
+        guard let token = token ?? PushDeviceTokenStore.load() else {
+            memberPushDeliveryState = .awaitingDeviceToken
+            return
+        }
         let memberVersion = memberStateVersion.snapshot
+        memberPushDeliveryState = .registering
         do {
             let session = try await validAuthSession()
             try await api.updatePushSubscription(session: session, token: token, enabled: true)
+            guard canApplyMemberState(memberVersion, session: session) else { return }
+            memberPushDeliveryState = .registered
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return }
             if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
                 return
             }
+            memberPushDeliveryState = .failed
             present(error)
         }
+    }
+
+    func retryMemberPushRegistration() async {
+        guard !isUpdatingMemberPush,
+              memberPushEnabled || memberPushDeliveryState == .failed else { return }
+        let memberVersion = memberStateVersion.snapshot
+        isUpdatingMemberPush = true
+        memberPushDeliveryState = .registering
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isUpdatingMemberPush = false }
+        }
+        guard await MemberPushRegistration.requestAndRegister() else {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            memberPushDeliveryState = .failed
+            errorMessage = "Notifications are disabled for XERT. Allow them in Settings, then retry registration."
+            XertHaptics.play(.warning)
+            return
+        }
+        guard memberStateVersion.isCurrent(memberVersion) else { return }
+        MemberPushPreference.setEnabled(true)
+        memberPushEnabled = true
+        memberPushDeliveryState = .awaitingDeviceToken
+        await syncMemberPushToken()
+        guard memberStateVersion.isCurrent(memberVersion) else { return }
+        XertHaptics.play(memberPushDeliveryState == .registered ? .success : .warning)
     }
 
     func handlePushRegistrationFailure() {
         MemberPushPreference.setEnabled(false)
         memberPushEnabled = false
+        memberPushDeliveryState = .failed
         errorMessage = "This device could not register for XERT notifications. Check notification settings and try again."
         XertHaptics.play(.error)
     }
 
     private func restoreMemberPushRegistration() async {
         guard memberPushEnabled, isSignedIn else { return }
+        memberPushDeliveryState = .registering
         guard await MemberPushRegistration.requestAndRegister() else {
             MemberPushPreference.setEnabled(false)
             memberPushEnabled = false
+            memberPushDeliveryState = .failed
             return
         }
+        memberPushDeliveryState = .awaitingDeviceToken
         await syncMemberPushToken()
     }
 
@@ -1533,6 +1579,7 @@ final class XertStore: ObservableObject {
         classRemindersEnabled = false
         classReminderSyncState = .off
         memberPushEnabled = false
+        memberPushDeliveryState = .off
     }
 
     private func recoverUnauthorizedMemberSession(

@@ -16,7 +16,10 @@ the public website alone.
 1. Open **Command Centre → Operations Health** and refresh.
 2. Require the **Member purchase + booking path** gate to show **Ready to open**.
 3. Confirm the timestamp is current. Never launch from a stale last-known snapshot.
-4. Run the portable live preflight from the repository:
+4. Confirm the TestFlight owner device appears under **Member push
+   notifications**, send the private production owner push test, and require a
+   successful attempt from the last 24 hours.
+5. Run the portable live preflight from the repository:
 
    ```bash
    npm run stripe:launch:check
@@ -24,13 +27,13 @@ the public website alone.
 
    This gate expects payments to remain paused while it checks the production
    deployment, Stripe catalogue, webhook, database contracts and kill switch.
-5. Confirm at least one future public class has the intended capacity, coach,
+6. Confirm at least one future public class has the intended capacity, coach,
    booking mode and location.
-6. Confirm Byron can sign in on a second device before changing either launch switch.
-7. Record the production Git SHA and the successful Codemagic iOS Verify build ID.
-8. In App Store Connect, confirm TestFlight **Beta App Description**, feedback
+7. Confirm Byron can sign in on a second device before changing either launch switch.
+8. Record the production Git SHA and the successful Codemagic iOS Verify build ID.
+9. In App Store Connect, confirm TestFlight **Beta App Description**, feedback
    email and review contact are populated before starting an external beta build.
-9. Export the launch-day class roster and store it securely for check-in continuity;
+10. Export the launch-day class roster and store it securely for check-in continuity;
    treat Supabase as authoritative and reconcile any offline notes after recovery.
 
 ## Pre-open member smoke path
@@ -101,14 +104,18 @@ If checkout, fulfillment or reconciliation is uncertain:
 
 ### Push unavailable
 
-- Push is a warning, not a blocker for the core booking path.
+- Keep launch switches off until APNs configuration, a production owner device
+  and a successful owner push test are current in Operations Health.
 - Use the in-app notice plus direct email/SMS for time-sensitive class changes.
+- After restoring APNs, retry device registration from **Account → App
+  Preferences**, send another owner push test, and refresh all launch gates.
 
 ## Evidence to retain
 
 - deployed Git SHA and Vercel production URL
 - successful Codemagic build ID for that SHA
 - launch-gate timestamp and required-gate result
+- production owner push-test timestamp and result
 - Stripe preflight and post-activation verification output
 - controlled purchase order ID and Stripe Event ID
 - any rollback time, owner, reason and member remediation

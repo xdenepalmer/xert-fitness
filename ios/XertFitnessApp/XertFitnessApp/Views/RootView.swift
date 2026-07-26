@@ -167,6 +167,12 @@ struct RootView: View {
     }
 
     private var memberTabs: some View {
+        GeometryReader { viewport in
+            memberTabSurface(deviceTopInset: viewport.safeAreaInsets.top)
+        }
+    }
+
+    private func memberTabSurface(deviceTopInset: CGFloat) -> some View {
         TabView(selection: selectedDestinationBinding) {
             HomeView(
                 route: navigation.route,
@@ -288,6 +294,7 @@ struct RootView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .environment(\.xertDeviceTopSafeAreaInset, deviceTopInset)
     }
 
     private var activeUpcomingBookings: [BookingItem] {

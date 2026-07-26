@@ -15,7 +15,10 @@ import {
   sendOwnerPushSmokeTest,
 } from '../api/admin-publish-announcement.js';
 import { inspectPushEnvironment } from '../api/push-health.js';
-import { normalizePushSubscription } from '../api/push-subscription.js';
+import {
+  normalizePushSubscription,
+  pushSubscriptionClaim,
+} from '../api/push-subscription.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -179,6 +182,27 @@ test('push registration accepts only APNs tokens and explicit environments', () 
   });
   assert.throws(() => normalizePushSubscription({ device_token: 'not-a-token', environment: 'production' }), /PUSH_TOKEN_INVALID/);
   assert.throws(() => normalizePushSubscription({ device_token: 'ab'.repeat(32), environment: 'preview' }), /PUSH_ENVIRONMENT_INVALID/);
+});
+
+test('push registration never rebinds an enabled device token to another account', () => {
+  const ownerId = 'c24f774a-2d4a-4db4-ab42-b784fdbd5f83';
+  const otherId = 'acdf4b35-b7fe-459c-af42-cc763c41d867';
+
+  assert.equal(pushSubscriptionClaim(null, ownerId), 'insert');
+  assert.equal(pushSubscriptionClaim({ user_id: ownerId, enabled: true }, ownerId), 'refresh');
+  assert.equal(pushSubscriptionClaim({ user_id: otherId, enabled: false }, ownerId), 'reassign');
+  assert.throws(
+    () => pushSubscriptionClaim({ user_id: otherId, enabled: true }, ownerId),
+    /PUSH_TOKEN_OWNED/,
+  );
+
+  const handler = read('../api/push-subscription.js');
+  assert.doesNotMatch(handler, /\.upsert\(/);
+  assert.match(handler, /\.insert\(\{/);
+  assert.match(handler, /error\?\.code === '23505'/);
+  assert.match(handler, /claim === 'refresh'[\s\S]*update\.eq\('user_id', user\.id\)[\s\S]*update\.eq\('enabled', false\)/);
+  assert.match(handler, /if \(!updated\) throw new Error\('PUSH_TOKEN_OWNED'\)/);
+  assert.match(handler, /This device is still linked to another XERT account/);
 });
 
 test('admin publishing rejects unsafe actions and expired notices', () => {

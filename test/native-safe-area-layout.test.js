@@ -4,16 +4,24 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('native home measures the physical top inset outside its full-bleed scroll view', async () => {
-  const [home, theme] = await Promise.all([
+test('native home inherits the physical top inset before its full-bleed scroll view', async () => {
+  const [root, home, theme, swiftTests] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Theme.swift'),
+    read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift'),
   ]);
 
-  assert.match(home, /GeometryReader \{ viewport in[\s\S]*topSafeAreaInset: viewport\.safeAreaInsets\.top/);
+  assert.match(root, /GeometryReader \{ viewport in[\s\S]*memberTabSurface\(deviceTopInset: viewport\.safeAreaInsets\.top\)/);
+  assert.match(root, /private func memberTabSurface\(deviceTopInset: CGFloat\)[\s\S]*\.environment\(\\\.xertDeviceTopSafeAreaInset, deviceTopInset\)/);
+  assert.match(home, /@Environment\(\\\.xertDeviceTopSafeAreaInset\) private var inheritedTopSafeAreaInset/);
+  assert.match(home, /resolvedTopSafeAreaInset\([\s\S]*localInset: viewport\.safeAreaInsets\.top,[\s\S]*inheritedInset: inheritedTopSafeAreaInset/);
+  assert.match(home, /topSafeAreaInset: topSafeAreaInset/);
   assert.match(home, /XertScreenLayout\.heroContentTopInset\(deviceTopInset: topSafeAreaInset\)/);
   assert.doesNotMatch(home, /max\(proxy\.safeAreaInsets\.top, 18\)/);
+  assert.match(theme, /resolvedTopSafeAreaInset[\s\S]*max\(0, max\(localInset, inheritedInset\)\)/);
   assert.match(theme, /heroContentTopInset[\s\S]*max\(deviceTopInset, minimumHeroTopInset\) \+ 10/);
+  assert.match(swiftTests, /resolvedTopSafeAreaInset\(localInset: 0, inheritedInset: 59\),[\s\S]*59/);
 });
 
 test('all primary member workspaces keep their final controls clear of the persistent dock', async () => {

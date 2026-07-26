@@ -268,8 +268,10 @@ capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
 and schedule audit, booking lifecycle, content/configuration history, member
 onboarding, member push delivery, daily class operations, schedule integrity,
-public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
-stops until every required migration has been applied. Run
+public-form integrity, and database security hardening. Stripe and APNs service
+readiness are required launch gates: APNs also requires a production owner device
+and a successful private owner push test from the last 24 hours. A release
+intentionally stops until every required migration and service proof is current. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.
 

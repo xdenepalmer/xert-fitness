@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
+    @Environment(\.xertDeviceTopSafeAreaInset) private var inheritedTopSafeAreaInset
     let route: XertMemberRoute
     let routeSequence: UInt
     let onNavigate: (XertPrimaryDestination) -> Void
@@ -15,6 +16,10 @@ struct HomeView: View {
 
     var body: some View {
         GeometryReader { viewport in
+            let topSafeAreaInset = XertScreenLayout.resolvedTopSafeAreaInset(
+                localInset: viewport.safeAreaInsets.top,
+                inheritedInset: inheritedTopSafeAreaInset
+            )
             NavigationStack {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -22,7 +27,7 @@ struct HomeView: View {
                             content: store.publicContent(for: .hero),
                             isSignedIn: store.isSignedIn,
                             noticeCount: store.announcements.count,
-                            topSafeAreaInset: viewport.safeAreaInsets.top,
+                            topSafeAreaInset: topSafeAreaInset,
                             onBook: { onNavigate(.booking) },
                             onEvents: { onNavigate(.events) },
                             onNotices: openNoticeCenter,
@@ -30,7 +35,7 @@ struct HomeView: View {
                         )
                         .frame(height: XertScreenLayout.homeHeroHeight(
                             viewportHeight: viewport.size.height,
-                            deviceTopInset: viewport.safeAreaInsets.top,
+                            deviceTopInset: topSafeAreaInset,
                             usesAccessibilityText: dynamicTypeSize.isAccessibilitySize
                         ))
 

@@ -545,6 +545,8 @@ struct AccountView: View {
             .tint(.xertSteel)
             .disabled(store.isUpdatingMemberPush)
 
+            memberPushDeliveryStatus
+
             Toggle(
                 "Class reminders",
                 isOn: Binding(
@@ -603,6 +605,74 @@ struct AccountView: View {
             Text("App Preferences").xertEyebrow()
         }
         .listRowBackground(Color.xertInk)
+    }
+
+    @ViewBuilder
+    private var memberPushDeliveryStatus: some View {
+        switch store.memberPushDeliveryState {
+        case .off:
+            EmptyView()
+        case .awaitingDeviceToken:
+            Label(
+                "Waiting for iOS to finish registering this device.",
+                systemImage: "iphone.gen3.radiowaves.left.and.right"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.xertPale)
+        case .registering:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.xertSteel)
+                Text("Securing this device for private member notices…")
+                    .font(.footnote)
+                    .foregroundStyle(Color.xertPale)
+            }
+            .accessibilityElement(children: .combine)
+        case .registered:
+            Label(
+                "This device is registered for private XERT member notices.",
+                systemImage: "checkmark.shield.fill"
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.green)
+        case .failed:
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    memberPushFailureLabel
+                    Spacer(minLength: 8)
+                    memberPushRetryButton
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    memberPushFailureLabel
+                    memberPushRetryButton
+                }
+            }
+        }
+    }
+
+    private var memberPushFailureLabel: some View {
+        Label(
+            "This device is not currently registered for member notices.",
+            systemImage: "exclamationmark.triangle.fill"
+        )
+        .font(.footnote)
+        .foregroundStyle(Color.orange)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var memberPushRetryButton: some View {
+        Button {
+            Task { await store.retryMemberPushRegistration() }
+        } label: {
+            Label("Retry", systemImage: "arrow.clockwise")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.xertSteel)
+        .disabled(store.isUpdatingMemberPush)
+        .accessibilityHint("Requests iOS notification access and securely registers this device again")
+        .accessibilityIdentifier("account.memberPush.retry")
     }
 
     @ViewBuilder

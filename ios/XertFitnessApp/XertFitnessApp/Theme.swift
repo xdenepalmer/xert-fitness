@@ -119,6 +119,17 @@ extension View {
 
 // MARK: - Screen scaffolding
 
+private struct XertDeviceTopSafeAreaInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var xertDeviceTopSafeAreaInset: CGFloat {
+        get { self[XertDeviceTopSafeAreaInsetKey.self] }
+        set { self[XertDeviceTopSafeAreaInsetKey.self] = max(0, newValue) }
+    }
+}
+
 enum XertScreenLayout {
     static let minimumHeroTopInset: CGFloat = 18
     /// Extra scroll runway above the persistent custom dock. The safe-area
@@ -128,6 +139,13 @@ enum XertScreenLayout {
 
     static func heroContentTopInset(deviceTopInset: CGFloat) -> CGFloat {
         max(deviceTopInset, minimumHeroTopInset) + 10
+    }
+
+    static func resolvedTopSafeAreaInset(
+        localInset: CGFloat,
+        inheritedInset: CGFloat
+    ) -> CGFloat {
+        max(0, max(localInset, inheritedInset))
     }
 
     static func homeHeroHeight(
