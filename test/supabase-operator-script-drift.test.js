@@ -220,14 +220,27 @@ test('every install_public_form_insert_policies definition gates PT/booking note
 test('operator RLS scripts keep admin policy quals as InitPlan-safe scalar subqueries', () => {
   // 20260726018000 wraps admin_all_* / admin_settings / availability / blackout
   // policies as `(select public.is_admin())` so Postgres evaluates them once per
-  // statement. rls_policies.sql and rls_hardening.sql recreate those same
-  // policies; a bare `public.is_admin()` here reintroduces per-row profile
-  // lookups on every badge count and lead scan when either file is re-run.
+  // statement. rls_policies.sql, rls_hardening.sql and availability_schema.sql
+  // recreate those same policies; a bare `public.is_admin()` here reintroduces
+  // per-row profile lookups on every badge count and lead scan when any file is
+  // re-run.
   const barePolicyQual = /(?:using|with check)\s*\(\s*public\.is_admin\s*\(\s*\)\s*\)/i;
   const wrappedPolicyQual = /(?:using|with check)\s*\(\s*\(\s*select\s+public\.is_admin\s*\(\s*\)\s*\)\s*\)/i;
+  const initPlanPolicyNames = [
+    'admin_all_member_interest',
+    'admin_all_trainer_interest',
+    'admin_all_partner_interest',
+    'admin_all_class_bookings',
+    'admin_all_private_session_requests',
+    'admin_all_class_sessions',
+    'admin_update_admin_settings',
+    'admin_insert_admin_settings',
+    'admins_manage_availability_blocks',
+    'admins_manage_blackout_periods',
+  ];
   let checked = 0;
 
-  for (const name of ['rls_policies.sql', 'rls_hardening.sql']) {
+  for (const name of ['rls_policies.sql', 'rls_hardening.sql', 'availability_schema.sql']) {
     const script = scripts().find(entry => entry.name === name);
     assert.ok(script, `missing operator script ${name}`);
     assert.match(
@@ -244,7 +257,45 @@ test('operator RLS scripts keep admin policy quals as InitPlan-safe scalar subqu
     checked += 1;
   }
 
-  assert.equal(checked, 2);
+  for (const { name, sql } of scripts()) {
+    for (const policyName of initPlanPolicyNames) {
+      for (const statement of statementsCreating(sql, policyName)) {
+        const cleaned = statement.text.replace(/\(\s*select\s+public\.is_admin\s*\(\s*\)\s*\)/gi, 'WRAPPED');
+        assert.doesNotMatch(
+          cleaned,
+          /public\.is_admin\s*\(\s*\)/i,
+          `${name} recreates ${policyName} with a bare public.is_admin() qual`,
+        );
+      }
+    }
+  }
+
+  assert.equal(checked, 3);
+});
+
+test('README operator apply order includes the newest Ops Health migrations', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  for (const script of [
+    'credit_batch_refund_reactivation.sql',
+    'account_deletion_public_lead_cleanup.sql',
+    'request_notes_health_consent.sql',
+    'waitlist_skip_concurrency_upgrade.sql',
+  ]) {
+    assert.match(
+      readme,
+      new RegExp(script.replace(/\./g, '\\.')),
+      `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
+    );
+  }
+  // Fresh + already-deployed apply sequences both end with waitlist skip.
+  assert.match(
+    readme,
+    /request_notes_health_consent\.sql` and\n`waitlist_skip_concurrency_upgrade\.sql`\. This/,
+  );
+  assert.match(
+    readme,
+    /request_notes_health_consent\.sql` and\n`waitlist_skip_concurrency_upgrade\.sql`\. The/,
+  );
 });
 
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {

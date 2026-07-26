@@ -463,6 +463,19 @@ export function getDefaultSettings() {
   };
 }
 
+function softLaunchSettingsError(error, fallback) {
+  const message = String(error?.message || fallback || 'Launch settings could not be saved.');
+  if (/PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/i.test(message)) {
+    return new Error(
+      'Pause session pack payments before changing other soft-launch controls. Checkout must stay frozen while live platform settings change.',
+    );
+  }
+  if (/PAYMENT_ACTIVATION_REQUIRES_SERVER_PREFLIGHT/i.test(message)) {
+    return new Error('Session pack payments can only be enabled through the protected Stripe launch checks.');
+  }
+  return new Error(message);
+}
+
 export async function updateSoftLaunchSettings(updates, baseline) {
   if (baseline?.id) {
     let query = supabase
@@ -470,7 +483,13 @@ export async function updateSoftLaunchSettings(updates, baseline) {
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', baseline.id);
     if (baseline.updated_at) query = query.eq('updated_at', baseline.updated_at);
-    const result = await query.select('*');
+    let result;
+    try {
+      result = await query.select('*');
+    } catch (error) {
+      throw softLaunchSettingsError(error);
+    }
+    if (result.error) throw softLaunchSettingsError(result.error);
     return assertAdminMutationVersion(result, 'Launch settings update')[0];
   }
 
@@ -483,7 +502,7 @@ export async function updateSoftLaunchSettings(updates, baseline) {
     .insert([{ ...getDefaultSettings(), ...updates }])
     .select('*')
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw softLaunchSettingsError(error);
   return data;
 }
 

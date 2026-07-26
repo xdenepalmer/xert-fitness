@@ -53,3 +53,30 @@ export function announcementAction(announcement) {
     return null;
   }
 }
+
+// Publish API returns 200 even when APNs throws after the row is saved; the
+// failure is carried on push.failed / push.reason. Never describe that as
+// "no devices registered" — operators would stop retrying a real outage.
+export function describeAnnouncementPublishPush(push) {
+  if (!push || typeof push !== 'object') {
+    return 'Members can see it now. Push delivery status was not returned.';
+  }
+  if (push.configured === false) {
+    return 'Members can see it now. APNs delivery needs the Vercel push secrets.';
+  }
+  const attempted = Number(push.attempted) || 0;
+  const delivered = Number(push.delivered) || 0;
+  const failed = Number(push.failed) || 0;
+  const reason = String(push.reason || '').trim();
+  if (attempted > 0) {
+    const deliveredLabel = `${delivered} device notification${delivered === 1 ? '' : 's'} delivered`;
+    if (!failed) return `${deliveredLabel}.`;
+    return `${deliveredLabel}; ${failed} failed${reason ? ` (${reason})` : ''}.`;
+  }
+  if (failed > 0) {
+    return reason
+      ? `Members can see it now, but Apple push delivery failed (${reason}). Publish again to retry devices that still need a delivery.`
+      : 'Members can see it now, but Apple push delivery failed. Publish again to retry devices that still need a delivery.';
+  }
+  return 'Members can see it now. No enabled iOS devices were registered.';
+}

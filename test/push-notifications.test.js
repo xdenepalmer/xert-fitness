@@ -320,6 +320,7 @@ test('web and native clients route authenticated push registration and publishin
   assert.match(adminData, /admin_announcement_push_metrics/);
   assert.match(adminData, /\/api\/admin-publish-announcement/);
   assert.match(manager, /publishMemberAnnouncement/);
+  assert.match(manager, /describeAnnouncementPublishPush/);
   assert.match(registration, /registerForRemoteNotifications/);
   assert.match(registration, /#if DEBUG[\s\S]*sandbox[\s\S]*production/);
   assert.match(api, /\/api\/push-subscription/);
@@ -328,4 +329,28 @@ test('web and native clients route authenticated push registration and publishin
   assert.match(root, /xertPushTokenUpdated/);
   assert.match(root, /consumePendingAnnouncementID/);
   assert.match(account, /Member notice notifications/);
+});
+
+test('broadcast publish UI surfaces swallowed APNs failures instead of claiming no devices', async () => {
+  const { describeAnnouncementPublishPush } = await import('../src/lib/memberAnnouncements.js');
+  assert.match(
+    describeAnnouncementPublishPush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'stream closed' }),
+    /push delivery failed \(stream closed\)/i,
+  );
+  assert.doesNotMatch(
+    describeAnnouncementPublishPush({ configured: true, attempted: 0, delivered: 0, failed: 1, reason: 'stream closed' }),
+    /No enabled iOS devices/i,
+  );
+  assert.match(
+    describeAnnouncementPublishPush({ configured: true, attempted: 2, delivered: 1, failed: 1, reason: 'BadDeviceToken' }),
+    /1 device notification delivered; 1 failed \(BadDeviceToken\)/,
+  );
+  assert.match(
+    describeAnnouncementPublishPush({ configured: true, attempted: 0, delivered: 0, failed: 0 }),
+    /No enabled iOS devices were registered/,
+  );
+  assert.match(
+    describeAnnouncementPublishPush({ configured: false, attempted: 0, delivered: 0, failed: 0 }),
+    /Vercel push secrets/,
+  );
 });

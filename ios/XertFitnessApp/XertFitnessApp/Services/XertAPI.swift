@@ -1690,11 +1690,28 @@ final class XertAPI {
             announcement_banner_enabled: settings.announcement_banner_enabled,
             updated_at: ISO8601DateFormatter.standard.string(from: Date())
         ))
-        let rows: [AdminPlatformSettings] = try await decode(request)
-        guard let updated = rows.first else {
-            throw APIError(message: "Platform settings changed elsewhere. Refresh and review the latest values before saving.")
+        do {
+            let rows: [AdminPlatformSettings] = try await decode(request)
+            guard let updated = rows.first else {
+                throw APIError(message: "Platform settings changed elsewhere. Refresh and review the latest values before saving.")
+            }
+            return updated
+        } catch let error as APIError {
+            throw APIError(
+                message: Self.platformSettingsSaveMessage(from: error.message),
+                statusCode: error.statusCode
+            )
         }
-        return updated
+    }
+
+    private static func platformSettingsSaveMessage(from raw: String) -> String {
+        if raw.localizedCaseInsensitiveContains("PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE") {
+            return "Pause session pack payments before changing other soft-launch controls. Checkout must stay frozen while live platform settings change."
+        }
+        if raw.localizedCaseInsensitiveContains("PAYMENT_ACTIVATION_REQUIRES_SERVER_PREFLIGHT") {
+            return "Session pack payments can only be enabled through the protected Stripe launch checks."
+        }
+        return raw
     }
 
     func adminActivatePlatformPayments(

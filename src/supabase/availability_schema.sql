@@ -158,15 +158,15 @@ drop policy if exists "admin_all_availability_blocks" on public.availability_blo
 drop policy if exists "admins_manage_availability_blocks" on public.availability_blocks;
 create policy "admins_manage_availability_blocks" on public.availability_blocks
   for all to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
 
 drop policy if exists "admin_all_blackout_periods" on public.blackout_periods;
 drop policy if exists "admins_manage_blackout_periods" on public.blackout_periods;
 create policy "admins_manage_blackout_periods" on public.blackout_periods
   for all to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
 
 insert into public.xert_schema_capabilities (capability)
 values ('schedule_blackout_guard')

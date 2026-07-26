@@ -3,7 +3,12 @@ import { toast } from '@/components/ui/use-toast';
 import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
-import { launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
+import {
+  launchSettingsChanged,
+  livePaymentSettingsRequirePause,
+  normalizeLaunchSettings,
+  paymentSettingsPauseRequiredMessage,
+} from '@/lib/launchSettings';
 
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
@@ -75,6 +80,14 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const handleSave = async () => {
     try {
       const normalized = normalizeLaunchSettings(settings);
+      if (livePaymentSettingsRequirePause(normalized, savedSettings)) {
+        toast({
+          title: 'Pause pack checkout first',
+          description: paymentSettingsPauseRequiredMessage(),
+          variant: 'destructive',
+        });
+        return;
+      }
       const activatingPayments = normalized.payments_enabled && !savedSettings.payments_enabled;
       if (!activatingPayments) {
         await persistSettings(normalized);

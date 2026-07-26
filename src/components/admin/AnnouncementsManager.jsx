@@ -9,7 +9,12 @@ import {
   setMemberAnnouncementArchived,
   updateMemberAnnouncement,
 } from '@/lib/adminData';
-import { announcementState, ANNOUNCEMENT_TONES, normalizeAnnouncementInput } from '@/lib/memberAnnouncements';
+import {
+  announcementState,
+  ANNOUNCEMENT_TONES,
+  describeAnnouncementPublishPush,
+  normalizeAnnouncementInput,
+} from '@/lib/memberAnnouncements';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 
 const EMPTY_FORM = { title: '', body: '', tone: 'info', expires_at: '', cta_label: '', cta_url: '' };
@@ -141,14 +146,13 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       } else {
         await createMemberAnnouncement(payload);
       }
-      const push = publishResult?.push;
-      const pushDescription = !publish ? 'The notice remains hidden until you publish it.'
-        : push?.configured === false ? 'Members can see it now. APNs delivery needs the Vercel push secrets.'
-        : push?.attempted > 0 ? `${push.delivered} device notification${push.delivered === 1 ? '' : 's'} delivered${push.failed ? `; ${push.failed} failed` : ''}.`
-        : 'Members can see it now. No enabled iOS devices were registered.';
+      const pushDescription = !publish
+        ? 'The notice remains hidden until you publish it.'
+        : describeAnnouncementPublishPush(publishResult?.push);
       toast({
         title: publish ? 'Announcement published' : editing?.id ? 'Announcement saved' : 'Draft created',
         description: pushDescription,
+        variant: publish && Number(publishResult?.push?.failed) > 0 ? 'destructive' : undefined,
       });
       setEditing(null);
       setForm(EMPTY_FORM);
@@ -169,12 +173,10 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       const result = publish
         ? await publishMemberAnnouncement(item.id, item, item.updated_at)
         : await updateMemberAnnouncement(item.id, { published_at: null }, item.updated_at);
-      const push = result?.push;
       toast({
         title: publish ? 'Announcement published' : 'Announcement unpublished',
-        description: publish && push?.attempted > 0
-          ? `${push.delivered} device notification${push.delivered === 1 ? '' : 's'} delivered${push.failed ? `; ${push.failed} failed` : ''}.`
-          : undefined,
+        description: publish ? describeAnnouncementPublishPush(result?.push) : undefined,
+        variant: publish && Number(result?.push?.failed) > 0 ? 'destructive' : undefined,
       });
       await load({ quiet: true });
     } catch (publishError) {

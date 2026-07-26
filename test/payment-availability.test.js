@@ -71,10 +71,16 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(webAdmin, /if \(!health\.ready\)/);
   assert.match(webAdmin, /activateSessionPackPayments\(normalized, savedSettings\)/);
   assert.match(webAdmin, /title="Open session pack checkout\?"/);
+  assert.match(webAdmin, /livePaymentSettingsRequirePause\(normalized, savedSettings\)/);
+  assert.match(webAdmin, /Pause pack checkout first/);
+  assert.match(webData, /PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/);
+  assert.match(webData, /Pause session pack payments before changing other soft-launch controls/);
   assert.match(nativeAPI, /func adminActivatePlatformPayments/);
   assert.match(nativeAPI, /confirmation: "ENABLE PAYMENTS"/);
+  assert.match(nativeAPI, /PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE/);
   assert.match(nativeStore, /let activatingPayments = draft\.payments_enabled/);
   assert.match(nativeStore, /api\.adminActivatePlatformPayments/);
+  assert.match(nativeStore, /Pause session pack payments, save that change/);
   assert.match(nativeAdmin, /confirmationDialog\("Open session pack checkout\?"/);
   assert.match(nativeAdmin, /run every Stripe launch check on the server/);
   assert.doesNotMatch(nativeAdmin, /disabled\(admin\.commerceHealth\?\.ready != true\)/);

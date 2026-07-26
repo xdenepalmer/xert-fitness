@@ -1160,6 +1160,14 @@ final class AdminStore: ObservableObject {
         defer { isSavingSettings = false }
         do {
             let activatingPayments = draft.payments_enabled && settings?.payments_enabled != true
+            if let live = settings,
+               live.payments_enabled,
+               draft.payments_enabled,
+               !activatingPayments,
+               draft != live {
+                errorMessage = "Pause session pack payments, save that change, then update the other soft-launch controls. Checkout must stay frozen while live platform settings change."
+                return false
+            }
             if activatingPayments {
                 settings = try await api.adminActivatePlatformPayments(session: session, settings: draft)
                 do {

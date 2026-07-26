@@ -37,15 +37,32 @@ export function normalizeLaunchSettings(settings = {}) {
   };
 }
 
+export const LIVE_LAUNCH_SETTING_FIELDS = Object.freeze([
+  'countdown_enabled',
+  'bookings_enabled',
+  'payments_enabled',
+  'prices_coming_soon',
+  'announcement_banner_enabled',
+  'target_launch_date',
+  'announcement_banner_text',
+]);
+
 export function launchSettingsChanged(current = {}, saved = {}) {
-  const fields = [
-    'countdown_enabled',
-    'bookings_enabled',
-    'payments_enabled',
-    'prices_coming_soon',
-    'announcement_banner_enabled',
-    'target_launch_date',
-    'announcement_banner_text',
-  ];
-  return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
+  return LIVE_LAUNCH_SETTING_FIELDS.some(
+    field => String(current[field] ?? '') !== String(saved[field] ?? ''),
+  );
+}
+
+// While pack checkout is live, admin_settings rejects any other column change
+// (PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE). Pausing payments in the same save
+// is the supported escape hatch; every other edit must pause first.
+export function livePaymentSettingsRequirePause(current = {}, saved = {}) {
+  if (saved?.payments_enabled !== true || current?.payments_enabled !== true) return false;
+  return LIVE_LAUNCH_SETTING_FIELDS
+    .filter(field => field !== 'payments_enabled')
+    .some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
+}
+
+export function paymentSettingsPauseRequiredMessage() {
+  return 'Pause session pack payments, save that change, then update the other soft-launch controls. Checkout must stay frozen while live platform settings change.';
 }

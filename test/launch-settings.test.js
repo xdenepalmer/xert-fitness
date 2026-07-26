@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { launchSettingsChanged, normalizeLaunchSettings } from '../src/lib/launchSettings.js';
+import {
+  launchSettingsChanged,
+  livePaymentSettingsRequirePause,
+  normalizeLaunchSettings,
+  paymentSettingsPauseRequiredMessage,
+} from '../src/lib/launchSettings.js';
 
 test('normalizes every live platform control, including the server payment switch', () => {
   const result = normalizeLaunchSettings({
@@ -44,4 +49,31 @@ test('tracks only live launch fields against the last saved snapshot', () => {
   assert.equal(launchSettingsChanged({ ...saved, bookings_enabled: true }, saved), true);
   assert.equal(launchSettingsChanged({ ...saved, payments_enabled: true }, saved), true);
   assert.equal(launchSettingsChanged({ ...saved, announcement_banner_text: '' }, saved), false);
+});
+
+test('live checkout freezes other soft-launch edits until payments are paused', () => {
+  const live = {
+    countdown_enabled: true,
+    bookings_enabled: true,
+    payments_enabled: true,
+    prices_coming_soon: false,
+    announcement_banner_enabled: false,
+    target_launch_date: '2026-08-01',
+    announcement_banner_text: null,
+  };
+
+  assert.equal(livePaymentSettingsRequirePause(live, live), false);
+  assert.equal(
+    livePaymentSettingsRequirePause({ ...live, countdown_enabled: false }, live),
+    true,
+  );
+  assert.equal(
+    livePaymentSettingsRequirePause({ ...live, payments_enabled: false, countdown_enabled: false }, live),
+    false,
+  );
+  assert.equal(
+    livePaymentSettingsRequirePause({ ...live, payments_enabled: true }, { ...live, payments_enabled: false }),
+    false,
+  );
+  assert.match(paymentSettingsPauseRequiredMessage(), /Pause session pack payments/i);
 });

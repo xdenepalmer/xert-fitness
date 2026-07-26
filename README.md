@@ -240,6 +240,9 @@ The Supabase schema is defined in:
 - `src/supabase/request_notes_health_consent.sql` — requires health-information
   consent before PT/booking free-text notes can be stored, and lets admins
   deliberately reveal consented member-interest injuries
+- `src/supabase/waitlist_skip_concurrency_upgrade.sql` — makes waitlist skip
+  claim the head row under row locks so two admins cannot promote different
+  members for the same freed place
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -283,8 +286,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `member_interest_health_consent.sql`,
 `class_session_optimistic_locking_upgrade.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
-`account_deletion_public_lead_cleanup.sql` and
-`request_notes_health_consent.sql`. This
+`account_deletion_public_lead_cleanup.sql`,
+`request_notes_health_consent.sql` and
+`waitlist_skip_concurrency_upgrade.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -336,8 +340,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `member_interest_health_consent.sql`,
 `class_session_optimistic_locking_upgrade.sql`,
 `audit_subject_pii_redaction_upgrade.sql`,
-`account_deletion_public_lead_cleanup.sql` and
-`request_notes_health_consent.sql`. The
+`account_deletion_public_lead_cleanup.sql`,
+`request_notes_health_consent.sql` and
+`waitlist_skip_concurrency_upgrade.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
