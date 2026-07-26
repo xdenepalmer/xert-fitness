@@ -15,6 +15,15 @@ function visibleFocusableElements(dialog) {
     .filter(element => element.getAttribute('aria-hidden') !== 'true' && !element.closest('[inert]'));
 }
 
+// A Radix AlertDialog portals its content to document.body — outside the
+// workspace — and runs its own focus scope. When focus has left the workspace
+// entirely we must yield the Tab cycle to that scope; otherwise this layer
+// keeps yanking focus back into the workspace dialog and the portalled dialog's
+// action button can never be reached by keyboard.
+export function shouldManageDialogTab(workspace, activeElement) {
+  return Boolean(workspace) && Boolean(activeElement) && workspace.contains(activeElement);
+}
+
 /**
  * Gives the command centre's hand-built dialogs one consistent modal boundary.
  * Radix dialogs render outside the workspace root and keep their own focus manager.
@@ -72,6 +81,7 @@ export function useAdminDialogLayer(workspaceRef) {
 
     const trapFocus = event => {
       if (event.key !== 'Tab' || !activeDialog) return;
+      if (!shouldManageDialogTab(workspace, document.activeElement)) return;
       const focusable = visibleFocusableElements(activeDialog);
       if (!focusable.length) {
         event.preventDefault();

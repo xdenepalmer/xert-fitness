@@ -477,6 +477,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
 
       {showEditor && (
         <EventEditor
+          key={editing?.id ?? 'new'}
           event={editing}
           onSave={() => {
             setShowEditor(false);

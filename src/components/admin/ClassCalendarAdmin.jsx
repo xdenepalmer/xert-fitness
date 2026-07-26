@@ -523,10 +523,18 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
   useEffect(() => {
     if (initialAction !== 'create') return;
+    // Refuse to discard an editor the operator already has open (e.g. the
+    // command palette firing "new class" mid-edit). Clobbering session here
+    // while keeping the edited form would re-tag the record as a fresh insert
+    // and silently duplicate the published class.
+    if (showEditor) {
+      onIntentHandled?.();
+      return;
+    }
     setEditingSession(null);
     setShowEditor(true);
     onIntentHandled?.();
-  }, [initialAction, onIntentHandled]);
+  }, [initialAction, onIntentHandled, showEditor]);
 
   const refreshBookings = async (sessionId) => {
     const [requests, members] = await Promise.all([
@@ -940,6 +948,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                             {waitlistPosition && <p className="font-body text-[11px] text-xert-steel mt-1">Waitlist position {waitlistPosition}</p>}
                           </div>
                           <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || s.status !== 'published'}
+                            aria-label={`Roster status for ${r.full_name || r.email || 'member'}`}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {rosterStatusOptions(r.status, s.status, waitlistedRoster.length > 0).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
@@ -962,6 +971,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                             <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.training_level}</p>
                           </div>
                           <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={updatingBookingId === b.id}
+                            aria-label={`Booking request status for ${b.full_name || b.email || 'member'}`}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
@@ -979,6 +989,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
       {showEditor && (
         <SessionEditor
+          key={editingSession?.id ?? 'new'}
           session={editingSession}
           blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}

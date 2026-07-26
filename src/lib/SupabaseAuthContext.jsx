@@ -4,6 +4,7 @@ import {
   supabase,
   supabaseConfigurationReady,
 } from '@/lib/supabase';
+import { clearSiteContentDrafts } from '@/lib/siteContentDraft';
 
 const SupabaseAuthContext = createContext(null);
 
@@ -81,8 +82,11 @@ export const SupabaseAuthProvider = ({ children }) => {
         if (active && sessionVersion === 0) setLoading(false);
       });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!active) return;
+      // Never let one admin's unsaved CMS draft survive into the next session
+      // on a shared browser.
+      if (event === 'SIGNED_OUT') clearSiteContentDrafts(window.localStorage);
       applySession(newSession);
     });
 
@@ -99,6 +103,7 @@ export const SupabaseAuthProvider = ({ children }) => {
   };
 
   const signOut = async () => {
+    clearSiteContentDrafts(window.localStorage);
     if (!supabaseConfigurationReady) return;
     await supabase.auth.signOut();
   };

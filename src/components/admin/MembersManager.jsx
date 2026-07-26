@@ -52,7 +52,18 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
       .catch(e => setDetailError(e.message || 'Check member detail permissions.'));
   };
 
-  useEffect(() => { loadDetail(); }, [member.id]);
+  useEffect(() => {
+    // Guard the in-flight fetch: without it, a slower request for a previously
+    // selected member can resolve after switching and paint that member's
+    // private record under the current member's header.
+    let active = true;
+    setDetail(null);
+    setDetailError('');
+    adminMemberDetail(member.id)
+      .then(result => { if (active) setDetail(result); })
+      .catch(error => { if (active) setDetailError(error.message || 'Check member detail permissions.'); });
+    return () => { active = false; };
+  }, [member.id]);
 
   const handleAddNote = async event => {
     event.preventDefault();
@@ -912,6 +923,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
 
       {viewing && (
         <MemberDrawer
+          key={viewing.id}
           member={viewing}
           onClose={() => setViewing(null)}
           onGrant={() => setGranting(viewing)}

@@ -9,6 +9,7 @@ import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { normalizeSiteContent } from '@/lib/siteContentAdmin';
 import { clearSiteContentDraft, readSiteContentDraft, writeSiteContentDraft } from '@/lib/siteContentDraft';
+import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
@@ -189,12 +190,12 @@ function ImageListEditor({ value, onChange, folder }) {
   );
 }
 
-function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyChange }) {
+function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyChange, userId }) {
   // Prefill with the live defaults so the editor always shows what the site
   // is currently displaying — saved CMS values overlay the defaults.
   const defaults = CONTENT_DEFAULTS[section.key] || {};
   const baseline = { ...defaults, ...(initial || {}) };
-  const [recoveredDraft] = useState(() => readSiteContentDraft(window.localStorage, section.key));
+  const [recoveredDraft] = useState(() => readSiteContentDraft(window.localStorage, userId, section.key));
   const [data, setData] = useState(() => ({ ...baseline, ...(recoveredDraft?.data || {}) }));
   const [dirty, setDirty] = useState(Boolean(recoveredDraft));
   const [saving, setSaving] = useState(false);
@@ -209,8 +210,8 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   useEffect(() => () => onDirtyChange(section.key, false), [onDirtyChange, section.key]);
 
   useEffect(() => {
-    if (dirty) writeSiteContentDraft(window.localStorage, section.key, data);
-  }, [data, dirty, section.key]);
+    if (dirty) writeSiteContentDraft(window.localStorage, userId, section.key, data);
+  }, [data, dirty, section.key, userId]);
 
   const handleRestore = () => {
     setData({ ...defaults });
@@ -220,7 +221,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   const handleDiscard = () => {
     setData(baseline);
     setDirty(false);
-    clearSiteContentDraft(window.localStorage, section.key);
+    clearSiteContentDraft(window.localStorage, userId, section.key);
   };
 
   const handleSave = async () => {
@@ -231,7 +232,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
       clearSiteContentCache();
       setSavedAt(new Date());
       setDirty(false);
-      clearSiteContentDraft(window.localStorage, section.key);
+      clearSiteContentDraft(window.localStorage, userId, section.key);
       await onSaved();
       toast({ title: `${section.title} saved`, description: 'Changes are live on the site.' });
     } catch (e) {
@@ -311,6 +312,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
 }
 
 export default function ContentManager({ onDirtyChange = NOOP }) {
+  const { user } = useSupabaseAuth();
   const [content, setContent] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [dirtySections, setDirtySections] = useState(() => new Set());
@@ -372,6 +374,7 @@ export default function ContentManager({ onDirtyChange = NOOP }) {
             expectedUpdatedAt={content[s.key]?.updated_at}
             onSaved={load}
             onDirtyChange={handleDirtyChange}
+            userId={user?.id}
           />
         ))}
       </div>

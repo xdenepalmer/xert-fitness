@@ -25,6 +25,15 @@ const OperationsHealth = lazy(() => import('@/components/admin/OperationsHealth'
 const AdminAuditLog = lazy(() => import('@/components/admin/AdminAuditLog'));
 const AnnouncementsManager = lazy(() => import('@/components/admin/AnnouncementsManager'));
 
+// Decides what a section navigation should do BEFORE touching the router. The
+// unsaved-changes guard must win even when the requested section equals the
+// current one, otherwise a same-section navigation (e.g. an intent link that
+// only changes query params) slips past the guard and discards an open editor.
+export function planAdminNavigation({ nextSection, currentSection, hasUnsavedChanges }) {
+  if (hasUnsavedChanges) return { prompt: true, switchedSection: false };
+  return { prompt: false, switchedSection: nextSection !== currentSection };
+}
+
 function SectionLoader() {
   return (
     <div className="p-6" role="status" aria-label="Loading section">
@@ -68,11 +77,8 @@ export default function AdminCommandCentre() {
   }, [hasUnsavedChanges]);
 
   const setSection = useCallback((nextSection, params) => {
-    if (nextSection === section) {
-      navigate(getAdminSectionPath(nextSection, params));
-      return true;
-    }
-    if (hasUnsavedChanges) {
+    const plan = planAdminNavigation({ nextSection, currentSection: section, hasUnsavedChanges });
+    if (plan.prompt) {
       setPendingNavigation({
         kind: 'section',
         section: nextSection,
@@ -80,8 +86,7 @@ export default function AdminCommandCentre() {
       });
       return false;
     }
-    setHasUnsavedChanges(false);
-    setActiveSection(nextSection);
+    if (plan.switchedSection) setActiveSection(nextSection);
     navigate(getAdminSectionPath(nextSection, params));
     return true;
   }, [hasUnsavedChanges, navigate, section]);
