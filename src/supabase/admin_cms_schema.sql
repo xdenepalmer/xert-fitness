@@ -285,7 +285,7 @@ create index if not exists credit_batches_member_expiry_active_idx
 -- Small operational queue for timely member follow-up. A recent active
 -- follow-up note suppresses the member for seven days.
 drop function if exists public.admin_member_follow_up_queue(integer);
-create function public.admin_member_follow_up_queue(p_limit integer default 20)
+create function public.admin_member_follow_up_queue(p_limit integer default 50)
 returns table (
   id uuid, full_name text, email text, phone text, role text, joined_at timestamptz,
   credits_remaining bigint, bookings_count bigint, last_attended_at timestamptz,
@@ -293,7 +293,7 @@ returns table (
   credits_expiring bigint, next_credit_expiry timestamptz
 ) language plpgsql security definer stable set search_path = public as $$
 declare
-  v_limit integer := greatest(1, least(coalesce(p_limit, 20), 50));
+  v_limit integer := greatest(1, least(coalesce(p_limit, 50), 50));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   return query
@@ -624,7 +624,7 @@ end; $$;
 
 -- Bounded operational desk for future class queues. One row per class keeps
 -- the FIFO head and credit blocker visible without loading every full roster.
-create or replace function public.admin_waitlist_overview(p_limit integer default 20)
+create or replace function public.admin_waitlist_overview(p_limit integer default 50)
 returns table (
   session_id uuid, title text, start_time timestamptz, capacity integer,
   active_count bigint, waitlist_count bigint, spots_available integer,
@@ -633,7 +633,7 @@ returns table (
   next_booked_at timestamptz, next_available_credits bigint
 ) language plpgsql security definer stable set search_path = public as $$
 declare
-  v_limit integer := greatest(1, least(coalesce(p_limit, 20), 50));
+  v_limit integer := greatest(1, least(coalesce(p_limit, 50), 50));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   return query

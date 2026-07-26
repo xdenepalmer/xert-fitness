@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726125000_admin_ops_desk_and_notice_metrics.sql` (**26125**). Tip
+`20260726126000_admin_desk_rpc_ceiling_defaults.sql` (**26126**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Members / packs / coaches silence + desk RPC defaults (**26126** + app tip):
+  iPhone Members directory pages past the old hard 50 cut so later accounts
+  cannot vanish after grant/role refresh; Admin Audit no longer silently drops
+  to the newest 300 rows; session packs and coaches (web + iPhone, public +
+  admin + Ops Health pack probe) page past PostgREST `max_rows` so later
+  purchasable packs / coach profiles cannot vanish; waitlist / follow-up RPC
+  defaults and null coalesce fallbacks use the desk ceiling (50) instead of 20.
 - Today desk / announcement metrics silence + booking-desk cancel honesty
   (**26125** + app tip): `admin_daily_operations` no longer hard-cuts at 50
   Brisbane-day classes (web + iPhone page past max_rows) so later roll-call
@@ -274,7 +281,7 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726125000_admin_ops_desk_and_notice_metrics.sql` (**26125** —
+   `20260726126000_admin_desk_rpc_ceiling_defaults.sql` (**26126** —
    full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
@@ -285,8 +292,9 @@ were **not** built.
    `class_cancel_notice_credit_honesty` (26122*),
    `booking_decision_notice_credit_honesty` (26123*),
    `admin_member_service_history_paging` (26124*),
-   `admin_daily_operations_full_day` (26125*), and
-   `admin_announcement_metrics_paging` (26125*).
+   `admin_daily_operations_full_day` (26125*),
+   `admin_announcement_metrics_paging` (26125*), and
+   `admin_desk_rpc_ceiling_defaults` (26126*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
@@ -321,6 +329,10 @@ were **not** built.
    classes afterwards. Today desk with >50 Brisbane-day classes still lists
    every class; Announcements Seen/Push counts stay accurate past max_rows;
    booking-desk cancel says credit returns when the pack is still live.
+   iPhone Members with >50 accounts still lists every member; Admin Audit with
+   >300 rows still lists every entry; session packs / coaches past max_rows
+   still show every pack/profile; waitlist/follow-up omitted-arg RPC calls
+   return up to 50.
 
 ---
 
@@ -804,6 +816,19 @@ Migration / operator mirror:
 ↔ `src/supabase/admin_ops_desk_and_notice_metrics.sql` (daily-ops upgrade /
 `admin_cms_schema` aligned). Apply through **26125**.
 
+### 49. This batch — Members / packs / coaches silence + desk RPC defaults
+| Area | Defect | Fix |
+|---|---|---|
+| Silent failure (privacy/ops) | iPhone Members directory hard-cut at 50 (offset 0) — later accounts vanished from the list (and after grant/role refresh) while Overview `total_count` stayed honest | Offset-page `admin_list_members_page` at 100; owner-command small limit stays single-page |
+| Silent failure (privacy/ops) | iPhone Admin Audit paged every table then `.prefix(300)` — older subject-email / privilege history vanished | Keep the full merged sorted list |
+| Silent failure (money/ops) | Session packs + coaches (web + iPhone, public + admin) and Ops Health active-pack probe hit PostgREST `max_rows` uncapped — later purchasable packs / coach profiles could vanish or undercount Stripe Price gaps | Page with `collectAdminBatches` / offset loops |
+| Silent failure (ops) | `admin_waitlist_overview` / `admin_member_follow_up_queue` still defaulted to 20 (and null coalesce 20) while desks pass 50 — omitted-arg callers silently collapsed queues | Defaults + coalesce use ceiling 50; capability `admin_desk_rpc_ceiling_defaults` (**26126**) |
+
+Migration / operator mirror:
+`supabase/migrations/20260726126000_admin_desk_rpc_ceiling_defaults.sql`
+↔ `src/supabase/admin_desk_rpc_ceiling_defaults.sql` (`admin_cms_schema` /
+waitlist FIFO / follow-up upgrade mirrors aligned). Apply through **26126**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -853,7 +878,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26125)
+### Copy-paste ordered filenames (overnight catch-up through 26126)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -882,6 +907,7 @@ supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
 supabase/migrations/20260726123000_booking_decision_notice_credit_honesty.sql
 supabase/migrations/20260726124000_admin_member_service_history_paging.sql
 supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql
+supabase/migrations/20260726126000_admin_desk_rpc_ceiling_defaults.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -903,7 +929,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql
+  -f supabase/migrations/20260726126000_admin_desk_rpc_ceiling_defaults.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -942,6 +968,7 @@ row shows `installed = true` and `release_ready = true`.
 | 22 | `20260726123000_booking_decision_notice_credit_honesty.sql` | `booking_decision_notice_credit_honesty` — waitlist/decline/cancel notices do not claim an unconditional credit return |
 | 23 | `20260726124000_admin_member_service_history_paging.sql` | `admin_member_service_history_paging` — member notes/notices page past hard 100 / 50 cuts |
 | 24 | `20260726125000_admin_ops_desk_and_notice_metrics.sql` | `admin_daily_operations_full_day` + `admin_announcement_metrics_paging` — Today desk full Brisbane day; announcement Seen/Push metrics page past max_rows |
+| 25 | `20260726126000_admin_desk_rpc_ceiling_defaults.sql` | `admin_desk_rpc_ceiling_defaults` — waitlist / follow-up RPC defaults + null coalesce use ceiling 50 |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -955,15 +982,16 @@ show `installed = true` and `release_ready = true`, including
 `class_cancel_notice_credit_honesty`,
 `booking_decision_notice_credit_honesty`,
 `admin_member_service_history_paging`,
-`admin_daily_operations_full_day`, and
-`admin_announcement_metrics_paging`.
+`admin_daily_operations_full_day`,
+`admin_announcement_metrics_paging`, and
+`admin_desk_rpc_ceiling_defaults`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726125000_admin_ops_desk_and_notice_metrics.sql`. Confirm readiness SQL.
+   `20260726126000_admin_desk_rpc_ceiling_defaults.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -1129,3 +1157,8 @@ show `installed = true` and `release_ready = true`, including
     Announcements Seen/Push counts stay accurate past max_rows; booking-desk
     cancel / bulk cancel (web + iPhone) say credit returns when the pack is
     still live; waitlist / follow-up helper defaults stay at the RPC ceiling 50.
+48. **Members / packs / coaches silence + desk RPC defaults** — iPhone Members
+    with >50 accounts still lists every member; Admin Audit with >300 rows
+    still lists every entry; session packs / coaches (web + iPhone) page past
+    max_rows; waitlist / follow-up RPC omitted-arg defaults return up to 50
+    (**26126**).

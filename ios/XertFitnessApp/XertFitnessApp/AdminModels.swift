@@ -1210,6 +1210,7 @@ enum AdminSchemaReadiness {
         "admin_member_service_history_paging",
         "admin_daily_operations_full_day",
         "admin_announcement_metrics_paging",
+        "admin_desk_rpc_ceiling_defaults",
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

@@ -1,10 +1,6 @@
--- Additive admin member follow-up queue. Apply after admin_member_notes_upgrade.sql.
-
-create index if not exists session_bookings_member_status_session_idx
-  on public.session_bookings (user_id, status, class_session_id);
-create index if not exists credit_batches_member_expiry_active_idx
-  on public.credit_batches (user_id, expires_at)
-  where remaining > 0 and expires_at is not null;
+-- Align waitlist / follow-up RPC defaults with the desk ceiling (50).
+-- App helpers already pass 50; omitted-arg PostgREST callers and null
+-- coalesce fallbacks still collapsed queues to 20 and hid later rows.
 
 drop function if exists public.admin_member_follow_up_queue(integer);
 create function public.admin_member_follow_up_queue(p_limit integer default 50)
@@ -74,13 +70,57 @@ begin
   limit v_limit;
 end; $$;
 
+create or replace function public.admin_waitlist_overview(p_limit integer default 50)
+returns table (
+  session_id uuid, title text, start_time timestamptz, capacity integer,
+  active_count bigint, waitlist_count bigint, spots_available integer,
+  can_promote boolean, next_booking_id uuid, next_member_id uuid,
+  next_full_name text, next_email text, next_phone text,
+  next_booked_at timestamptz, next_available_credits bigint
+) language plpgsql security definer stable set search_path = public as $$
+declare
+  v_limit integer := greatest(1, least(coalesce(p_limit, 50), 50));
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  return query
+  with queued_sessions as materialized (
+    select s.id, s.title, s.start_time, s.capacity,
+           count(b.id) filter (where b.status in ('requested', 'confirmed')) as active_count,
+           count(b.id) filter (where b.status = 'waitlisted') as waitlist_count
+      from public.class_sessions s
+      left join public.session_bookings b on b.class_session_id = s.id
+     where s.status = 'published' and s.start_time > now()
+     group by s.id, s.title, s.start_time, s.capacity
+    having count(b.id) filter (where b.status = 'waitlisted') > 0
+  )
+  select q.id, q.title, q.start_time, q.capacity,
+         q.active_count, q.waitlist_count,
+         case when q.capacity is null then null
+              else greatest(q.capacity - q.active_count, 0)::integer end,
+         q.capacity is null or q.active_count < q.capacity,
+         head.id, head.user_id, p.full_name, p.email, p.phone, head.created_at,
+         coalesce((select sum(cb.remaining) from public.credit_batches cb
+                    where cb.user_id = head.user_id and cb.remaining > 0
+                      and (cb.expires_at is null or cb.expires_at > now())), 0)
+    from queued_sessions q
+    join lateral (
+      select b.id, b.user_id, b.created_at
+        from public.session_bookings b
+       where b.class_session_id = q.id and b.status = 'waitlisted'
+       order by b.created_at, b.id
+       limit 1
+    ) head on true
+    left join public.profiles p on p.id = head.user_id
+   order by (q.capacity is null or q.active_count < q.capacity) desc,
+            q.start_time, q.id
+   limit v_limit;
+end; $$;
+
 revoke execute on function public.admin_member_follow_up_queue(integer) from public, anon;
 grant execute on function public.admin_member_follow_up_queue(integer) to authenticated;
+revoke execute on function public.admin_waitlist_overview(integer) from public, anon;
+grant execute on function public.admin_waitlist_overview(integer) to authenticated;
 
-create table if not exists public.xert_schema_capabilities (
-  capability text primary key,
-  installed_at timestamptz not null default now()
-);
-alter table public.xert_schema_capabilities enable row level security;
 insert into public.xert_schema_capabilities (capability)
-values ('credit_expiry_follow_up') on conflict (capability) do nothing;
+values ('admin_desk_rpc_ceiling_defaults')
+on conflict (capability) do nothing;

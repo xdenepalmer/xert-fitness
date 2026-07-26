@@ -238,7 +238,7 @@ begin
   return v_booking_id;
 end; $$;
 
-create or replace function public.admin_waitlist_overview(p_limit integer default 20)
+create or replace function public.admin_waitlist_overview(p_limit integer default 50)
 returns table (
   session_id uuid, title text, start_time timestamptz, capacity integer,
   active_count bigint, waitlist_count bigint, spots_available integer,
@@ -247,7 +247,7 @@ returns table (
   next_booked_at timestamptz, next_available_credits bigint
 ) language plpgsql security definer stable set search_path = public as $$
 declare
-  v_limit integer := greatest(1, least(coalesce(p_limit, 20), 50));
+  v_limit integer := greatest(1, least(coalesce(p_limit, 50), 50));
 begin
   if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
   return query

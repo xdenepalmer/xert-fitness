@@ -192,6 +192,8 @@ test('fresh and upgrade SQL paths register the same capability contract', () => 
     ['../src/supabase/admin_ops_desk_and_notice_metrics.sql', 'admin_announcement_metrics_paging'],
     ['../supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql', 'admin_daily_operations_full_day'],
     ['../supabase/migrations/20260726125000_admin_ops_desk_and_notice_metrics.sql', 'admin_announcement_metrics_paging'],
+    ['../src/supabase/admin_desk_rpc_ceiling_defaults.sql', 'admin_desk_rpc_ceiling_defaults'],
+    ['../supabase/migrations/20260726126000_admin_desk_rpc_ceiling_defaults.sql', 'admin_desk_rpc_ceiling_defaults'],
   ];
   for (const [path, capability] of pairs) {
     const sql = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -327,6 +329,7 @@ test('read-only production check reports every release capability and migration'
     'admin_member_service_history_paging',
     'admin_daily_operations_full_day',
     'admin_announcement_metrics_paging',
+    'admin_desk_rpc_ceiling_defaults',
   ];
 
   for (const capability of capabilities) {

@@ -131,14 +131,26 @@ final class XertAPI {
     }
 
     func products() async throws -> [Product] {
-        try await restRequest(
-            path: "/rest/v1/products",
-            queryItems: [
-                URLQueryItem(name: "select", value: "*"),
-                URLQueryItem(name: "active", value: "eq.true"),
-                URLQueryItem(name: "order", value: "sort_order.asc")
-            ]
-        )
+        // Page past PostgREST max_rows — a truncated active-pack list silently
+        // hid later purchasable packs from Book / Account (web getProducts parity).
+        let pageSize = 500
+        var offset = 0
+        var products: [Product] = []
+        while true {
+            let page: [Product] = try await restRequest(
+                path: "/rest/v1/products",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "*"),
+                    URLQueryItem(name: "active", value: "eq.true"),
+                    URLQueryItem(name: "order", value: "sort_order.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ]
+            )
+            products.append(contentsOf: page)
+            if page.count < pageSize { return products }
+            offset += pageSize
+        }
     }
 
     func publicPlatformSettings() async throws -> PublicPlatformSettings? {
@@ -773,19 +785,45 @@ final class XertAPI {
         )
     }
 
-    func adminMembers(session auth: AuthSession, search: String = "", limit: Int = 50) async throws -> [AdminMemberSummary] {
-        try await rpc(
-            path: "admin_list_members_page",
-            body: AdminMemberPageRequest(
-                p_search: search.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                p_role: "all",
-                p_credit: "all",
-                p_limit: min(max(limit, 1), 100),
-                p_offset: 0,
-                p_user_id: nil
-            ),
-            auth: auth
-        )
+    func adminMembers(session auth: AuthSession, search: String = "", limit: Int? = nil) async throws -> [AdminMemberSummary] {
+        let normalizedSearch = search.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        // Owner command index passes an explicit small limit. Directory / search
+        // must page past the old hard 50 cut — later members (and grant/role
+        // refreshes) silently vanished from Command Centre while web pages.
+        if let limit {
+            return try await rpc(
+                path: "admin_list_members_page",
+                body: AdminMemberPageRequest(
+                    p_search: normalizedSearch,
+                    p_role: "all",
+                    p_credit: "all",
+                    p_limit: min(max(limit, 1), 100),
+                    p_offset: 0,
+                    p_user_id: nil
+                ),
+                auth: auth
+            )
+        }
+        let pageSize = 100
+        var offset = 0
+        var rows: [AdminMemberSummary] = []
+        while true {
+            let page: [AdminMemberSummary] = try await rpc(
+                path: "admin_list_members_page",
+                body: AdminMemberPageRequest(
+                    p_search: normalizedSearch,
+                    p_role: "all",
+                    p_credit: "all",
+                    p_limit: pageSize,
+                    p_offset: offset,
+                    p_user_id: nil
+                ),
+                auth: auth
+            )
+            rows.append(contentsOf: page)
+            if page.count < pageSize { return rows }
+            offset += pageSize
+        }
     }
 
     func adminMember(session auth: AuthSession, id: UUID) async throws -> AdminMemberSummary {
@@ -1044,14 +1082,26 @@ final class XertAPI {
     }
 
     func coaches() async throws -> [AdminCoach] {
-        try await restRequest(
-            path: "/rest/v1/coaches",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
-                URLQueryItem(name: "published", value: "eq.true"),
-                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
-            ]
-        )
+        // Page past PostgREST max_rows — a truncated published list silently
+        // hid later coaches from Explore (web getCoaches parity).
+        let pageSize = 500
+        var offset = 0
+        var coaches: [AdminCoach] = []
+        while true {
+            let page: [AdminCoach] = try await restRequest(
+                path: "/rest/v1/coaches",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
+                    URLQueryItem(name: "published", value: "eq.true"),
+                    URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ]
+            )
+            coaches.append(contentsOf: page)
+            if page.count < pageSize { return coaches }
+            offset += pageSize
+        }
     }
 
     func adminSaveSiteContent(
@@ -1441,22 +1491,34 @@ final class XertAPI {
             rows.3.map { $0.entry }, rows.4.map { $0.entry }, rows.5.map { $0.entry(category: "Schedule") },
             rows.6.map { $0.entry(category: "Content") }, rows.7.map { $0.entry }
         ]
+        // Keep every paged audit row — the old hard prefix(300) silently hid
+        // older subject-email / privilege history after tables already paged.
         return all
             .flatMap { $0 }
             .sorted { $0.createdAt > $1.createdAt }
-            .prefix(300)
-            .map { $0 }
     }
 
     func adminProducts(session auth: AuthSession) async throws -> [AdminProduct] {
-        try await restRequest(
-            path: "/rest/v1/products",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,slug,name,description,price_cents,currency,sessions_count,validity_days,stripe_price_id,featured,active,sort_order,updated_at"),
-                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated catalogue silently hid
+        // later session packs from Command Centre / Soft Launch money desks.
+        let pageSize = 500
+        var offset = 0
+        var products: [AdminProduct] = []
+        while true {
+            let page: [AdminProduct] = try await restRequest(
+                path: "/rest/v1/products",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,slug,name,description,price_cents,currency,sessions_count,validity_days,stripe_price_id,featured,active,sort_order,updated_at"),
+                    URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            products.append(contentsOf: page)
+            if page.count < pageSize { return products }
+            offset += pageSize
+        }
     }
 
     func adminCreateProduct(session auth: AuthSession, draft: AdminProductDraft) async throws -> AdminProduct {
@@ -1730,14 +1792,26 @@ final class XertAPI {
     }
 
     func adminCoaches(session auth: AuthSession) async throws -> [AdminCoach] {
-        try await restRequest(
-            path: "/rest/v1/coaches",
-            queryItems: [
-                URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
-                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
-            ],
-            auth: auth
-        )
+        // Page past PostgREST max_rows — a truncated coach list silently hid
+        // later published profiles from Command Centre and public Explore.
+        let pageSize = 500
+        var offset = 0
+        var coaches: [AdminCoach] = []
+        while true {
+            let page: [AdminCoach] = try await restRequest(
+                path: "/rest/v1/coaches",
+                queryItems: [
+                    URLQueryItem(name: "select", value: "id,name,role,bio,experience,currently_training_for,photo_url,social_url,category,sort_order,published,updated_at"),
+                    URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc,id.asc"),
+                    URLQueryItem(name: "limit", value: String(pageSize)),
+                    URLQueryItem(name: "offset", value: String(offset))
+                ],
+                auth: auth
+            )
+            coaches.append(contentsOf: page)
+            if page.count < pageSize { return coaches }
+            offset += pageSize
+        }
     }
 
     func adminCreateCoach(session auth: AuthSession, draft: AdminCoachDraft) async throws {

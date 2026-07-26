@@ -46,8 +46,8 @@ for (const path of ['../src/supabase/admin_cms_schema.sql', '../src/supabase/adm
   test(`${path} installs a secure, indexed and bounded follow-up queue`, () => {
     const sql = read(path);
     assert.match(sql, /create index if not exists session_bookings_member_status_session_idx[\s\S]*user_id, status, class_session_id/i);
-    assert.match(sql, /function public\.admin_member_follow_up_queue\(p_limit integer default 20\)/i);
-    assert.match(sql, /greatest\(1, least\(coalesce\(p_limit, 20\), 50\)\)/i);
+    assert.match(sql, /function public\.admin_member_follow_up_queue\(p_limit integer default 50\)/i);
+    assert.match(sql, /greatest\(1, least\(coalesce\(p_limit, 50\), 50\)\)/i);
     assert.match(sql, /if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/i);
     assert.match(sql, /bookings_count = 0[\s\S]*interval '7 days'[\s\S]*'no_first_booking'/i);
     assert.match(sql, /credits_expiring > 0 then 'credits_expiring'/i);

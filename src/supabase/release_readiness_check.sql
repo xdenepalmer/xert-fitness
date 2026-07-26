@@ -90,7 +90,8 @@ with required (capability, migration) as (
     ('booking_decision_notice_credit_honesty', 'src/supabase/booking_decision_notice_credit_honesty.sql'),
     ('admin_member_service_history_paging', 'src/supabase/admin_member_service_history_paging.sql'),
     ('admin_daily_operations_full_day', 'src/supabase/admin_ops_desk_and_notice_metrics.sql'),
-    ('admin_announcement_metrics_paging', 'src/supabase/admin_ops_desk_and_notice_metrics.sql')
+    ('admin_announcement_metrics_paging', 'src/supabase/admin_ops_desk_and_notice_metrics.sql'),
+    ('admin_desk_rpc_ceiling_defaults', 'src/supabase/admin_desk_rpc_ceiling_defaults.sql')
 ), readiness as (
   select
     required.capability,

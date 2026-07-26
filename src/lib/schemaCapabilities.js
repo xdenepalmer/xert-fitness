@@ -97,6 +97,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   admin_member_service_history_paging: 'Apply src/supabase/admin_member_service_history_paging.sql in Supabase.',
   admin_daily_operations_full_day: 'Apply src/supabase/admin_ops_desk_and_notice_metrics.sql in Supabase.',
   admin_announcement_metrics_paging: 'Apply src/supabase/admin_ops_desk_and_notice_metrics.sql in Supabase.',
+  admin_desk_rpc_ceiling_defaults: 'Apply src/supabase/admin_desk_rpc_ceiling_defaults.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

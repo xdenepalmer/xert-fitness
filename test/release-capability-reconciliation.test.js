@@ -54,6 +54,7 @@ test('linked migrations install the canonical manually-authored upgrades', () =>
     // pages past the historical hard limit 50 (admin_member_service_history_paging).
     // Covered by targeted-member-notices.test.js + schema-capabilities.test.js.
     ['../src/supabase/waitlist_promotion_notifications_upgrade.sql', '../supabase/migrations/20260721030000_waitlist_promotion_notifications.sql'],
+    ['../src/supabase/admin_desk_rpc_ceiling_defaults.sql', '../supabase/migrations/20260726126000_admin_desk_rpc_ceiling_defaults.sql'],
   ];
   for (const [sourcePath, migrationPath] of pairs) {
     const normalize = (sql) => sql

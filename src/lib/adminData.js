@@ -614,9 +614,19 @@ export async function getDashboardStats() {
 // ─── Coaches (admin CRUD) ───────────────────────────────────────────────────
 
 export async function getAllCoaches() {
-  const { data, error } = await supabase.from('coaches').select('*').order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated coach list silently hid later
+  // profiles from Command Centre / public Explore.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('coaches')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function createCoach(coach) {
@@ -1529,9 +1539,19 @@ export async function reconcileOrder(orderId) {
 // ─── Products (admin) ────────────────────────────────────────────────────────
 
 export async function getAllProducts() {
-  const { data, error } = await supabase.from('products').select('*').order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated catalogue silently hid later
+  // session packs from Soft Launch / Orders money desks.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function createProduct(product) {
@@ -1836,9 +1856,20 @@ export async function getOperationsHealth() {
     }),
 
     healthCheck('products', 'Session packs', async () => {
-      const { data, error } = await supabase.from('products').select('slug, active, stripe_price_id').eq('active', true);
-      if (error) throw error;
-      const products = data || [];
+      // Page past PostgREST max_rows — a truncated active-pack probe silently
+      // undercounted packs missing Stripe Price IDs at launch.
+      const products = await collectAdminBatches(async (page, pageSize) => {
+        const from = (page - 1) * pageSize;
+        const { data, error } = await supabase
+          .from('products')
+          .select('slug, active, stripe_price_id')
+          .eq('active', true)
+          .order('sort_order', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        return data || [];
+      });
       const missingStripePrices = products.filter(p => !p.stripe_price_id).length;
       if (products.length === 0) {
         return {

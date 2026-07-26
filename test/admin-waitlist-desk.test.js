@@ -31,7 +31,8 @@ for (const path of [
     );
 
     assert.match(overview, /if not public\.is_admin\(\) then raise exception 'ADMIN_ONLY'/i);
-    assert.match(overview, /greatest\(1, least\(coalesce\(p_limit, 20\), 50\)\)/i);
+    assert.match(overview, /admin_waitlist_overview\(p_limit integer default 50\)/i);
+    assert.match(overview, /greatest\(1, least\(coalesce\(p_limit, 50\), 50\)\)/i);
     assert.match(overview, /s\.status = 'published' and s\.start_time > now\(\)/i);
     assert.match(overview, /having count\(b\.id\) filter \(where b\.status = 'waitlisted'\) > 0/i);
     assert.match(overview, /order by b\.created_at, b\.id[\s\S]*?limit 1/i);

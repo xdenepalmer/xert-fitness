@@ -9,9 +9,20 @@ import { collectAdminBatches } from './adminPagination';
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
 export async function getProducts() {
-  const { data, error } = await supabase.from('products').select('*').eq('active', true).order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated active-pack list silently hid
+  // later purchasable packs from /booking and Account.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getSessionPackPaymentAvailability() {
@@ -313,9 +324,20 @@ export async function saveMyMemberOnboarding({
 // ─── Public content: coaches & events ─────────────────────────────────────────
 
 export async function getCoaches() {
-  const { data, error } = await supabase.from('coaches').select('*').eq('published', true).order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows — a truncated published list silently hid
+  // later coaches from Coaches / Explore.
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('coaches')
+      .select('*')
+      .eq('published', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getEvents() {
