@@ -36,6 +36,8 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
   const [healthReveal, setHealthReveal] = useState(null);
   const [revealingHealth, setRevealingHealth] = useState(false);
   const healthRevealRequestRef = useRef(0);
+  // Same-paint Save double-click must not fire two status updates.
+  const saveLockRef = useRef(false);
 
   const revealHealth = async () => {
     if (revealingHealth) return;
@@ -58,6 +60,8 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
   };
 
   const save = async () => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     try {
       await updateLead(table, lead.id, { status, admin_notes: notes });
@@ -67,6 +71,7 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   };
@@ -168,6 +173,8 @@ export default function LeadTable({ type = 'member' }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const requestIdRef = useRef(0);
+  const bulkLockRef = useRef(false);
+  const exportLockRef = useRef(false);
 
   const fetchFn = type === 'member' ? getMemberLeads : type === 'trainer' ? getTrainerLeads : getPartnerLeads;
   const table = type === 'member' ? 'member_interest' : type === 'trainer' ? 'trainer_interest' : 'partner_interest';
@@ -214,6 +221,8 @@ export default function LeadTable({ type = 'member' }) {
   };
 
   const handleExport = async () => {
+    if (exportLockRef.current || exporting || loading) return;
+    exportLockRef.current = true;
     setExporting(true);
     try {
       const rows = await collectLeadPages(targetPage => fetchFn({
@@ -236,12 +245,14 @@ export default function LeadTable({ type = 'member' }) {
     } catch (exportError) {
       toast({ title: 'Export failed', description: exportError.message, variant: 'destructive' });
     } finally {
+      exportLockRef.current = false;
       setExporting(false);
     }
   };
 
   const handleBulkUpdate = async () => {
-    if (!bulkStatus || selectedIds.size === 0) return;
+    if (!bulkStatus || selectedIds.size === 0 || bulkLockRef.current || bulkSaving) return;
+    bulkLockRef.current = true;
     setBulkSaving(true);
     try {
       await updateLeadStatuses(table, [...selectedIds], bulkStatus);
@@ -252,6 +263,7 @@ export default function LeadTable({ type = 'member' }) {
     } catch (bulkError) {
       toast({ title: 'Bulk update failed', description: bulkError.message, variant: 'destructive' });
     } finally {
+      bulkLockRef.current = false;
       setBulkSaving(false);
     }
   };

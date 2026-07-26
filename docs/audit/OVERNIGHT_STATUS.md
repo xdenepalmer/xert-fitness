@@ -5,10 +5,18 @@
 **Still shipping; apply through latest migration timestamp**
 `20260726115000_waitlist_skip_notice_accuracy.sql` (**26115**). This latest
 batch is **app-only** (no new SQL) — tip commit on
-`cursor/xert-audit-continuation-8c8e` after `38b5a4d` (see git log). Staff
+`cursor/xert-audit-continuation-8c8e` after `45e2b8e` (see git log). Staff
 roles were **not** built.
 
 **What was made safer overnight (plain English)**
+- Lead pipeline Save / bulk status / CSV refuse same-paint double submits;
+  Campaign Attribution and Admin Audit CSV stay disabled while a refresh or
+  range reload is in flight (stale/wrong-range export blocked).
+- iPhone Member App Controls freezes toggles and Save while the pack-checkout
+  confirm dialog is open, then clears confirm before persisting.
+- Public acquisition forms (member / trainer / partner / PT / booking request)
+  lock submit against double-insert, and honeypots use `autoComplete="new-password"`
+  so browser autofill cannot silently drop a real lead.
 - Session pack Create / Save / Stripe Price provision cannot double-fire on the
   same paint (same lock pattern as Events / Coaches).
 - Soft Launch timetable footer + sticky Book CTAs stay off while bookings are
@@ -209,6 +217,16 @@ No new migration for this batch.
 | iOS sign-out | Double-tap raced two unregister / remote sign-out Tasks | `isSigningOut` guard + disable Account / privacy-lock Sign Out |
 
 No new migration for this batch (app-only tip after `38b5a4d`).
+
+### 17. This batch — lead/CSV races, iOS settings confirm freeze, public form submit/honeypot
+| Area | Defect | Fix |
+|---|---|---|
+| LeadTable status / bulk | Save and bulk Apply used only React `saving` state — same-paint double-click could write two status updates | `saveLockRef` / `bulkLockRef` / `exportLockRef` |
+| CampaignStats / AdminAuditLog CSV | Export stayed enabled during refresh / range reload, so operators could download stale or wrong-range rows | `disabled={loading \|\| …}`; CampaignStats load generation ignores stale responses |
+| iOS Member App Controls | Payment-activation confirm left toggles + Save live, so the draft could change under the dialog before persist | Freeze mutations while `confirmingPaymentActivation`; clear confirm then save; Save guards in-flight store/exit saves |
+| Public forms | Double-submit could insert duplicate leads/requests; honeypot `autoComplete="off"` is still autofilled by some browsers (filled honeypot silently drops the lead) | `submitLockRef` on all five forms; honeypot `autoComplete="new-password"` |
+
+No new migration for this batch (app-only tip after `45e2b8e`).
 
 ---
 

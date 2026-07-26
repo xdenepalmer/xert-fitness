@@ -135,7 +135,7 @@ export default function AdminAuditLog() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={exportRows} disabled={events.length === 0}
+          <button type="button" onClick={exportRows} disabled={loading || events.length === 0}
             className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-xs text-xert-concrete/70 uppercase tracking-wider hover:border-xert-steel disabled:opacity-40">
             <Download className="w-3.5 h-3.5" /> CSV
           </button>

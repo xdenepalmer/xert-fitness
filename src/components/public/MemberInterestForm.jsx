@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitMemberInterest } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
@@ -53,6 +53,8 @@ export default function MemberInterestForm() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Same-paint double-submit must not insert two member_interest rows.
+  const submitLockRef = useRef(false);
   const [form, setForm] = useState({
     full_name: '', email: '', phone: '', age_range: '', suburb_town: '',
     current_training_level: '', main_training_goals: [], preferred_training_times: [],
@@ -105,8 +107,10 @@ export default function MemberInterestForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLockRef.current || loading) return;
     const err = validateStep();
     if (err) { setError(err); return; }
+    submitLockRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -114,6 +118,7 @@ export default function MemberInterestForm() {
       navigate('/thank-you');
     } catch {
       setError('Submission failed. Please try again or contact us directly.');
+      submitLockRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -121,8 +126,10 @@ export default function MemberInterestForm() {
 
   return (
     <form onSubmit={handleSubmit} autoComplete="off">
-      {/* Honeypot */}
-      <input type="text" name="company_website" value={form.company_website} autoComplete="off"
+      {/* Honeypot must never be browser-autofilled: a filled value silently
+          drops the lead while the UI still reports success. `new-password`
+          is ignored by password managers and website autofill heuristics. */}
+      <input type="text" name="company_website" value={form.company_website} autoComplete="new-password"
         onChange={e => set('company_website', e.target.value)}
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 

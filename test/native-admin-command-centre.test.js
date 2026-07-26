@@ -311,12 +311,12 @@ test('native platform controls and health recovery remain safe and reachable on 
   assert.match(platform, /Live platform settings could not be refreshed/);
   assert.match(platform, /No safe settings snapshot is available/);
   assert.match(platform, /private var platformMutationAvailable: Bool/);
-  assert.match(platform, /!admin\.isSavingSettings[\s\S]*!isExitSaving/);
+  assert.match(platform, /!admin\.isSavingSettings[\s\S]*!isExitSaving[\s\S]*!confirmingPaymentActivation/);
   assert.ok((platform.match(/disabled\(!platformMutationAvailable\)/g) || []).length >= 3);
   assert.match(platform, /let onDraftChange: \(AdminPlatformSettings\?\) -> Void/);
   assert.match(platform, /onDraftChange\(value\)/);
-  assert.match(platform, /private func save\(_ settings:[\s\S]*guard platformMutationAvailable else \{ return \}/);
-  assert.match(platform, /platformMutationAvailable[\s\S]*draft != admin\.settings/);
+  assert.match(platform, /private func save\(_ settings:[\s\S]*guard platformDataIsCurrent, !admin\.isLoading, !admin\.isSavingSettings, !isExitSaving else \{ return \}/);
+  assert.match(platform, /canSavePlatformSettings[\s\S]*!confirmingPaymentActivation[\s\S]*draft != admin\.settings/);
   assert.match(store, /loadedSources\.insert\("platform controls"\)/);
   assert.match(store, /refreshUnavailableSources\.removeAll \{ \$0 == "platform controls" \}/);
   assert.match(store, /guard loadedSources\.contains\("platform controls"\),[\s\S]*Refresh Platform Controls before saving/);

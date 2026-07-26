@@ -117,6 +117,7 @@ test('every remaining acquisition form names custom inputs and non-input control
     }
     // Browser autofill must never fill the spam honeypot: a filled honeypot
     // silently drops the lead while the UI still reports success.
-    assert.match(source, /name="company_website"[\s\S]{0,200}?autoComplete="off"/);
+    // `new-password` is ignored by password managers and website autofill.
+    assert.match(source, /name="company_website"[\s\S]{0,200}?autoComplete="new-password"/);
   }
 });

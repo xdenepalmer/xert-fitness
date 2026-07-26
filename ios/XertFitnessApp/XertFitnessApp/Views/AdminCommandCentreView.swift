@@ -5027,6 +5027,9 @@ private struct AdminPlatformView: View {
             && !admin.isLoading
             && !admin.isSavingSettings
             && !isExitSaving
+            // Freeze toggles while the payment-activation confirm is open so
+            // Save cannot commit a draft that no longer matches the dialog.
+            && !confirmingPaymentActivation
     }
 
     private var stripeHealthIsCurrent: Bool {
@@ -5232,8 +5235,12 @@ private struct AdminPlatformView: View {
         .confirmationDialog("Open session pack checkout?", isPresented: $confirmingPaymentActivation, titleVisibility: .visible) {
             Button("Enable pack checkout") {
                 guard let draft else { return }
+                // Clear confirm before save — platformMutationAvailable freezes
+                // while the dialog is up, and Save must be able to proceed.
+                confirmingPaymentActivation = false
                 save(draft)
             }
+            .disabled(admin.isSavingSettings || isExitSaving)
             Button("Keep payments paused", role: .cancel) {}
         } message: {
             Text(stripeHealthIsCurrent && admin.commerceHealth?.ready == true
@@ -5245,6 +5252,7 @@ private struct AdminPlatformView: View {
     private var platformSaveBar: some View {
         Button {
             guard let draft else { return }
+            guard canSavePlatformSettings else { return }
             XertHaptics.play(.lightImpact)
             if draft.payments_enabled && admin.settings?.payments_enabled != true {
                 confirmingPaymentActivation = true
@@ -5271,7 +5279,10 @@ private struct AdminPlatformView: View {
 
     private var canSavePlatformSettings: Bool {
         !admin.isSavingSettings
-            && platformMutationAvailable
+            && !confirmingPaymentActivation
+            && platformDataIsCurrent
+            && !admin.isLoading
+            && !isExitSaving
             && draft != nil
             && draft != admin.settings
     }
@@ -5282,7 +5293,8 @@ private struct AdminPlatformView: View {
     }
 
     private func save(_ settings: AdminPlatformSettings) {
-        guard platformMutationAvailable else { return }
+        // Refuse while exit-save or an in-flight store save owns the write path.
+        guard platformDataIsCurrent, !admin.isLoading, !admin.isSavingSettings, !isExitSaving else { return }
         Task {
             saved = await admin.saveSettings(session: session, draft: settings)
             if saved {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitTrainerInterest } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
@@ -49,6 +49,7 @@ export default function TrainerInterestForm() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const submitLockRef = useRef(false);
   const [form, setForm] = useState({
     full_name: '', email: '', phone: '',
     qualifications: '', years_experience: '', functional_training_experience: '',
@@ -85,8 +86,10 @@ export default function TrainerInterestForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLockRef.current || loading) return;
     const err = validateStep();
     if (err) { setError(err); return; }
+    submitLockRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -94,6 +97,7 @@ export default function TrainerInterestForm() {
       navigate('/thank-you');
     } catch {
       setError('Submission failed. Please try again.');
+      submitLockRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -101,7 +105,9 @@ export default function TrainerInterestForm() {
 
   return (
     <form onSubmit={handleSubmit} autoComplete="off">
-      <input type="text" name="company_website" value={form.company_website} autoComplete="off"
+      {/* Honeypot must never be browser-autofilled: a filled value silently
+          drops the lead while the UI still reports success. */}
+      <input type="text" name="company_website" value={form.company_website} autoComplete="new-password"
         onChange={e => set('company_website', e.target.value)}
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 

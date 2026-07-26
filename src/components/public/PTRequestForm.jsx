@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { requestPrivateSession } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
 import { PT_SESSION_TYPES } from '@/lib/ptRequestAnalytics';
@@ -39,6 +39,7 @@ export default function PTRequestForm({ onSuccess }) {
   const needsHealthConsent = hasHealthNotes || hasRehabGoal;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
     setForm(current => ({
@@ -53,6 +54,7 @@ export default function PTRequestForm({ onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLockRef.current || loading) return;
     if (!form.full_name.trim()) { setError('Full name is required.'); return; }
     if (!form.email.trim() || !form.email.includes('@')) { setError('Valid email is required.'); return; }
     if (!form.phone.trim()) { setError('Phone is required.'); return; }
@@ -66,6 +68,7 @@ export default function PTRequestForm({ onSuccess }) {
       return;
     }
     if (!form.consent_to_contact) { setError('Consent to contact is required.'); return; }
+    submitLockRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -73,6 +76,7 @@ export default function PTRequestForm({ onSuccess }) {
       onSuccess?.();
     } catch {
       setError('Submission failed. Please try again.');
+      submitLockRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -83,7 +87,7 @@ export default function PTRequestForm({ onSuccess }) {
       {/* Honeypot must never be browser-autofilled: a filled value silently
           drops the submission server-side while the UI still reports success. */}
       <input type="text" name="company_website" value={form.company_website}
-        onChange={e => set('company_website', e.target.value)} autoComplete="off"
+        onChange={e => set('company_website', e.target.value)} autoComplete="new-password"
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
       <div><FieldLabel htmlFor="pt-full-name" required>Full name</FieldLabel><Input id="pt-full-name" name="full_name" autoComplete="name" aria-required="true" placeholder="Your name" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>

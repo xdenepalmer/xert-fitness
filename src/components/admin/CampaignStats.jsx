@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getCampaignAttributionRows } from '@/lib/adminData';
@@ -45,24 +45,33 @@ export default function CampaignStats() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [updatedAt, setUpdatedAt] = useState(null);
+  const loadVersion = useRef(0);
 
   const load = async () => {
+    const version = loadVersion.current + 1;
+    loadVersion.current = version;
     setLoading(true);
     setLoadError('');
     try {
-      setRows(await getCampaignAttributionRows());
+      const nextRows = await getCampaignAttributionRows();
+      if (version !== loadVersion.current) return;
+      setRows(nextRows);
       setUpdatedAt(new Date());
       setHasLoaded(true);
     } catch (error) {
+      if (version !== loadVersion.current) return;
       const message = error.message || 'Check the member interest table and admin permissions.';
       if (!hasLoaded) setLoadError(message);
       toast({ title: 'Campaign data unavailable', description: message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    return () => { loadVersion.current += 1; };
+  }, []);
 
   const data = useMemo(() => summarizeCampaignAttribution(rows, { days: range }), [range, rows]);
   const chartMaximum = Math.max(...data.dailySignups.map(day => day.count), 1);
@@ -100,7 +109,7 @@ export default function CampaignStats() {
             className="min-h-11 bg-xert-ink border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite">
             {RANGE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <button type="button" onClick={exportRows} disabled={data.total === 0}
+          <button type="button" onClick={exportRows} disabled={loading || data.total === 0}
             className="min-h-11 inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/40 font-body text-xs text-xert-concrete/70 uppercase tracking-wider hover:border-xert-steel disabled:opacity-40">
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
