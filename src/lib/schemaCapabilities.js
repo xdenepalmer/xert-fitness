@@ -89,6 +89,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   session_capacity_concurrency_guard: 'Apply src/supabase/session_capacity_concurrency_guard.sql in Supabase.',
   soft_launch_switch_authz: 'Apply src/supabase/soft_launch_switch_authz.sql in Supabase.',
   booking_credit_release_clears_batch: 'Apply src/supabase/booking_credit_release_clears_batch.sql in Supabase.',
+  roll_call_stripe_refund_clears_credit_batch: 'Apply src/supabase/roll_call_stripe_refund_clears_credit_batch.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

@@ -50,6 +50,9 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
   const [revealingEmergency, setRevealingEmergency] = useState(false);
   const detailGenerationRef = useRef(0);
   const emergencyRevealRequestRef = useRef(0);
+  // Audited reveal is not idempotent — same-paint double Reveal mints two
+  // member_emergency_contact_reveals rows before `revealingEmergency` paints.
+  const emergencyRevealLockRef = useRef(false);
   // admin_send_member_notice is not idempotent — same-paint double submit mints
   // two private notices and two APNs deliveries before `noticeSaving` re-renders.
   const noticeLockRef = useRef(false);
@@ -91,7 +94,8 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
   }, [member.id]);
 
   const revealEmergencyContact = async () => {
-    if (revealingEmergency) return;
+    if (emergencyRevealLockRef.current || revealingEmergency) return;
+    emergencyRevealLockRef.current = true;
     const memberId = member.id;
     const requestId = ++emergencyRevealRequestRef.current;
     setRevealingEmergency(true);
@@ -107,6 +111,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
       toast({ title: 'Reveal failed', description: error.message, variant: 'destructive' });
     } finally {
       if (requestId === emergencyRevealRequestRef.current) setRevealingEmergency(false);
+      emergencyRevealLockRef.current = false;
     }
   };
 

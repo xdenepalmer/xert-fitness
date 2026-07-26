@@ -36,11 +36,16 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
   const [healthReveal, setHealthReveal] = useState(null);
   const [revealingHealth, setRevealingHealth] = useState(false);
   const healthRevealRequestRef = useRef(0);
+  // Audited reveal is not idempotent — same-paint double Reveal mints two
+  // member_interest_health_reveals rows before `revealingHealth` paints (iOS
+  // revealingMemberInterestHealthLeadID parity).
+  const healthRevealLockRef = useRef(false);
   // Same-paint Save double-click must not fire two status updates.
   const saveLockRef = useRef(false);
 
   const revealHealth = async () => {
-    if (revealingHealth) return;
+    if (healthRevealLockRef.current || revealingHealth) return;
+    healthRevealLockRef.current = true;
     const leadId = lead.id;
     const requestId = ++healthRevealRequestRef.current;
     setRevealingHealth(true);
@@ -56,6 +61,7 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
       toast({ title: 'Reveal failed', description: e.message, variant: 'destructive' });
     } finally {
       if (requestId === healthRevealRequestRef.current) setRevealingHealth(false);
+      healthRevealLockRef.current = false;
     }
   };
 

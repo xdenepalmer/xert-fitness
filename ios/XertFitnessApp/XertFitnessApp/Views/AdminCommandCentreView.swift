@@ -3850,7 +3850,10 @@ private struct AdminBookingRequestsView: View {
                                 VStack(alignment: .trailing, spacing: 5) {
                                     Text(statusLabel(booking.status).uppercased())
                                         .font(.caption2.weight(.bold)).foregroundStyle(bookingStatusColour(booking.status))
-                                    if booking.creditBatchID != nil {
+                                    // Only active credit-holding statuses — cancelled /
+                                    // waitlisted / declined must not look charged after release.
+                                    if booking.creditBatchID != nil,
+                                       ["requested", "confirmed", "attended", "no_show"].contains(booking.status) {
                                         Label("Reserved", systemImage: "ticket").font(.caption2).foregroundStyle(Color.xertPale.opacity(0.5))
                                     }
                                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color.xertSteel)
@@ -3945,7 +3948,10 @@ private struct AdminBookingRequestDetailView: View {
                 detailRow("Source", booking.source.label)
                 detailRow("Status", statusLabel(booking.status))
                 detailRow("Requested", booking.createdAt.formatted(date: .abbreviated, time: .shortened))
-                if booking.creditBatchID != nil { detailRow("Class credit", "Reserved") }
+                if booking.creditBatchID != nil,
+                   ["requested", "confirmed", "attended", "no_show"].contains(booking.status) {
+                    detailRow("Class credit", "Reserved")
+                }
                 if let email = nonBlank(booking.email), let url = URL(string: "mailto:\(email)") {
                     Link(destination: url) { Label(email, systemImage: "envelope") }
                 }

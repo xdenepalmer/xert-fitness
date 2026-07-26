@@ -3,11 +3,18 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726119000_booking_credit_release_clears_batch.sql` (**26119**). Tip
+`20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` (**26120**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Roll-call + Stripe refund clear `credit_batch_id` (**26120**): finishing a
+  roll call that releases unactioned requests, and Stripe full-refund cancel of
+  open requested/confirmed places, null the batch FK so cancelled rows cannot
+  keep a “Credit reserved” marker after the pack was topped up or revoked.
+- Web audited reveals (injury + emergency) refuse same-paint double Reveal so
+  two audit rows cannot mint before re-render (iOS in-flight guard parity);
+  booking desk Reserved badges only show for credit-holding statuses.
 - Soft-launch switch authz (**26118**): database + activate_payments API refuse
   pack checkout without bookings, and refuse enabling bookings without
   `member_booking_switch_guard` — UI-only gates are no longer bypassable via a
@@ -199,16 +206,19 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726119000_booking_credit_release_clears_batch.sql` (**26119** — full
-   list + command examples below).
+   `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` (**26120** —
+   full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
-   `soft_launch_switch_authz` (26118*) and
-   `booking_credit_release_clears_batch` (26119*).
+   `soft_launch_switch_authz` (26118*),
+   `booking_credit_release_clears_batch` (26119*), and
+   `roll_call_stripe_refund_clears_credit_batch` (26120*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
    emergency contact writes an audit row. Demote confirmed→waitlisted clears
+   `credit_batch_id`. Roll-call release of a requested place clears
+   `credit_batch_id`. Stripe full refund of an open confirmed place clears
    `credit_batch_id`. Concurrent book/confirm against a full class raises
    `SESSION_FULL`.
 
@@ -570,6 +580,16 @@ Migration / operator mirrors:
 `supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql`
 ↔ `src/supabase/booking_credit_release_clears_batch.sql`. Apply through **26119**.
 
+### 38. This batch — roll-call / Stripe-refund credit FK clear + audited reveal locks
+| Area | Defect | Fix |
+|---|---|---|
+| Silent credit marker | Roll-call released requested credits then cancelled without nulling `credit_batch_id`; Stripe full-refund cancelled open requested/confirmed the same way — desk “Credit reserved” stayed lit on cancelled rows | Null FK in both paths; capability `roll_call_stripe_refund_clears_credit_batch` (**26120**) |
+| Privacy / race | Web Lead injury Reveal and Member emergency Reveal only gated on React busy state — same-paint double click could mint two audited reveal rows before re-render (iOS already serialises) | `healthRevealLockRef` / `emergencyRevealLockRef`; Reserved badge only for credit-holding statuses (web + iPhone) |
+
+Migration / operator mirror:
+`supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql`
+↔ `src/supabase/roll_call_stripe_refund_clears_credit_batch.sql`. Apply through **26120**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -619,7 +639,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26119)
+### Copy-paste ordered filenames (overnight catch-up through 26120)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -642,6 +662,7 @@ supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql
 supabase/migrations/20260726117000_session_capacity_concurrency_guard.sql
 supabase/migrations/20260726118000_soft_launch_switch_authz.sql
 supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
+supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -663,7 +684,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
+  -f supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -696,6 +717,7 @@ row shows `installed = true` and `release_ready = true`.
 | 16 | `20260726117000_session_capacity_concurrency_guard.sql` | `session_capacity_concurrency_guard` — session-locked `SESSION_FULL` on concurrent book/confirm (incl. session moves) |
 | 17 | `20260726118000_soft_launch_switch_authz.sql` | `soft_launch_switch_authz` — payments require bookings; bookings require switch guard (DB + API) |
 | 18 | `20260726119000_booking_credit_release_clears_batch.sql` | `booking_credit_release_clears_batch` — release paths null `credit_batch_id` |
+| 19 | `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` | `roll_call_stripe_refund_clears_credit_batch` — roll-call + Stripe refund cancel null `credit_batch_id` |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -703,14 +725,15 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
-`soft_launch_switch_authz` and `booking_credit_release_clears_batch`.
+`soft_launch_switch_authz`, `booking_credit_release_clears_batch`, and
+`roll_call_stripe_refund_clears_credit_batch`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726119000_booking_credit_release_clears_batch.sql`. Confirm readiness SQL.
+   `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -825,3 +848,8 @@ show `installed = true` and `release_ready = true`, including
     enable bookings without the switch-guard capability; demote/cancel/class
     cancel clear `credit_batch_id` when releasing a credit; web Member drawer
     can Reveal emergency contact (audited) and clears it on member switch.
+37. **Roll-call / Stripe-refund credit clear + audited reveal locks** — Roll call
+    that releases requested places and Stripe full-refund cancel of open
+    requested/confirmed clear `credit_batch_id`; web Lead/Member Reveal ignore a
+    second same-paint click; booking desk Reserved badges only for
+    requested/confirmed/attended/no_show.

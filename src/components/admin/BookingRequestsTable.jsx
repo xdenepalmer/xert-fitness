@@ -334,7 +334,9 @@ export default function BookingRequestsTable() {
                     <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
                       {b.source === 'member' ? 'Member credit booking' : 'Enquiry form'}
                     </span>
-                    {b.source === 'member' && b.credit_batch_id && (
+                    {b.source === 'member'
+                      && b.credit_batch_id
+                      && ['requested', 'confirmed', 'attended', 'no_show'].includes(b.status) && (
                       <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
                         Credit reserved
                       </span>
