@@ -8,6 +8,14 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Operator re-runs of cancel/refund/fulfill/class-cancel scripts
+  (`cancel_booking_expired_batch_refund`, `credit_batch_refund_reactivation`,
+  `class_cancellation_credit_refund_fix`, `stripe_fulfillment_deleted_member_fix`,
+  `stripe_payment_fulfillment_upgrade`) skip-if-newer so they cannot replace
+  helper-backed refunds, Stripe-refunded pack skips, or deleted-buyer email
+  erasure. Ops Health remediation for those money/privacy capabilities now
+  points at the strong `src/supabase/` mirrors (not the weaker historical
+  migrations). Drift tests pin the skip notices.
 - Operator re-runs of `waitlist_fifo_promotion_upgrade.sql` no longer restore
   an inline credit refund that could top up a Stripe-refunded pack. Re-runs of
   `request_notes_health_consent.sql` cannot install the unaudited health-reveal
@@ -429,6 +437,13 @@ No new migration for this batch (operator + iOS tip). Apply through **26116** re
 | Privacy disclosure | Injury reveal still said “deliberate” (emergency contact already “recorded”); iOS push device tokens were not listed as collected / deleted with the account | Privacy: recorded + logged health reveal; collect/retain device notification tokens |
 
 No new migration for this batch (operator + Privacy tip). Apply through **26116** remains current.
+
+### 30. This batch — money/privacy operator skip-if-newer + Ops Health remediation paths
+| Area | Defect | Fix |
+|---|---|---|
+| Operator SQL drift (money) | Re-running older cancel/refund/class-cancel/fulfill operator scripts could replace helper-backed or erasure-aware RPC bodies; Ops Health also pointed at historical migrations that still inline refunds / re-attach deleted-buyer email | Skip-if-newer on `cancel_booking_expired_batch_refund`, `credit_batch_refund_reactivation`, `class_cancellation_credit_refund_fix`, `stripe_fulfillment_deleted_member_fix`, `stripe_payment_fulfillment_upgrade`; Ops Health actions retargeted to strong `src/supabase/` mirrors; drift tests pin `keeping newer…` |
+
+No new migration for this batch (operator tip). Apply through **26116** remains current.
 
 ---
 

@@ -26,7 +26,8 @@ async function executableBody(url) {
 
 test('operator mirror keeps reactivation behaviour and refuses Stripe-refunded packs', async () => {
   // Mirror is intentionally ahead of the historical migration so re-runs cannot
-  // strip refund_skips_stripe_refunded_batches.
+  // strip refund_skips_stripe_refunded_batches. Skip-if-newer keeps a live body
+  // that already refuses orders.status = 'refunded'.
   const [migration, mirror] = await Promise.all([
     executableBody(MIGRATION),
     executableBody(MIRROR),
@@ -41,6 +42,9 @@ test('operator mirror keeps reactivation behaviour and refuses Stripe-refunded p
     assert.match(text, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
   }
   assert.match(mirror, /o\.status = 'refunded'/);
+  assert.match(mirror, /keeping newer refund_credits_to_batch/);
+  assert.match(mirror, /keeping newer admin_cancel_class_session/);
+  assert.match(mirror, /keeping newer cancel_booking/);
 });
 
 test('class cancel refunds attended and no_show that still hold a credit', async () => {

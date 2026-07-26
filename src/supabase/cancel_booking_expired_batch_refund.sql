@@ -13,7 +13,25 @@
 -- (the same lead time that earned the refund). Unexpired and never-expiring
 -- batches are unchanged aside from remaining + 1. Waitlisted places still do
 -- not refund (they never held a credit). Late confirmed cancels still forfeit.
+--
+-- Re-run safe: an older copy inlined remaining+1 and skipped the shared helper,
+-- so Ops Health re-runs could restore credits onto packs Stripe had already
+-- fully refunded. Keep a newer helper-backed body.
 
+do $install_cancel_booking$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'cancel_booking'
+    and pg_get_function_identity_arguments(p.oid) = 'p_booking_id uuid';
+  if v_def is not null and v_def ilike '%refund_credits_to_batch%' then
+    raise notice 'keeping newer cancel_booking';
+  else
+    execute $fn$
 create or replace function public.cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -43,6 +61,10 @@ begin
     perform public.refund_credits_to_batch(v_batch, 1, v_start);
   end if;
 end; $$;
+$fn$;
+  end if;
+end;
+$install_cancel_booking$;
 
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 grant execute on function public.cancel_booking(uuid) to authenticated;

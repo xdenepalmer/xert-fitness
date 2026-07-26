@@ -11,6 +11,10 @@
 -- state: it also includes attended/no_show refund targets and expired-pack
 -- reactivation via the shared helper (same body as
 -- credit_batch_refund_reactivation.sql for the cancel path).
+--
+-- Re-run safe: keep refund_credits_to_batch / admin_cancel bodies that refuse
+-- Stripe-refunded packs and refund attended/no_show. Older copies restored
+-- credits onto packs Stripe had already fully refunded.
 
 create or replace function public.credit_batch_expires_at_after_refund(
   p_expires_at timestamptz,
@@ -28,6 +32,20 @@ as $$
   end;
 $$;
 
+do $install_refund_credits_to_batch$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'refund_credits_to_batch'
+    and pg_get_function_identity_arguments(p.oid) = 'p_batch_id uuid, p_count integer, p_anchor timestamp with time zone';
+  if v_def is not null and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer refund_credits_to_batch';
+  else
+    execute $fn$
 create or replace function public.refund_credits_to_batch(
   p_batch_id uuid,
   p_count integer,
@@ -53,12 +71,33 @@ begin
      );
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_refund_credits_to_batch$;
 
 revoke all on function public.credit_batch_expires_at_after_refund(timestamptz, timestamptz)
   from public, anon, authenticated;
 revoke all on function public.refund_credits_to_batch(uuid, integer, timestamptz)
   from public, anon, authenticated;
 
+do $install_admin_cancel_class_session$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'admin_cancel_class_session'
+    and pg_get_function_identity_arguments(p.oid) = 'p_session_id uuid';
+  if v_def is not null
+     and v_def ilike '%attended%'
+     and v_def ilike '%no_show%'
+     and v_def ilike '%status = ''refunded''%' then
+    raise notice 'keeping newer admin_cancel_class_session';
+  else
+    execute $fn$
 create or replace function public.admin_cancel_class_session(p_session_id uuid)
 returns integer
 language plpgsql
@@ -136,6 +175,10 @@ begin
   return v_cancelled_count + v_enquiry_cancelled_count;
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_admin_cancel_class_session$;
 
 revoke all on function public.admin_cancel_class_session(uuid) from public, anon;
 grant execute on function public.admin_cancel_class_session(uuid) to authenticated;

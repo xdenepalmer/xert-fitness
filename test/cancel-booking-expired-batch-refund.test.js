@@ -47,6 +47,7 @@ test('operator mirror forwards cancel_booking through the shared refund helper',
   // Re-running the operator script must not reinstall an inline refund that
   // bypasses refund_skips_stripe_refunded_batches.
   const text = await executableBody(MIRROR);
+  assert.match(text, /keeping newer cancel_booking/);
   assert.match(text, /perform public\.refund_credits_to_batch\(v_batch, 1, v_start\)/);
   assert.match(
     text,

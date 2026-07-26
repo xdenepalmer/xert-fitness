@@ -37,11 +37,29 @@
 -- p_credit_validity_days overload that api/stripe-webhook.js calls. Do not
 -- recreate the retired p_expires_at overload (that was the bug in the first
 -- attempt at this fix).
+--
+-- Re-run safe: an older copy re-attached Stripe's p_email onto orphaned orders
+-- after delete_member_account nulled orders.email. Keep a newer body that
+-- forces email null when orders.user_id is already null.
 
 drop function if exists public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, timestamptz
 );
 
+do $install_fulfill_stripe_checkout$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'fulfill_stripe_checkout'
+    and pg_get_function_identity_arguments(p.oid) = 'p_checkout_session_id text, p_user_id uuid, p_product_id uuid, p_email text, p_amount_cents integer, p_currency text, p_payment_intent_id text, p_paid_at timestamp with time zone, p_credit_total integer, p_credit_validity_days integer';
+  if v_def is not null and v_def ilike '%user_id is null then null%' then
+    raise notice 'keeping newer fulfill_stripe_checkout';
+  else
+    execute $fn$
 create or replace function public.fulfill_stripe_checkout(
   p_checkout_session_id text,
   p_user_id uuid,
@@ -138,6 +156,10 @@ begin
   return query select v_order.id, v_order.status, v_credit_rows = 1;
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_fulfill_stripe_checkout$;
 
 revoke execute on function public.fulfill_stripe_checkout(
   text, uuid, uuid, text, integer, text, text, timestamptz, integer, integer

@@ -126,6 +126,7 @@ test('operator mirror keeps deleted-member settlement and email erasure', async 
   // Operator file is ahead of the historical overload-repair migration so a
   // re-run cannot restore the unguarded Stripe email write.
   const operator = await readFile(OPERATOR, 'utf8');
+  assert.match(operator, /keeping newer fulfill_stripe_checkout/);
   assert.match(
     operator,
     /\(v_order\.user_id is not null and v_order\.user_id is distinct from p_user_id\)/,

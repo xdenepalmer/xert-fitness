@@ -338,6 +338,58 @@ test('older operator scripts cannot downgrade audited health reveal or waitlist 
   assert.match(authz.sql, /'audit_event_id'/);
 });
 
+test('older money/privacy operator scripts skip-if-newer for cancel/refund/fulfill/class-cancel', () => {
+  // Ops Health used to point at historical migrations whose bodies omit helper
+  // refunds, Stripe-refunded pack skips, or deleted-buyer email erasure.
+  // These operator mirrors must not unconditionally replace a newer live body.
+  const guarded = [
+    {
+      name: 'cancel_booking_expired_batch_refund.sql',
+      notice: /keeping newer cancel_booking/,
+      mustMatch: [/refund_credits_to_batch/, /install_cancel_booking/],
+    },
+    {
+      name: 'credit_batch_refund_reactivation.sql',
+      notice: /keeping newer refund_credits_to_batch/,
+      mustMatch: [
+        /keeping newer cancel_booking/,
+        /keeping newer admin_cancel_class_session/,
+        /o\.status = 'refunded'/,
+        /attended/,
+        /no_show/,
+      ],
+    },
+    {
+      name: 'class_cancellation_credit_refund_fix.sql',
+      notice: /keeping newer admin_cancel_class_session/,
+      mustMatch: [/keeping newer refund_credits_to_batch/, /o\.status = 'refunded'/, /attended/, /no_show/],
+    },
+    {
+      name: 'stripe_fulfillment_deleted_member_fix.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      mustMatch: [/user_id is null then null/, /install_fulfill_stripe_checkout/],
+    },
+    {
+      name: 'stripe_payment_fulfillment_upgrade.sql',
+      notice: /keeping newer fulfill_stripe_checkout/,
+      mustMatch: [/user_id is null then null/, /install_fulfill_stripe_checkout/],
+    },
+  ];
+
+  for (const { name, notice, mustMatch } of guarded) {
+    const script = scripts().find(entry => entry.name === name);
+    assert.ok(script, `missing operator script ${name}`);
+    assert.match(script.sql, notice, `${name} must skip-if-newer`);
+    for (const pattern of mustMatch) {
+      assert.match(
+        script.sql,
+        pattern,
+        `${name} is not re-run safe against a newer money/privacy shape (${pattern})`,
+      );
+    }
+  }
+});
+
 test('waitlist_fifo operator script cannot recreate admin_set_booking_status with an inline refund', () => {
   // credit_batch_refund_reactivation / fulfillment_erasure put refunds through
   // refund_credits_to_batch (skips Stripe-refunded packs). Re-running the older
