@@ -233,3 +233,59 @@ test('waitlist skip refuses to cancel when the expected booking is no longer FIF
   );
   assert.match(skipHandler, /refreshWaitlistOverview\(\)/);
 });
+
+/**
+ * Soft-launch / onboarding / erasure gates that must stay in the overnight
+ * regression bundle (not only their dedicated suite files).
+ */
+test('soft-launch public booking gate keeps class_bookings inserts behind bookings_enabled', () => {
+  for (const path of [
+    '../supabase/migrations/20260726113000_public_booking_switch_gate.sql',
+    '../src/supabase/public_booking_switch_gate.sql',
+  ]) {
+    const sql = read(path);
+    assert.match(sql, /v_table = 'class_bookings'/);
+    assert.match(sql, /bookings_enabled is true/);
+    assert.match(sql, /values \('public_booking_switch_gate'\)/i);
+  }
+
+  const timetable = read('../src/pages/SoftLaunchTimetable.jsx');
+  assert.match(timetable, /settings\.bookings_enabled === true && <StickyMobileCTA/);
+  assert.match(timetable, /<PublicFooter showBookCta=\{settings\.bookings_enabled === true\}/);
+
+  const booking = read('../src/pages/Booking.jsx');
+  assert.match(booking, /setBookingsEnabled\(settings\?\.bookings_enabled === true\)/);
+  assert.match(booking, /if \(!bookingsEnabled\)/);
+});
+
+test('member onboarding booking gate fails closed before session_bookings insert', () => {
+  for (const path of [
+    '../supabase/migrations/20260726114000_member_onboarding_booking_gate.sql',
+    '../src/supabase/member_onboarding_booking_gate.sql',
+  ]) {
+    const sql = read(path);
+    assert.match(sql, /enforce_member_onboarding_for_booking/i);
+    assert.match(sql, /MEMBER_ONBOARDING_REQUIRED/i);
+    assert.match(sql, /before insert on public\.session_bookings/i);
+    assert.match(sql, /values \('member_onboarding_booking_gate'\)/i);
+  }
+
+  const web = read('../src/lib/bookingData.js');
+  assert.match(web, /MEMBER_ONBOARDING_REQUIRED:\s*'Complete Member Readiness/);
+});
+
+test('deleted-buyer fulfillment keeps Stripe email erased on orphaned orders', () => {
+  const executable = text => text.split('\n').filter(line => !line.trimStart().startsWith('--')).join('\n');
+  for (const path of [
+    '../supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql',
+    '../src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql',
+    '../src/supabase/stripe_fulfillment_deleted_member_fix.sql',
+  ]) {
+    const sql = executable(read(path));
+    assert.match(
+      sql,
+      /email = case\s+when orders\.user_id is null then null\s+else coalesce\(nullif\(btrim\(p_email\), ''\), orders\.email\)\s+end/s,
+    );
+    assert.doesNotMatch(sql, /set status = 'paid',\s*email = coalesce\(nullif\(btrim\(p_email\)/s);
+  }
+});

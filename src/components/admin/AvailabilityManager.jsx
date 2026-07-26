@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getAvailabilityBlocks, createAvailabilityBlock, updateAvailabilityBlock, deleteAvailabilityBlock, getBlackoutPeriods, createBlackoutPeriod, updateBlackoutPeriod, deleteBlackoutPeriod } from '@/lib/adminData';
@@ -26,6 +26,8 @@ export default function AvailabilityManager() {
   const [loadError, setLoadError] = useState('');
   const [removingId, setRemovingId] = useState(null);
   const [pendingRemoval, setPendingRemoval] = useState(null);
+  // Same-paint Save can mint two blocks / blackouts before `saving` re-renders.
+  const saveLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -59,7 +61,10 @@ export default function AvailabilityManager() {
   }, [saving, showBlackoutForm, showBlockForm]);
 
   const saveBlock = async () => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
+    const wasEditing = Boolean(editingBlock);
     try {
       const payload = normalizeAvailabilityBlock(blockForm);
       if (editingBlock) await updateAvailabilityBlock(editingBlock.id, payload, editingBlock.updated_at);
@@ -68,16 +73,20 @@ export default function AvailabilityManager() {
       setEditingBlock(null);
       setShowBlockForm(false);
       await load();
-      toast({ title: editingBlock ? 'Availability block updated' : 'Availability block saved' });
+      toast({ title: wasEditing ? 'Availability block updated' : 'Availability block saved' });
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
   const saveBlackout = async () => {
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
+    const wasEditing = Boolean(editingBlackout);
     try {
       const payload = normalizeBlackoutPeriod(blackoutForm);
       if (editingBlackout) await updateBlackoutPeriod(editingBlackout.id, payload, editingBlackout.updated_at);
@@ -86,11 +95,12 @@ export default function AvailabilityManager() {
       setEditingBlackout(null);
       setShowBlackoutForm(false);
       await load();
-      toast({ title: editingBlackout ? 'Blackout period updated' : 'Blackout period saved' });
+      toast({ title: wasEditing ? 'Blackout period updated' : 'Blackout period saved' });
     } catch (e) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 
@@ -154,7 +164,7 @@ export default function AvailabilityManager() {
       {tab === 'availability' && (
         <div>
           <div className="flex justify-end mb-4">
-            <button onClick={() => { setEditingBlock(null); setBlockForm(emptyBlock()); setShowBlockForm(true); }} disabled={removingId !== null}
+            <button type="button" onClick={() => { setEditingBlock(null); setBlockForm(emptyBlock()); setShowBlockForm(true); }} disabled={removingId !== null || saving}
               className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
               + Add block
             </button>
@@ -181,9 +191,9 @@ export default function AvailabilityManager() {
                       setEditingBlock(b);
                       setBlockForm(availabilityBlockEditorForm(b));
                       setShowBlockForm(true);
-                    }} disabled={removingId !== null}
+                    }} disabled={removingId !== null || saving}
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
-                    <button onClick={() => setPendingRemoval({ kind: 'availability', item: b })} disabled={removingId !== null}
+                    <button type="button" onClick={() => setPendingRemoval({ kind: 'availability', item: b })} disabled={removingId !== null || saving}
                       className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
                       {removingId === b.id ? 'Removing...' : 'Remove'}
                     </button>
@@ -232,9 +242,9 @@ export default function AvailabilityManager() {
                     className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} disabled={saving}
+                  <button type="button" onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
-                  <button onClick={saveBlock} disabled={saving}
+                  <button type="button" onClick={() => void saveBlock()} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
                     {saving ? 'Saving...' : editingBlock ? 'Update block' : 'Save block'}
                   </button>
@@ -248,7 +258,7 @@ export default function AvailabilityManager() {
       {tab === 'blackouts' && (
         <div>
           <div className="flex justify-end mb-4">
-            <button onClick={() => { setEditingBlackout(null); setBlackoutForm(emptyBlackout()); setShowBlackoutForm(true); }} disabled={removingId !== null}
+            <button type="button" onClick={() => { setEditingBlackout(null); setBlackoutForm(emptyBlackout()); setShowBlackoutForm(true); }} disabled={removingId !== null || saving}
               className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
               + Add blackout
             </button>
@@ -276,9 +286,9 @@ export default function AvailabilityManager() {
                       setEditingBlackout(b);
                       setBlackoutForm(blackoutPeriodEditorForm(b));
                       setShowBlackoutForm(true);
-                    }} disabled={removingId !== null}
+                    }} disabled={removingId !== null || saving}
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-50">Edit</button>
-                    <button onClick={() => setPendingRemoval({ kind: 'blackout', item: b })} disabled={removingId !== null}
+                    <button type="button" onClick={() => setPendingRemoval({ kind: 'blackout', item: b })} disabled={removingId !== null || saving}
                       className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors disabled:opacity-50">
                       {removingId === b.id ? 'Removing...' : 'Remove'}
                     </button>
@@ -324,9 +334,9 @@ export default function AvailabilityManager() {
                     className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowBlackoutForm(false); setEditingBlackout(null); }} disabled={saving}
+                  <button type="button" onClick={() => { setShowBlackoutForm(false); setEditingBlackout(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
-                  <button onClick={saveBlackout} disabled={saving}
+                  <button type="button" onClick={() => void saveBlackout()} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
                     {saving ? 'Saving...' : editingBlackout ? 'Update blackout' : 'Save blackout'}
                   </button>

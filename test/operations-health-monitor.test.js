@@ -70,3 +70,12 @@ test('operations health exposes bounded Stripe incidents with an accessible copy
   assert.match(monitor, /XERT verifies the event identity and payment mode/);
   assert.match(monitor, /AdminConfirmDialog/);
 });
+
+test('operations health force-refreshes after retry/resolve and locks concurrent incident actions', () => {
+  assert.match(monitor, /async \(\{ initial = false, force = false \} = \{\}\)/);
+  assert.match(monitor, /if \(requestInFlightRef\.current && !force\) return/);
+  assert.match(monitor, /await load\(\{ force: true \}\)/);
+  assert.match(monitor, /const actionLockRef = useRef\(false\)/);
+  assert.match(monitor, /if \(actionLockRef\.current \|\| resolving \|\| retrying\) return/);
+  assert.match(monitor, /disabled=\{incidentActionsLocked\}/);
+});

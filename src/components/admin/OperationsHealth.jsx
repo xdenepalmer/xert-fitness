@@ -61,9 +61,12 @@ export default function OperationsHealth({ onNavigate }) {
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
+  const actionLockRef = useRef(false);
 
-  const load = useCallback(async ({ initial = false } = {}) => {
-    if (requestInFlightRef.current) return;
+  const load = useCallback(async ({ initial = false, force = false } = {}) => {
+    // Post-mutation refresh must not no-op behind a background poll — otherwise
+    // "Mark handled" / "Retry safely" can succeed while the incident stays painted.
+    if (requestInFlightRef.current && !force) return;
     requestInFlightRef.current = true;
     const requestId = ++requestIdRef.current;
     if (initial) setLoading(true);
@@ -139,22 +142,27 @@ export default function OperationsHealth({ onNavigate }) {
   }, []);
 
   const markIncidentHandled = useCallback(async () => {
+    if (actionLockRef.current || resolving || retrying) return;
     if (!pendingResolution?.event_id || !pendingResolution?.error_code) return;
+    actionLockRef.current = true;
     setResolving(true);
     try {
       await resolveStripeOperatorReview(pendingResolution.event_id, pendingResolution.error_code);
       setPendingResolution(null);
       toast({ title: 'Stripe incident marked handled' });
-      await load();
+      await load({ force: true });
     } catch (error) {
       toast({ title: 'Could not resolve incident', description: error.message, variant: 'destructive' });
     } finally {
       setResolving(false);
+      actionLockRef.current = false;
     }
-  }, [load, pendingResolution]);
+  }, [load, pendingResolution, resolving, retrying]);
 
   const retryIncident = useCallback(async () => {
+    if (actionLockRef.current || resolving || retrying) return;
     if (!pendingRetry?.event_id) return;
+    actionLockRef.current = true;
     setRetrying(true);
     try {
       const result = await retryStripeWebhookEvent(pendingRetry.event_id);
@@ -167,13 +175,16 @@ export default function OperationsHealth({ onNavigate }) {
           ? 'XERT processed the canonical Stripe event and reconciled its records.'
           : 'XERT safely completed the event without a payment record change.',
       });
-      await load();
+      await load({ force: true });
     } catch (error) {
       toast({ title: 'Could not retry Stripe event', description: error.message, variant: 'destructive' });
     } finally {
       setRetrying(false);
+      actionLockRef.current = false;
     }
-  }, [load, pendingRetry]);
+  }, [load, pendingRetry, resolving, retrying]);
+
+  const incidentActionsLocked = resolving || retrying || Boolean(pendingResolution) || Boolean(pendingRetry);
 
   return (
     <div className="p-6 space-y-6">
@@ -369,7 +380,8 @@ export default function OperationsHealth({ onNavigate }) {
                               {incident.resolution}
                             </p>
                             <button type="button" onClick={() => setPendingResolution(incident)}
-                              className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
+                              disabled={incidentActionsLocked}
+                              className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10 disabled:opacity-50">
                               <CheckCircle2 className="size-4" />
                               Mark handled
                             </button>
@@ -377,7 +389,8 @@ export default function OperationsHealth({ onNavigate }) {
                         )}
                         {!incident.resolution && (
                           <button type="button" onClick={() => setPendingRetry(incident)}
-                            className="mt-3 inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
+                            disabled={incidentActionsLocked}
+                            className="mt-3 inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10 disabled:opacity-50">
                             <RefreshCw className="size-4" />
                             Retry safely
                           </button>

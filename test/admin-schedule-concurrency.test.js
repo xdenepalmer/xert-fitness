@@ -32,3 +32,16 @@ test('availability admin passes the version loaded into every edit and delete', 
   assert.match(managerSource, /deleteAvailabilityBlock\(block\.id, block\.updated_at\)/);
   assert.match(managerSource, /deleteBlackoutPeriod\(blackout\.id, blackout\.updated_at\)/);
 });
+
+test('availability and blackout editors refuse same-paint double saves', () => {
+  assert.match(managerSource, /const saveLockRef = useRef\(false\)/);
+  for (const name of ['saveBlock', 'saveBlackout']) {
+    const start = managerSource.indexOf(`const ${name} = async`);
+    assert.notEqual(start, -1, `${name} must exist`);
+    const next = managerSource.indexOf('\n  const ', start + 1);
+    const body = managerSource.slice(start, next === -1 ? managerSource.length : next);
+    assert.match(body, /if \(saveLockRef\.current \|\| saving\) return/);
+    assert.match(body, /saveLockRef\.current = true/);
+    assert.match(body, /saveLockRef\.current = false/);
+  }
+});
