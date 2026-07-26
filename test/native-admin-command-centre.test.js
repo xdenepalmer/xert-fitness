@@ -351,6 +351,7 @@ test('native owner overview counts fresh lead work without downloading lead hist
   ]);
 
   assert.match(models, /struct AdminLeadActionCounts: Equatable[\s\S]*var total: Int/);
+  assert.match(models, /var priorityPipeline: AdminLeadPipeline\?[\s\S]*filter \{ \$0\.count > 0 \}[\s\S]*AdminLeadPipeline\.allCases\.firstIndex/);
   assert.match(api, /func adminLeadActionCounts[\s\S]*pipeline: \.members, status: "new"[\s\S]*pipeline: \.trainers, status: "new"[\s\S]*pipeline: \.partners, status: "new"/);
   assert.match(api, /private func restCount[\s\S]*request\.httpMethod = "HEAD"[\s\S]*"count=exact"[\s\S]*"Content-Range"/);
   assert.ok(
@@ -363,6 +364,9 @@ test('native owner overview counts fresh lead work without downloading lead hist
   assert.match(view, /title: "New lead enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads/);
   assert.match(view, /counts\.memberLeads[\s\S]*counts\.trainerApplicants[\s\S]*counts\.partnerEnquiries/);
   assert.match(view, /case \.leads:[\s\S]*admin\.leadActionCounts\?\.total/);
+  assert.match(view, /AdminLeadsView\([\s\S]*initialPipeline: admin\.leadActionCounts\?\.priorityPipeline[\s\S]*prioritizesNewWork: \(admin\.leadActionCounts\?\.total \?\? 0\) > 0/);
+  assert.match(view, /let initialStatus = prioritizesNewWork \? "new" : "all"[\s\S]*_pipeline = State\(initialValue: initialPipeline \?\? \.members\)[\s\S]*_status = State\(initialValue: initialStatus\)/);
+  assert.match(view, /\.onChange\(of: pipeline\)[\s\S]*status = defaultStatus/);
 });
 
 test('native owner overview is freshness-aware and exposes safe one-tap operating tools', async () => {

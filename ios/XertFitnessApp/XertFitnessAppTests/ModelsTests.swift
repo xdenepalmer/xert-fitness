@@ -676,6 +676,22 @@ final class ModelsTests: XCTestCase {
             partnerEnquiries: 1
         )
         XCTAssertEqual(counts.total, 7)
+        XCTAssertEqual(counts.priorityPipeline, .members)
+        XCTAssertEqual(
+            AdminLeadActionCounts(
+                memberLeads: 0,
+                trainerApplicants: 2,
+                partnerEnquiries: 5
+            ).priorityPipeline,
+            .partners
+        )
+        XCTAssertNil(
+            AdminLeadActionCounts(
+                memberLeads: 0,
+                trainerApplicants: 0,
+                partnerEnquiries: 0
+            ).priorityPipeline
+        )
     }
 
     func testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped() throws {

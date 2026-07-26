@@ -1548,6 +1548,23 @@ struct AdminLeadActionCounts: Equatable {
     let partnerEnquiries: Int
 
     var total: Int { memberLeads + trainerApplicants + partnerEnquiries }
+
+    var priorityPipeline: AdminLeadPipeline? {
+        let pipelines: [(pipeline: AdminLeadPipeline, count: Int)] = [
+            (.members, memberLeads),
+            (.trainers, trainerApplicants),
+            (.partners, partnerEnquiries)
+        ]
+        return pipelines
+            .filter { $0.count > 0 }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return (AdminLeadPipeline.allCases.firstIndex(of: $0.pipeline) ?? 0)
+                    < (AdminLeadPipeline.allCases.firstIndex(of: $1.pipeline) ?? 0)
+            }
+            .first?
+            .pipeline
+    }
 }
 
 struct AdminLeadIdentifier: Codable, Hashable {

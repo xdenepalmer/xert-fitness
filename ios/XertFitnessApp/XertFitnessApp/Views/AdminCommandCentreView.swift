@@ -2624,7 +2624,12 @@ struct AdminCommandCentreView: View {
                 session: session
             )
         case .leads:
-            AdminLeadsView(admin: admin, session: session)
+            AdminLeadsView(
+                admin: admin,
+                session: session,
+                initialPipeline: admin.leadActionCounts?.priorityPipeline,
+                prioritizesNewWork: (admin.leadActionCounts?.total ?? 0) > 0
+            )
         case .campaigns:
             AdminCampaignAttributionView(admin: admin, session: session)
         case .siteContent:
@@ -8985,9 +8990,10 @@ private struct AdminCampaignCSVDocument: FileDocument {
 private struct AdminLeadsView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
-    @State private var pipeline = AdminLeadPipeline.members
+    private let defaultStatus: String
+    @State private var pipeline: AdminLeadPipeline
     @State private var query = ""
-    @State private var status = "all"
+    @State private var status: String
     @State private var selectedLead: AdminLead?
     @State private var selectedIDs: Set<AdminLeadIdentifier> = []
     @State private var bulkStatus = ""
@@ -9010,6 +9016,20 @@ private struct AdminLeadsView: View {
     }
     private var exportDateStamp: String {
         String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+    }
+
+    init(
+        admin: AdminStore,
+        session: AuthSession,
+        initialPipeline: AdminLeadPipeline? = nil,
+        prioritizesNewWork: Bool = false
+    ) {
+        self.admin = admin
+        self.session = session
+        let initialStatus = prioritizesNewWork ? "new" : "all"
+        defaultStatus = initialStatus
+        _pipeline = State(initialValue: initialPipeline ?? .members)
+        _status = State(initialValue: initialStatus)
     }
 
     var body: some View {
@@ -9196,7 +9216,7 @@ private struct AdminLeadsView: View {
         .task { await admin.loadLeads(session: session, pipeline: pipeline) }
         .onChange(of: pipeline) { newPipeline in
             query = ""
-            status = "all"
+            status = defaultStatus
             selectedIDs = []
             bulkStatus = ""
             selectedLead = nil
