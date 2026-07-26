@@ -1075,6 +1075,46 @@ test('native revenue desk filters and exports a current ledger and member purcha
   assert.match(orders, /ViewThatFits\(in: \.horizontal\)/);
 });
 
+test('native finance is a currency-safe current-data-gated owner decision workspace', async () => {
+  const [view, models, store] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+  ]);
+  const finance = view.slice(
+    view.indexOf('private struct AdminFinanceView'),
+    view.indexOf('private struct AdminOrdersView'),
+  );
+
+  assert.match(models, /struct AdminFinanceReport/);
+  assert.match(models, /Self\.currencyCode\(\$0\.currency\) == normalizedCurrency/);
+  assert.match(models, /currentStart[\s\S]*previousStart[\s\S]*monthStart/);
+  assert.match(models, /let currentPaid = paid\.filter/);
+  assert.match(models, /let previousPaid = paid\.filter/);
+  assert.match(models, /dailyRevenue = \(0\.\.<30\)\.compactMap/);
+  assert.match(models, /productLeaders = Dictionary\(grouping: currentPaid\)/);
+  assert.match(models, /var periodChangePercent: Double\?/);
+  assert.match(store, /private var paidAUDOrders: \[OrderItem\]/);
+  assert.match(store, /code\.isEmpty \|\| code == "AUD"/);
+  assert.match(store, /var totalRevenueCents: Int \{ paidAUDOrders\.reduce/);
+  assert.match(store, /let calendar = EventItem\.calendar/);
+
+  assert.match(finance, /let session: AuthSession/);
+  assert.match(finance, /AdminFinanceReport\(orders: admin\.orders, currency: currency\)/);
+  assert.match(finance, /admin\.loadedSources\.contains\("orders"\)/);
+  assert.match(finance, /Finance data unavailable/);
+  assert.match(finance, /The figures below may be stale/);
+  assert.match(finance, /Picker\("Reporting currency", selection: \$currency\)/);
+  assert.match(finance, /Section\(ordersAreCurrent \? "Revenue pulse" : "Last revenue pulse"\)/);
+  assert.match(finance, /AdminFinanceTrendChart\(days: report\.dailyRevenue, currency: report\.currency\)/);
+  assert.match(finance, /Top packs - 30 days/);
+  assert.match(finance, /report\.recoverableCount/);
+  assert.match(finance, /New revenue - the previous 30 days had no paid sales/);
+  assert.match(finance, /\.refreshable \{[\s\S]*admin\.refreshOperationalPulse\(session: session\)/);
+  assert.match(finance, /ViewThatFits\(in: \.horizontal\)/);
+  assert.doesNotMatch(finance, /admin\.monthRevenueCents|admin\.totalRevenueCents/);
+});
+
 test('native class cancellation preserves mutation truth and provides complete member follow-up', async () => {
   const [api, store, view, models] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),

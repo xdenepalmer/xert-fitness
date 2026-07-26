@@ -4039,6 +4039,88 @@ final class ModelsTests: XCTestCase {
         ])
     }
 
+    func testAdminFinanceReportBuildsCurrencySafeThirtyDayOwnerInsights() {
+        let now = queenslandDate(2026, 7, 27, 12, 0)
+        let currentLaunch = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 4_800,
+            createdAt: EventItem.calendar.date(byAdding: .day, value: -1, to: now)!,
+            productName: "Launch Pack"
+        )
+        let currentLaunchTwo = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 5_200,
+            createdAt: EventItem.calendar.date(byAdding: .day, value: -10, to: now)!,
+            productName: "Launch Pack"
+        )
+        let previousStarter = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 4_000,
+            createdAt: EventItem.calendar.date(byAdding: .day, value: -35, to: now)!,
+            productName: "Starter Pack"
+        )
+        let pending = order(
+            id: UUID(),
+            status: "pending",
+            checkoutSessionID: "cs_pending",
+            createdAt: now,
+            productName: "Launch Pack"
+        )
+        let refunded = order(
+            id: UUID(),
+            status: "refunded",
+            createdAt: now,
+            productName: "Launch Pack"
+        )
+        let currentNZD = order(
+            id: UUID(),
+            status: "paid",
+            amountCents: 20_000,
+            currency: "nzd",
+            createdAt: now,
+            productName: "NZ Pack"
+        )
+
+        let report = AdminFinanceReport(
+            orders: [
+                currentLaunch, currentLaunchTwo, previousStarter,
+                pending, refunded, currentNZD
+            ],
+            currency: "aud",
+            now: now
+        )
+
+        XCTAssertEqual(report.currency, "AUD")
+        XCTAssertEqual(report.currentPeriodCents, 10_000)
+        XCTAssertEqual(report.previousPeriodCents, 4_000)
+        XCTAssertEqual(report.monthRevenueCents, 10_000)
+        XCTAssertEqual(report.allTimeRevenueCents, 14_000)
+        XCTAssertEqual(report.currentPaidCount, 2)
+        XCTAssertEqual(report.previousPaidCount, 1)
+        XCTAssertEqual(report.averageSaleCents, 5_000)
+        XCTAssertEqual(report.pendingCount, 1)
+        XCTAssertEqual(report.refundedCount, 1)
+        XCTAssertEqual(report.recoverableCount, 1)
+        XCTAssertEqual(report.dailyRevenue.count, 30)
+        XCTAssertEqual(report.dailyRevenue.reduce(0) { $0 + $1.cents }, 10_000)
+        XCTAssertEqual(
+            report.productLeaders.first,
+            AdminFinanceProductPerformance(name: "Launch Pack", sales: 2, cents: 10_000)
+        )
+        XCTAssertEqual(report.periodChangePercent, 150)
+
+        let newRevenue = AdminFinanceReport(
+            orders: [currentLaunch],
+            currency: "AUD",
+            now: now
+        )
+        XCTAssertNil(newRevenue.periodChangePercent)
+        XCTAssertEqual(newRevenue.previousPeriodCents, 0)
+    }
+
     func testClassCancellationFollowUpDeduplicatesActiveContactsAndBuildsFallbackCopy() {
         let session = adminClassSession(
             title: "XERT Engine",

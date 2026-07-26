@@ -199,10 +199,16 @@ final class AdminStore: ObservableObject {
     var waitingMembers: Int { waitlist.reduce(0) { $0 + $1.waitlist_count } }
     var attendanceDue: Int { dailyOperations.filter(\.attendance_due).count }
     var paidOrders: [OrderItem] { orders.filter { $0.status == "paid" } }
-    var totalRevenueCents: Int { paidOrders.reduce(0) { $0 + ($1.amount_cents ?? 0) } }
+    private var paidAUDOrders: [OrderItem] {
+        paidOrders.filter {
+            let code = $0.currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+            return code.isEmpty || code == "AUD"
+        }
+    }
+    var totalRevenueCents: Int { paidAUDOrders.reduce(0) { $0 + ($1.amount_cents ?? 0) } }
     var monthRevenueCents: Int {
-        let calendar = Calendar.current
-        return paidOrders.filter { calendar.isDate($0.activityDate, equalTo: Date(), toGranularity: .month) }
+        let calendar = EventItem.calendar
+        return paidAUDOrders.filter { calendar.isDate($0.activityDate, equalTo: Date(), toGranularity: .month) }
             .reduce(0) { $0 + ($1.amount_cents ?? 0) }
     }
     var pendingPTRequests: Int { ptRequests.filter(\.isPending).count }

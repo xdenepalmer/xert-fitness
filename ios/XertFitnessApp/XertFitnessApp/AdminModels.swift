@@ -325,6 +325,117 @@ struct AdminOrderCurrencyTotal: Identifiable, Equatable {
     }
 }
 
+struct AdminFinanceDay: Identifiable, Equatable {
+    let date: Date
+    let cents: Int
+
+    var id: Date { date }
+}
+
+struct AdminFinanceProductPerformance: Identifiable, Equatable {
+    let name: String
+    let sales: Int
+    let cents: Int
+
+    var id: String { name }
+}
+
+struct AdminFinanceReport {
+    let currency: String
+    let currentPeriodCents: Int
+    let previousPeriodCents: Int
+    let monthRevenueCents: Int
+    let allTimeRevenueCents: Int
+    let currentPaidCount: Int
+    let previousPaidCount: Int
+    let averageSaleCents: Int
+    let pendingCount: Int
+    let refundedCount: Int
+    let recoverableCount: Int
+    let dailyRevenue: [AdminFinanceDay]
+    let productLeaders: [AdminFinanceProductPerformance]
+
+    init(
+        orders: [OrderItem],
+        currency: String,
+        now: Date = Date(),
+        calendar: Calendar = EventItem.calendar
+    ) {
+        let normalizedCurrency = Self.currencyCode(currency)
+        let today = calendar.startOfDay(for: now)
+        let currentStart = calendar.date(byAdding: .day, value: -29, to: today) ?? today
+        let currentEnd = calendar.date(byAdding: .day, value: 1, to: today) ?? now
+        let previousStart = calendar.date(byAdding: .day, value: -30, to: currentStart) ?? currentStart
+        let monthStart = calendar.date(
+            from: calendar.dateComponents([.year, .month], from: now)
+        ) ?? today
+        let matching = orders.filter { Self.currencyCode($0.currency) == normalizedCurrency }
+        let paid = matching.filter { $0.status == "paid" }
+        let currentPaid = paid.filter {
+            let date = $0.paid_at ?? $0.created_at
+            return date >= currentStart && date < currentEnd
+        }
+        let previousPaid = paid.filter {
+            let date = $0.paid_at ?? $0.created_at
+            return date >= previousStart && date < currentStart
+        }
+        let sum: ([OrderItem]) -> Int = {
+            $0.reduce(0) { $0 + ($1.amount_cents ?? 0) }
+        }
+        let currentRevenue = sum(currentPaid)
+        let previousRevenue = sum(previousPaid)
+
+        self.currency = normalizedCurrency
+        currentPeriodCents = currentRevenue
+        previousPeriodCents = previousRevenue
+        monthRevenueCents = sum(paid.filter {
+            let date = $0.paid_at ?? $0.created_at
+            return date >= monthStart && date < currentEnd
+        })
+        allTimeRevenueCents = sum(paid)
+        currentPaidCount = currentPaid.count
+        previousPaidCount = previousPaid.count
+        averageSaleCents = currentPaid.isEmpty ? 0 : currentRevenue / currentPaid.count
+        pendingCount = matching.filter { $0.status == "pending" }.count
+        refundedCount = matching.filter { $0.status == "refunded" }.count
+        recoverableCount = matching.filter(\.isRecoverable).count
+
+        let revenueByDay = Dictionary(grouping: currentPaid) {
+            calendar.startOfDay(for: $0.paid_at ?? $0.created_at)
+        }
+        dailyRevenue = (0..<30).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: currentStart) else {
+                return nil
+            }
+            return AdminFinanceDay(date: date, cents: sum(revenueByDay[date] ?? []))
+        }
+
+        productLeaders = Dictionary(grouping: currentPaid) {
+            $0.products?.name.nilIfBlank ?? "Session pack"
+        }
+        .map { name, productOrders in
+            AdminFinanceProductPerformance(
+                name: name,
+                sales: productOrders.count,
+                cents: sum(productOrders)
+            )
+        }
+        .sorted {
+            $0.cents != $1.cents ? $0.cents > $1.cents : $0.name < $1.name
+        }
+    }
+
+    var periodChangePercent: Double? {
+        guard previousPeriodCents > 0 else { return nil }
+        return (Double(currentPeriodCents - previousPeriodCents) / Double(previousPeriodCents)) * 100
+    }
+
+    private static func currencyCode(_ value: String?) -> String {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        return normalized.isEmpty ? "AUD" : normalized
+    }
+}
+
 struct AdminOrderReport {
     let rows: [OrderItem]
     let paidCount: Int

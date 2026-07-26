@@ -1718,6 +1718,7 @@ struct AdminCommandCentreView: View {
         case .finance:
             AdminFinanceView(
                 admin: admin,
+                session: session,
                 onOpenOrders: { openWorkspace(.orders) }
             )
         case .orders:
@@ -5263,59 +5264,221 @@ private struct AdminRetentionView: View {
 
 private struct AdminFinanceView: View {
     @ObservedObject var admin: AdminStore
+    let session: AuthSession
     let onOpenOrders: () -> Void
+    @State private var currency = "AUD"
 
-    private var pendingOrders: Int {
-        admin.orders.filter { $0.status == "pending" }.count
+    private var currencies: [String] {
+        let values = Set(admin.orders.map {
+            let normalized = $0.currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+            return normalized.isEmpty ? "AUD" : normalized
+        })
+        return values.isEmpty ? ["AUD"] : values.sorted()
     }
 
-    private var refundedOrders: Int {
-        admin.orders.filter { $0.status == "refunded" }.count
+    private var report: AdminFinanceReport {
+        AdminFinanceReport(orders: admin.orders, currency: currency)
     }
 
-    private var recoverableOrders: Int {
-        admin.orders.filter(\.isRecoverable).count
+    private var ordersAreCurrent: Bool {
+        admin.loadedSources.contains("orders") && !admin.refreshUnavailableSources.contains("orders")
+    }
+
+    private var ordersAreLoading: Bool {
+        admin.isLoading && !admin.loadedSources.contains("orders")
+    }
+
+    private var comparisonLabel: String {
+        if report.previousPeriodCents == 0, report.currentPeriodCents > 0 {
+            return "New revenue - the previous 30 days had no paid sales"
+        }
+        guard let change = report.periodChangePercent else {
+            return "No paid sales in either 30-day period"
+        }
+        let direction = change > 0 ? "Up" : change < 0 ? "Down" : "Flat"
+        return "\(direction) \(abs(change).formatted(.number.precision(.fractionLength(0))))% vs previous 30 days"
+    }
+
+    private var comparisonColour: Color {
+        guard let change = report.periodChangePercent else { return Color.xertPale.opacity(0.6) }
+        if change > 0 { return Color.green }
+        if change < 0 { return Color.orange }
+        return Color.xertSteel
     }
 
     var body: some View {
         List {
-            Section("Revenue") {
-                FinanceSummaryRow(label: "This month", cents: admin.monthRevenueCents)
-                FinanceSummaryRow(label: "All paid orders", cents: admin.totalRevenueCents)
-            }
-            Section("Sales performance") {
-                financeCount("Paid orders", value: admin.paidOrders.count, icon: "checkmark.circle")
-                financeCount("Pending checkouts", value: pendingOrders, icon: "clock")
-                financeCount("Refunded orders", value: refundedOrders, icon: "arrow.uturn.backward.circle")
-            }
-            Section("Order operations") {
-                Button(action: onOpenOrders) {
+            if ordersAreLoading {
+                Section {
                     HStack(spacing: 12) {
-                        Image(systemName: recoverableOrders > 0 ? "exclamationmark.arrow.circlepath" : "creditcard")
-                            .foregroundStyle(recoverableOrders > 0 ? Color.orange : Color.xertSteel)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Open orders")
-                                .font(.headline)
-                                .foregroundStyle(Color.xertOffWhite)
-                            Text(recoverableOrders > 0
-                                 ? "\(recoverableOrders) payment\(recoverableOrders == 1 ? "" : "s") need recovery"
-                                 : "Search sales, reconcile payments and manage refunds")
-                                .font(.caption)
-                                .foregroundStyle(Color.xertPale.opacity(0.65))
+                        ProgressView().tint(Color.xertSteel)
+                        Text("Loading the complete sales ledger...")
+                    }
+                    .foregroundStyle(Color.xertPale)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            if !ordersAreCurrent {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(
+                            admin.orders.isEmpty ? "Finance data unavailable" : "Last finance snapshot",
+                            systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                        )
+                        .font(.headline)
+                        .foregroundStyle(Color.orange)
+                        Text(
+                            admin.orders.isEmpty
+                                ? "Revenue and sales performance could not be verified. Retry before relying on this workspace."
+                                : "The figures below may be stale. Payment actions remain protected in Orders."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            Task { await admin.refreshOperationalPulse(session: session) }
+                        } label: {
+                            Label(
+                                admin.isRefreshingOperations ? "Retrying..." : "Retry finance data",
+                                systemImage: "arrow.clockwise"
+                            )
                         }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.xertSteel)
+                        .foregroundStyle(Color.xertNavy)
+                        .disabled(admin.isRefreshingOperations)
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+            }
+
+            if ordersAreCurrent || !admin.orders.isEmpty {
+                Section {
+                    Picker("Reporting currency", selection: $currency) {
+                        ForEach(currencies, id: \.self) { code in
+                            Text(code).tag(code)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.xertInk)
+                } header: {
+                    Text("Currency")
+                }
+
+                Section(ordersAreCurrent ? "Revenue pulse" : "Last revenue pulse") {
+                    FinanceSummaryRow(
+                        label: "Last 30 days",
+                        cents: report.currentPeriodCents,
+                        currency: report.currency
+                    )
+                    FinanceSummaryRow(
+                        label: "Previous 30 days",
+                        cents: report.previousPeriodCents,
+                        currency: report.currency
+                    )
+                    FinanceSummaryRow(
+                        label: "This calendar month",
+                        cents: report.monthRevenueCents,
+                        currency: report.currency
+                    )
+                    FinanceSummaryRow(
+                        label: "All paid orders",
+                        cents: report.allTimeRevenueCents,
+                        currency: report.currency
+                    )
+                    HStack {
+                        Label(comparisonLabel, systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(comparisonColour)
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+
+                Section("30-day sales rhythm") {
+                    AdminFinanceTrendChart(days: report.dailyRevenue, currency: report.currency)
+                        .listRowBackground(Color.xertInk)
+                }
+
+                Section("Sales performance") {
+                    financeCount(
+                        "Paid orders - 30 days",
+                        value: report.currentPaidCount,
+                        icon: "checkmark.circle"
+                    )
+                    FinanceSummaryRow(
+                        label: "Average paid sale",
+                        cents: report.averageSaleCents,
+                        currency: report.currency
+                    )
+                    financeCount("Pending checkouts", value: report.pendingCount, icon: "clock")
+                    financeCount(
+                        "Refunded orders",
+                        value: report.refundedCount,
+                        icon: "arrow.uturn.backward.circle"
+                    )
+                }
+
+                Section("Top packs - 30 days") {
+                    if report.productLeaders.isEmpty {
+                        Text("No paid packs in this period.")
+                            .foregroundStyle(Color.xertPale.opacity(0.62))
+                            .listRowBackground(Color.xertInk)
+                    }
+                    ForEach(report.productLeaders.prefix(5)) { product in
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                productLeaderIdentity(product)
+                                Spacer()
+                                productLeaderValue(product)
+                            }
+                            VStack(alignment: .leading, spacing: 7) {
+                                productLeaderIdentity(product)
+                                productLeaderValue(product)
+                            }
+                        }
+                        .listRowBackground(Color.xertInk)
                     }
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(Color.xertInk)
+
+                Section("Order operations") {
+                    Button(action: onOpenOrders) {
+                        HStack(spacing: 12) {
+                            Image(systemName: report.recoverableCount > 0 ? "exclamationmark.arrow.circlepath" : "creditcard")
+                                .foregroundStyle(report.recoverableCount > 0 ? Color.orange : Color.xertSteel)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Open orders")
+                                    .font(.headline)
+                                    .foregroundStyle(Color.xertOffWhite)
+                                Text(report.recoverableCount > 0
+                                     ? "\(report.recoverableCount) \(report.currency) payment\(report.recoverableCount == 1 ? "" : "s") need recovery"
+                                     : "Search sales, reconcile payments and manage refunds")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.xertPale.opacity(0.65))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.xertInk)
+                }
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
         .navigationTitle("Finance")
+        .refreshable {
+            await admin.refreshOperationalPulse(session: session)
+        }
+        .onChange(of: currencies) { available in
+            if !available.contains(currency) {
+                currency = available.first ?? "AUD"
+            }
+        }
     }
 
     private func financeCount(_ label: String, value: Int, icon: String) -> some View {
@@ -5326,6 +5489,78 @@ private struct AdminFinanceView: View {
         }
         .foregroundStyle(Color.xertOffWhite)
         .listRowBackground(Color.xertInk)
+    }
+
+    private func productLeaderIdentity(_ product: AdminFinanceProductPerformance) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(product.name)
+                .font(.headline)
+                .foregroundStyle(Color.xertOffWhite)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(product.sales) sale\(product.sales == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+        }
+    }
+
+    private func productLeaderValue(_ product: AdminFinanceProductPerformance) -> some View {
+        Text((Double(product.cents) / 100).formatted(.currency(code: report.currency)))
+            .font(.subheadline.weight(.bold).monospacedDigit())
+            .foregroundStyle(Color.xertSteel)
+    }
+}
+
+private struct AdminFinanceTrendChart: View {
+    let days: [AdminFinanceDay]
+    let currency: String
+
+    private var maximumCents: Int {
+        max(days.map(\.cents).max() ?? 0, 1)
+    }
+
+    private var totalCents: Int {
+        days.reduce(0) { $0 + $1.cents }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { proxy in
+                HStack(alignment: .bottom, spacing: 2) {
+                    ForEach(days) { day in
+                        Rectangle()
+                            .fill(day.cents > 0 ? Color.xertSteel : Color.xertSteel.opacity(0.12))
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: day.cents > 0 ? 3 : 1,
+                                maxHeight: max(1, proxy.size.height * CGFloat(day.cents) / CGFloat(maximumCents))
+                            )
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            .frame(height: 118)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(height: 1)
+            }
+
+            HStack {
+                Text(days.first?.date.formatted(date: .abbreviated, time: .omitted) ?? "30 days ago")
+                Spacer()
+                Text(days.last?.date.formatted(date: .abbreviated, time: .omitted) ?? "Today")
+            }
+            .font(.caption2)
+            .foregroundStyle(Color.xertPale.opacity(0.5))
+
+            Text("\((Double(totalCents) / 100).formatted(.currency(code: currency))) paid across \(days.filter { $0.cents > 0 }.count) active sales day\(days.filter { $0.cents > 0 }.count == 1 ? "" : "s").")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Thirty day paid revenue trend. \((Double(totalCents) / 100).formatted(.currency(code: currency))) total."
+        )
     }
 }
 
@@ -11495,12 +11730,13 @@ private struct AdminMoneyTile: View {
 private struct FinanceSummaryRow: View {
     let label: String
     let cents: Int
+    var currency = "AUD"
 
     var body: some View {
         HStack {
             Text(label)
             Spacer()
-            Text((Double(cents) / 100).formatted(.currency(code: "AUD"))).fontWeight(.bold)
+            Text((Double(cents) / 100).formatted(.currency(code: currency))).fontWeight(.bold)
         }
         .foregroundStyle(Color.xertOffWhite)
         .listRowBackground(Color.xertInk)
