@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Download, RefreshCw, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getMemberLeads, getTrainerLeads, getPartnerLeads, updateLead, updateLeadStatuses } from '@/lib/adminData';
+import { getMemberLeads, getTrainerLeads, getPartnerLeads, revealMemberInterestHealth, updateLead, updateLeadStatuses } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { collectLeadPages, leadExportColumns, leadExportRows, selectedLeadIds } from '@/lib/adminLeads';
 import AdminLoadError from '@/components/admin/AdminLoadError';
@@ -33,6 +33,23 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
   const [status, setStatus] = useState(lead.status || 'new');
   const [notes, setNotes] = useState(lead.admin_notes || '');
   const [saving, setSaving] = useState(false);
+  const [healthReveal, setHealthReveal] = useState(null);
+  const [revealingHealth, setRevealingHealth] = useState(false);
+
+  const revealHealth = async () => {
+    setRevealingHealth(true);
+    try {
+      const result = await revealMemberInterestHealth(lead.id);
+      setHealthReveal(result);
+      if (!result?.available) {
+        toast({ title: 'No health details', description: 'This lead has no consented injury notes to reveal.' });
+      }
+    } catch (e) {
+      toast({ title: 'Reveal failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRevealingHealth(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -80,6 +97,26 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
           {lead.short_intro && <div><p className="font-body text-xs text-xert-concrete/40 uppercase">Intro</p><p className="font-body text-sm text-xert-offwhite leading-relaxed">{lead.short_intro}</p></div>}
           {lead.utm_source && <div><p className="font-body text-xs text-xert-concrete/40 uppercase">Source</p><p className="font-body text-sm text-xert-concrete/60">{lead.utm_source} / {lead.utm_medium} / {lead.utm_campaign}</p></div>}
           <div><p className="font-body text-xs text-xert-concrete/40 uppercase">Submitted</p><p className="font-body text-sm text-xert-concrete/60">{new Date(lead.created_at).toLocaleString('en-AU')}</p></div>
+          {table === 'member_interest' && (
+            <div>
+              <p className="font-body text-xs text-xert-concrete/40 uppercase">Health notes</p>
+              {healthReveal?.available ? (
+                <p className="font-body text-sm text-xert-offwhite leading-relaxed mt-1">{healthReveal.injuries_or_limitations_optional}</p>
+              ) : (
+                <button
+                  type="button"
+                  disabled={revealingHealth}
+                  onClick={() => void revealHealth()}
+                  className="mt-2 min-h-11 px-3 py-2 border border-xert-steel/40 font-body text-xs uppercase tracking-wider text-xert-concrete/70 hover:border-xert-steel disabled:opacity-50"
+                >
+                  {revealingHealth ? 'Revealing...' : 'Reveal consented health notes'}
+                </button>
+              )}
+              <p className="font-body text-[11px] text-xert-concrete/40 mt-2 leading-relaxed">
+                Injury details stay out of lists and CSV exports. Reveal only when you need them for safe follow-up.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Status update */}

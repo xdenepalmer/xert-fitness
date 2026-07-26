@@ -4,11 +4,15 @@ import test from 'node:test';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('linked migration exactly installs the canonical content audit contract', () => {
+test('operator upgrade stays re-run safe without matching the historical migration byte-for-byte', () => {
   const source = read('../src/supabase/content_change_audit_upgrade.sql').replace(/\r\n/g, '\n');
   const migration = read('../supabase/migrations/20260714013000_content_change_audit.sql').replace(/\r\n/g, '\n');
-  assert.equal(migration, source);
+  assert.match(source, /install_guard_admin_content_change/);
+  assert.match(source, /keeping newer guard_admin_content_change/);
+  assert.match(migration, /create or replace function public\.guard_admin_content_change\(\)/i);
+  assert.match(migration, /raise exception 'CONTENT_AUDIT_IMMUTABLE'/);
 });
+
 
 for (const path of [
   '../src/supabase/content_change_audit_upgrade.sql',

@@ -307,6 +307,7 @@ export default function BookingRequestsTable() {
                       {b.session.title} · {b.session.start_time ? new Date(b.session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                     </p>
                   )}
+                  {b.notes && <p className="font-body text-xs text-xert-concrete/40 mt-1">Member note: {b.notes}</p>}
                   {b.admin_notes && <p className="font-body text-xs text-xert-concrete/30 mt-1 italic">{b.admin_notes}</p>}
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end shrink-0">

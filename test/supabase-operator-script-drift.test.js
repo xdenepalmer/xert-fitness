@@ -155,6 +155,68 @@ test('no operator script recreates admin_cancel_class_session without the credit
   assert.ok(checked >= 3, 'bootstrap and fix scripts still define admin_cancel_class_session');
 });
 
+test('older audit/deletion operator scripts cannot downgrade redaction-aware guards or delete_member_account', () => {
+  const guarded = [
+    {
+      name: 'audit_immutability_account_deletion_fix.sql',
+      mustMatch: [/install_guard_admin_request_status_change/, /subject_label/, /install_guard_admin_lead_change/],
+    },
+    {
+      name: 'atomic_account_deletion.sql',
+      mustMatch: [/install_delete_member_account/, /redact_audit_subject_pii|member_interest/],
+    },
+    {
+      name: 'audit_subject_pii_redaction_upgrade.sql',
+      mustMatch: [/install_delete_member_account/, /member_interest/],
+    },
+    {
+      name: 'admin_request_status_audit_upgrade.sql',
+      mustMatch: [/install_guard_admin_request_status_change/, /subject_label|changed_by/],
+    },
+    {
+      name: 'lead_pipeline_audit_upgrade.sql',
+      mustMatch: [/install_guard_admin_lead_change/, /subject_label|changed_by/],
+    },
+  ];
+
+  for (const { name, mustMatch } of guarded) {
+    const script = scripts().find(entry => entry.name === name);
+    assert.ok(script, `missing operator script ${name}`);
+    for (const pattern of mustMatch) {
+      assert.match(
+        script.sql,
+        pattern,
+        `${name} is not re-run safe against a newer deletion/redaction shape (${pattern})`,
+      );
+    }
+    // Unconditional CREATE OR REPLACE of the weaker body must not remain outside the skip branch.
+    if (name.includes('audit_upgrade') || name === 'admin_request_status_audit_upgrade.sql' || name === 'lead_pipeline_audit_upgrade.sql') {
+      assert.match(script.sql, /keeping newer|keeping redaction-aware/);
+    }
+  }
+
+  const currentDeletion = scripts().find(entry => entry.name === 'account_deletion_public_lead_cleanup.sql');
+  assert.ok(currentDeletion, 'missing current account deletion cleanup script');
+  assert.match(currentDeletion.sql, /member_interest/);
+  assert.match(currentDeletion.sql, /trainer_interest/);
+  assert.match(currentDeletion.sql, /partner_interest/);
+  assert.match(currentDeletion.sql, /private_session_requests/);
+});
+
+test('every install_public_form_insert_policies definition gates PT/booking notes on health consent', () => {
+  const definers = scripts().filter(({ sql }) => sql.includes('create or replace function public.install_public_form_insert_policies()'));
+  assert.ok(definers.length >= 3, 'the public form installer is defined by more than one operator script');
+
+  for (const { name, sql } of definers) {
+    assert.match(
+      sql,
+      /class_bookings',\s*'private_session_requests'/,
+      `${name} replaces install_public_form_insert_policies without the PT/booking notes health-consent guard`,
+    );
+    assert.match(sql, /coalesce\(btrim\(notes\), ''\) = ''/);
+  }
+});
+
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {
   const superseded = [
     {

@@ -74,6 +74,14 @@ export async function updateLeadStatus(table, id, status) {
   if (Number(data) !== 1) throw new Error('Lead status update was not acknowledged. Refresh and try again.');
 }
 
+export async function revealMemberInterestHealth(leadId) {
+  const { data, error } = await supabase.rpc('admin_reveal_member_interest_health', {
+    p_lead_id: leadId,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 export async function updateLead(table, id, updates) {
   const mutation = normalizeLeadUpdate(table, updates);
   const validatedId = validateLeadMutation(table, mutation.updates.status, [id]).ids[0];
@@ -232,7 +240,7 @@ export async function getClassBookings(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('class_bookings')
-      .select('id, full_name, email, phone, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, full_name, email, phone, status, notes, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);

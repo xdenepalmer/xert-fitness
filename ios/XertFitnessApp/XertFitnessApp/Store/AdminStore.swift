@@ -39,6 +39,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var events: [AdminEvent] = []
     @Published private(set) var eventGoalCounts: [UUID: Int] = [:]
     @Published private(set) var eventRoster: [AdminEventGoalMember] = []
+    @Published private(set) var loadedEventRosterID: UUID?
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var classRoster: [AdminRosterMember] = []
     @Published private(set) var loadedRosterSessionID: UUID?
@@ -105,6 +106,7 @@ final class AdminStore: ObservableObject {
     private var emergencyContactRevealGeneration: UInt = 0
     private var healthRefreshGeneration: UInt = 0
     private var rosterLoadGeneration: UInt = 0
+    private var eventRosterLoadGeneration: UInt = 0
 
     var memberCount: Int {
         memberDirectoryTotalCount > 0 ? memberDirectoryTotalCount : members.count
@@ -496,7 +498,8 @@ final class AdminStore: ObservableObject {
     }
 
     func loadMemberDetail(session: AuthSession, memberID: UUID) async {
-        guard loadingMemberDetailID == nil else { return }
+        // Do not silently skip when another detail load is in flight — bump the
+        // generation so the newer member wins and late responses are dropped.
         memberDetailGeneration &+= 1
         let generation = memberDetailGeneration
         loadedMemberDetailID = memberID
@@ -585,20 +588,26 @@ final class AdminStore: ObservableObject {
 
     func addMemberNote(session: AuthSession, memberID: UUID, category: String, body: String) async -> Bool {
         guard servicingMemberID == nil else { return false }
+        let generation = memberDetailGeneration
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             _ = try await api.adminAddMemberNote(session: session, memberID: memberID, category: category, body: body)
-            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
     func archiveMemberNote(session: AuthSession, memberID: UUID, note: AdminMemberNote) async -> Bool {
         guard servicingMemberID == nil else { return false }
+        let generation = memberDetailGeneration
         servicingMemberID = memberID; defer { servicingMemberID = nil }
         do {
             try await api.adminArchiveMemberNote(session: session, noteID: note.id, archived: note.archived_at == nil)
-            memberNotes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
             lastUpdatedAt = Date(); return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
@@ -978,14 +987,20 @@ final class AdminStore: ObservableObject {
         status: String
     ) async -> Bool {
         guard updatingBookingID == nil else { return false }
+        // Capture roster generation up front so a newer loadClassRoster cannot
+        // be clobbered by this mutation's slower roster refresh.
+        let rosterGeneration = rosterLoadGeneration
         updatingBookingID = bookingID
         defer { updatingBookingID = nil }
         do {
             bookingDecisionNoticeWarning = nil
             let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
             bookingDecisionNoticeWarning = outcome.warning
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
-            loadedRosterSessionID = classSessionID
+            let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            if rosterLoadGeneration == rosterGeneration {
+                classRoster = roster
+                loadedRosterSessionID = classSessionID
+            }
             dailyOperations = try await api.adminDailyOperations(session: session)
             waitlist = try await api.adminWaitlist(session: session)
             lastUpdatedAt = Date()
@@ -1003,6 +1018,7 @@ final class AdminStore: ObservableObject {
         noShowIDs: [UUID]
     ) async -> Bool {
         guard recordingAttendanceSessionID == nil else { return false }
+        let rosterGeneration = rosterLoadGeneration
         recordingAttendanceSessionID = classSessionID
         defer { recordingAttendanceSessionID = nil }
         do {
@@ -1012,8 +1028,11 @@ final class AdminStore: ObservableObject {
                 attendedIDs: attendedIDs,
                 noShowIDs: noShowIDs
             )
-            classRoster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
-            loadedRosterSessionID = classSessionID
+            let roster = try await api.adminSessionRoster(session: session, classSessionID: classSessionID)
+            if rosterLoadGeneration == rosterGeneration {
+                classRoster = roster
+                loadedRosterSessionID = classSessionID
+            }
             dailyOperations = try await api.adminDailyOperations(session: session)
             lastUpdatedAt = Date()
             return true
@@ -1312,13 +1331,25 @@ final class AdminStore: ObservableObject {
     }
 
     func loadEventRoster(session: AuthSession, eventID: UUID) async {
-        guard loadingEventRosterID == nil else { return }
+        eventRosterLoadGeneration &+= 1
+        let requestID = eventRosterLoadGeneration
         eventRoster = []
+        loadedEventRosterID = nil
         loadingEventRosterID = eventID
-        defer { loadingEventRosterID = nil }
+        defer {
+            if eventRosterLoadGeneration == requestID {
+                loadingEventRosterID = nil
+            }
+        }
         do {
-            eventRoster = try await api.adminEventGoalMembers(session: session, eventID: eventID)
+            let roster = try await api.adminEventGoalMembers(session: session, eventID: eventID)
+            guard eventRosterLoadGeneration == requestID else { return }
+            eventRoster = roster
+            loadedEventRosterID = eventID
         } catch {
+            guard eventRosterLoadGeneration == requestID else { return }
+            eventRoster = []
+            loadedEventRosterID = nil
             errorMessage = error.localizedDescription
         }
     }

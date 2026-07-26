@@ -8,8 +8,9 @@ const migration = read('../supabase/migrations/20260714008000_admin_request_stat
 const adminData = read('../src/lib/adminData.js');
 const auditView = read('../src/components/admin/AdminAuditLog.jsx');
 
-test('linked migration exactly installs the canonical request audit contract', () => {
-  assert.equal(migration, source);
+test('operator request audit upgrade is re-run safe; migration keeps the historical contract', () => {
+  assert.match(source, /install_guard_admin_request_status_change/);
+  assert.match(source, /keeping newer guard_admin_request_status_change/);
   assert.match(migration, /create table if not exists public\.admin_request_status_changes/i);
   assert.match(migration, /request_type in \('class_booking', 'private_session'\)/i);
   assert.match(migration, /before update or delete on public\.admin_request_status_changes/i);

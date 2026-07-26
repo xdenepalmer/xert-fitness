@@ -291,6 +291,8 @@ test('read-only production check reports every release capability and migration'
     'cancel_booking_expired_batch_refund',
     'credit_batch_refund_reactivation',
     'member_interest_health_consent',
+    'account_deletion_public_lead_cleanup',
+    'request_notes_health_consent',
   ];
 
   for (const capability of capabilities) {

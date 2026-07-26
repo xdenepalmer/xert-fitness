@@ -96,7 +96,7 @@ test('web member admin keeps activation authoritative, bounded and independently
   assert.match(source, /Email unavailable until activation actions refresh/);
   assert.match(source, /Call unavailable until activation actions refresh/);
   assert.match(source, /activationQueuePresentation\(queue, 12\)/);
-  assert.match(source, /onView=\{setViewing\}/);
+  assert.match(source, /onView=\{selectMember\}/);
   assert.match(source, /onLog=\{setLoggingFollowUp\}/);
 
   const activationIndex = source.indexOf('<ActivationCockpit');

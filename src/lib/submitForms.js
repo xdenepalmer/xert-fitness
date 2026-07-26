@@ -58,12 +58,23 @@ export async function submitPartnerInterest(formData) {
   return { success: true };
 }
 
-export async function requestClassBooking(formData) {
-  if (isHoneypotFilled(formData)) return { success: true };
-  const payload = {
+function withRequestHealthConsent(formData) {
+  const notes = String(formData.notes || '').trim();
+  const healthInfoConsent = Boolean(formData.health_info_consent);
+  if (notes && !healthInfoConsent) {
+    throw new Error('Consent to collect health information is required when sharing notes about injuries or limitations.');
+  }
+  return {
     ...stripHoneypot(formData),
+    notes: notes || null,
+    health_info_consent: notes ? healthInfoConsent : false,
     status: 'requested',
   };
+}
+
+export async function requestClassBooking(formData) {
+  if (isHoneypotFilled(formData)) return { success: true };
+  const payload = withRequestHealthConsent(formData);
   const { error } = await supabase.from('class_bookings').insert([payload]);
   if (error) throw new Error(error.message);
   return { success: true };
@@ -71,10 +82,7 @@ export async function requestClassBooking(formData) {
 
 export async function requestPrivateSession(formData) {
   if (isHoneypotFilled(formData)) return { success: true };
-  const payload = {
-    ...stripHoneypot(formData),
-    status: 'requested',
-  };
+  const payload = withRequestHealthConsent(formData);
   const { error } = await supabase.from('private_session_requests').insert([payload]);
   if (error) throw new Error(error.message);
   return { success: true };

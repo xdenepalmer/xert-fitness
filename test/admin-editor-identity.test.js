@@ -65,10 +65,45 @@ test('planAdminNavigation prompts on unsaved changes even for a same-section req
 
 test('the member drawer is keyed per member and its detail fetch is guarded', () => {
   assert.match(members, /<MemberDrawer\s+key=\{viewing\.id\}/);
+  assert.match(members, /detailGenerationRef/);
   assert.match(
     members,
-    /let active = true;[\s\S]*?adminMemberDetail\(member\.id\)[\s\S]*?return \(\) => \{ active = false; \};\s*\}, \[member\.id\]\)/,
+    /const loadDetail = \(\) => \{[\s\S]*?const generation = \+\+detailGenerationRef\.current;[\s\S]*?adminMemberDetail\(memberId\)[\s\S]*?if \(detailGenerationRef\.current !== generation\) return;/,
   );
+  assert.match(members, /return \(\) => \{ detailGenerationRef\.current \+= 1; \};\s*\}, \[member\.id\]\)/);
+});
+
+test('class editor and member notice drafts report unsaved changes to the command centre', () => {
+  assert.match(classCalendar, /onDirtyChange = NOOP/);
+  assert.match(classCalendar, /onDirtyChange\(dirty\)/);
+  assert.match(classCalendar, /Discard class changes\?/);
+  assert.match(members, /onDirtyChange = NOOP/);
+  assert.match(members, /onDirtyChange=\{setNoticeDirty\}/);
+  assert.match(members, /onDirtyChange\(noticeDirty\)/);
+  assert.match(commandCentre, /<ClassCalendarAdmin[^>]+onDirtyChange=\{setHasUnsavedChanges\}/);
+  assert.match(commandCentre, /<MembersManager[^>]+onDirtyChange=\{setHasUnsavedChanges\}/);
+});
+
+test('member subject switches confirm before discarding a private notice draft', () => {
+  assert.match(members, /const selectMember = next =>/);
+  assert.match(members, /noticeDirtyRef\.current && current && next\?\.id !== current\.id/);
+  assert.match(members, /setPendingSubjectSwitch\(\{ next: next \?\? null \}\)/);
+  assert.match(members, /Switching members permanently discards/);
+  assert.match(members, /onView=\{selectMember\}/);
+  assert.match(members, /onClick=\{\(\) => selectMember\(m\)\}/);
+});
+
+test('class roster refresh is generation-scoped so late class A responses cannot paint class B', () => {
+  assert.match(classCalendar, /bookingsRefreshGenerationRef/);
+  assert.match(classCalendar, /loadedRosterSessionId/);
+  assert.match(
+    classCalendar,
+    /const generation = \+\+bookingsRefreshGenerationRef\.current;[\s\S]*?if \(generation !== bookingsRefreshGenerationRef\.current\)/,
+  );
+  assert.match(classCalendar, /const scopedRosterFor = sessionId => \(loadedRosterSessionId === sessionId \? roster : \[\]\)/);
+  assert.match(classCalendar, /const sessionRoster = scopedRosterFor\(s\.id\)/);
+  assert.match(classCalendar, /loadedRosterSessionId !== session\.id/);
+  assert.match(classCalendar, /loadedRosterSessionId !== attendanceSession\.id/);
 });
 
 test('the dialog layer yields the Tab cycle when focus leaves the workspace', () => {

@@ -45,10 +45,13 @@ test('coach, event and pack mutations carry the version originally loaded', () =
 });
 
 test('all catalog editors protect drafts locally and through admin navigation', () => {
+  const classCalendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const members = read('../src/components/admin/MembersManager.jsx');
   for (const [source, title] of [
     [coaches, 'Discard team member changes?'],
     [events, 'Discard event changes?'],
     [products, 'Discard session pack draft?'],
+    [classCalendar, 'Discard class changes?'],
   ]) {
     assert.match(source, /onDirtyChange/);
     assert.match(source, /Unsaved changes/);
@@ -58,7 +61,9 @@ test('all catalog editors protect drafts locally and through admin navigation', 
   }
   assert.match(products, /dirtyEditors\.size > 0/);
   assert.match(products, /key=\{`\$\{p\.id\}:\$\{p\.updated_at \|\| ''\}`\}/);
-  for (const component of ['CoachesManager', 'EventsManager', 'ProductsManager']) {
+  assert.match(members, /onDirtyChange/);
+  assert.match(members, /noticeDirty/);
+  for (const component of ['CoachesManager', 'EventsManager', 'ProductsManager', 'ClassCalendarAdmin', 'MembersManager']) {
     assert.match(commandCentre, new RegExp(`<${component}[^>]+onDirtyChange=\\{setHasUnsavedChanges\\}`));
   }
 });

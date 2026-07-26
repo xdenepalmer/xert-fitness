@@ -14,9 +14,9 @@ const sections = [
   {
     title: 'Sensitive And Health Information',
     content: [
-      'Under Australian privacy law, health information is sensitive information. Optional free-text answers about injuries or physical limitations on the member interest form are treated as health information.',
-      'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox. Contact-only consent is not enough. You can leave the injuries field blank and still register interest.',
-      'When collected, this information is used to help coaches plan safe training and follow up appropriately. It is available to authorised XERT administrators for that purpose and is not included in bulk lead CSV exports or campaign analytics.'
+      'Under Australian privacy law, health information is sensitive information. Optional free-text about injuries or physical limitations on the member interest form, and optional notes on PT or class booking requests that may describe injuries or medical limitations, are treated as health information.',
+      'XERT only collects those details when you choose to provide them and tick a separate health-information consent checkbox on that form. Contact-only consent is not enough. You can leave injuries or notes blank and still submit.',
+      'Member-interest injury details are not shown in admin lead lists, bulk lead CSV exports or campaign analytics. Authorised XERT administrators can open a deliberate reveal on an individual lead when consent was given, so they can follow up safely. PT and class booking notes you consent to share are available to authorised administrators in those request queues for the same purpose.'
     ]
   },
   {
@@ -38,7 +38,7 @@ const sections = [
   {
     title: 'Retention And Security',
     content: [
-      'We retain information only for as long as it is reasonably needed for the purposes above. Account deletion removes your member profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals through the linked account-deletion process. Paid order records may be retained in anonymized form for financial integrity, and payment providers may retain records required by law.',
+      'We retain information only for as long as it is reasonably needed for the purposes above. Account deletion removes your member profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests, training goals and public interest or enquiry records matched to your account email (including member, trainer and partner interest leads and anonymous PT requests) through the linked account-deletion process. Paid order records may be retained in anonymized form for financial integrity, and payment providers may retain records required by law.',
       'We use access controls, row-level database policies, encrypted connections and restricted server credentials. No online system can guarantee absolute security, so please use a unique password and contact us if you suspect unauthorized access.'
     ]
   },

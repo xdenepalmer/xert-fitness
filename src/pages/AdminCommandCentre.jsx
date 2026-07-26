@@ -123,10 +123,10 @@ export default function AdminCommandCentre() {
       case 'members': return <LeadTable key={section} type="member" />;
       case 'trainers': return <LeadTable key={section} type="trainer" />;
       case 'partners': return <LeadTable key={section} type="partner" />;
-      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} />;
+      case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
-      case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
+      case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'orders': return <OrdersManager />;
       case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'content': return <ContentManager onDirtyChange={setHasUnsavedChanges} />;

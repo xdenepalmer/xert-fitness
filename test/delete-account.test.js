@@ -103,6 +103,14 @@ test('falls back to ordered piecemeal deletion including legacy class bookings d
     ['eq', 'user_id', 'member-123'],
     ['from', 'class_bookings'],
     ['ilike', 'email', 'member@example.com'],
+    ['from', 'private_session_requests'],
+    ['ilike', 'email', 'member@example.com'],
+    ['from', 'member_interest'],
+    ['ilike', 'email', 'member@example.com'],
+    ['from', 'trainer_interest'],
+    ['ilike', 'email', 'member@example.com'],
+    ['from', 'partner_interest'],
+    ['ilike', 'email', 'member@example.com'],
     ['deleteUser', 'member-123'],
   ]);
 });
@@ -122,8 +130,18 @@ test('rollout fallback proceeds through PT rollout gaps but rejects unrelated fa
     async rpc() { return { error: { code: '42883', message: 'function delete_member_account does not exist' } }; },
     from(table) {
       if (table === 'orders') return { update: () => ({ eq: async () => ({ error: null }) }) };
-      if (table === 'class_bookings') return { delete: () => ({ ilike: async () => ({ error: null }) }) };
-      return { delete: () => ({ eq: async () => ({ error: ptError }) }) };
+      if (table === 'class_bookings'
+        || table === 'member_interest'
+        || table === 'trainer_interest'
+        || table === 'partner_interest') {
+        return { delete: () => ({ ilike: async () => ({ error: null }) }) };
+      }
+      return {
+        delete: () => ({
+          eq: async () => ({ error: ptError }),
+          ilike: async () => ({ error: null }),
+        }),
+      };
     },
     auth: { admin: { deleteUser: async () => ({ error: null }) } },
   });

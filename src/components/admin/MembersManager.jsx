@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { Activity, Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
 import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
@@ -10,6 +10,8 @@ import { activationQueuePresentation, activationSnapshotPresentation } from '@/l
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+
+const NOOP = _dirty => {};
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -30,7 +32,7 @@ const BOOKING_BADGE = {
 const PAGE_SIZE = 50;
 const emptyNoticeDraft = () => ({ title: '', body: '', tone: 'info', action: 'none', expiryDays: '30' });
 
-function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
+function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange = NOOP }) {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
   const [noteCategory, setNoteCategory] = useState('general');
@@ -43,27 +45,36 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [noticeError, setNoticeError] = useState('');
   const [discardNoticeOpen, setDiscardNoticeOpen] = useState(false);
+  const detailGenerationRef = useRef(0);
   const noticeDirty = Boolean(noticeDraft.title.trim() || noticeDraft.body.trim());
 
+  useEffect(() => {
+    onDirtyChange(noticeDirty);
+  }, [noticeDirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
   const loadDetail = () => {
+    // Generation guard covers the effect path and every mutation refresh so a
+    // late response for member A cannot paint under member B's header.
+    const generation = ++detailGenerationRef.current;
+    const memberId = member.id;
     setDetail(null);
     setDetailError('');
-    adminMemberDetail(member.id)
-      .then(setDetail)
-      .catch(e => setDetailError(e.message || 'Check member detail permissions.'));
+    adminMemberDetail(memberId)
+      .then(result => {
+        if (detailGenerationRef.current !== generation) return;
+        setDetail(result);
+      })
+      .catch(error => {
+        if (detailGenerationRef.current !== generation) return;
+        setDetailError(error.message || 'Check member detail permissions.');
+      });
   };
 
   useEffect(() => {
-    // Guard the in-flight fetch: without it, a slower request for a previously
-    // selected member can resolve after switching and paint that member's
-    // private record under the current member's header.
-    let active = true;
-    setDetail(null);
-    setDetailError('');
-    adminMemberDetail(member.id)
-      .then(result => { if (active) setDetail(result); })
-      .catch(error => { if (active) setDetailError(error.message || 'Check member detail permissions.'); });
-    return () => { active = false; };
+    loadDetail();
+    return () => { detailGenerationRef.current += 1; };
   }, [member.id]);
 
   const handleAddNote = async event => {
@@ -846,7 +857,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
   );
 }
 
-export default function MembersManager({ initialMemberId, onIntentHandled }) {
+export default function MembersManager({ initialMemberId, onIntentHandled, onDirtyChange = NOOP }) {
   const { user } = useSupabaseAuth();
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -856,6 +867,10 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [granting, setGranting] = useState(null);
   const [loggingFollowUp, setLoggingFollowUp] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [noticeDirty, setNoticeDirty] = useState(false);
+  const [pendingSubjectSwitch, setPendingSubjectSwitch] = useState(null);
+  const noticeDirtyRef = useRef(false);
+  const viewingRef = useRef(null);
   const [loadError, setLoadError] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [creditFilter, setCreditFilter] = useState('all');
@@ -876,6 +891,37 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [activationQueueLoading, setActivationQueueLoading] = useState(true);
   const [activationQueueError, setActivationQueueError] = useState('');
   const [pendingRoleChange, setPendingRoleChange] = useState(null);
+
+  useEffect(() => {
+    noticeDirtyRef.current = noticeDirty;
+    onDirtyChange(noticeDirty);
+  }, [noticeDirty, onDirtyChange]);
+
+  useEffect(() => {
+    viewingRef.current = viewing;
+  }, [viewing]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const applyMemberSelection = next => {
+    setPendingSubjectSwitch(null);
+    setNoticeDirty(false);
+    noticeDirtyRef.current = false;
+    setViewing(next ?? null);
+  };
+
+  const selectMember = next => {
+    // Block subject switches (view another member, close, filter clear, deep
+    // link) while a private notice draft is dirty unless the operator confirms.
+    // The drawer close path calls applyMemberSelection directly after its own
+    // discard prompt so it does not re-enter this guard.
+    const current = viewingRef.current;
+    if (noticeDirtyRef.current && current && next?.id !== current.id) {
+      setPendingSubjectSwitch({ next: next ?? null });
+      return;
+    }
+    applyMemberSelection(next);
+  };
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -975,9 +1021,10 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
 
   useEffect(() => {
     setPage(1);
-    setViewing(null);
     setGranting(null);
     setLoggingFollowUp(null);
+    if (!viewingRef.current) return;
+    selectMember(null);
   }, [creditFilter, debouncedSearch, roleFilter]);
 
   useEffect(() => {
@@ -986,7 +1033,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     adminListMembersPage({ memberId: initialMemberId, pageSize: 1 })
       .then(result => {
         if (!active) return;
-        if (result.rows[0]) setViewing(result.rows[0]);
+        if (result.rows[0]) selectMember(result.rows[0]);
         else toast({ title: 'Member not found', description: 'This member may have been removed or is no longer accessible.', variant: 'destructive' });
       })
       .catch(error => {
@@ -1065,11 +1112,11 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         queueError={activationQueueError}
         queueLoading={activationQueueLoading}
         onRetry={refresh}
-        onView={setViewing}
+        onView={selectMember}
         onLog={setLoggingFollowUp}
       />
 
-      <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} onLog={setLoggingFollowUp} />
+      <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={selectMember} onLog={setLoggingFollowUp} />
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
@@ -1114,7 +1161,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button type="button" onClick={() => setViewing(m)}
+                <button type="button" onClick={() => selectMember(m)}
                   className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                   View
                 </button>
@@ -1147,11 +1194,11 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         </p>
         {pageCount > 1 && (
           <nav aria-label="Member result pages" className="flex items-center gap-2">
-            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+            <button type="button" onClick={() => { selectMember(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
-            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+            <button type="button" onClick={() => { selectMember(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
               <ChevronRight className="w-4 h-4" />
             </button>
           </nav>
@@ -1162,14 +1209,15 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         <MemberDrawer
           key={viewing.id}
           member={viewing}
-          onClose={() => setViewing(null)}
+          onClose={() => applyMemberSelection(null)}
           onGrant={() => setGranting(viewing)}
           onNotesChanged={refresh}
+          onDirtyChange={setNoticeDirty}
         />
       )}
 
       {granting && (
-        <GrantCreditsModal member={granting} onDone={() => { setGranting(null); setViewing(null); refresh(); }} onCancel={() => setGranting(null)} />
+        <GrantCreditsModal member={granting} onDone={() => { setGranting(null); applyMemberSelection(null); refresh(); }} onCancel={() => setGranting(null)} />
       )}
 
       {loggingFollowUp && (
@@ -1184,6 +1232,16 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         confirmLabel={pendingRoleChange?.role === 'admin' ? 'Make admin' : 'Remove admin'}
         onConfirm={() => void applyRoleChange()}
         busy={roleChangingId !== null}
+      />
+      <AdminConfirmDialog
+        open={Boolean(pendingSubjectSwitch)}
+        onOpenChange={open => !open && setPendingSubjectSwitch(null)}
+        title="Discard private notice draft?"
+        description="This member notice has not been sent."
+        warning="Switching members permanently discards the title and message you entered."
+        cancelLabel="Keep writing"
+        confirmLabel="Discard draft"
+        onConfirm={() => applyMemberSelection(pendingSubjectSwitch?.next ?? null)}
       />
     </div>
   );

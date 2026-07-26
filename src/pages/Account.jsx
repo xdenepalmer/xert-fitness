@@ -1452,7 +1452,7 @@ export default function Account() {
           <div className="w-full max-w-md border p-6" style={{ borderColor: 'rgba(201,78,68,0.45)', backgroundColor: '#101820' }}>
             <h2 id="delete-account-title" className="font-display text-2xl uppercase text-xert-offwhite">Delete account permanently?</h2>
             <p id="delete-account-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
-              Your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized. This cannot be undone.
+              Your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests, training goals and public interest or enquiry records matched to your email (including soft-launch leads and anonymous PT requests) will be removed. Purchase records are anonymized. This cannot be undone.
             </p>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
               <button type="button" autoFocus disabled={deletingAccount} onClick={() => setShowDeleteAccount(false)} className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.65)' }}>Keep account</button>

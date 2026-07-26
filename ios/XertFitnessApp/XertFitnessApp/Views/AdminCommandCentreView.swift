@@ -1988,6 +1988,9 @@ private struct AdminMemberDetailView: View {
     @State private var pendingRole: String?
 
     private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
+    private var scopedNotes: [AdminMemberNote] {
+        admin.loadedMemberDetailID == current.id ? admin.memberNotes : []
+    }
 
     var body: some View {
         List {
@@ -2047,7 +2050,8 @@ private struct AdminMemberDetailView: View {
 
             Section("Staff timeline") {
                 if admin.loadingMemberDetailID == current.id { ProgressView().tint(Color.xertSteel) }
-                if admin.memberDetailUnavailableSources.contains("staff timeline") {
+                if admin.loadedMemberDetailID == current.id,
+                   admin.memberDetailUnavailableSources.contains("staff timeline") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Staff timeline is unavailable.")
                             .font(.subheadline.weight(.semibold))
@@ -2055,10 +2059,10 @@ private struct AdminMemberDetailView: View {
                             .font(.caption)
                             .foregroundStyle(Color.xertPale.opacity(0.58))
                     }
-                } else if admin.memberNotes.isEmpty && admin.loadingMemberDetailID == nil {
+                } else if scopedNotes.isEmpty && admin.loadingMemberDetailID != current.id {
                     Text("No staff notes yet.")
                 }
-                ForEach(admin.memberNotes) { note in
+                ForEach(scopedNotes) { note in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(note.category.replacingOccurrences(of: "_", with: " ").uppercased())
@@ -2184,7 +2188,8 @@ private struct AdminMemberDetailView: View {
                         .font(.caption)
                         .foregroundStyle(Color.xertPale.opacity(0.58))
                 }
-            } else if admin.memberDetailUnavailableSources.contains("member readiness") {
+            } else if admin.loadedMemberDetailID == current.id,
+                      admin.memberDetailUnavailableSources.contains("member readiness") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Member readiness is unavailable.")
                         .font(.subheadline.weight(.semibold))
@@ -2192,7 +2197,7 @@ private struct AdminMemberDetailView: View {
                         .font(.caption)
                         .foregroundStyle(Color.xertPale.opacity(0.58))
                 }
-            } else {
+            } else if admin.loadingMemberDetailID != current.id {
                 Text("No member readiness record is available yet.")
                     .font(.subheadline)
                     .foregroundStyle(Color.xertPale.opacity(0.68))
@@ -6711,15 +6716,19 @@ private struct AdminEventRosterView: View {
     @ObservedObject var admin: AdminStore
     let event: AdminEvent
 
+    private var scopedRoster: [AdminEventGoalMember] {
+        admin.loadedEventRosterID == event.id ? admin.eventRoster : []
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 if admin.loadingEventRosterID == event.id {
                     HStack { Spacer(); ProgressView(); Spacer() }
-                } else if admin.eventRoster.isEmpty {
+                } else if scopedRoster.isEmpty {
                     Text("No members are training toward this event yet.")
                 } else {
-                    ForEach(admin.eventRoster) { member in
+                    ForEach(scopedRoster) { member in
                         VStack(alignment: .leading, spacing: 7) {
                             Text(member.displayName).font(.headline)
                             if let email = nonempty(member.email) {

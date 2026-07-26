@@ -28,13 +28,31 @@ revoke all on table public.admin_request_status_changes from anon;
 revoke insert, update, delete on table public.admin_request_status_changes from authenticated;
 grant select on table public.admin_request_status_changes to authenticated;
 
-create or replace function public.guard_admin_request_status_change()
-returns trigger language plpgsql set search_path = public as $$
+-- Re-run safe: do not replace a newer guard shape with this older body.
+do $install_guard_admin_request_status_change$
+declare
+  v_def text;
 begin
-  raise exception 'REQUEST_AUDIT_IMMUTABLE';
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_admin_request_status_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and (v_def ilike '%changed_by%' or v_def ilike '%subject_label%') then
+    raise notice 'keeping newer guard_admin_request_status_change';
+  else
+    execute $fn$
+      create or replace function public.guard_admin_request_status_change()
+      returns trigger language plpgsql set search_path = public as $$
+      begin
+        raise exception 'REQUEST_AUDIT_IMMUTABLE';
+      end;
+      $$;
+$fn$;
+  end if;
 end;
-$$;
-
+$install_guard_admin_request_status_change$;
 drop trigger if exists admin_request_status_changes_immutable on public.admin_request_status_changes;
 create trigger admin_request_status_changes_immutable
   before update or delete on public.admin_request_status_changes

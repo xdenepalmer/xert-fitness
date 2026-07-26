@@ -65,6 +65,8 @@ test('member drawer composes, protects and reports private notices', () => {
   assert.match(members, /Private notices/);
   assert.match(members, /adminSendMemberNotice\(member\.id, noticeDraft\)/);
   assert.match(members, /Discard private notice draft\?/);
+  assert.match(members, /pendingSubjectSwitch/);
+  assert.match(members, /Switching members permanently discards/);
   assert.match(members, /Read in app/);
   assert.match(members, /Push delivered/);
   assert.match(members, /targeted_member_notices_upgrade\.sql/);

@@ -1,15 +1,18 @@
--- Records explicit consent before free-text health details can land in
--- member_interest, and refuses an insert that carries injuries text without it.
---
--- The public member-interest form already collected
--- injuries_or_limitations_optional under only consent_to_contact (consent to be
--- contacted). Health information is sensitive information under the Privacy Act
--- 1988; APP 3.3 requires a separate, informed consent to collect it.
---
--- Extends install_public_form_insert_policies() so every operator script that
--- reinstalls the public form policies keeps the health guard. The clause is
--- added only when both columns exist, so earlier apply paths stay safe.
+-- PT and booking request free-text notes can carry health information
+-- (injuries, rehab constraints) with only consent_to_contact. APP 3.3 needs a
+-- separate, informed consent — the same shape already used for member_interest
+-- injuries. Adds health_info_consent on both request tables, extends the public
+-- form installer so notes without consent are refused, and exposes a narrow
+-- admin reveal for member-interest injuries (kept out of list/CSV selects).
 
+alter table public.class_bookings
+  add column if not exists health_info_consent boolean not null default false;
+
+alter table public.private_session_requests
+  add column if not exists health_info_consent boolean not null default false;
+
+-- Keep the member-interest injuries guard when this installer re-runs after
+-- member_interest_health_consent (column may already exist).
 alter table public.member_interest
   add column if not exists health_info_consent boolean not null default false;
 
@@ -130,5 +133,56 @@ revoke execute on function public.install_public_form_insert_policies() from pub
 
 select public.install_public_form_insert_policies();
 
+-- Narrow reveal: injuries stay out of admin list/CSV selects; staff fetch them
+-- only for a single lead when consent was recorded.
+create or replace function public.admin_reveal_member_interest_health(p_lead_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_consent boolean;
+  v_injuries text;
+begin
+  if auth.uid() is null or not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
+  if p_lead_id is null then
+    raise exception 'LEAD_REQUIRED';
+  end if;
+
+  select health_info_consent,
+         nullif(btrim(injuries_or_limitations_optional), '')
+    into v_consent, v_injuries
+  from public.member_interest
+  where id = p_lead_id;
+
+  if not found then
+    raise exception 'LEAD_NOT_FOUND';
+  end if;
+
+  if v_consent is not true or v_injuries is null then
+    return jsonb_build_object(
+      'lead_id', p_lead_id,
+      'available', false,
+      'injuries_or_limitations_optional', null
+    );
+  end if;
+
+  return jsonb_build_object(
+    'lead_id', p_lead_id,
+    'available', true,
+    'injuries_or_limitations_optional', v_injuries
+  );
+end;
+$$;
+
+revoke all on function public.admin_reveal_member_interest_health(uuid)
+  from public, anon;
+grant execute on function public.admin_reveal_member_interest_health(uuid)
+  to authenticated;
+
 insert into public.xert_schema_capabilities (capability)
-values ('member_interest_health_consent') on conflict (capability) do nothing;
+values ('request_notes_health_consent')
+on conflict (capability) do nothing;

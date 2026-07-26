@@ -2,11 +2,22 @@
 
 **56 findings.** Statuses below reflect verification against the current branch
 `cursor/xert-audit-continuation-8c8e` (merged with `main`) plus the working tree.
-**49 FIXED**, **7 still OPEN**. Auditor evidence quotes are preserved for history;
-prefer the **status** line and `docs/HANDOFF.md` for what is true now.
+Auditor evidence quotes are preserved for history; prefer the **status** line and
+`docs/HANDOFF.md` for what is true now.
 
 Read `../HANDOFF.md` first for environment setup, what landed on this branch, and
 the remaining open work.
+
+## Completeness critic (closed)
+
+Cross-cutting privacy/deletion/operator-drift items found after the original queue:
+
+| id | Status |
+|---|---|
+| `operator-sql-rerun-downgrades-deletion-redaction` | **CLOSED** — skip-if-newer wrappers on older audit/deletion operator scripts; drift tests |
+| `account-deletion-leaves-public-leads-and-anon-pt` | **CLOSED** — `20260726108000_account_deletion_public_lead_cleanup.sql` + Account/Privacy copy |
+| `pt-booking-notes-health-consent-missing` | **CLOSED** — `20260726109000_request_notes_health_consent.sql` + PT/Booking forms |
+| `privacy-purpose-vs-write-only-injuries` | **CLOSED** — honest Privacy + admin reveal RPC; sensitive-data boundary tests retained |
 
 ---
 

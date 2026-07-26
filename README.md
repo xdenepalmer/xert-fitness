@@ -235,6 +235,11 @@ The Supabase schema is defined in:
 - `src/supabase/member_interest_health_consent.sql` — requires an explicit health
   information consent before free-text injuries can be stored on a public member
   interest lead
+- `src/supabase/account_deletion_public_lead_cleanup.sql` — account deletion also
+  removes email-matched public interest leads and anonymous PT requests
+- `src/supabase/request_notes_health_consent.sql` — requires health-information
+  consent before PT/booking free-text notes can be stored, and lets admins
+  deliberately reveal consented member-interest injuries
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -276,8 +281,10 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
 `credit_batch_refund_reactivation.sql`,
 `member_interest_health_consent.sql`,
-`class_session_optimistic_locking_upgrade.sql` and
-`audit_subject_pii_redaction_upgrade.sql`. This
+`class_session_optimistic_locking_upgrade.sql`,
+`audit_subject_pii_redaction_upgrade.sql`,
+`account_deletion_public_lead_cleanup.sql` and
+`request_notes_health_consent.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -327,8 +334,10 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `member_history_index.sql`, `cancel_booking_expired_batch_refund.sql`,
 `credit_batch_refund_reactivation.sql`,
 `member_interest_health_consent.sql`,
-`class_session_optimistic_locking_upgrade.sql` and
-`audit_subject_pii_redaction_upgrade.sql`. The
+`class_session_optimistic_locking_upgrade.sql`,
+`audit_subject_pii_redaction_upgrade.sql`,
+`account_deletion_public_lead_cleanup.sql` and
+`request_notes_health_consent.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

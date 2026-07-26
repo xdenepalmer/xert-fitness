@@ -30,8 +30,10 @@ export default function PTRequestForm({ onSuccess }) {
     full_name: '', email: '', phone: '',
     requested_session_type: '', preferred_day: '', preferred_time: '',
     training_goal: '', experience_level: '', notes: '',
+    health_info_consent: false,
     consent_to_contact: false, company_website: '',
   });
+  const hasHealthNotes = Boolean(form.notes.trim());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,6 +54,10 @@ export default function PTRequestForm({ onSuccess }) {
     if (!form.email.trim() || !form.email.includes('@')) { setError('Valid email is required.'); return; }
     if (!form.phone.trim()) { setError('Phone is required.'); return; }
     if (!form.requested_session_type) { setError('Please select a session type.'); return; }
+    if (hasHealthNotes && !form.health_info_consent) {
+      setError('Consent to collect health information is required when you share notes about injuries or limitations.');
+      return;
+    }
     if (!form.consent_to_contact) { setError('Consent to contact is required.'); return; }
     setLoading(true);
     setError('');
@@ -139,9 +145,34 @@ export default function PTRequestForm({ onSuccess }) {
 
       <div>
         <FieldLabel htmlFor="pt-notes">Notes</FieldLabel>
-        <textarea id="pt-notes" name="notes" value={form.notes} onChange={e => set('notes', e.target.value)}
-          rows={2} placeholder="Anything you'd like the coach to know (optional)"
-          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+        <textarea
+          id="pt-notes"
+          name="notes"
+          value={form.notes}
+          onChange={e => {
+            const value = e.target.value;
+            setForm(f => ({
+              ...f,
+              notes: value,
+              health_info_consent: value.trim() ? f.health_info_consent : false,
+            }));
+          }}
+          rows={2}
+          placeholder="Anything you'd like the coach to know (optional)"
+          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none"
+        />
+        {hasHealthNotes && (
+          <div className="mt-3">
+            <FormCheckbox
+              name="health_info_consent"
+              checked={form.health_info_consent}
+              onChange={checked => set('health_info_consent', checked)}
+              required
+            >
+              I consent to XERT collecting health information in these notes (for example injuries or medical limitations) so coaches can follow up safely. I understand I can leave notes blank.
+            </FormCheckbox>
+          </div>
+        )}
       </div>
 
       <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>

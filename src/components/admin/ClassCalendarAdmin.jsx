@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
@@ -12,6 +12,35 @@ const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hy
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
+const NOOP = _dirty => {};
+const EMPTY_SESSION = {
+  class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
+  start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
+  location_zone: 'Main floor', beginner_friendly: false,
+  intensity_level: 'Moderate', status: 'draft', public_visible: false,
+  booking_mode: 'request_to_book', notes: '',
+};
+
+function sessionEditorForm(session) {
+  if (!session?.id) return { ...EMPTY_SESSION };
+  return {
+    class_type: session.class_type || EMPTY_SESSION.class_type,
+    title: session.title || '',
+    description: session.description || '',
+    coach_name: session.coach_name || '',
+    start_time: toDateTimeLocalInput(session.start_time),
+    end_time: toDateTimeLocalInput(session.end_time),
+    duration_minutes: session.duration_minutes ?? 60,
+    capacity: session.capacity,
+    location_zone: session.location_zone || '',
+    beginner_friendly: Boolean(session.beginner_friendly),
+    intensity_level: session.intensity_level || 'Moderate',
+    status: session.status || 'draft',
+    public_visible: Boolean(session.public_visible),
+    booking_mode: session.booking_mode || 'request_to_book',
+    notes: session.notes || '',
+  };
+}
 
 function classEditorStatuses(session) {
   if (!session?.id) return ['draft', 'published'];
@@ -217,22 +246,38 @@ const STATUS_COLORS = {
   completed: 'text-xert-concrete/40 border-xert-steel/30',
 };
 
-function SessionEditor({ session, blackouts, onSave, onCancel }) {
-  const [form, setForm] = useState(() => session ? {
-    ...session,
-    start_time: toDateTimeLocalInput(session.start_time),
-    end_time: toDateTimeLocalInput(session.end_time),
-  } : {
-    class_type: 'XERT Foundation', title: '', description: '', coach_name: '',
-    start_time: '', end_time: '', duration_minutes: 60, capacity: 8,
-    location_zone: 'Main floor', beginner_friendly: false,
-    intensity_level: 'Moderate', status: 'draft', public_visible: false,
-    booking_mode: 'request_to_book', notes: '',
-  });
+function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) {
+  const baseline = useMemo(() => sessionEditorForm(session), [session]);
+  const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
   const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
+  const dirty = Object.keys(EMPTY_SESSION).some(key => form[key] !== baseline[key]);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  const requestCancel = useCallback(() => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onCancel();
+  }, [dirty, onCancel, saving]);
+
+  useEffect(() => {
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') requestCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [requestCancel]);
 
   const handleSave = async () => {
     const validationError = classSessionValidationError(form);
@@ -256,11 +301,14 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4" onMouseDown={event => { if (event.target === event.currentTarget) requestCancel(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-xert-steel/20">
-          <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
-          <button type="button" onClick={onCancel} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl">&#10005;</button>
+          <div>
+            <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
+            {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
+          </div>
+          <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl disabled:opacity-40">&#10005;</button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -371,8 +419,8 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           </div>
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving}
-            className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
+          <button type="button" onClick={requestCancel} disabled={saving}
+            className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={saving}
@@ -381,6 +429,17 @@ function SessionEditor({ session, blackouts, onSave, onCancel }) {
           </button>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard class changes?"
+        description="This class session has edits that have not been saved."
+        warning="Closing now permanently discards the changes in this editor."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        onConfirm={onCancel}
+        busy={saving}
+      />
     </div>
   );
 }
@@ -459,7 +518,7 @@ function RepeatModal({ session, onDone, onCancel }) {
   );
 }
 
-export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled }) {
+export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled, onDirtyChange = NOOP }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
@@ -467,6 +526,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [loadedRosterSessionId, setLoadedRosterSessionId] = useState(null);
+  const bookingsRefreshGenerationRef = useRef(0);
   const [waitlistOverview, setWaitlistOverview] = useState([]);
   const [waitlistOverviewAvailable, setWaitlistOverviewAvailable] = useState(true);
   const [waitlistOverviewError, setWaitlistOverviewError] = useState('');
@@ -538,14 +599,28 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     onIntentHandled?.();
   }, [initialAction, onIntentHandled, showEditor]);
 
+  const clearRosterState = () => {
+    bookingsRefreshGenerationRef.current += 1;
+    setBookings([]);
+    setRoster([]);
+    setLoadedRosterSessionId(null);
+  };
+
   const refreshBookings = async (sessionId) => {
+    // Generation + session scoping: a late response for class A must not paint
+    // over class B's roster, booking requests, roll call, or CSV export.
+    const generation = ++bookingsRefreshGenerationRef.current;
     const [requests, members] = await Promise.all([
       getClassBookings({ class_session_id: sessionId }),
       adminSessionRoster(sessionId).catch(() => []),
     ]);
+    if (generation !== bookingsRefreshGenerationRef.current) {
+      return { requests, members, applied: false };
+    }
     setBookings(requests);
     setRoster(members);
-    return { requests, members };
+    setLoadedRosterSessionId(sessionId);
+    return { requests, members, applied: true };
   };
 
   useEffect(() => {
@@ -560,8 +635,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     let active = true;
     const openIntent = async () => {
       try {
-        const { members } = await refreshBookings(target.id);
-        if (!active) return;
+        const { members, applied } = await refreshBookings(target.id);
+        if (!active || !applied) return;
         setTimeFilter(new Date(target.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
         setExpandedBookings(target.id);
         if (initialAction === 'attendance') {
@@ -589,13 +664,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const loadBookings = async (sessionId) => {
     if (expandedBookings === sessionId) {
       setExpandedBookings(null);
-      setBookings([]);
-      setRoster([]);
+      clearRosterState();
       return;
     }
     try {
-      await refreshBookings(sessionId);
-      setExpandedBookings(sessionId);
+      const result = await refreshBookings(sessionId);
+      if (result.applied) setExpandedBookings(sessionId);
     } catch (e) {
       toast({ title: 'Could not load class bookings', description: e.message, variant: 'destructive' });
     }
@@ -604,7 +678,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const openWaitlistRoster = async sessionId => {
     setTimeFilter('upcoming');
     try {
-      await refreshBookings(sessionId);
+      const result = await refreshBookings(sessionId);
+      if (!result.applied) return;
       setExpandedBookings(sessionId);
       window.requestAnimationFrame(() => document.getElementById(`class-session-${sessionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     } catch (error) {
@@ -715,8 +790,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       });
       if (expandedBookings === session.id) {
         setExpandedBookings(null);
-        setBookings([]);
-        setRoster([]);
+        clearRosterState();
       }
       setSessionToCancel(null);
       await load();
@@ -741,10 +815,19 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
+  const scopedRosterFor = sessionId => (loadedRosterSessionId === sessionId ? roster : []);
+  const scopedBookingsFor = sessionId => (loadedRosterSessionId === sessionId ? bookings : []);
+  const attendanceRoster = attendanceSession ? scopedRosterFor(attendanceSession.id) : [];
+
   const exportRoster = (session) => {
+    const scopedRoster = scopedRosterFor(session.id);
+    if (loadedRosterSessionId !== session.id) {
+      toast({ title: 'Roster not ready', description: 'Open this class roster again before exporting.', variant: 'destructive' });
+      return;
+    }
     downloadCsv(
       rosterExportFilename(session),
-      roster.map(member => ({
+      scopedRoster.map(member => ({
         class_title: session.title || 'XERT class',
         class_starts_at: session.start_time ? new Date(session.start_time).toLocaleString('en-AU') : '',
         name: member.full_name || '',
@@ -766,13 +849,22 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const openAttendance = (session) => {
-    setAttendanceDraft(createAttendanceDraft(roster));
+    const scopedRoster = scopedRosterFor(session.id);
+    if (loadedRosterSessionId !== session.id) {
+      toast({ title: 'Roster not ready', description: 'Open this class roster again before taking attendance.', variant: 'destructive' });
+      return;
+    }
+    setAttendanceDraft(createAttendanceDraft(scopedRoster));
     setAttendanceSession(session);
   };
 
   const saveAttendance = async () => {
     if (!attendanceSession) return;
-    const summary = summarizeAttendanceDraft(roster, attendanceDraft);
+    if (loadedRosterSessionId !== attendanceSession.id) {
+      toast({ title: 'Roster changed', description: 'Reload this class roster before saving attendance.', variant: 'destructive' });
+      return;
+    }
+    const summary = summarizeAttendanceDraft(attendanceRoster, attendanceDraft);
     if (!summary.complete) {
       toast({
         title: 'Roll call is incomplete',
@@ -805,7 +897,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     return timeFilter === 'past' ? isPast : !isPast;
   });
   const upcomingCount = sessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
-  const attendanceSummary = summarizeAttendanceDraft(roster, attendanceDraft);
+  const attendanceSummary = summarizeAttendanceDraft(attendanceRoster, attendanceDraft);
 
   return (
     <div className="p-6">
@@ -863,8 +955,10 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         <div className="space-y-2">
           {filtered.map(s => {
             const sessionBlackouts = blackoutsOverlappingSession(s, blackouts);
-            const activeRosterCount = roster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
-            const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
+            const sessionRoster = scopedRosterFor(s.id);
+            const sessionBookings = scopedBookingsFor(s.id);
+            const activeRosterCount = sessionRoster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
+            const waitlistedRoster = sessionRoster.filter(member => member.status === 'waitlisted');
             const promotionItem = waitlistOverview.find(item => item.session_id === s.id) || null;
             const hasOpenPlace = s.capacity == null || activeRosterCount < s.capacity;
             return (
@@ -935,25 +1029,25 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       )}
                       {s.start_time && new Date(s.start_time).getTime() <= now
                         && ['published', 'full', 'completed'].includes(s.status)
-                        && roster.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status)) && (
+                        && sessionRoster.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status)) && (
                         <button type="button" onClick={() => openAttendance(s)}
                           className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-green-600/40 font-body text-[11px] uppercase tracking-wider text-green-400 hover:bg-green-900/20 transition-colors">
                           <ClipboardCheck className="w-3.5 h-3.5" />
                           Take attendance
                         </button>
                       )}
-                      <button onClick={() => exportRoster(s)} disabled={roster.length === 0}
+                      <button onClick={() => exportRoster(s)} disabled={sessionRoster.length === 0}
                         className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
                         <Download className="w-3.5 h-3.5" />
                         Export roster
                       </button>
                     </div>
                   </div>
-                  {roster.length === 0 ? (
+                  {sessionRoster.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40 mb-4">No member bookings yet.</p>
                   ) : (
                     <div className="space-y-2 mb-5">
-                      {roster.map(r => {
+                      {sessionRoster.map(r => {
                         const waitlistPosition = r.status === 'waitlisted'
                           ? waitlistedRoster.findIndex(member => member.booking_id === r.booking_id) + 1
                           : null;
@@ -976,12 +1070,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                     </div>
                   )}
 
-                  <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">Booking requests ({bookings.length})</h4>
-                  {bookings.length === 0 ? (
+                  <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">Booking requests ({sessionBookings.length})</h4>
+                  {sessionBookings.length === 0 ? (
                     <p className="font-body text-sm text-xert-concrete/40">No bookings yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      {bookings.map(b => (
+                      {sessionBookings.map(b => (
                         <div key={b.id} className="flex items-center justify-between gap-4 bg-xert-ink p-3">
                           <div>
                             <p className="font-body text-sm text-xert-offwhite">{b.full_name}</p>
@@ -1011,6 +1105,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}
           onCancel={() => setShowEditor(false)}
+          onDirtyChange={onDirtyChange}
         />
       )}
 
@@ -1050,11 +1145,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   {attendanceSummary.unmarked > 0 && <span><strong className="text-xert-steel">{attendanceSummary.unmarked}</strong> unmarked</span>}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setAttendanceDraft(markAllAttendance(roster))} disabled={isSavingAttendance}
+                  <button type="button" onClick={() => setAttendanceDraft(markAllAttendance(attendanceRoster))} disabled={isSavingAttendance}
                     className="inline-flex min-h-11 items-center gap-2 border border-green-600/40 px-3 font-body text-xs text-green-400 disabled:opacity-40">
                     <CheckCheck className="h-4 w-4" /> Mark all present
                   </button>
-                  <button type="button" onClick={() => setAttendanceDraft(blankAttendanceDraft(roster))} disabled={isSavingAttendance || attendanceSummary.marked === 0}
+                  <button type="button" onClick={() => setAttendanceDraft(blankAttendanceDraft(attendanceRoster))} disabled={isSavingAttendance || attendanceSummary.marked === 0}
                     className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 disabled:opacity-40">
                     <RotateCcw className="h-4 w-4" /> Clear marks
                   </button>

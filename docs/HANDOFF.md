@@ -144,10 +144,17 @@ superseded overload grants). Keep that test green whenever you edit operator
 scripts. Prefer `supabase/migrations/` as authoritative; still mirror into
 `src/supabase/` and the README list until that tree is retired.
 
-### 2c. Two agent jobs that never ran
+### 2c. Completeness critic (privacy / deletion / operator drift) — closed
 
-- **Completeness critic.** Was meant to find what the 13 auditors *missed* —
-  especially cross-cutting defects owned by no single dimension.
+Cross-cutting gaps the original 56-item queue did not fully pin. Status:
+
+| Finding | Status |
+|---|---|
+| Operator SQL re-runs re-break account deletion / PII redaction | **CLOSED** — older `src/supabase/*` audit/deletion scripts skip replace when a newer guard or `delete_member_account` shape exists; `test/supabase-operator-script-drift.test.js` pins it |
+| Account deletion leaves public leads (incl. health) and anonymous PT by email | **CLOSED** — `20260726108000_account_deletion_public_lead_cleanup.sql`; Account / Privacy retention copy aligned |
+| Health consent incomplete on PT + booking free-text | **CLOSED** — `health_info_consent` on `class_bookings` / `private_session_requests`, form + installer guards (`20260726109000_*`) |
+| Privacy purpose vs write-only injuries | **CLOSED** — honest Privacy + `admin_reveal_member_interest_health` behind consent; list/CSV boundary tests kept |
+
 - **Design integration architect.** Synthesis lives in `docs/requirements/README.md`
   but was not independently reviewed.
 
@@ -219,7 +226,7 @@ Do not re-litigate these without reason:
 1. **Commit or discard the working-tree parallel fixes**, then re-run lint/tests/build.
 2. **Close the 4 open findings** (§2a), highest severity first (16, then 27/31/49).
 3. **Write the staff/role model spec (§3).** Unblocks three XL features.
-4. **Run the completeness critic (§2c).**
+4. **Completeness critic privacy/deletion/operator-drift items are closed (§2c).**
 5. Only then start implementing any of specs 01–06, in the phase order in
    `docs/requirements/README.md`: correctness → roles+agreements → health →
    money → operations → engagement.

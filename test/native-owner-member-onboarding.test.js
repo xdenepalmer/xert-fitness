@@ -21,6 +21,10 @@ test('owner member records show readiness without leaking emergency details into
   assert.match(store, /func revealMemberEmergencyContact[\s\S]*loadedMemberDetailID == memberID/);
   assert.match(store, /func clearMemberDetail[\s\S]*revealedMemberEmergencyContact = nil/);
   assert.match(store, /func clearRevealedMemberEmergencyContact\(\)[\s\S]*emergencyContactRevealGeneration &\+= 1[\s\S]*revealedMemberEmergencyContact = nil/);
+  assert.doesNotMatch(
+    store.slice(store.indexOf('func loadMemberDetail'), store.indexOf('func clearMemberDetail')),
+    /guard loadingMemberDetailID == nil else \{ return \}/,
+  );
   assert.match(view, /onChange\(of: scenePhase\)[\s\S]*phase == \.active else \{[\s\S]*clearRevealedMemberEmergencyContact\(\)/);
 
   const directory = view.slice(

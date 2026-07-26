@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+const stripComments = sql => sql
+  .split('\n')
+  .filter(line => !line.trimStart().startsWith('--'))
+  .join('\n');
+
 const migration = readFileSync(
   new URL('../supabase/migrations/20260726105000_audit_subject_pii_redaction.sql', import.meta.url),
   'utf8',
@@ -11,8 +16,14 @@ const upgrade = readFileSync(
   'utf8',
 );
 
-test('upgrade mirror matches the migration exactly', () => {
-  assert.equal(upgrade, migration);
+test('upgrade keeps redaction guards and skips replacing a newer delete_member_account', () => {
+  const body = stripComments(upgrade);
+  assert.match(body, /create or replace function public\.guard_admin_request_status_change\(\)/i);
+  assert.match(body, /subject_label/);
+  assert.match(body, /install_delete_member_account/);
+  assert.match(body, /keeping newer delete_member_account/);
+  assert.match(body, /member_interest/);
+  assert.match(migration, /perform public\.redact_audit_subject_pii\(v_email\)/);
 });
 
 test('guards keep SET NULL and add a narrow subject-PII nulling allowance', () => {

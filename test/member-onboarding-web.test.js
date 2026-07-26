@@ -93,5 +93,6 @@ test('privacy and account deletion copy enumerate the new member-owned data boun
   assert.match(privacy, /OpenStreetMap/);
   assert.match(terms, /does not mean XERT has medically assessed or cleared you to exercise/);
   assert.doesNotMatch(terms, /Member Readiness[^.]*waiver/i);
-  assert.match(account, /emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals will be removed/);
+  assert.match(account, /emergency contact, readiness acknowledgements, credits, bookings, PT requests, training goals and public interest or enquiry records matched to your email/);
+  assert.match(account, /anonymous PT requests/);
 });

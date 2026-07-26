@@ -22,6 +22,9 @@
 -- blocked outright. No UPDATE policy exists on any of these tables, so this
 -- narrow allowance is not reachable by an API caller — only by referential
 -- integrity itself.
+--
+-- Request/lead guards were later extended to also allow subject-PII redaction.
+-- Re-running this file must not wipe that newer shape.
 
 -- session_booking_changes: member_id + changed_by
 create or replace function public.guard_session_booking_change()
@@ -42,7 +45,21 @@ begin
 end;
 $$;
 
--- admin_request_status_changes: changed_by
+-- admin_request_status_changes: changed_by (skip if redaction-aware shape exists)
+do $install_guard_admin_request_status_change$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_admin_request_status_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and v_def ilike '%subject_label%' then
+    raise notice 'keeping redaction-aware guard_admin_request_status_change';
+  else
+    execute $fn$
 create or replace function public.guard_admin_request_status_change()
 returns trigger
 language plpgsql
@@ -58,8 +75,26 @@ begin
   raise exception 'REQUEST_AUDIT_IMMUTABLE';
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_guard_admin_request_status_change$;
 
--- admin_lead_changes: changed_by
+-- admin_lead_changes: changed_by (skip if redaction-aware shape exists)
+do $install_guard_admin_lead_change$
+declare
+  v_def text;
+begin
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_admin_lead_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and v_def ilike '%subject_label%' then
+    raise notice 'keeping redaction-aware guard_admin_lead_change';
+  else
+    execute $fn$
 create or replace function public.guard_admin_lead_change()
 returns trigger
 language plpgsql
@@ -75,6 +110,10 @@ begin
   raise exception 'LEAD_AUDIT_IMMUTABLE';
 end;
 $$;
+$fn$;
+  end if;
+end;
+$install_guard_admin_lead_change$;
 
 -- admin_schedule_changes: changed_by
 create or replace function public.guard_admin_schedule_change()

@@ -60,6 +60,29 @@ export async function deleteMemberAccountLegacy(admin, userId, email) {
     if (bookingError && !isMissingClassBookingsTable(bookingError)) {
       throw bookingError;
     }
+
+    // Anonymous PT rows and any leftover address match after the user_id delete.
+    const { error: anonPtError } = await admin
+      .from('private_session_requests')
+      .delete()
+      .ilike('email', normalizedEmail);
+    if (
+      anonPtError
+      && !isMissingPTTrackingColumn(anonPtError)
+      && !['42P01', 'PGRST205'].includes(anonPtError.code)
+    ) {
+      throw anonPtError;
+    }
+
+    for (const table of ['member_interest', 'trainer_interest', 'partner_interest']) {
+      const { error: leadError } = await admin
+        .from(table)
+        .delete()
+        .ilike('email', normalizedEmail);
+      if (leadError && !['42P01', 'PGRST205'].includes(leadError.code)) {
+        throw leadError;
+      }
+    }
   }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);

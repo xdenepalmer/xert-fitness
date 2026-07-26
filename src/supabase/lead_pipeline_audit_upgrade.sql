@@ -26,16 +26,34 @@ create policy "admin_lead_changes_admin_read"
   to authenticated
   using ((select public.is_admin()));
 
-create or replace function public.guard_admin_lead_change()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
+-- Re-run safe: do not replace a newer guard shape with this older body.
+do $install_guard_admin_lead_change$
+declare
+  v_def text;
 begin
-  raise exception 'LEAD_AUDIT_IMMUTABLE';
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_admin_lead_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and (v_def ilike '%changed_by%' or v_def ilike '%subject_label%') then
+    raise notice 'keeping newer guard_admin_lead_change';
+  else
+    execute $fn$
+      create or replace function public.guard_admin_lead_change()
+      returns trigger
+      language plpgsql
+      set search_path = public, pg_temp
+      as $$
+      begin
+        raise exception 'LEAD_AUDIT_IMMUTABLE';
+      end;
+      $$;
+$fn$;
+  end if;
 end;
-$$;
-
+$install_guard_admin_lead_change$;
 drop trigger if exists admin_lead_changes_immutable on public.admin_lead_changes;
 create trigger admin_lead_changes_immutable
   before update or delete on public.admin_lead_changes

@@ -531,6 +531,77 @@ test('native roll call requires explicit complete attendance and provides compac
   assert.match(loadRoster, /loadedRosterSessionID = classSessionID/);
   assert.match(roster, /admin\.loadedRosterSessionID == operation\.id \? admin\.classRoster : \[\]/);
   assert.match(roster, /ForEach\(scopedRoster\)/);
+
+  const setBooking = store.slice(
+    store.indexOf('func setBookingStatus'),
+    store.indexOf('func recordAttendance'),
+  );
+  const recordAttendance = store.slice(
+    store.indexOf('func recordAttendance'),
+    store.indexOf('func logFollowUp'),
+  );
+  assert.match(setBooking, /let rosterGeneration = rosterLoadGeneration/);
+  assert.match(setBooking, /if rosterLoadGeneration == rosterGeneration/);
+  assert.match(recordAttendance, /let rosterGeneration = rosterLoadGeneration/);
+  assert.match(recordAttendance, /if rosterLoadGeneration == rosterGeneration/);
+});
+
+test('native event roster load is generation and identity scoped', async () => {
+  const [store, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+  const loadEventRoster = store.slice(
+    store.indexOf('func loadEventRoster'),
+    store.indexOf('private func reloadEvents'),
+  );
+  const eventRosterView = view.slice(
+    view.indexOf('private struct AdminEventRosterView'),
+    view.indexOf('private struct AdminCoachesView'),
+  );
+
+  assert.match(store, /@Published private\(set\) var loadedEventRosterID: UUID\?/);
+  assert.match(store, /eventRosterLoadGeneration/);
+  assert.match(loadEventRoster, /eventRosterLoadGeneration &\+= 1/);
+  assert.match(loadEventRoster, /eventRoster = \[\]/);
+  assert.match(loadEventRoster, /loadedEventRosterID = nil/);
+  assert.match(loadEventRoster, /guard eventRosterLoadGeneration == requestID else \{ return \}/);
+  assert.match(loadEventRoster, /loadedEventRosterID = eventID/);
+  assert.doesNotMatch(loadEventRoster, /guard loadingEventRosterID == nil else \{ return \}/);
+  assert.match(eventRosterView, /admin\.loadedEventRosterID == event\.id \? admin\.eventRoster : \[\]/);
+  assert.match(eventRosterView, /ForEach\(scopedRoster\)/);
+});
+
+test('native member detail never silently skips and scopes notes to the loaded member', async () => {
+  const [store, view] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+  const loadDetail = store.slice(
+    store.indexOf('func loadMemberDetail'),
+    store.indexOf('func clearMemberDetail'),
+  );
+  const addNote = store.slice(
+    store.indexOf('func addMemberNote'),
+    store.indexOf('func archiveMemberNote'),
+  );
+  const archiveNote = store.slice(
+    store.indexOf('func archiveMemberNote'),
+    store.indexOf('func grantCredits'),
+  );
+  const detail = view.slice(
+    view.indexOf('private struct AdminMemberDetailView'),
+    view.indexOf('private struct AdminCreditGrantView'),
+  );
+
+  assert.doesNotMatch(loadDetail, /guard loadingMemberDetailID == nil else \{ return \}/);
+  assert.match(loadDetail, /memberDetailGeneration &\+= 1/);
+  assert.match(addNote, /let generation = memberDetailGeneration/);
+  assert.match(addNote, /guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else \{ return true \}/);
+  assert.match(archiveNote, /let generation = memberDetailGeneration/);
+  assert.match(archiveNote, /guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else \{ return true \}/);
+  assert.match(detail, /admin\.loadedMemberDetailID == current\.id \? admin\.memberNotes : \[\]/);
+  assert.match(detail, /ForEach\(scopedNotes\)/);
 });
 
 test('native site content editors bind FAQ and text rows by stable identity', async () => {

@@ -66,7 +66,9 @@ with required (capability, migration) as (
     ('cancel_booking_expired_batch_refund', 'supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql'),
     ('credit_batch_refund_reactivation', 'supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql'),
     ('member_interest_health_consent', 'supabase/migrations/20260726103000_member_interest_health_consent.sql'),
-    ('audit_subject_pii_redaction', 'supabase/migrations/20260726105000_audit_subject_pii_redaction.sql')
+    ('audit_subject_pii_redaction', 'supabase/migrations/20260726105000_audit_subject_pii_redaction.sql'),
+    ('account_deletion_public_lead_cleanup', 'supabase/migrations/20260726108000_account_deletion_public_lead_cleanup.sql'),
+    ('request_notes_health_consent', 'supabase/migrations/20260726109000_request_notes_health_consent.sql')
 ), readiness as (
   select
     required.capability,

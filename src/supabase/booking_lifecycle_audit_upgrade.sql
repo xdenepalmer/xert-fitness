@@ -33,16 +33,34 @@ create policy "session_booking_changes_admin_read"
   to authenticated
   using ((select public.is_admin()));
 
-create or replace function public.guard_session_booking_change()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
+-- Re-run safe: do not replace a newer guard shape with this older body.
+do $install_guard_session_booking_change$
+declare
+  v_def text;
 begin
-  raise exception 'BOOKING_AUDIT_IMMUTABLE';
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_session_booking_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and (v_def ilike '%changed_by%' or v_def ilike '%member_id%') then
+    raise notice 'keeping newer guard_session_booking_change';
+  else
+    execute $fn$
+      create or replace function public.guard_session_booking_change()
+      returns trigger
+      language plpgsql
+      set search_path = public, pg_temp
+      as $$
+      begin
+        raise exception 'BOOKING_AUDIT_IMMUTABLE';
+      end;
+      $$;
+$fn$;
+  end if;
 end;
-$$;
-
+$install_guard_session_booking_change$;
 drop trigger if exists session_booking_changes_immutable on public.session_booking_changes;
 create trigger session_booking_changes_immutable
   before update or delete on public.session_booking_changes

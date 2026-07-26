@@ -63,6 +63,8 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   cancel_booking_expired_batch_refund: 'Apply supabase/migrations/20260726080000_cancel_booking_expired_batch_refund.sql in Supabase.',
   credit_batch_refund_reactivation: 'Apply supabase/migrations/20260726106000_credit_batch_refund_reactivation.sql in Supabase.',
   member_interest_health_consent: 'Apply supabase/migrations/20260726103000_member_interest_health_consent.sql in Supabase.',
+  account_deletion_public_lead_cleanup: 'Apply supabase/migrations/20260726108000_account_deletion_public_lead_cleanup.sql in Supabase.',
+  request_notes_health_consent: 'Apply supabase/migrations/20260726109000_request_notes_health_consent.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

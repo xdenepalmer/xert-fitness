@@ -49,9 +49,6 @@ begin
       else 'new'
     end;
 
-    -- The signed-in variant of the PT request form sets user_id from
-    -- auth.uid(); an anonymous one must leave it null. The column arrives with
-    -- the PT request tracking work, so it is checked rather than assumed.
     v_owner := '';
     if v_table = 'private_session_requests' and exists (
       select 1 from information_schema.columns
@@ -62,7 +59,7 @@ begin
         (auth.uid() is null and user_id is null)
         or (auth.uid() is not null and user_id = auth.uid())
       )
-    $owner$;
+      $owner$;
     end if;
 
     v_session := '';
@@ -76,7 +73,7 @@ begin
           and session.public_visible is true
           and session.start_time > now()
       )
-    $session$;
+      $session$;
     end if;
 
     v_extra := '';
@@ -103,6 +100,24 @@ begin
       v_health := $health$
       and (
         coalesce(btrim(injuries_or_limitations_optional), '') = ''
+        or health_info_consent is true
+      )
+      $health$;
+    elsif v_table in ('class_bookings', 'private_session_requests')
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'notes'
+      )
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_table
+          and column_name = 'health_info_consent'
+      )
+    then
+      v_health := $health$
+      and (
+        coalesce(btrim(notes), '') = ''
         or health_info_consent is true
       )
       $health$;

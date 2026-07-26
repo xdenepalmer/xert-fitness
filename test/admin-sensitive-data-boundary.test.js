@@ -57,3 +57,18 @@ test('admin intake queues no longer use wildcard reads', async () => {
   assert.doesNotMatch(bookingBlock, /select\('\*'/);
   assert.doesNotMatch(ptBlock, /select\('\*'/);
 });
+
+test('member-interest injuries stay out of list selects and reach admins only via deliberate reveal', async () => {
+  const [adminData, leadTable, migration] = await Promise.all([
+    readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/admin/LeadTable.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/20260726109000_request_notes_health_consent.sql', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(adminData, /admin_reveal_member_interest_health/);
+  assert.doesNotMatch(adminLeadSelect('member_interest'), /injuries_or_limitations_optional|health_info_consent/);
+  assert.match(leadTable, /revealMemberInterestHealth/);
+  assert.match(leadTable, /Reveal consented health notes/);
+  assert.match(migration, /create or replace function public\.admin_reveal_member_interest_health\(p_lead_id uuid\)/i);
+  assert.match(migration, /v_consent is not true/);
+});

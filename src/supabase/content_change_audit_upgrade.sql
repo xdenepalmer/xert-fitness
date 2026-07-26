@@ -24,16 +24,34 @@ create policy "admin_content_changes_admin_read"
   to authenticated
   using ((select public.is_admin()));
 
-create or replace function public.guard_admin_content_change()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
+-- Re-run safe: do not replace a newer guard shape with this older body.
+do $install_guard_admin_content_change$
+declare
+  v_def text;
 begin
-  raise exception 'CONTENT_AUDIT_IMMUTABLE';
+  select pg_get_functiondef(p.oid) into v_def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'guard_admin_content_change'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if v_def is not null and (v_def ilike '%changed_by%') then
+    raise notice 'keeping newer guard_admin_content_change';
+  else
+    execute $fn$
+      create or replace function public.guard_admin_content_change()
+      returns trigger
+      language plpgsql
+      set search_path = public, pg_temp
+      as $$
+      begin
+        raise exception 'CONTENT_AUDIT_IMMUTABLE';
+      end;
+      $$;
+$fn$;
+  end if;
 end;
-$$;
-
+$install_guard_admin_content_change$;
 drop trigger if exists admin_content_changes_immutable on public.admin_content_changes;
 create trigger admin_content_changes_immutable
   before update or delete on public.admin_content_changes
