@@ -31,6 +31,7 @@ test('native member mutations securely recover a revoked session without treatin
   assert.match(recovery, /MemberPushRegistration\.stopReceivingPrivateNotices\(\)/);
   assert.match(recovery, /clearLocalMemberState\(for: currentUserID\)/);
   assert.match(recovery, /replaceAuthSession\(with: nil\)/);
+  assert.match(recovery, /authenticationRecoveryRequired = true/);
   assert.match(recovery, /KeychainStore\.clearSession\(\)/);
   assert.match(recovery, /await ClassReminderScheduler\.shared\.clearAll\(\)/);
   assert.match(recovery, /Your XERT session has expired\. Sign in again to continue\./);
@@ -93,6 +94,33 @@ test('native member mutations securely recover a revoked session without treatin
   assert.match(swiftTests, /statusCode: 401\)\.isUnauthorized/);
   assert.match(swiftTests, /statusCode: 400\)\.isUnauthorized/);
   assert.match(swiftTests, /statusCode: 403\)\.isUnauthorized/);
+});
+
+test('native revoked sessions route once to sign-in without changing manual sign-out navigation', async () => {
+  const [store, root] = await Promise.all([
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift', import.meta.url), 'utf8'),
+    readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift', import.meta.url), 'utf8'),
+  ]);
+  const sessionReplacement = store.slice(
+    store.indexOf('private func replaceAuthSession('),
+    store.indexOf('private func clearMemberData('),
+  );
+  const signOut = store.slice(store.indexOf('func signOut()'), store.indexOf('func consumeAuthenticationRecovery()'));
+  const expiry = store.slice(
+    store.indexOf('private func expireCurrentSession(message: String)'),
+    store.indexOf('private func applyMemberOnboarding('),
+  );
+  const rootRecovery = root.slice(
+    root.indexOf('.onChange(of: store.authenticationRecoveryRequired)'),
+    root.indexOf('.onChange(of: store.checkoutActivatedSessionID)'),
+  );
+
+  assert.match(store, /@Published private\(set\) var authenticationRecoveryRequired = false/);
+  assert.match(sessionReplacement, /authenticationRecoveryRequired = false[\s\S]*authSession = session/);
+  assert.doesNotMatch(signOut, /authenticationRecoveryRequired = true/);
+  assert.match(expiry, /replaceAuthSession\(with: nil\)[\s\S]*authenticationRecoveryRequired = true/);
+  assert.match(rootRecovery, /navigation\.open\(\.account, source: \.content\)/);
+  assert.match(rootRecovery, /store\.consumeAuthenticationRecovery\(\)/);
 });
 
 test('native command centre fails closed on a scoped unauthorized owner response', async () => {

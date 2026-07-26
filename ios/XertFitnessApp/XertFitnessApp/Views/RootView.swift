@@ -70,6 +70,11 @@ struct RootView: View {
             }
             lockAndAuthenticate()
         }
+        .onChange(of: store.authenticationRecoveryRequired) { isRequired in
+            guard isRequired else { return }
+            navigation.open(.account, source: .content)
+            store.consumeAuthenticationRecovery()
+        }
         .onChange(of: store.checkoutActivatedSessionID) { sessionID in
             guard sessionID != nil else { return }
             resumeFirstClassAfterCheckout()

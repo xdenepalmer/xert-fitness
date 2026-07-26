@@ -55,6 +55,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var isUsingStaleMemberData = false
     @Published private(set) var memberDataUpdatedAt: Date?
     @Published private(set) var unavailableDataSources: Set<XertDataSource> = []
+    @Published private(set) var authenticationRecoveryRequired = false
 
     private let api = XertAPI()
     private var bootstrapTask: Task<Void, Never>?
@@ -521,6 +522,10 @@ final class XertStore: ObservableObject {
                 try? await api.signOut(session: currentSession)
             }
         }
+    }
+
+    func consumeAuthenticationRecovery() {
+        authenticationRecoveryRequired = false
     }
 
     @discardableResult
@@ -1474,6 +1479,7 @@ final class XertStore: ObservableObject {
         dataRefreshTask = nil
         sessionRefreshTask?.cancel()
         sessionRefreshTask = nil
+        authenticationRecoveryRequired = false
         authSession = session
         clearMemberData()
         isLoading = false
@@ -1548,6 +1554,7 @@ final class XertStore: ObservableObject {
         MemberPushRegistration.stopReceivingPrivateNotices()
         clearLocalMemberState(for: currentUserID)
         replaceAuthSession(with: nil)
+        authenticationRecoveryRequired = true
         KeychainStore.clearSession()
         await ClassReminderScheduler.shared.clearAll()
         errorMessage = message
