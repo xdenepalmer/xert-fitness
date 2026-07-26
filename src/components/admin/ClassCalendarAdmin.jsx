@@ -522,11 +522,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (initialAction !== 'create') return;
+    if (initialAction !== 'create' || showEditor) return;
     setEditingSession(null);
     setShowEditor(true);
     onIntentHandled?.();
-  }, [initialAction, onIntentHandled]);
+  }, [initialAction, onIntentHandled, showEditor]);
 
   const refreshBookings = async (sessionId) => {
     const [requests, members] = await Promise.all([
@@ -979,6 +979,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
       {showEditor && (
         <SessionEditor
+          key={editingSession?.id ?? 'new'}
           session={editingSession}
           blackouts={blackouts}
           onSave={() => { setShowEditor(false); load(); }}

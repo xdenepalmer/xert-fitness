@@ -331,11 +331,11 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
   }, []);
 
   useEffect(() => {
-    if (initialAction !== 'create') return;
+    if (initialAction !== 'create' || showEditor) return;
     setEditing(null);
     setShowEditor(true);
     onIntentHandled?.();
-  }, [initialAction, onIntentHandled]);
+  }, [initialAction, onIntentHandled, showEditor]);
 
   const handleDelete = async () => {
     const event = pendingDelete;
@@ -477,6 +477,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
 
       {showEditor && (
         <EventEditor
+          key={editing?.id ?? 'new'}
           event={editing}
           onSave={() => {
             setShowEditor(false);

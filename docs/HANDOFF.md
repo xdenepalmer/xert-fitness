@@ -4,9 +4,11 @@
 touching anything. It records what was done, what was proven, what is still
 unproven, and the traps that already cost time.
 
-- **Branch:** `claude/ios-operational-page-layout-pskigi` (all work is here, pushed)
-- **Baseline right now:** `584 tests pass`, lint clean, typecheck clean, build clean
-- **No pull request has been opened.** Do not open one unless the user asks.
+- **Branch:** `cursor/audit-findings-cull-24e8` (continues from
+  `claude/ios-operational-page-layout-pskigi`)
+- **Baseline right now:** `593 tests pass`, lint clean, typecheck clean
+- **Prior branch note:** the earlier handoff asked not to open a PR until asked;
+  cloud agents may open a draft for review — leave merging to the owner.
 
 ---
 
@@ -18,7 +20,7 @@ until you fix that. This is not a repo defect:
 ```bash
 cd /home/user/xert-fitness
 npm ci                 # ~20s, 544 packages
-npm test               # expect 584 pass
+npm test               # expect 593 pass
 npm run lint           # clean
 npm run typecheck      # clean
 npm run build          # clean
@@ -27,8 +29,9 @@ npm run build          # clean
 ### PostgreSQL is available locally — use it
 
 This is the single highest-value tool for this codebase, because most of the real
-defects are in SQL. **Postgres 16 is installed.** It cannot run as root and cannot
-use a directory under `/tmp/claude-*` (permissions), so:
+defects are in SQL. **Postgres 16 may need installing** in some cloud images; when
+present it cannot run as root and cannot use a directory under `/tmp/claude-*`
+(permissions), so:
 
 ```bash
 PGD=/var/tmp/pgdata; rm -rf $PGD; mkdir -p $PGD
@@ -56,9 +59,11 @@ A ~35-agent run took ~2.3 hours and still lost its last 16 agents to the limit.
 
 ## 1. What has been fixed (all proven, all pushed)
 
-Six commits. Every defect was reproduced before being fixed, and the four SQL
-ones were re-verified against PostgreSQL 16 including that their existing guards
-still reject bad input.
+### Pass A (prior agent) — six commits
+
+Every defect was reproduced before being fixed, and the four SQL ones were
+re-verified against PostgreSQL 16 including that their existing guards still
+reject bad input.
 
 | # | Commit | Defect |
 |---|---|---|
@@ -97,18 +102,51 @@ SQL. `credit_batches` is the entitlement primitive the whole product rests on an
 it has been wrong in several directions. Treat credit correctness as a gate before
 anything that mints credits automatically (see §4).
 
+### Pass B (this agent) — audit cull + SQL-tree landmines
+
+Verified the critical finding and HIGH findings 2–16 adversarially, then fixed
+what survived. Status labels are in `docs/audit/remaining-findings.md`.
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| #1 class editor duplicate | CONFIRMED | remount key + refuse create-intent under open editor |
+| #2 aged-out failed webhook | CONFIRMED | Ops Health lists all failed rows; any failed can be marked handled |
+| #3 non-AUD currency strands payment | CONFIRMED | AUD-only in checkout, products.js, DB constraint + admin RPCs |
+| #4 webhook signature invisible | CONFIRMED | **not fixed** — needs durable rejection ledger |
+| #5 iOS refresh coalescing | unverified here | still open |
+| #6 iOS content editor OOB | CONFIRMED | still open (Swift) |
+| #7 checkout deeplink forge | PARTIAL | still open (UI griefing, not credit theft) |
+| #8 event editor duplicate | CONFIRMED | same remount/intent fix + unsaved guard before same-section nav |
+| #9 member drawer race | CONFIRMED | drawer key + in-flight active guard |
+| #10 health info consent | CONFIRMED | still open (compliance; do with Privacy.jsx) |
+| #11/#12 lead & PT paging | CONFIRMED | `.order('id')` tiebreak |
+| #13 public timetable past | CONFIRMED | bound public query + INSERT trigger rejects past sessions |
+| #14 account form reset | CONFIRMED | skip sync while editing |
+| #15 RLS is_admin wrap | PARTIAL / DEFER | perf, not security bypass |
+| #16 immutable audit PII | CONFIRMED | still open (needs redaction RPC) |
+| §2b announcement policy drift | CONFIRMED | `booking_schema.sql` hardened; new migration `20260726006000`; email immutability restored in `guard_profile_write` inside booking_schema |
+
+New migrations: `20260726004000` (AUD), `20260726005000` (past bookings),
+`20260726006000` (announcement audience policy). Mirrored under `src/supabase/`.
+
+**Do not edit** `announcement_archival_upgrade.sql` or
+`catalog_optimistic_locking_upgrade.sql` without also editing their linked
+migrations — tests require byte equality. Apply `announcement_select_policy_audience_guard.sql`
+after any re-run of the archival upgrade.
+
 ---
 
 ## 2. What is still outstanding
 
-### 2a. 56 unverified findings — the main queue
+### 2a. Remaining unverified / open findings — the main queue
 
-Full evidence, including each auditor's verbatim quote and proposed fix, is in
-**`docs/audit/remaining-findings.md`**. Summary shape: 1 critical, 15 high,
-30 medium, 10 low.
+Full evidence is in **`docs/audit/remaining-findings.md`**. Pass B cleared the
+critical item and most HIGH commerce/admin web defects. Still open of note:
+signature-rejection health (#4), iOS items (#5–7), health-consent (#10),
+audit-PII redaction (#16), and the MEDIUM/LOW queue.
 
-**These are NOT a defect list.** They are raw swarm output whose adversarial
-verification pass never ran. Of the findings already examined by hand:
+**These are NOT a defect list.** They are raw swarm output. Of the findings
+already examined by hand:
 
 - two had the **right symptom but the wrong mechanism** (the account-deletion one
   blamed an FK restriction; it was actually the immutability trigger — and it

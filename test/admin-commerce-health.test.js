@@ -428,6 +428,7 @@ test('webhook delivery health reports retries, failures and stalled processing',
       event_id: 'evt_failed_123', event_type: 'checkout.session.completed', status: 'failed', attempts: 3,
       order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2', last_received_at: '2026-07-16T05:59:00.000Z',
       error_code: 'FULFILLMENT_REJECTED',
+      resolution: 'Confirm member credits and the linked order are correct, retry if the failure was temporary, then mark handled to clear the checkout pause.',
     },
     {
       event_id: 'evt_stalled_456', event_type: 'charge.refunded', status: 'stalled', attempts: 1,
@@ -446,7 +447,7 @@ test('webhook delivery health reports retries, failures and stalled processing',
 
 test('partial-refund incidents give owners a concrete recovery instruction', async () => {
   assert.match(stripeIncidentResolution('PARTIAL_REFUND_REQUIRES_REVIEW'), /adjust or revoke the member credits/i);
-  assert.equal(stripeIncidentResolution('DATABASE_TIMEOUT'), null);
+  assert.match(stripeIncidentResolution('DATABASE_TIMEOUT'), /mark handled/i);
   const result = await inspectWebhookDeliveryHealth(capabilityAdmin(new Set(), [{
     event_id: 'evt_partial_refund', event_type: 'charge.refunded', status: 'failed', attempts: 1,
     order_id: '81fdd46a-d2a9-4ab4-a479-0e687c72c4f2', last_received_at: '2026-07-16T05:59:00.000Z',
@@ -467,6 +468,7 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
   const admin = {
     from() {
       queryNumber += 1;
+      // Recent window empty; unbounded failed query returns the aged review.
       const rows = queryNumber === 1 ? [] : [oldReview];
       const query = {
         select() { return query; }, gte() { return query; }, eq() { return query; },
@@ -483,6 +485,41 @@ test('owner-review incidents remain visible after the 24-hour delivery window', 
   assert.equal(result.incidents[0].event_id, oldReview.event_id);
 });
 
+test('aged-out generic fulfilment failures stay visible and clearable', async () => {
+  const oldFailure = {
+    event_id: 'evt_old_fulfillment', event_type: 'checkout.session.completed', status: 'failed',
+    attempts: 4, order_id: null, last_received_at: '2026-07-10T05:59:00.000Z',
+    last_error_code: 'FULFILLMENT_REJECTED',
+  };
+  let queryNumber = 0;
+  const admin = {
+    from() {
+      queryNumber += 1;
+      const rows = queryNumber === 1 ? [] : [oldFailure];
+      const query = {
+        select() { return query; }, gte() { return query; }, eq() { return query; },
+        in() { return query; }, order() { return query; },
+        async limit() { return { data: rows, error: null }; },
+      };
+      return query;
+    },
+  };
+  const result = await inspectWebhookDeliveryHealth(admin, new Date('2026-07-16T06:00:00.000Z'));
+  assert.equal(result.failed, 1);
+  assert.equal(result.ready, false);
+  assert.equal(result.incidents[0].event_id, oldFailure.event_id);
+  assert.equal(result.incidents[0].error_code, 'FULFILLMENT_REJECTED');
+  assert.match(result.incidents[0].resolution || '', /acknowledge|handled|credits/i);
+
+  const review = normalizeStripeReviewResolutionRequest({
+    action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
+    event_id: 'evt_old_fulfillment', error_code: 'FULFILLMENT_REJECTED',
+  });
+  assert.deepEqual(review, {
+    eventId: 'evt_old_fulfillment', errorCode: 'FULFILLMENT_REJECTED',
+  });
+});
+
 test('Stripe review resolution is confirmed, allow-listed, and compare-and-set', async () => {
   const review = normalizeStripeReviewResolutionRequest({
     action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
@@ -491,9 +528,15 @@ test('Stripe review resolution is confirmed, allow-listed, and compare-and-set',
   assert.deepEqual(review, {
     eventId: 'evt_partial_123', errorCode: 'PARTIAL_REFUND_REQUIRES_REVIEW',
   });
+  assert.deepEqual(normalizeStripeReviewResolutionRequest({
+    action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
+    event_id: 'evt_timeout_123', error_code: 'DATABASE_TIMEOUT',
+  }), {
+    eventId: 'evt_timeout_123', errorCode: 'DATABASE_TIMEOUT',
+  });
   assert.throws(() => normalizeStripeReviewResolutionRequest({
     action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
-    event_id: 'evt_partial_123', error_code: 'DATABASE_TIMEOUT',
+    event_id: 'evt_partial_123', error_code: '',
   }), /INVALID_STRIPE_REVIEW_RESOLUTION/);
   assert.deepEqual(normalizeStripeReviewResolutionRequest({
     action: 'resolve_stripe_review', confirmation: 'MARK HANDLED',
@@ -811,7 +854,7 @@ test('commerce health responses are explicitly private and non-cacheable', async
   assert.match(source, /activateSessionPackPayments\(serverClient, user\.id, activation\)/);
   assert.match(source, /if \(reviewResolution\)[\s\S]*resolveStripeOperatorReview\(admin, reviewResolution\)[\s\S]*actorId: user\.id/);
   assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.eq\('last_error_code', review\.errorCode\)/);
-  assert.match(source, /\.in\('last_error_code', STRIPE_OPERATOR_REVIEW_CODES\)/);
+  assert.match(source, /\.eq\('status', 'failed'\)[\s\S]*\.order\('last_received_at'/);
   assert.match(source, /createClient\(SUPABASE_URL, SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /global: \{ headers: \{ Authorization: `Bearer \$\{token\}` \} \}/);
   assert.doesNotMatch(source, /environment:\s*process\.env/);

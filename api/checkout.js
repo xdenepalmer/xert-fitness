@@ -257,13 +257,13 @@ function isPositiveInteger(value) {
  * roll out, so malformed admin data never reaches Stripe or credit fulfilment.
  */
 export function assertCheckoutProduct(product) {
-  const currency = String(product?.currency || 'aud');
+  const currency = String(product?.currency || 'aud').trim().toLowerCase();
   if (
     !product ||
     !isPositiveInteger(product.price_cents) ||
     !isPositiveInteger(product.sessions_count) ||
     !isPositiveInteger(product.validity_days) ||
-    !/^[a-z]{3}$/i.test(currency)
+    currency !== 'aud'
   ) {
     throw new Error('Product configuration is invalid.');
   }

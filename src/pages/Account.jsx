@@ -136,11 +136,12 @@ export default function Account() {
   };
 
   useEffect(() => {
+    if (editingProfile) return;
     setProfileForm({
       full_name: profile?.full_name || '',
       phone: profile?.phone || ''
     });
-  }, [profile]);
+  }, [editingProfile, profile?.full_name, profile?.phone]);
 
   useEffect(() => {
     if (!cancellationTarget) return undefined;

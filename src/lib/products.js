@@ -67,8 +67,8 @@ export function normalizeProductAdminInput(form) {
   }
 
   const currency = String(form.currency || 'aud').trim().toLowerCase();
-  if (!/^[a-z]{3}$/.test(currency)) {
-    throw new Error('Currency must be a 3-letter code such as AUD.');
+  if (currency !== 'aud') {
+    throw new Error('Currency must be AUD.');
   }
   const sortOrder = Number(form.sort_order ?? 0);
   if (!Number.isSafeInteger(sortOrder) || sortOrder < 0) {

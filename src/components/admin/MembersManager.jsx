@@ -47,12 +47,20 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   const loadDetail = () => {
     setDetail(null);
     setDetailError('');
+    let active = true;
     adminMemberDetail(member.id)
-      .then(setDetail)
-      .catch(e => setDetailError(e.message || 'Check member detail permissions.'));
+      .then(result => {
+        if (!active) return;
+        setDetail(result);
+      })
+      .catch(e => {
+        if (!active) return;
+        setDetailError(e.message || 'Check member detail permissions.');
+      });
+    return () => { active = false; };
   };
 
-  useEffect(() => { loadDetail(); }, [member.id]);
+  useEffect(() => loadDetail(), [member.id]);
 
   const handleAddNote = async event => {
     event.preventDefault();
@@ -912,6 +920,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
 
       {viewing && (
         <MemberDrawer
+          key={viewing.id}
           member={viewing}
           onClose={() => setViewing(null)}
           onGrant={() => setGranting(viewing)}

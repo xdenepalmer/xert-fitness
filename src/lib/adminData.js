@@ -25,7 +25,9 @@ import { apiErrorMessage } from './apiError.js';
 
 async function getLeadPage(table, filters = {}) {
   const pagination = normalizeLeadPage(filters.page, filters.pageSize);
-  let query = supabase.from(table).select('*', { count: 'exact' }).order('created_at', { ascending: false });
+  let query = supabase.from(table).select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
   const search = normalizeLeadSearch(filters.search);
   if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
@@ -115,7 +117,13 @@ export async function updateLegacyBookingNotes(id, adminNotes) {
 
 export async function getClassSessions(publicOnly = false) {
   let query = supabase.from('class_sessions').select('*').order('start_time', { ascending: true });
-  if (publicOnly) query = query.eq('public_visible', true).eq('status', 'published');
+  if (publicOnly) {
+    query = query
+      .eq('public_visible', true)
+      .eq('status', 'published')
+      .gte('start_time', new Date().toISOString())
+      .limit(500);
+  }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -296,7 +304,9 @@ export async function getPTRequests(filters = {}) {
   };
 
   const pageQuery = applyFilters(
-    supabase.from('private_session_requests').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+    supabase.from('private_session_requests').select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
   ).range(normalized.from, normalized.to);
   const statusCount = status => applyFilters(
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }),

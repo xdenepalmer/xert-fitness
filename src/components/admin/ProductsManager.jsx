@@ -40,7 +40,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   let transitionError = '';
   const hasStripePrice = /^price_[A-Za-z0-9]+$/.test(form.stripe_price_id.trim());
   try {
-    transitionError = productStripeTransitionError(product, normalizeProductAdminInput(form));
+    transitionError = productStripeTransitionError(product, normalizeProductAdminInput({ ...form, currency: 'aud' }));
   } catch {
     // Field-level validation is reported when Save is pressed.
   }
@@ -48,7 +48,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
   const handleSave = async () => {
     let updates;
     try {
-      updates = normalizeProductAdminInput(form);
+      updates = normalizeProductAdminInput({ ...form, currency: 'aud' });
     } catch (error) {
       toast({ title: 'Check this pack', description: error.message, variant: 'destructive' });
       return;
@@ -85,7 +85,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
         </div>
         <div>
           <label htmlFor={`product-${product.id}-currency`} className={labelCls}>Currency</label>
-          <input id={`product-${product.id}-currency`} maxLength={3} value={form.currency} onChange={e => set('currency', e.target.value.toLowerCase())} className={inputCls} />
+          <input id={`product-${product.id}-currency`} value="aud" readOnly className={`${inputCls} opacity-70`} />
         </div>
         <div>
           <label htmlFor={`product-${product.id}-order`} className={labelCls}>Display order</label>
@@ -188,7 +188,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
   const save = async () => {
     let product;
     try {
-      product = normalizeProductCreateInput(form);
+      product = normalizeProductCreateInput({ ...form, currency: 'aud' });
     } catch (error) {
       toast({ title: 'Check this pack', description: error.message, variant: 'destructive' });
       return;
@@ -224,7 +224,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
           <div><label htmlFor="new-product-description" className={labelCls}>Description</label><textarea id="new-product-description" rows={2} value={form.description} onChange={e => set('description', e.target.value)} className={`${inputCls} resize-none`} /></div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div><label htmlFor="new-product-price" className={labelCls}>Price</label><input id="new-product-price" inputMode="decimal" value={form.price_dollars} onChange={e => set('price_dollars', e.target.value)} className={inputCls} /></div>
-            <div><label htmlFor="new-product-currency" className={labelCls}>Currency</label><input id="new-product-currency" maxLength={3} value={form.currency} onChange={e => set('currency', e.target.value.toLowerCase())} className={inputCls} /></div>
+            <div><label htmlFor="new-product-currency" className={labelCls}>Currency</label><input id="new-product-currency" value="aud" readOnly className={`${inputCls} opacity-70`} /></div>
             <div><label htmlFor="new-product-sessions" className={labelCls}>Sessions</label><input id="new-product-sessions" type="number" min="1" value={form.sessions_count} onChange={e => set('sessions_count', e.target.value)} className={inputCls} /></div>
             <div><label htmlFor="new-product-validity" className={labelCls}>Validity</label><input id="new-product-validity" type="number" min="1" value={form.validity_days} onChange={e => set('validity_days', e.target.value)} className={inputCls} /></div>
             <div><label htmlFor="new-product-order" className={labelCls}>Order</label><input id="new-product-order" type="number" min="0" value={form.sort_order} onChange={e => set('sort_order', e.target.value)} className={inputCls} /></div>

@@ -610,6 +610,8 @@ test('rejects invalid pricing, credits, expiry, and currency before Checkout', (
     { ...validProduct, sessions_count: 0 },
     { ...validProduct, validity_days: 0 },
     { ...validProduct, currency: 'australian-dollars' },
+    { ...validProduct, currency: 'nzd' },
+    { ...validProduct, currency: 'usd' },
   ]) {
     assert.throws(() => assertCheckoutProduct(product), /configuration is invalid/i);
   }

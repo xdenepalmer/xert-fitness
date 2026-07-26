@@ -172,6 +172,13 @@ The Supabase schema is defined in:
   order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
+- `src/supabase/product_currency_aud_only.sql` — locks session-pack currency to AUD so
+  checkout cannot charge a currency fulfilment will reject
+- `src/supabase/reject_past_class_booking_requests.sql` — rejects public class booking
+  requests against classes whose start time has already passed
+- `src/supabase/announcement_select_policy_audience_guard.sql` — restores the targeted
+  audience predicate if an older operator SQL file recreated the announcements policy
+  without it
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,

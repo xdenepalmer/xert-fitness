@@ -63,7 +63,8 @@ test('rejects ambiguous prices and malformed Stripe price IDs', () => {
   };
   assert.throws(() => normalizeProductAdminInput({ ...valid, price_dollars: '48.009' }), /2 decimal places/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, stripe_price_id: 'prod_ABC123' }), /price_/);
-  assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'dollars' }), /3-letter/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'dollars' }), /3-letter|AUD/i);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'nzd' }), /AUD/i);
   assert.throws(() => normalizeProductAdminInput({ ...valid, sort_order: -1 }), /Display order/);
 });
 

@@ -1,6 +1,9 @@
 # Remaining audit findings — full evidence
 
-**56 findings. None has been adversarially verified.** They are raw output from the audit swarm; the verification pass that would have culled false positives never ran.
+**56 findings originally.** Pass B adversarially verified the CRITICAL item and
+HIGH findings 2–16. Fixed items are marked `FIXED` below; confirmed-but-open
+items are `CONFIRMED`; deferred/partial are labelled accordingly. MEDIUM/LOW
+remain largely unverified.
 
 Read `../HANDOFF.md` first — it explains how to verify these and lists the false-positive patterns already observed in this codebase.
 
@@ -16,7 +19,7 @@ Each entry preserves the auditor's own `evidence` quote and proposed `fix`. **Do
 - **id:** `session-editor-prop-desync-creates-duplicate-class`
 - **severity (claimed):** critical
 - **location:** `src/components/admin/ClassCalendarAdmin.jsx:524`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -70,7 +73,7 @@ Make the editor's identity follow its subject so React remounts it when the subj
 - **id:** `aged-out-failed-event-permanently-blocks-checkout`
 - **severity (claimed):** high
 - **location:** `api/admin-commerce-health.js:256`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -105,7 +108,7 @@ Make the two queries agree. Either bound the checkout gate to the same window th
 - **id:** `non-aud-product-currency-strands-payment`
 - **severity (claimed):** high
 - **location:** `api/checkout.js:266`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -143,7 +146,7 @@ Make the AUD-only assumption explicit at the point money is committed: change `a
 - **id:** `webhook-signature-failure-invisible-to-health`
 - **severity (claimed):** high
 - **location:** `api/stripe-webhook.js:512`
-- **status:** UNVERIFIED
+- **status:** CONFIRMED
 
 **What the auditor claims**
 
@@ -212,7 +215,7 @@ Do not coalesce a caller that arrives after the in-flight refresh started. Eithe
 - **id:** `site-content-editor-index-binding-oob`
 - **severity (claimed):** high
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift:2918`
-- **status:** UNVERIFIED
+- **status:** CONFIRMED
 
 **What the auditor claims**
 
@@ -241,7 +244,7 @@ Key the ForEach by element identity and mutate by identity, not index: `ForEach(
 - **id:** `external-checkout-deeplink-forges-purchase-state`
 - **severity (claimed):** high
 - **location:** `ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift:726`
-- **status:** UNVERIFIED
+- **status:** PARTIAL (UI griefing / cancel wipe; no credit theft)
 
 **What the auditor claims**
 
@@ -285,7 +288,7 @@ Stop treating the external URL channel as a checkout callback. Split `handleOpen
 - **id:** `event-editor-prop-desync-creates-duplicate-event`
 - **severity (claimed):** high
 - **location:** `src/components/admin/EventsManager.jsx:333`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -326,7 +329,7 @@ Render `<EventEditor key={editing?.id ?? 'new'} ... />` so a subject change remo
 - **id:** `member-drawer-unguarded-detail-fetch`
 - **severity (claimed):** high
 - **location:** `src/components/admin/MembersManager.jsx:47`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -361,7 +364,7 @@ Give the drawer a subject-scoped identity and guard the fetch. Render `<MemberDr
 - **id:** `sensitive-health-info-no-app33-consent`
 - **severity (claimed):** high
 - **location:** `src/components/public/MemberInterestForm.jsx:207`
-- **status:** UNVERIFIED
+- **status:** CONFIRMED
 
 **What the auditor claims**
 
@@ -389,7 +392,7 @@ Add a separate, unticked `health_info_consent` checkbox rendered immediately adj
 - **id:** `lead-pagination-nondeterministic-order`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:28`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -425,7 +428,7 @@ Add the unique tiebreak the rest of the file already uses: `.order('created_at',
 - **id:** `pt-requests-pagination-nondeterministic-order`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:299`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -454,7 +457,7 @@ Chain `.order('id', { ascending: false })` after the created_at order on line 29
 - **id:** `public-timetable-unbounded-and-past-sessions`
 - **severity (claimed):** high
 - **location:** `src/lib/adminData.js:116`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -487,7 +490,7 @@ Give getClassSessions a bounded window when publicOnly is true — e.g. `.gte('s
 - **id:** `account-profile-form-reset-on-token-refresh`
 - **severity (claimed):** high
 - **location:** `src/pages/Account.jsx:138`
-- **status:** UNVERIFIED
+- **status:** FIXED
 
 **What the auditor claims**
 
@@ -519,7 +522,7 @@ Only seed the form from `profile` when the member is not editing, and key the sy
 - **id:** `rls-is-admin-not-wrapped-in-scalar-subquery`
 - **severity (claimed):** high
 - **location:** `src/supabase/rls_policies.sql:58`
-- **status:** UNVERIFIED
+- **status:** DEFERRED (perf; not a security bypass)
 
 **What the auditor claims**
 
@@ -547,7 +550,7 @@ Extend the 20260714007000 treatment with a follow-up migration that drops and re
 - **id:** `immutable-audit-pii-no-erasure-path`
 - **severity (claimed):** high
 - **location:** `supabase/migrations/20260714011000_lead_pipeline_audit.sql:41`
-- **status:** UNVERIFIED
+- **status:** CONFIRMED
 
 **What the auditor claims**
 

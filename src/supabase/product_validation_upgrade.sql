@@ -15,8 +15,10 @@ alter table public.products
 alter table public.products
   drop constraint if exists products_currency_code_check;
 alter table public.products
-  add constraint products_currency_code_check
-  check (currency ~ '^[a-zA-Z]{3}$') not valid;
+  drop constraint if exists products_currency_aud_check;
+alter table public.products
+  add constraint products_currency_aud_check
+  check (lower(currency) = 'aud') not valid;
 
 alter table public.products
   drop constraint if exists products_positive_sessions_count_check;
@@ -36,4 +38,4 @@ alter table public.products
 -- where price_cents <= 0
 --    or sessions_count <= 0
 --    or validity_days <= 0
---    or currency !~ '^[a-zA-Z]{3}$';
+--    or lower(currency) <> 'aud';

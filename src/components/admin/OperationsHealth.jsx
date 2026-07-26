@@ -304,24 +304,30 @@ export default function OperationsHealth({ onNavigate }) {
                           )}
                         </div>
                         {incident.resolution && (
-                          <div className="mt-3 space-y-3">
-                            <p className="font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
-                              {incident.resolution}
-                            </p>
+                          <p className="mt-3 font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
+                            {incident.resolution}
+                          </p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {incident.status === 'failed' && (
                             <button type="button" onClick={() => setPendingResolution(incident)}
                               className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
                               <CheckCircle2 className="size-4" />
                               Mark handled
                             </button>
-                          </div>
-                        )}
-                        {!incident.resolution && (
-                          <button type="button" onClick={() => setPendingRetry(incident)}
-                            className="mt-3 inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
-                            <RefreshCw className="size-4" />
-                            Retry safely
-                          </button>
-                        )}
+                          )}
+                          {![
+                            'PARTIAL_REFUND_REQUIRES_REVIEW',
+                            'PAYMENT_DISPUTE_REQUIRES_REVIEW',
+                            'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW',
+                          ].includes(incident.error_code) && (
+                            <button type="button" onClick={() => setPendingRetry(incident)}
+                              className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/25 px-3 font-body text-xs uppercase tracking-wider text-xert-pale transition-colors hover:bg-xert-steel/10">
+                              <RefreshCw className="size-4" />
+                              Retry safely
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

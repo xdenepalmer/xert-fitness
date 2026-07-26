@@ -68,10 +68,6 @@ export default function AdminCommandCentre() {
   }, [hasUnsavedChanges]);
 
   const setSection = useCallback((nextSection, params) => {
-    if (nextSection === section) {
-      navigate(getAdminSectionPath(nextSection, params));
-      return true;
-    }
     if (hasUnsavedChanges) {
       setPendingNavigation({
         kind: 'section',
@@ -79,6 +75,10 @@ export default function AdminCommandCentre() {
         path: getAdminSectionPath(nextSection, params),
       });
       return false;
+    }
+    if (nextSection === section) {
+      navigate(getAdminSectionPath(nextSection, params));
+      return true;
     }
     setHasUnsavedChanges(false);
     setActiveSection(nextSection);

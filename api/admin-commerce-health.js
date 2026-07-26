@@ -109,13 +109,13 @@ export function normalizePaymentActivationRequest(body) {
 export function normalizeStripeReviewResolutionRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('INVALID_STRIPE_REVIEW_RESOLUTION');
   const eventId = String(body.event_id || '').trim();
-  const errorCode = String(body.error_code || '').trim();
+  const errorCode = String(body.error_code || '').trim().slice(0, 120);
   if (
     body.action !== 'resolve_stripe_review'
     || body.confirmation !== 'MARK HANDLED'
     || !/^evt_[A-Za-z0-9_]+$/.test(eventId)
     || eventId.length > 255
-    || !STRIPE_OPERATOR_REVIEW_CODES.includes(errorCode)
+    || !/^[A-Za-z0-9_]{1,120}$/.test(errorCode)
   ) {
     throw new Error('INVALID_STRIPE_REVIEW_RESOLUTION');
   }
@@ -242,6 +242,9 @@ export function stripeIncidentResolution(errorCode) {
   if (errorCode === 'PAYMENT_DISPUTE_LOST_REQUIRES_REVIEW') {
     return 'Stripe closed this dispute as lost. Review the linked order, member access and remaining credits, then record the accounting outcome.';
   }
+  if (errorCode) {
+    return 'Confirm member credits and the linked order are correct, retry if the failure was temporary, then mark handled to clear the checkout pause.';
+  }
   return null;
 }
 
@@ -249,7 +252,9 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const staleBefore = now.getTime() - 10 * 60 * 1000;
   const fields = 'event_id,event_type,status,attempts,order_id,last_received_at,last_error_code';
-  const [recentResult, reviewResult] = await Promise.all([
+  // Failed ledger rows pause checkout with no age bound, so Ops Health must
+  // surface every unresolved failure — including ones older than 24 hours.
+  const [recentResult, failedResult] = await Promise.all([
     admin
       .from('stripe_webhook_events')
       .select(fields)
@@ -260,11 +265,10 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       .from('stripe_webhook_events')
       .select(fields)
       .eq('status', 'failed')
-      .in('last_error_code', STRIPE_OPERATOR_REVIEW_CODES)
       .order('last_received_at', { ascending: false })
       .limit(100),
   ]);
-  if (recentResult.error || reviewResult.error) {
+  if (recentResult.error || failedResult.error) {
     return {
       ready: false, available: false, received: 0, failed: 0,
       stale_processing: 0, retries: 0, incidents: [],
@@ -272,8 +276,8 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     };
   }
   const rows = recentResult.data || [];
-  const reviewRows = reviewResult.data || [];
-  const incidentRows = [...reviewRows, ...rows].filter((row, index, all) => (
+  const failedRows = failedResult.data || [];
+  const incidentRows = [...failedRows, ...rows].filter((row, index, all) => (
     all.findIndex(candidate => candidate.event_id === row.event_id) === index
   ));
   const failed = incidentRows.filter(row => row.status === 'failed').length;
@@ -304,8 +308,8 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
       };
     });
   const recentTruncated = rows.length === 500;
-  const reviewTruncated = reviewRows.length === 100;
-  const truncated = recentTruncated || reviewTruncated;
+  const failedTruncated = failedRows.length === 100;
+  const truncated = recentTruncated || failedTruncated;
   const ready = failed === 0 && staleProcessing === 0 && !truncated;
   return {
     ready,
@@ -315,8 +319,8 @@ export async function inspectWebhookDeliveryHealth(admin, now = new Date()) {
     stale_processing: staleProcessing,
     retries,
     incidents,
-    issue: reviewTruncated
-      ? 'The unresolved Stripe operator review queue reached its safety limit.'
+    issue: failedTruncated
+      ? 'The unresolved Stripe failure queue reached its safety limit.'
       : recentTruncated
         ? 'Stripe webhook delivery history exceeded the 24-hour health window limit.'
       : failed > 0
