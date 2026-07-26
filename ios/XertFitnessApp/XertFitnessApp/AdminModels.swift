@@ -2745,6 +2745,7 @@ struct AdminPushHealth: Codable, Hashable {
 enum AdminSchemaReadiness {
     static let required: Set<String> = [
         "admin_role_safety", "audited_credit_grants", "booking_waitlist_withdrawal",
+        "member_cancellation_receipt",
         "member_booking_switch_guard",
         "member_waitlist_join", "waitlist_fifo_promotion", "attendance_roll_call",
         "attendance_request_resolution_guard",

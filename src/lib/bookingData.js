@@ -4,6 +4,7 @@ import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkout
 import { sessionPackPaymentsEnabled } from './launchSettings';
 import { savePendingWebCheckout } from './webCheckoutRecovery';
 import { apiErrorMessage } from './apiError';
+import { normalizeCancellationReceipt } from './bookingCancellation';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -154,10 +155,11 @@ export async function joinSessionWaitlist(sessionId) {
 }
 
 export async function cancelBooking(bookingId) {
-  const { error } = await supabase.rpc('cancel_booking', {
+  const { data, error } = await supabase.rpc('cancel_booking', {
     p_booking_id: bookingId
   });
   if (error) throw new Error(friendlyBookingError(error.message));
+  return normalizeCancellationReceipt(data, bookingId);
 }
 
 // ─── Profile / role ───────────────────────────────────────────────────────────

@@ -2527,12 +2527,26 @@ final class XertAPI {
         )
     }
 
-    func cancelBooking(session auth: AuthSession, bookingID: UUID) async throws {
-        let _: EmptyResponse = try await rpc(
+    func cancelBooking(
+        session auth: AuthSession,
+        bookingID: UUID
+    ) async throws -> MemberBookingCancellationReceipt {
+        let rows: [MemberBookingCancellationReceipt] = try await rpc(
             path: "cancel_booking",
             body: ["p_booking_id": bookingID.uuidString],
             auth: auth
         )
+        guard rows.count == 1, let receipt = rows.first,
+              receipt.cancelled_booking_id == bookingID,
+              ["requested", "confirmed", "waitlisted"].contains(receipt.previous_status),
+              ["returned", "not_reserved", "late_cancellation", "expired", "reservation_unavailable"]
+                .contains(receipt.credit_outcome),
+              receipt.credit_refunded == (receipt.credit_outcome == "returned") else {
+            throw APIError(
+                message: "The booking changed without a verifiable cancellation receipt. Refresh your account before continuing."
+            )
+        }
+        return receipt
     }
 
     func checkout(session auth: AuthSession, productSlug: String, attemptID: UUID) async throws -> CheckoutResponse {

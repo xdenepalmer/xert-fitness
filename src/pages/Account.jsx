@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { dismissMemberAnnouncement, getMemberAnnouncements, getMyCredits, getMyBookings, getMyEventGoals, getMyMemberOnboarding, getMyOrders, getMyPrivateSessionRequests, cancelBooking, removeMyEventGoal, saveMyMemberOnboarding, updateMyProfile } from '@/lib/bookingData';
-import { cancellationMessage, cancellationReturnsCredit } from '@/lib/bookingCancellation';
+import { cancellationMessage, cancellationOutcomeMessage } from '@/lib/bookingCancellation';
 import { partitionAccountBookings } from '@/lib/accountBookings';
 import { summarizeExpiringCredits } from '@/lib/creditExpiry';
 import { summarizeMemberProgress } from '@/lib/memberProgress';
@@ -391,14 +391,10 @@ export default function Account() {
   const handleCancel = async booking => {
     setCancellingId(booking.booking_id);
     try {
-      await cancelBooking(booking.booking_id);
+      const receipt = await cancelBooking(booking.booking_id);
       toast({
         title: 'Booking cancelled',
-        description: booking.status === 'waitlisted'
-          ? 'You have been removed from the waitlist.'
-          : cancellationReturnsCredit(booking)
-            ? 'Your class credit has been returned.'
-            : 'Cancelled within 12 hours of the class, so the credit was used.'
+        description: cancellationOutcomeMessage(receipt)
       });
       await refresh();
     } catch (e) {

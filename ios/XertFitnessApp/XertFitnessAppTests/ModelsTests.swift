@@ -3417,6 +3417,33 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testMemberCancellationReceiptExplainsOnlyTheServerOutcome() throws {
+        let bookingID = try XCTUnwrap(UUID(
+            uuidString: "00000000-0000-0000-0000-000000000099"
+        ))
+        let cancelledAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let returned = MemberBookingCancellationReceipt(
+            cancelled_booking_id: bookingID,
+            previous_status: "confirmed",
+            credit_refund_eligible: true,
+            credit_refunded: true,
+            credit_outcome: "returned",
+            cancelled_at: cancelledAt
+        )
+        let expired = MemberBookingCancellationReceipt(
+            cancelled_booking_id: bookingID,
+            previous_status: "requested",
+            credit_refund_eligible: true,
+            credit_refunded: false,
+            credit_outcome: "expired",
+            cancelled_at: cancelledAt
+        )
+
+        XCTAssertTrue(returned.memberMessage.contains("one class credit was returned"))
+        XCTAssertTrue(expired.memberMessage.contains("credit pack had already expired"))
+        XCTAssertFalse(expired.memberMessage.contains("credit was returned"))
+    }
+
     func testWaitlistedBookingRemainsVisibleAndCanBeWithdrawn() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         var waitlisted = booking(status: "waitlisted", startTime: now.addingTimeInterval(60 * 60))

@@ -26,7 +26,7 @@ struct AccountView: View {
     @State private var passwordResetSent = false
     @State private var bookingToCancel: BookingItem?
     @State private var addingBookingToCalendarID: UUID?
-    @State private var bookingCalendarNotice: BookingCalendarNotice?
+    @State private var accountActionNotice: AccountActionNotice?
     @State private var showingDeleteConfirmation = false
     @State private var showingMemberReadiness = false
     @State private var authenticationSupport = DeviceAuthenticator.support()
@@ -134,7 +134,14 @@ struct AccountView: View {
                     }
                     Button("Cancel booking", role: .destructive) {
                         bookingToCancel = nil
-                        Task { await store.cancel(booking) }
+                        Task {
+                            if let receipt = await store.cancel(booking) {
+                                accountActionNotice = AccountActionNotice(
+                                    title: "Booking Cancelled",
+                                    message: receipt.memberMessage
+                                )
+                            }
+                        }
                     }
                 } message: { booking in
                     Text(booking.cancellationMessage)
@@ -151,7 +158,7 @@ struct AccountView: View {
                 } message: {
                     Text("Your member profile, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized.")
                 }
-                .alert(item: $bookingCalendarNotice) { notice in
+                .alert(item: $accountActionNotice) { notice in
                     Alert(
                         title: Text(notice.title),
                         message: Text(notice.message),
@@ -1376,11 +1383,11 @@ struct AccountView: View {
         defer { addingBookingToCalendarID = nil }
         do {
             let result = try await EventCalendarWriter.add(booking)
-            bookingCalendarNotice = result == .added
-                ? BookingCalendarNotice(title: "Added to Calendar", message: "\(booking.title) is now in your calendar.")
-                : BookingCalendarNotice(title: "Already in Calendar", message: "\(booking.title) is already saved in your calendar.")
+            accountActionNotice = result == .added
+                ? AccountActionNotice(title: "Added to Calendar", message: "\(booking.title) is now in your calendar.")
+                : AccountActionNotice(title: "Already in Calendar", message: "\(booking.title) is already saved in your calendar.")
         } catch {
-            bookingCalendarNotice = BookingCalendarNotice(
+            accountActionNotice = AccountActionNotice(
                 title: "Could Not Add Class",
                 message: error.localizedDescription
             )
@@ -1400,7 +1407,7 @@ struct AccountView: View {
     }
 }
 
-private struct BookingCalendarNotice: Identifiable {
+private struct AccountActionNotice: Identifiable {
     let id = UUID()
     let title: String
     let message: String
@@ -1431,7 +1438,7 @@ private extension BookingItem {
             return "This will remove you from the waitlist for \(title). No class credit is currently reserved."
         }
         if BookingCancellationPolicy.returnsCredit(status: status, startTime: start_time) {
-            return "This will remove you from \(title) and return your class credit."
+            return "This will remove you from \(title) and return the reserved credit when its original credit pack is still valid. XERT will confirm the credit outcome after cancellation."
         }
         return "This will remove you from \(title). Confirmed bookings cancelled within 12 hours do not return a class credit."
     }

@@ -913,13 +913,23 @@ end; $$;
 
 -- Cancel a confirmed booking, pending request, or waitlist place. Waitlisted
 -- places have already released their credit and must never refund it twice.
-create or replace function public.cancel_booking(p_booking_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+drop function if exists public.cancel_booking(uuid);
+create function public.cancel_booking(p_booking_id uuid)
+returns table (
+  cancelled_booking_id uuid, previous_status text,
+  credit_refund_eligible boolean, credit_refunded boolean,
+  credit_outcome text, cancelled_at timestamptz
+) language plpgsql security definer set search_path = public as $$
 declare
   v_user   uuid := auth.uid();
   v_batch  uuid;
   v_start  timestamptz;
   v_status text;
+  v_cancelled_at timestamptz := now();
+  v_refund_eligible boolean := false;
+  v_refunded boolean := false;
+  v_outcome text;
+  v_updated integer := 0;
 begin
   if v_user is null then raise exception 'AUTH_REQUIRED'; end if;
 
@@ -932,13 +942,37 @@ begin
   if not found then raise exception 'BOOKING_NOT_FOUND'; end if;
   if v_status not in ('requested', 'confirmed', 'waitlisted') then raise exception 'NOT_CANCELLABLE'; end if;
 
-  update session_bookings set status = 'cancelled', cancelled_at = now()
+  v_refund_eligible := v_status = 'requested'
+    or (v_status = 'confirmed' and v_start - v_cancelled_at > interval '12 hours');
+
+  update session_bookings set status = 'cancelled', cancelled_at = v_cancelled_at
     where id = p_booking_id;
 
-  if (v_status = 'requested' or (v_status = 'confirmed' and v_start - now() > interval '12 hours')) and v_batch is not null then
-    update credit_batches set remaining = remaining + 1
-      where id = v_batch and (expires_at is null or expires_at > now());
+  if v_status = 'waitlisted' then
+    v_outcome := 'not_reserved';
+  elsif not v_refund_eligible then
+    v_outcome := 'late_cancellation';
+  elsif v_batch is null then
+    v_outcome := 'reservation_unavailable';
+  else
+    update credit_batches set remaining = least(total, remaining + 1)
+      where id = v_batch and remaining < total
+        and (expires_at is null or expires_at > v_cancelled_at);
+    get diagnostics v_updated = row_count;
+    v_refunded := v_updated = 1;
+    if v_refunded then
+      v_outcome := 'returned';
+    elsif exists (
+      select 1 from credit_batches
+      where id = v_batch and expires_at is not null and expires_at <= v_cancelled_at
+    ) then
+      v_outcome := 'expired';
+    else
+      v_outcome := 'reservation_unavailable';
+    end if;
   end if;
+  return query select p_booking_id, v_status, v_refund_eligible,
+    v_refunded, v_outcome, v_cancelled_at;
 end; $$;
 
 -- Public timetable with live spots remaining (no booker identities exposed).
@@ -1355,6 +1389,8 @@ create policy "xert_schema_capabilities_admin_read" on public.xert_schema_capabi
   for select to authenticated using (public.is_admin());
 insert into public.xert_schema_capabilities (capability)
 values ('booking_waitlist_withdrawal') on conflict (capability) do nothing;
+insert into public.xert_schema_capabilities (capability)
+values ('member_cancellation_receipt') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)
 values ('member_waitlist_join') on conflict (capability) do nothing;
 insert into public.xert_schema_capabilities (capability)

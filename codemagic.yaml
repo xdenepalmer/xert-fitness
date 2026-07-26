@@ -293,6 +293,7 @@ workflows:
               "admin_role_safety",
               "audited_credit_grants",
               "booking_waitlist_withdrawal",
+              "member_cancellation_receipt",
               "member_booking_switch_guard",
               "member_onboarding_foundation",
               "member_activation_cockpit",

@@ -955,6 +955,30 @@ struct NativeInterestDraft: Equatable {
     }
 }
 
+struct MemberBookingCancellationReceipt: Decodable, Hashable {
+    let cancelled_booking_id: UUID
+    let previous_status: String
+    let credit_refund_eligible: Bool
+    let credit_refunded: Bool
+    let credit_outcome: String
+    let cancelled_at: Date
+
+    var memberMessage: String {
+        switch credit_outcome {
+        case "returned":
+            return "Your booking was cancelled and one class credit was returned."
+        case "not_reserved":
+            return "You have been removed from the waitlist. No class credit was reserved."
+        case "late_cancellation":
+            return "Your booking was cancelled within 12 hours of class, so the reserved credit was used."
+        case "expired":
+            return "Your booking was cancelled, but its original credit pack had already expired so the credit could not be returned."
+        default:
+            return "Your booking was cancelled, but XERT could not verify a credit return. Please contact XERT before booking again."
+        }
+    }
+}
+
 struct MemberInterestSubmission: Encodable, Equatable {
     let full_name: String
     let email: String

@@ -607,8 +607,8 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func cancel(_ booking: BookingItem) async {
-        guard bookingSessionID == nil, cancellingBookingID == nil else { return }
+    func cancel(_ booking: BookingItem) async -> MemberBookingCancellationReceipt? {
+        guard bookingSessionID == nil, cancellingBookingID == nil else { return nil }
         let memberVersion = memberStateVersion.snapshot
         cancellingBookingID = booking.id
         defer {
@@ -616,17 +616,19 @@ final class XertStore: ObservableObject {
         }
         do {
             let authSession = try await validAuthSession()
-            try await api.cancelBooking(session: authSession, bookingID: booking.id)
-            guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            let receipt = try await api.cancelBooking(session: authSession, bookingID: booking.id)
+            guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
             cancelInFlightFullRefresh()
             await ClassReminderScheduler.shared.remove(bookingID: booking.booking_id)
-            guard canApplyMemberState(memberVersion, session: authSession) else { return }
+            guard canApplyMemberState(memberVersion, session: authSession) else { return nil }
             XertHaptics.play(.success)
             await refreshBookingState(memberVersion: memberVersion, session: authSession)
+            return canApplyMemberState(memberVersion, session: authSession) ? receipt : nil
         } catch {
-            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            guard memberStateVersion.isCurrent(memberVersion) else { return nil }
             errorMessage = BookingErrorMessage.display(for: error.localizedDescription)
             XertHaptics.play(.error)
+            return nil
         }
     }
 

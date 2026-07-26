@@ -6,6 +6,7 @@ with required (capability, migration) as (
     ('admin_role_safety', 'src/supabase/admin_role_safety_upgrade.sql'),
     ('audited_credit_grants', 'supabase/migrations/20260714005500_credit_grant_audit.sql'),
     ('booking_waitlist_withdrawal', 'src/supabase/booking_modes_upgrade.sql'),
+    ('member_cancellation_receipt', 'supabase/migrations/20260727030000_member_cancellation_receipt.sql'),
     ('member_booking_switch_guard', 'supabase/migrations/20260721000000_member_booking_switch_guard.sql'),
     ('member_onboarding_foundation', 'supabase/migrations/20260721010000_member_onboarding_foundation.sql'),
     ('member_activation_cockpit', 'supabase/migrations/20260721020000_member_activation_cockpit.sql'),
