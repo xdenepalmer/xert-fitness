@@ -3485,9 +3485,30 @@ final class ModelsTests: XCTestCase {
         partner.businessName = "South Burnett Physio"; partner.profession = "Physiotherapist"
         partner.services = ["Physiotherapy"]
         XCTAssertEqual(try PartnerInterestSubmission(partner).services_offered, ["Physiotherapy"])
+        XCTAssertNil(partner.validationMessage(for: .partner))
 
         member.consentsToContact = false
         XCTAssertThrowsError(try MemberInterestSubmission(member))
+        XCTAssertEqual(member.validationMessage(for: .member), "Consent to contact is required.")
+
+        var invalid = trainer
+        invalid.email = "alex@example"
+        XCTAssertThrowsError(try TrainerInterestSubmission(invalid))
+        invalid = trainer
+        invalid.phone = "123"
+        XCTAssertThrowsError(try TrainerInterestSubmission(invalid))
+        invalid = trainer
+        invalid.qualifications = String(repeating: "Q", count: 2_001)
+        XCTAssertThrowsError(try TrainerInterestSubmission(invalid))
+
+        var unsafePartner = partner
+        unsafePartner.websiteSocialLink = "javascript:alert(1)"
+        XCTAssertThrowsError(try PartnerInterestSubmission(unsafePartner))
+        unsafePartner.websiteSocialLink = "https://example.com/practice"
+        XCTAssertEqual(
+            try PartnerInterestSubmission(unsafePartner).website_social_link,
+            "https://example.com/practice"
+        )
     }
 
     func testOwnerNavigationPulseBoundsCountsAndExplainsAttention() {

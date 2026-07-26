@@ -144,16 +144,57 @@ private struct NativeInterestFormView: View {
     @Environment(\.dismiss) private var dismiss
     let kind: NativeInterestKind
     @State private var draft = NativeInterestDraft()
+    @State private var baselineDraft = NativeInterestDraft()
     @State private var submitted = false
+    @State private var attemptedSubmit = false
+    @State private var showingDiscardConfirmation = false
+    @FocusState private var focusedField: InterestField?
+
+    private enum InterestField: Hashable {
+        case fullName
+        case email
+        case phone
+        case businessName
+        case suburb
+        case injuries
+        case joiningReason
+        case qualifications
+        case functionalExperience
+        case shortIntro
+        case socialLinks
+        case profession
+        case availability
+        case website
+    }
+
+    private var validationMessage: String? {
+        draft.validationMessage(for: kind)
+    }
+
+    private var hasUnsavedChanges: Bool {
+        !submitted && draft != baselineDraft
+    }
 
     var body: some View {
         Form {
             Section("Contact") {
-                TextField("Full name", text: $draft.fullName).textContentType(.name)
-                TextField("Email", text: $draft.email).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never)
-                TextField("Phone", text: $draft.phone).textContentType(.telephoneNumber).keyboardType(.phonePad)
+                TextField("Full name", text: $draft.fullName)
+                    .textContentType(.name)
+                    .focused($focusedField, equals: .fullName)
+                TextField("Email", text: $draft.email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .email)
+                TextField("Phone", text: $draft.phone)
+                    .textContentType(.telephoneNumber)
+                    .keyboardType(.phonePad)
+                    .focused($focusedField, equals: .phone)
                 if kind == .partner {
-                    TextField("Business or practice name", text: $draft.businessName).textContentType(.organizationName)
+                    TextField("Business or practice name", text: $draft.businessName)
+                        .textContentType(.organizationName)
+                        .focused($focusedField, equals: .businessName)
                 }
             }
 
@@ -168,10 +209,15 @@ private struct NativeInterestFormView: View {
                 if kind == .member {
                     Toggle("Send me XERT launch and timetable updates", isOn: $draft.mailingList)
                 }
+                if attemptedSubmit, let validationMessage {
+                    Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("interest.validation")
+                }
                 Button {
-                    Task {
-                        if await store.submitInterest(kind: kind, draft: draft) { submitted = true }
-                    }
+                    submit()
                 } label: {
                     HStack {
                         if store.isSubmittingInterest { ProgressView() }
@@ -179,6 +225,11 @@ private struct NativeInterestFormView: View {
                     }
                 }
                 .disabled(store.isSubmittingInterest)
+                .accessibilityHint(
+                    attemptedSubmit && validationMessage != nil
+                        ? validationMessage ?? ""
+                        : "Sends this enquiry to XERT's protected owner CRM"
+                )
             } footer: {
                 Text("Your details go directly to XERT's protected owner CRM for follow-up.")
             }
@@ -187,7 +238,37 @@ private struct NativeInterestFormView: View {
         .background(Color.xertNavy)
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: requestDismiss) {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Back")
+                .accessibilityHint(hasUnsavedChanges ? "Asks before discarding this application" : "Returns to Explore")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
         .onAppear(perform: prefillContact)
+        .interactiveDismissDisabled(hasUnsavedChanges || store.isSubmittingInterest)
+        .confirmationDialog(
+            "Discard unfinished \(kind.title.lowercased())?",
+            isPresented: $showingDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Keep editing", role: .cancel) {}
+            Button("Discard application", role: .destructive) {
+                focusedField = nil
+                dismiss()
+            }
+        } message: {
+            Text("The details entered on this device have not been sent to XERT.")
+        }
         .alert("Thanks - we have it.", isPresented: $submitted) {
             Button("Done") { dismiss() }
         } message: {
@@ -203,6 +284,7 @@ private struct NativeInterestFormView: View {
                     ForEach(["16–20", "21–30", "31–40", "41–55", "56+"], id: \.self) { Text($0).tag($0) }
                 }
                 TextField("Suburb or town", text: $draft.suburbTown)
+                    .focused($focusedField, equals: .suburb)
                 Picker("Occupation group", selection: $draft.occupationGroup) {
                     Text("Optional").tag("")
                     ForEach(Self.occupations, id: \.self) { Text($0).tag($0) }
@@ -221,8 +303,12 @@ private struct NativeInterestFormView: View {
                 Toggle("Personal training", isOn: $draft.personalTraining)
                 Toggle("Workshops", isOn: $draft.workshops)
                 Toggle("Event preparation", isOn: $draft.eventPrep)
-                TextField("Injuries or limitations (optional)", text: $draft.injuries, axis: .vertical).lineLimit(3...8)
-                TextField("Biggest reason for joining", text: $draft.joiningReason, axis: .vertical).lineLimit(3...8)
+                TextField("Injuries or limitations (optional)", text: $draft.injuries, axis: .vertical)
+                    .lineLimit(3...8)
+                    .focused($focusedField, equals: .injuries)
+                TextField("Biggest reason for joining", text: $draft.joiningReason, axis: .vertical)
+                    .lineLimit(3...8)
+                    .focused($focusedField, equals: .joiningReason)
             }
         }
     }
@@ -231,11 +317,14 @@ private struct NativeInterestFormView: View {
         Group {
             Section("Experience") {
                 TextField("Qualifications", text: $draft.qualifications, axis: .vertical)
+                    .focused($focusedField, equals: .qualifications)
                 Picker("Years of experience", selection: $draft.yearsExperience) {
                     Text("Choose").tag("")
                     ForEach(["Under 1 year", "1–2 years", "3–5 years", "5–10 years", "10+ years"], id: \.self) { Text($0).tag($0) }
                 }
-                TextField("Functional training experience", text: $draft.functionalExperience, axis: .vertical).lineLimit(4...10)
+                TextField("Functional training experience", text: $draft.functionalExperience, axis: .vertical)
+                    .lineLimit(4...10)
+                    .focused($focusedField, equals: .functionalExperience)
                 NativeMultiSelect(title: "Availability", options: Self.trainerAvailability, selection: $draft.availability)
             }
             Section("Coaching fit") {
@@ -248,8 +337,14 @@ private struct NativeInterestFormView: View {
                     Text("Optional").tag("")
                     ForEach(["Current PI/PL insurance", "Expired — can renew", "Not currently insured", "Unsure"], id: \.self) { Text($0).tag($0) }
                 }
-                TextField("Short introduction", text: $draft.shortIntro, axis: .vertical).lineLimit(3...8)
-                TextField("Social or website links", text: $draft.socialLinks).keyboardType(.URL).textInputAutocapitalization(.never)
+                TextField("Short introduction", text: $draft.shortIntro, axis: .vertical)
+                    .lineLimit(3...8)
+                    .focused($focusedField, equals: .shortIntro)
+                TextField("Social or website links", text: $draft.socialLinks)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .socialLinks)
             }
         }
     }
@@ -258,6 +353,7 @@ private struct NativeInterestFormView: View {
         Group {
             Section("Practice") {
                 TextField("Profession or specialty", text: $draft.profession)
+                    .focused($focusedField, equals: .profession)
                 NativeMultiSelect(title: "Services offered", options: Self.partnerServices, selection: $draft.services)
                 Toggle("Open to subcontracting at XERT", isOn: $draft.subcontractInterest)
                 Toggle("Interested in running workshops", isOn: $draft.workshops)
@@ -266,17 +362,51 @@ private struct NativeInterestFormView: View {
                     ForEach(Self.partnerModels, id: \.self) { Text($0).tag($0) }
                 }
                 TextField("Availability", text: $draft.availabilityText)
-                TextField("Website or social link", text: $draft.websiteSocialLink).keyboardType(.URL).textInputAutocapitalization(.never)
-                TextField("Tell us about your practice", text: $draft.shortIntro, axis: .vertical).lineLimit(3...8)
+                    .focused($focusedField, equals: .availability)
+                TextField("Website or social link", text: $draft.websiteSocialLink)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .website)
+                TextField("Tell us about your practice", text: $draft.shortIntro, axis: .vertical)
+                    .lineLimit(3...8)
+                    .focused($focusedField, equals: .shortIntro)
             }
         }
     }
 
     private func prefillContact() {
-        guard draft.fullName.isEmpty else { return }
-        draft.fullName = store.profile?.full_name ?? ""
-        draft.email = store.profile?.email ?? ""
-        draft.phone = store.profile?.phone ?? ""
+        if draft.fullName.isEmpty {
+            draft.fullName = store.profile?.full_name ?? ""
+            draft.email = store.profile?.email ?? ""
+            draft.phone = store.profile?.phone ?? ""
+        }
+        baselineDraft = draft
+    }
+
+    private func submit() {
+        attemptedSubmit = true
+        guard validationMessage == nil else {
+            XertHaptics.play(.warning)
+            return
+        }
+        focusedField = nil
+        Task {
+            if await store.submitInterest(kind: kind, draft: draft) {
+                baselineDraft = draft
+                submitted = true
+            }
+        }
+    }
+
+    private func requestDismiss() {
+        focusedField = nil
+        guard !store.isSubmittingInterest else { return }
+        if hasUnsavedChanges {
+            showingDiscardConfirmation = true
+        } else {
+            dismiss()
+        }
     }
 
     private static let occupations = ["Emergency services", "Mine worker", "Hospital / healthcare", "Teacher / education", "Council / government", "Trade / labour", "Office / admin", "Student", "Local business owner", "Other"]

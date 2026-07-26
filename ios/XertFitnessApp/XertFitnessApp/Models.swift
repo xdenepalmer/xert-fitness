@@ -937,6 +937,22 @@ struct NativeInterestDraft: Equatable {
     var preferredModel = ""
     var websiteSocialLink = ""
     var consentsToContact = false
+
+    func validationMessage(for kind: NativeInterestKind) -> String? {
+        do {
+            switch kind {
+            case .member:
+                _ = try MemberInterestSubmission(self)
+            case .trainer:
+                _ = try TrainerInterestSubmission(self)
+            case .partner:
+                _ = try PartnerInterestSubmission(self)
+            }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
 }
 
 struct MemberInterestSubmission: Encodable, Equatable {
@@ -963,7 +979,11 @@ struct MemberInterestSubmission: Encodable, Equatable {
     init(_ draft: NativeInterestDraft) throws {
         let common = try InterestValidation.common(draft)
         guard !draft.ageRange.isEmpty else { throw APIError(message: "Choose your age range.") }
-        guard let suburb = InterestValidation.optional(draft.suburbTown) else { throw APIError(message: "Enter your suburb or town.") }
+        guard let suburb = try InterestValidation.optional(
+            draft.suburbTown,
+            maximum: 120,
+            label: "Suburb or town"
+        ) else { throw APIError(message: "Enter your suburb or town.") }
         guard !draft.trainingLevel.isEmpty else { throw APIError(message: "Choose your current training level.") }
         guard !draft.goals.isEmpty else { throw APIError(message: "Select at least one training goal.") }
         guard !draft.preferredTimes.isEmpty else { throw APIError(message: "Select at least one preferred training time.") }
@@ -971,11 +991,19 @@ struct MemberInterestSubmission: Encodable, Equatable {
         full_name = common.name; email = common.email; phone = common.phone
         age_range = draft.ageRange; suburb_town = suburb; current_training_level = draft.trainingLevel
         main_training_goals = draft.goals.sorted(); preferred_training_times = draft.preferredTimes.sorted()
-        occupation_group = InterestValidation.optional(draft.occupationGroup)
+        occupation_group = try InterestValidation.optional(draft.occupationGroup, maximum: 120, label: "Occupation group")
         interested_in_group_classes = draft.groupClasses; interested_in_pt = draft.personalTraining
         interested_in_workshops = draft.workshops; interested_in_event_prep = draft.eventPrep
-        injuries_or_limitations_optional = InterestValidation.optional(draft.injuries)
-        biggest_reason_for_joining = InterestValidation.optional(draft.joiningReason)
+        injuries_or_limitations_optional = try InterestValidation.optional(
+            draft.injuries,
+            maximum: 2_000,
+            label: "Injuries or limitations"
+        )
+        biggest_reason_for_joining = try InterestValidation.optional(
+            draft.joiningReason,
+            maximum: 2_000,
+            label: "Reason for joining"
+        )
         consent_to_contact = true; mailing_list_consent = draft.mailingList
     }
 }
@@ -1002,9 +1030,17 @@ struct TrainerInterestSubmission: Encodable, Equatable {
 
     init(_ draft: NativeInterestDraft) throws {
         let common = try InterestValidation.common(draft)
-        guard let qualifications = InterestValidation.optional(draft.qualifications) else { throw APIError(message: "Enter your qualifications.") }
+        guard let qualifications = try InterestValidation.optional(
+            draft.qualifications,
+            maximum: 2_000,
+            label: "Qualifications"
+        ) else { throw APIError(message: "Enter your qualifications.") }
         guard !draft.yearsExperience.isEmpty else { throw APIError(message: "Choose your years of experience.") }
-        guard let functional = InterestValidation.optional(draft.functionalExperience) else { throw APIError(message: "Describe your functional training experience.") }
+        guard let functional = try InterestValidation.optional(
+            draft.functionalExperience,
+            maximum: 3_000,
+            label: "Functional training experience"
+        ) else { throw APIError(message: "Describe your functional training experience.") }
         guard !draft.availability.isEmpty else { throw APIError(message: "Select at least one availability window.") }
         guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
         full_name = common.name; email = common.email; phone = common.phone
@@ -1012,8 +1048,10 @@ struct TrainerInterestSubmission: Encodable, Equatable {
         functional_training_experience = functional; availability = draft.availability.sorted()
         specialties = draft.specialties.sorted(); interested_in_group_classes = draft.groupClasses
         interested_in_pt = draft.personalTraining; interested_in_workshops = draft.workshops
-        first_aid_cpr = draft.firstAidCPR; insurance_status = InterestValidation.optional(draft.insuranceStatus)
-        short_intro = InterestValidation.optional(draft.shortIntro); social_links = InterestValidation.optional(draft.socialLinks)
+        first_aid_cpr = draft.firstAidCPR
+        insurance_status = try InterestValidation.optional(draft.insuranceStatus, maximum: 120, label: "Insurance status")
+        short_intro = try InterestValidation.optional(draft.shortIntro, maximum: 3_000, label: "Short introduction")
+        social_links = try InterestValidation.optional(draft.socialLinks, maximum: 2_048, label: "Social or website links")
         consent_to_contact = true
     }
 }
@@ -1037,32 +1075,70 @@ struct PartnerInterestSubmission: Encodable, Equatable {
 
     init(_ draft: NativeInterestDraft) throws {
         let common = try InterestValidation.common(draft)
-        guard let business = InterestValidation.optional(draft.businessName) else { throw APIError(message: "Enter your business or practice name.") }
-        guard let profession = InterestValidation.optional(draft.profession) else { throw APIError(message: "Enter your profession or specialty.") }
+        guard let business = try InterestValidation.optional(
+            draft.businessName,
+            maximum: 160,
+            label: "Business or practice name"
+        ) else { throw APIError(message: "Enter your business or practice name.") }
+        guard let profession = try InterestValidation.optional(
+            draft.profession,
+            maximum: 160,
+            label: "Profession or specialty"
+        ) else { throw APIError(message: "Enter your profession or specialty.") }
         guard !draft.services.isEmpty else { throw APIError(message: "Select at least one service.") }
         guard draft.consentsToContact else { throw APIError(message: "Consent to contact is required.") }
         full_name = common.name; business_name = business; email = common.email; phone = common.phone
         self.profession = profession; services_offered = draft.services.sorted()
-        availability = InterestValidation.optional(draft.availabilityText)
+        availability = try InterestValidation.optional(draft.availabilityText, maximum: 500, label: "Availability")
         subcontract_interest = draft.subcontractInterest; workshop_interest = draft.workshops
-        preferred_model = InterestValidation.optional(draft.preferredModel)
-        website_social_link = InterestValidation.optional(draft.websiteSocialLink)
-        short_intro = InterestValidation.optional(draft.shortIntro); consent_to_contact = true
+        preferred_model = try InterestValidation.optional(draft.preferredModel, maximum: 120, label: "Partnership model")
+        website_social_link = try InterestValidation.webLink(draft.websiteSocialLink)
+        short_intro = try InterestValidation.optional(draft.shortIntro, maximum: 3_000, label: "Practice introduction")
+        consent_to_contact = true
     }
 }
 
 private enum InterestValidation {
     static func common(_ draft: NativeInterestDraft) throws -> (name: String, email: String, phone: String) {
-        guard let name = optional(draft.fullName), name.count <= 100 else { throw APIError(message: "Enter your full name.") }
+        guard let name = try optional(draft.fullName, maximum: 100, label: "Full name") else {
+            throw APIError(message: "Enter your full name.")
+        }
         let email = draft.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard email.contains("@"), email.contains("."), email.count <= 254 else { throw APIError(message: "Enter a valid email address.") }
-        guard let phone = optional(draft.phone), phone.count <= 40 else { throw APIError(message: "Enter your phone number.") }
+        guard email.count <= 254,
+              email.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) != nil else {
+            throw APIError(message: "Enter a valid email address.")
+        }
+        guard let phone = try optional(draft.phone, maximum: 40, label: "Phone number"),
+              phone.filter({ $0.isNumber }).count >= 8 else {
+            throw APIError(message: "Enter a valid phone number.")
+        }
         return (name, email, phone)
     }
 
-    static func optional(_ value: String) -> String? {
+    static func optional(
+        _ value: String,
+        maximum: Int,
+        label: String
+    ) throws -> String? {
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return clean.isEmpty ? nil : String(clean.prefix(5_000))
+        guard !clean.isEmpty else { return nil }
+        guard clean.count <= maximum else {
+            throw APIError(message: "\(label) must be \(maximum.formatted()) characters or fewer.")
+        }
+        return clean
+    }
+
+    static func webLink(_ value: String) throws -> String? {
+        guard let link = try optional(value, maximum: 2_048, label: "Website or social link") else {
+            return nil
+        }
+        guard let url = URL(string: link),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            throw APIError(message: "Website or social link must begin with http:// or https://.")
+        }
+        return link
     }
 }
 
