@@ -439,6 +439,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
     case product(UUID)
     case event(UUID)
     case announcement(UUID)
+    case ptRequest(UUID)
 
     var id: String { restorationValue }
 
@@ -451,6 +452,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .product: return .products
         case .event: return .events
         case .announcement: return .notices
+        case .ptRequest: return .ptRequests
         }
     }
 
@@ -463,6 +465,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .product: return "Session Pack"
         case .event: return "Event Detail"
         case .announcement: return "Member Notice"
+        case .ptRequest: return "PT Request"
         }
     }
 
@@ -475,6 +478,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case .product(let id): return "product/\(id.uuidString.lowercased())"
         case .event(let id): return "event/\(id.uuidString.lowercased())"
         case .announcement(let id): return "announcement/\(id.uuidString.lowercased())"
+        case .ptRequest(let id): return "pt-request/\(id.uuidString.lowercased())"
         }
     }
 
@@ -492,6 +496,7 @@ enum XertOwnerTask: Equatable, Hashable, Identifiable {
         case (.products, "product"): return .product(id)
         case (.events, "event"): return .event(id)
         case (.notices, "announcement"): return .announcement(id)
+        case (.ptRequests, "pt-request"): return .ptRequest(id)
         default: return nil
         }
     }

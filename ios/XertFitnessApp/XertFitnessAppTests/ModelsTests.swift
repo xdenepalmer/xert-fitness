@@ -107,6 +107,7 @@ final class ModelsTests: XCTestCase {
         let productID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000084"))
         let classID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000085"))
         let announcementID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000086"))
+        let ptRequestID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000087"))
         let routes = [
             XertOwnerRoute(task: .member(memberID)),
             XertOwnerRoute(task: .classSession(classID)),
@@ -115,6 +116,7 @@ final class ModelsTests: XCTestCase {
             XertOwnerRoute(task: .product(productID)),
             XertOwnerRoute(task: .event(eventID)),
             XertOwnerRoute(task: .announcement(announcementID)),
+            XertOwnerRoute(task: .ptRequest(ptRequestID)),
         ]
 
         for route in routes {
@@ -148,6 +150,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(XertOwnerRoute.restore("owner/members/order/\(orderID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/orders/product/\(productID.uuidString)"))
         XCTAssertNil(XertOwnerRoute.restore("owner/events/announcement/\(announcementID.uuidString)"))
+        XCTAssertNil(XertOwnerRoute.restore("owner/members/pt-request/\(ptRequestID.uuidString)"))
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/notices/announcement/\(announcementID.uuidString)"),
             XertOwnerRoute(task: .announcement(announcementID))
@@ -155,6 +158,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(
             XertOwnerRoute.restore("owner/finance/order/\(orderID.uuidString)"),
             XertOwnerRoute(task: .order(orderID))
+        )
+        XCTAssertEqual(
+            XertOwnerRoute.restore("owner/ptrequests/pt-request/\(ptRequestID.uuidString)"),
+            XertOwnerRoute(task: .ptRequest(ptRequestID))
         )
         XCTAssertNil(XertOwnerRoute.restore("owner/events/event/not-a-uuid"))
         XCTAssertNil(XertOwnerRoute.route(for: try XCTUnwrap(URL(

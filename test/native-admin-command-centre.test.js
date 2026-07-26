@@ -325,12 +325,14 @@ test('native owner priorities open the exact protected task when one workload is
 
   assert.match(priorities, /title: "Pack sales setup"[\s\S]*task: singlePricingAttentionTask/);
   assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestClassTask/);
+  assert.match(priorities, /title: "PT enquiries"[\s\S]*task: singlePTRequestTask/);
   assert.match(priorities, /title: "Waitlisted members"[\s\S]*task: singleWaitlistClassTask/);
   assert.match(priorities, /title: "Retention follow-ups"[\s\S]*task: singleRetentionTask/);
   assert.match(priorities, /title: "Orders to reconcile"[\s\S]*task: singleRecoverableOrderTask/);
 
   assert.match(priorities, /private var singlePricingAttentionTask:[\s\S]*return \.product\(product\.id\)[\s\S]*return \.product\(draft\.id\)/);
   assert.match(priorities, /private var singleBookingRequestClassTask:[\s\S]*requested_count \+ \$0\.public_request_count > 0[\s\S]*return \.classSession\(operation\.id\)/);
+  assert.match(priorities, /private var singlePTRequestTask:[\s\S]*admin\.ptRequests\.filter\(\\\.isPending\)[\s\S]*return \.ptRequest\(request\.id\)/);
   assert.match(priorities, /private var singleWaitlistClassTask:[\s\S]*\$0\.waitlist_count > 0[\s\S]*return \.classSession\(item\.session_id\)/);
   assert.match(priorities, /private var singleRetentionTask:[\s\S]*admin\.followUps\.count == 1[\s\S]*return \.member\(followUp\.id\)/);
   assert.match(priorities, /private var singleRecoverableOrderTask:[\s\S]*admin\.orders\.filter\(\\\.isRecoverable\)[\s\S]*return \.order\(order\.id\)/);
@@ -1335,7 +1337,7 @@ test('native intake notes remain retryable and cannot be discarded through sheet
     view.indexOf('private struct AdminPTRequestsView'),
   );
   const ptNotes = view.slice(
-    view.indexOf('private struct AdminPTNotesEditor'),
+    view.indexOf('private struct AdminPTRequestDetailView'),
     view.indexOf('private struct AdminPlatformView'),
   );
 
@@ -1361,6 +1363,12 @@ test('native intake notes remain retryable and cannot be discarded through sheet
   assert.match(leadDetail, /status != baselineStatus \|\| notes != baselineNotes/);
   assert.match(ptNotes, /let didSave = await admin\.updatePTRequest/);
   assert.match(ptNotes, /if didSave \{[\s\S]*dismiss\(\)[\s\S]*\} else \{[\s\S]*XertHaptics\.play\(\.error\)/);
+  assert.match(ptNotes, /Section\("Contact"\)/);
+  assert.match(ptNotes, /Section\("Training request"\)/);
+  assert.match(ptNotes, /Section\("Workflow"\)/);
+  assert.match(ptNotes, /Label\("Update request status", systemImage: "arrow\.triangle\.2\.circlepath"\)/);
+  assert.match(ptNotes, /Save or discard private notes before changing workflow status/);
+  assert.match(ptNotes, /\.disabled\(!mutationAllowed \|\| isDirty \|\| isSaving\)/);
   assert.doesNotMatch(ptNotes, /let onSave:/);
   assert.ok((view.match(/\.adminOwnerExitState\(/g) || []).length >= 14);
 });
@@ -1884,7 +1892,7 @@ test('native intake desks never hide failed loads or lose confirmed mutation out
   assert.match(intakeViews, /Only requests that fail will remain selected for retry/);
   assert.match(intakeViews, /AdminIntakeCSVDocument\(csv: report\.csv\)/);
   assert.match(intakeViews, /defaultFilename: "xert-pt-requests-/);
-  assert.match(intakeViews, /PT Requests must refresh before owner notes can be changed/);
+  assert.match(intakeViews, /Contact and request details remain available, but workflow and notes are read-only/);
 });
 
 test('native event and team catalogues preserve mutation truth and never fake empty records', async () => {

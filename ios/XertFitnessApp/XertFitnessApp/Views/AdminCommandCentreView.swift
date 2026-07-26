@@ -2044,7 +2044,8 @@ struct AdminCommandCentreView: View {
                 detail: "Respond to coaching requests",
                 icon: "figure.strengthtraining.traditional",
                 count: admin.pendingPTRequests,
-                workspace: .ptRequests
+                workspace: .ptRequests,
+                task: singlePTRequestTask
             ),
             AdminPriorityAction(
                 title: "Attendance due",
@@ -2142,6 +2143,12 @@ struct AdminCommandCentreView: View {
         let affectedClasses = admin.waitlist.filter { $0.waitlist_count > 0 }
         guard affectedClasses.count == 1, let item = affectedClasses.first else { return nil }
         return .classSession(item.session_id)
+    }
+
+    private var singlePTRequestTask: XertOwnerTask? {
+        let pendingRequests = admin.ptRequests.filter(\.isPending)
+        guard pendingRequests.count == 1, let request = pendingRequests.first else { return nil }
+        return .ptRequest(request.id)
     }
 
     private var singleRetentionTask: XertOwnerTask? {
@@ -3014,6 +3021,17 @@ private struct AdminOwnerTaskSheet: View {
                 )
             } else {
                 resolutionView(recordName: "member notice")
+            }
+        case .ptRequest(let id):
+            if let request = admin.ptRequests.first(where: { $0.id == id }) {
+                AdminPTRequestDetailView(
+                    admin: admin,
+                    session: session,
+                    request: request,
+                    mutationAllowed: admin.ptRequestsAreCurrent
+                )
+            } else {
+                resolutionView(recordName: "PT request")
             }
         }
     }
@@ -9647,12 +9665,14 @@ private struct AdminPTRequestsView: View {
         .onChange(of: ageFilter) { _ in resetSelection() }
         .onChange(of: query) { _ in resetSelection() }
         .sheet(item: $notesRequest) { request in
-            AdminPTNotesEditor(
-                admin: admin,
-                session: session,
-                request: request,
-                mutationAllowed: requestsAreCurrent
-            )
+            NavigationStack {
+                AdminPTRequestDetailView(
+                    admin: admin,
+                    session: session,
+                    request: request,
+                    mutationAllowed: requestsAreCurrent
+                )
+            }
         }
     }
 
@@ -9748,12 +9768,12 @@ private struct AdminPTRequestsView: View {
         .disabled(!requestsAreCurrent || isMutating || request.allowedNextStatuses.isEmpty)
 
         Button { notesRequest = request } label: {
-            Label("Notes", systemImage: "note.text")
+            Label("Open", systemImage: "arrow.up.right.square")
                 .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
         }
         .buttonStyle(.bordered)
         .disabled(!requestsAreCurrent || isMutating)
-        .accessibilityLabel("Edit admin notes for \(request.displayName)")
+        .accessibilityLabel("Open PT request for \(request.displayName)")
     }
 
     @ViewBuilder
@@ -9783,7 +9803,7 @@ private struct AdminIntakeCSVDocument: FileDocument {
     }
 }
 
-private struct AdminPTNotesEditor: View {
+private struct AdminPTRequestDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var admin: AdminStore
     let session: AuthSession
@@ -9814,49 +9834,128 @@ private struct AdminPTNotesEditor: View {
     private var isSaving: Bool { admin.updatingPTRequestID == request.id }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if !mutationAllowed {
-                    Section {
-                        Label(
-                            "PT Requests must refresh before owner notes can be changed.",
-                            systemImage: "lock.trianglebadge.exclamationmark"
-                        )
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.orange)
+        Form {
+            if !mutationAllowed {
+                Section {
+                    Label(
+                        "This PT request snapshot is not current. Contact and request details remain available, but workflow and notes are read-only.",
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            Section("Contact") {
+                if let phone = nonBlank(request.phone),
+                   let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                    Link(destination: url) {
+                        Label(phone, systemImage: "phone")
+                            .frame(minHeight: 44, alignment: .leading)
                     }
                 }
-                Section("Private owner notes") {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 160)
-                        .focused($notesFocused)
-                    Text("\(notes.count)/5,000")
-                        .font(.caption)
-                        .foregroundStyle(notes.count > 5_000 ? Color.red : .secondary)
+                if let email = nonBlank(request.email),
+                   let url = URL(string: "mailto:\(email)") {
+                    Link(destination: url) {
+                        Label(email, systemImage: "envelope")
+                            .frame(minHeight: 44, alignment: .leading)
+                    }
                 }
-                .disabled(!mutationAllowed)
+                if nonBlank(request.phone) == nil && nonBlank(request.email) == nil {
+                    Label("No contact details supplied", systemImage: "person.crop.circle.badge.exclamationmark")
+                        .foregroundStyle(Color.orange)
+                }
             }
-            .navigationTitle(request.displayName)
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: requestDismiss)
-                        .disabled(isSaving)
+
+            Section("Training request") {
+                requestDetailRow("Session", request.requested_session_type)
+                requestDetailRow(
+                    "Submitted",
+                    request.created_at.formatted(date: .abbreviated, time: .shortened)
+                )
+                optionalRequestDetailRow("Preferred day", request.preferred_day)
+                optionalRequestDetailRow("Preferred time", request.preferred_time)
+                optionalRequestDetailRow("Goal", request.training_goal)
+                optionalRequestDetailRow("Experience", request.experience_level)
+                if let memberNotes = nonBlank(request.notes) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MEMBER NOTES")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertPale.opacity(0.52))
+                        Text(memberNotes)
+                            .foregroundStyle(Color.xertOffWhite)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving..." : "Save", action: save)
-                        .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
+            }
+
+            Section("Workflow") {
+                requestDetailRow(
+                    "Status",
+                    request.status.replacingOccurrences(of: "_", with: " ").capitalized
+                )
+                if !request.allowedNextStatuses.isEmpty {
+                    Menu {
+                        ForEach(request.allowedNextStatuses, id: \.self) { status in
+                            Button(status.replacingOccurrences(of: "_", with: " ").capitalized) {
+                                updateStatus(status)
+                            }
+                        }
+                    } label: {
+                        Label("Update request status", systemImage: "arrow.triangle.2.circlepath")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .disabled(!mutationAllowed || isDirty || isSaving)
+                    .accessibilityHint(
+                        isDirty
+                            ? "Save or discard private notes before changing status"
+                            : "Changes this request to its next valid workflow state"
+                    )
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { notesFocused = false }
+                if isDirty {
+                    Label(
+                        "Save or discard private notes before changing workflow status.",
+                        systemImage: "square.and.pencil"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
                 }
+            }
+
+            Section("Private owner notes") {
+                TextEditor(text: $notes)
+                    .frame(minHeight: 160)
+                    .focused($notesFocused)
+                Text("\(notes.count)/5,000")
+                    .font(.caption)
+                    .foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.55))
+            }
+            .disabled(!mutationAllowed)
+        }
+        .tint(Color.xertSteel)
+        .xertListBackground()
+        .navigationTitle(request.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close", action: requestDismiss)
+                    .disabled(isSaving)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(isSaving ? "Saving..." : "Save", action: save)
+                    .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { notesFocused = false }
             }
         }
         .adminOwnerExitState(
             id: exitStateID,
-            title: "PT notes for \(request.displayName)",
+            title: "PT request for \(request.displayName)",
             isDirty: isDirty,
             isBusy: isSaving
         )
@@ -9870,6 +9969,24 @@ private struct AdminPTNotesEditor: View {
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The unsaved private notes for \(request.displayName) will be lost.")
+        }
+    }
+
+    private func updateStatus(_ status: String) {
+        notesFocused = false
+        guard !isDirty else { return }
+        Task {
+            let didSave = await admin.updatePTRequest(
+                session: session,
+                request: request,
+                status: status
+            )
+            if didSave {
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
         }
     }
 
@@ -9899,6 +10016,26 @@ private struct AdminPTNotesEditor: View {
         } else if !isSaving {
             dismiss()
         }
+    }
+
+    private func requestDetailRow(_ label: String, _ value: String) -> some View {
+        LabeledContent(label) {
+            Text(value)
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(Color.xertOffWhite)
+        }
+    }
+
+    @ViewBuilder
+    private func optionalRequestDetailRow(_ label: String, _ value: String?) -> some View {
+        if let value = nonBlank(value) {
+            requestDetailRow(label, value)
+        }
+    }
+
+    private func nonBlank(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

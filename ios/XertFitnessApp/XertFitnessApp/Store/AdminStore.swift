@@ -841,6 +841,11 @@ final class AdminStore: ObservableObject {
             requiresResolution = !events.contains(where: { $0.id == eventID })
         case .announcement(let announcementID):
             requiresResolution = !announcements.contains(where: { $0.id == announcementID })
+        case .ptRequest(let requestID):
+            let ptRequestsAreCurrent = loadedSources.contains("PT requests")
+                && !refreshUnavailableSources.contains("PT requests")
+            requiresResolution = !ptRequests.contains(where: { $0.id == requestID })
+                || !ptRequestsAreCurrent
         }
         guard requiresResolution else {
             resolvingOwnerTask = nil
@@ -911,6 +916,14 @@ final class AdminStore: ObservableObject {
                 mergeAnnouncement(announcement)
                 loadedSources.insert("member notices")
                 refreshUnavailableSources.removeAll { $0 == "member notices" }
+            case .ptRequest(let requestID):
+                let refreshedRequests = try await api.adminPTRequests(session: session)
+                guard ownerTaskResolutionGeneration == generation,
+                      resolvingOwnerTask == task else { return }
+                ptRequests = refreshedRequests
+                loadedSources.insert("PT requests")
+                refreshUnavailableSources.removeAll { $0 == "PT requests" }
+                guard refreshedRequests.contains(where: { $0.id == requestID }) else { return }
             }
         } catch {
             guard ownerTaskResolutionGeneration == generation,
