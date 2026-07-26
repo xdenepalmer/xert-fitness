@@ -4,6 +4,7 @@ import { clearCheckoutAttemptID, getOrCreateCheckoutAttemptID } from './checkout
 import { sessionPackPaymentsEnabled } from './launchSettings';
 import { savePendingWebCheckout } from './webCheckoutRecovery';
 import { apiErrorMessage } from './apiError';
+import { collectAdminBatches } from './adminPagination';
 
 // ─── Products (session packs) ─────────────────────────────────────────────────
 
@@ -89,9 +90,20 @@ export async function getMyCredits() {
 export async function getMyOrders() {
   const userID = await currentUserID();
   if (!userID) return [];
-  const { data, error } = await supabase.from('orders').select('*, products(name)').eq('user_id', userID).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(200);
-  if (error) throw new Error(error.message);
-  return data || [];
+  // Page past PostgREST max_rows / the old hard 200 cut — a truncated list
+  // silently hides paid / refunded packs from Account (iOS orders paging parity).
+  return collectAdminBatches(async (page, pageSize) => {
+    const from = (page - 1) * pageSize;
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, products(name)')
+      .eq('user_id', userID)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
 }
 
 export async function getMemberAnnouncements() {

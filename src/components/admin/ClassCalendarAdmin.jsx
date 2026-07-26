@@ -592,7 +592,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     if (!quiet) setWaitlistOverviewLoading(true);
     setWaitlistOverviewError('');
     try {
-      const result = await adminWaitlistOverview(20);
+      // RPC ceiling is 50 — the old hard 20 cut silently hid later waitlisted
+      // classes from the promote/skip desk (iOS Overview / waitlist parity).
+      const result = await adminWaitlistOverview(50);
       if (generation !== waitlistOverviewGenerationRef.current) {
         return { applied: false, ok: false };
       }

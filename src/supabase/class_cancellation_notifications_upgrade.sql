@@ -231,7 +231,7 @@ begin
     ) values (
       'Class cancelled: ' || coalesce(nullif(btrim(v_title), ''), 'XERT class'),
       format(
-        'Unfortunately, XERT has cancelled %s on %s. Any reserved session credit has been returned automatically. Open XERT to choose another class, or contact us if you need help.',
+        'Unfortunately, XERT has cancelled %s on %s. Reserved credits on open credit places are returned when the pack is still live; waitlist places never held a credit. Open XERT to choose another class, or contact us if you need help.',
         coalesce(nullif(btrim(v_title), ''), 'your class'),
         to_char(v_start_time at time zone 'Australia/Brisbane', 'FMDay FMDD FMMonth at FMHH12:MI am')
       ),

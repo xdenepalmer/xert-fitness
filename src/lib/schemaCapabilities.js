@@ -91,6 +91,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   booking_credit_release_clears_batch: 'Apply src/supabase/booking_credit_release_clears_batch.sql in Supabase.',
   roll_call_stripe_refund_clears_credit_batch: 'Apply src/supabase/roll_call_stripe_refund_clears_credit_batch.sql in Supabase.',
   terminal_booking_clears_stale_credit_batch: 'Apply src/supabase/terminal_booking_clears_stale_credit_batch.sql in Supabase.',
+  class_cancel_notice_credit_honesty: 'Apply src/supabase/class_cancel_notice_credit_honesty.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

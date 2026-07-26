@@ -77,7 +77,7 @@ export function buildClassCancellationMessage(session) {
     body: [
       'Hi,',
       '',
-      `Unfortunately, XERT has cancelled ${title} on ${startsAt}. Any reserved session credit has been returned automatically.`,
+      `Unfortunately, XERT has cancelled ${title} on ${startsAt}. Reserved credits on open credit places are returned when the pack is still live; waitlist places never held a credit.`,
       '',
       'We are sorry for the disruption. Please open XERT to choose another class, or reply if you need help.',
       '',

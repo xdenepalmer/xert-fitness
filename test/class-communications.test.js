@@ -31,7 +31,7 @@ test('cancellation contacts merge both booking systems without exposing inactive
   ]);
 });
 
-test('cancellation copy names the class, Brisbane time and automatic credit return', () => {
+test('cancellation copy names the class, Brisbane time and honest credit return', () => {
   const message = buildClassCancellationMessage({
     title: 'XERT Engine',
     start_time: '2026-07-15T08:30:00Z',
@@ -39,7 +39,12 @@ test('cancellation copy names the class, Brisbane time and automatic credit retu
 
   assert.equal(message.subject, 'XERT class cancelled: XERT Engine');
   assert.match(message.body, /Wednesday 15 July at 6:30 pm/);
-  assert.match(message.body, /reserved session credit has been returned automatically/);
+  assert.match(
+    message.body,
+    /Reserved credits on open credit places are returned when the pack is still live/,
+  );
+  assert.match(message.body, /waitlist places never held a credit/);
+  assert.doesNotMatch(message.body, /Any reserved session credit has been returned automatically/);
   assert.match(message.body, /choose another class/);
 
   assert.match(

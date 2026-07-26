@@ -1066,7 +1066,9 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
     let active = true;
     setFollowUpsLoading(true);
     setFollowUpsError('');
-    adminListMemberFollowUps(20)
+    // RPC ceiling is 50 — the old hard 20 cut silently hid later follow-ups
+    // from the Members desk (iOS Overview Follow-ups parity).
+    adminListMemberFollowUps(50)
       .then(result => {
         if (!active) return;
         setFollowUps(result.rows);

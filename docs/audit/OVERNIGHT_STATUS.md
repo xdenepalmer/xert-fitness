@@ -3,11 +3,17 @@
 ## Morning owner briefing
 
 **Still shipping; apply through latest migration timestamp**
-`20260726121000_terminal_booking_clears_stale_credit_batch.sql` (**26121**). Tip
+`20260726122000_class_cancel_notice_credit_honesty.sql` (**26122**). Tip
 commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Class-cancel notice / money silence (**26122** + app tip): private class-cancel
+  notices and BCC mailto no longer claim every affected member got a credit back
+  (waitlist never held one; attended/no_show already consumed); web waitlist desk
+  and Members follow-ups load the RPC ceiling (50) so later queues are not
+  silently hidden; web Account `getMyOrders` pages past the old hard 200 cut
+  (iOS parity) so purchase history cannot truncate without warning.
 - Class catalogue / money-history silence (app-only tip after **26121**): admin
   calendar + soft-launch/public timetable page past PostgREST `max_rows` (and
   drop the silent 100-row public cut) so seed/repeat growth cannot hide bookable
@@ -220,14 +226,15 @@ were **not** built.
 
 **What you must apply in Supabase tomorrow**
 1. Run any missing migrations in timestamp order through
-   `20260726121000_terminal_booking_clears_stale_credit_batch.sql` (**26121** —
+   `20260726122000_class_cancel_notice_credit_honesty.sql` (**26122** —
    full list + command examples below).
 2. Run `src/supabase/release_readiness_check.sql` — every row must show
    `installed = true` and `release_ready = true`, including
    `soft_launch_switch_authz` (26118*),
    `booking_credit_release_clears_batch` (26119*),
-   `roll_call_stripe_refund_clears_credit_batch` (26120*), and
-   `terminal_booking_clears_stale_credit_batch` (26121*).
+   `roll_call_stripe_refund_clears_credit_batch` (26120*),
+   `terminal_booking_clears_stale_credit_batch` (26121*), and
+   `class_cancel_notice_credit_honesty` (26122*).
 3. Smoke: Soft Launch — try enabling payments with bookings off (blocked at
    API/DB, not only UI); enable bookings only when Ops Health shows the
    booking-switch guard (DB refuses without it). Member drawer Reveal
@@ -237,7 +244,9 @@ were **not** built.
    `credit_batch_id`. Stripe full refund also clears leftover FK on a prior
    late-cancelled place for that pack. Concurrent book/confirm against a full
    class raises `SESSION_FULL`. Class roster load failure toasts (not empty).
-   Timetable fetch failure shows “unavailable” (not “coming soon”).
+   Timetable fetch failure shows “unavailable” (not “coming soon”). Cancel a
+   class with waitlisted members → private notice does not claim their credit
+   was returned. Waitlist desk shows up to 50 queued classes.
 
 ---
 
@@ -629,6 +638,18 @@ Migration / operator mirror:
 
 No new migration for this batch (app-only tip). Apply through **26121** remains current.
 
+### 41. This batch — class-cancel notice honesty + waitlist/orders/follow-up silence
+| Area | Defect | Fix |
+|---|---|---|
+| Money honesty | `create_class_cancellation_notice` + BCC mailto told every targeted member a reserved credit was returned — false for waitlist / attended / no_show / Stripe-refunded packs | Honest shared body; capability `class_cancel_notice_credit_honesty` (**26122**); operator + historical recreations updated so re-runs do not restore the lie |
+| Silent failure (ops) | Class Calendar waitlist desk called `adminWaitlistOverview(20)` while the RPC ceiling (and iOS) is 50 — later waitlisted classes vanished from promote/skip | Load 50 |
+| Silent failure (ops) | Members follow-ups desk called `adminListMemberFollowUps(20)` while iOS Overview uses 50 | Load 50 |
+| Silent failure (money) | Web Account `getMyOrders` hard-`limit(200)` while iOS pages — purchase history truncated without warning | Page with `collectAdminBatches` |
+
+Migration / operator mirror:
+`supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql`
+↔ `src/supabase/class_cancel_notice_credit_honesty.sql`. Apply through **26122**.
+
 ---
 
 ## Operator re-run safety (skip-if-newer inventory)
@@ -678,7 +699,7 @@ Apply in timestamp order (skip any already applied). Operator mirrors under
 `src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
 source of truth.
 
-### Copy-paste ordered filenames (overnight catch-up through 26121)
+### Copy-paste ordered filenames (overnight catch-up through 26122)
 
 Paste into a checklist, SQL Editor queue, or shell loop — one file per line, in order:
 
@@ -703,6 +724,7 @@ supabase/migrations/20260726118000_soft_launch_switch_authz.sql
 supabase/migrations/20260726119000_booking_credit_release_clears_batch.sql
 supabase/migrations/20260726120000_roll_call_stripe_refund_clears_credit_batch.sql
 supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
+supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
 ```
 
 ### Production apply checklist (examples — no secrets)
@@ -724,7 +746,7 @@ supabase db push
 
 # Or apply a single file when catch-up is needed
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f supabase/migrations/20260726121000_terminal_booking_clears_stale_credit_batch.sql
+  -f supabase/migrations/20260726122000_class_cancel_notice_credit_honesty.sql
 
 # Release contract — every row must be installed + release_ready
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -759,6 +781,7 @@ row shows `installed = true` and `release_ready = true`.
 | 18 | `20260726119000_booking_credit_release_clears_batch.sql` | `booking_credit_release_clears_batch` — release paths null `credit_batch_id` |
 | 19 | `20260726120000_roll_call_stripe_refund_clears_credit_batch.sql` | `roll_call_stripe_refund_clears_credit_batch` — roll-call + Stripe refund cancel null `credit_batch_id` |
 | 20 | `20260726121000_terminal_booking_clears_stale_credit_batch.sql` | `terminal_booking_clears_stale_credit_batch` — waitlist/terminal leftovers + Stripe late-cancel FK clear |
+| 21 | `20260726122000_class_cancel_notice_credit_honesty.sql` | `class_cancel_notice_credit_honesty` — class-cancel notice does not claim waitlist/consumed places returned a credit |
 
 Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
 `20260726070214_sql_drift_repair.sql`) may already be in production from prior
@@ -767,15 +790,16 @@ batches; confirm via `release_readiness_check.sql` before re-applying.
 After applying, run `src/supabase/release_readiness_check.sql` — every row must
 show `installed = true` and `release_ready = true`, including
 `soft_launch_switch_authz`, `booking_credit_release_clears_batch`,
-`roll_call_stripe_refund_clears_credit_batch`, and
-`terminal_booking_clears_stale_credit_batch`.
+`roll_call_stripe_refund_clears_credit_batch`,
+`terminal_booking_clears_stale_credit_batch`, and
+`class_cancel_notice_credit_honesty`.
 
 ---
 
 ## Morning smoke checklist
 
 1. **Migrations** — Apply any missing rows from the table above through
-   `20260726121000_terminal_booking_clears_stale_credit_batch.sql`. Confirm readiness SQL.
+   `20260726122000_class_cancel_notice_credit_honesty.sql`. Confirm readiness SQL.
 2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
    `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
    when enabled.
@@ -905,3 +929,7 @@ show `installed = true` and `release_ready = true`, including
     soft-launch timetable + iOS class list still show every class; Member drawer
     credits/orders/grants and iPhone Account orders page past max_rows; class
     cancel confirm/toast does not claim waitlist-only cancels returned credits.
+40. **Class-cancel notice honesty + waitlist/orders/follow-up silence** — Cancel
+    a class with waitlisted members → private notice + BCC mailto do not claim
+    their credit was returned; waitlist desk and Members follow-ups load up to
+    50 rows; web Account orders page past the old 200 cut.
