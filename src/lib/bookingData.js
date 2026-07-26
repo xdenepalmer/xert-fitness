@@ -140,6 +140,8 @@ const BOOKING_ERRORS = {
   ALREADY_BOOKED: "You've already booked this class.",
   BOOKING_TIME_CONFLICT: 'That class overlaps another active booking in your schedule.',
   SESSION_FULL: 'Sorry, this class is now full.',
+  BOOKINGS_PAUSED: 'Online class bookings are currently paused. You can still register interest and XERT will follow up.',
+  MEMBER_ONBOARDING_REQUIRED: 'Complete Member Readiness on your account before booking or joining a waitlist.',
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
   SESSION_HAS_CAPACITY: 'A place is available now. Book the class instead of joining its waitlist.',
   WAITLIST_PRIORITY: 'Members already on the waitlist have first claim on this place. Join the queue instead.',

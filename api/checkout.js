@@ -24,6 +24,9 @@ import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const REUSABLE_CHECKOUT_WINDOW_MS = 20 * 60 * 1000;
+/** Cap how many checkout rows one member can mint in a short window (abuse / runaway retries). */
+export const CHECKOUT_BURST_LIMIT = 8;
+export const CHECKOUT_BURST_WINDOW_MS = 10 * 60 * 1000;
 const PAYMENT_FULFILLMENT_CAPABILITY = 'stripe_payment_fulfillment';
 const STRIPE_PENDING_ORDER_CAPABILITY = 'stripe_pending_order_guard';
 const STRIPE_ORDER_TERMS_CAPABILITY = 'stripe_order_terms_snapshot';
@@ -553,6 +556,27 @@ async function findReusableCheckout({
   return null;
 }
 
+/**
+ * Refuse runaway checkout minting when reusable-session recovery cannot absorb
+ * the load (expired sessions, stale attempt ids, scripted retries). Counts every
+ * order row created for the member in the window — pending and settled alike.
+ */
+export async function memberCheckoutBurstExceeded(admin, userId, {
+  limit = CHECKOUT_BURST_LIMIT,
+  windowMs = CHECKOUT_BURST_WINDOW_MS,
+  now = new Date(),
+} = {}) {
+  if (!userId) return false;
+  const since = new Date(now.getTime() - windowMs).toISOString();
+  const { count, error } = await admin
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', since);
+  if (error) throw error;
+  return (count || 0) >= limit;
+}
+
 export function pendingOrderForCheckout(checkout, user, product) {
   if (!checkout?.id || !user?.id || !product?.id) {
     throw new Error('Pending checkout identity is incomplete.');
@@ -740,6 +764,12 @@ export default async function handler(request, response) {
         checkout_session_id: reusableCheckout.checkoutSessionID,
         reused: true,
       });
+    }
+
+    if (await memberCheckoutBurstExceeded(admin, user.id)) {
+      return json({
+        error: 'Too many checkout attempts. Wait a few minutes, then try again.',
+      }, 429);
     }
 
     let lineItem;

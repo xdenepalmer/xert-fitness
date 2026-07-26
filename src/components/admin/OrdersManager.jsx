@@ -56,14 +56,24 @@ export default function OrdersManager() {
   const currencies = useMemo(() => [...new Set(orders.map(order => String(order.currency || 'aud').toLowerCase()))].sort(), [orders]);
   const filteredOrders = useMemo(() => filterOrders(orders, { search, status: statusFilter, currency: currencyFilter, days: daysFilter }), [currencyFilter, daysFilter, orders, search, statusFilter]);
   const pageCount = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
-  const visibleOrders = useMemo(() => filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredOrders, page]);
-  const firstResult = filteredOrders.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastResult = Math.min(page * PAGE_SIZE, filteredOrders.length);
+  const safePage = Math.min(page, pageCount);
+  const visibleOrders = useMemo(
+    () => filteredOrders.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredOrders, safePage],
+  );
+  const firstResult = filteredOrders.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(safePage * PAGE_SIZE, filteredOrders.length);
 
   useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  useEffect(() => {
+    // Keep the open refund/reconcile subject pinned while Stripe work is in flight.
+    if (refunding || reconciling) return;
     setPage(1);
     setSelectedOrder(null);
-  }, [currencyFilter, daysFilter, search, statusFilter]);
+  }, [currencyFilter, daysFilter, search, statusFilter, refunding, reconciling]);
 
   const stats = useMemo(() => summarizeOrders(filteredOrders), [filteredOrders]);
   const summaryCurrency = stats.currencies.length === 1 ? stats.currencies[0] : currencyFilter !== 'all' ? currencyFilter : null;
@@ -90,10 +100,11 @@ export default function OrdersManager() {
   };
 
   const submitReconciliation = async () => {
-    if (!selectedOrder) return;
+    const orderId = selectedOrder?.id;
+    if (!orderId) return;
     setReconciling(true);
     try {
-      const result = await reconcileOrder(selectedOrder.id);
+      const result = await reconcileOrder(orderId);
       const expired = result.status === 'failed' && result.checkout_status === 'expired';
       toast({
         title: expired
@@ -113,10 +124,13 @@ export default function OrdersManager() {
   };
 
   const submitRefund = async () => {
-    if (!selectedOrder) return;
+    const orderId = selectedOrder?.id;
+    const reason = refundReason;
+    const confirmation = refundConfirmation;
+    if (!orderId) return;
     setRefunding(true);
     try {
-      const result = await refundOrder(selectedOrder.id, refundReason, refundConfirmation);
+      const result = await refundOrder(orderId, reason, confirmation);
       const count = Number(result.credits_revoked) || 0;
       const bookings = Number(result.bookings_cancelled) || 0;
       toast({
@@ -258,11 +272,11 @@ export default function OrdersManager() {
         </p>
         {pageCount > 1 && (
           <nav aria-label="Order result pages" className="flex items-center gap-2">
-            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.max(1, current - 1)); }} disabled={safePage <= 1} title="Previous page" aria-label="Previous order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
-            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {safePage} of {pageCount}</span>
+            <button type="button" onClick={() => { setSelectedOrder(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={safePage >= pageCount} title="Next page" aria-label="Next order page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
               <ChevronRight className="w-4 h-4" />
             </button>
           </nav>

@@ -251,6 +251,9 @@ The Supabase schema is defined in:
 - `src/supabase/public_booking_switch_gate.sql` — refuses public timetable
   `class_bookings` inserts while soft-launch `bookings_enabled` is off (same
   switch already gates signed-in `session_bookings`)
+- `src/supabase/member_onboarding_booking_gate.sql` — refuses new
+  `session_bookings` inserts (book or waitlist) until Member Readiness is
+  complete, matching the launch-guide / Account soft UX at the database boundary
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -298,8 +301,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `request_notes_health_consent.sql`,
 `waitlist_skip_concurrency_upgrade.sql`,
 `pt_rehab_goal_health_consent.sql`,
-`fulfillment_erasure_and_refunded_pack_guard.sql` and
-`public_booking_switch_gate.sql`. This
+`fulfillment_erasure_and_refunded_pack_guard.sql`,
+`public_booking_switch_gate.sql` and
+`member_onboarding_booking_gate.sql`. This
 sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
@@ -355,8 +359,9 @@ fixes in filename order: `class_cancellation_credit_refund_fix.sql`,
 `request_notes_health_consent.sql`,
 `waitlist_skip_concurrency_upgrade.sql`,
 `pt_rehab_goal_health_consent.sql`,
-`fulfillment_erasure_and_refunded_pack_guard.sql` and
-`public_booking_switch_gate.sql`. The
+`fulfillment_erasure_and_refunded_pack_guard.sql`,
+`public_booking_switch_gate.sql` and
+`member_onboarding_booking_gate.sql`. The
 scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).

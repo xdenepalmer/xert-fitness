@@ -71,13 +71,16 @@ export async function notifyClassCancellation(admin, sessionId) {
   if (!UUID.test(sessionId)) throw new Error('CLASS_NOTICE_SESSION_INVALID');
   const { data: announcement, error: announcementError } = await admin
     .from('member_announcements')
-    .select('id,title,body,cta_url,expires_at')
+    .select('id,title,body,cta_url,expires_at,archived_at')
     .eq('audience', 'targeted')
     .eq('source_kind', 'class_cancellation')
     .eq('source_id', sessionId)
     .maybeSingle();
   if (announcementError) throw announcementError;
   if (!announcement) throw new Error('CLASS_NOTICE_NOT_FOUND');
+  // Archive clears published_at; pushing an archived class notice would resurface
+  // a cancelled-session alert the operator already withdrew from member feeds.
+  if (announcement.archived_at) throw new Error('CLASS_NOTICE_ARCHIVED');
 
   const [{ data: targets, error: targetError }, { data: previous, error: previousError }] = await Promise.all([
     admin.from('member_announcement_targets').select('user_id').eq('announcement_id', announcement.id),
@@ -102,13 +105,16 @@ export async function notifyTargetedAnnouncement(admin, announcementId) {
   if (!UUID.test(announcementId)) throw new Error('TARGETED_NOTICE_ID_INVALID');
   const { data: announcement, error: announcementError } = await admin
     .from('member_announcements')
-    .select('id,title,body,cta_url,expires_at')
+    .select('id,title,body,cta_url,expires_at,archived_at')
     .eq('id', announcementId)
     .eq('audience', 'targeted')
     .in('source_kind', ['member_direct', 'waitlist_promotion', 'booking_decision'])
     .maybeSingle();
   if (announcementError) throw announcementError;
   if (!announcement) throw new Error('TARGETED_NOTICE_NOT_FOUND');
+  // admin_archive_member_announcement nulls published_at; refuse APNs so an
+  // archived private notice cannot be re-pushed while still withdrawn in-app.
+  if (announcement.archived_at) throw new Error('TARGETED_NOTICE_ARCHIVED');
 
   const [{ data: targets, error: targetError }, { data: previous, error: previousError }] = await Promise.all([
     admin.from('member_announcement_targets').select('user_id').eq('announcement_id', announcement.id),
@@ -202,8 +208,14 @@ export default async function handler(request, response) {
   } catch (error) {
     if (error.message === 'CLASS_NOTICE_SESSION_INVALID') return json({ error: 'A valid class session is required.' }, 400);
     if (error.message === 'CLASS_NOTICE_NOT_FOUND') return json({ error: 'No member-account cancellation notice was created for this class.' }, 404);
+    if (error.message === 'CLASS_NOTICE_ARCHIVED') {
+      return json({ error: 'Restore this class notice before sending push delivery.' }, 409);
+    }
     if (error.message === 'TARGETED_NOTICE_ID_INVALID') return json({ error: 'A valid private notice is required.' }, 400);
     if (error.message === 'TARGETED_NOTICE_NOT_FOUND') return json({ error: 'Private member notice not found.' }, 404);
+    if (error.message === 'TARGETED_NOTICE_ARCHIVED') {
+      return json({ error: 'Restore this private notice before sending push delivery.' }, 409);
+    }
     if (error.message === 'TARGETED_NOTICE_RECIPIENT_INVALID') return json({ error: 'Private member notice recipient is invalid.' }, 409);
     if (error.message?.startsWith('ANNOUNCEMENT_')) return json({ error: 'Announcement details are invalid.' }, 400);
     if (error.message?.startsWith('CLASS_NOTICE_')) {

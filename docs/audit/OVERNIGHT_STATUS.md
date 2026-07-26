@@ -70,7 +70,7 @@ Migration / operator mirror:
 `supabase/migrations/20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql`
 ↔ `src/supabase/fulfillment_erasure_and_refunded_pack_guard.sql`.
 
-### 10. This batch — soft-launch booking gate + notice deep links
+### 10. Soft-launch booking gate + notice deep links (`09b576b`)
 | Area | Defect | Fix |
 |---|---|---|
 | Soft launch / public booking | `bookings_enabled = false` hid Request spot and blocked signed-in `session_bookings`, but anon/authenticated could still insert into `class_bookings` (PostgREST / stale tab) | `install_public_form_insert_policies` requires `admin_settings.bookings_enabled is true` for `class_bookings`; capability `public_booking_switch_gate` |
@@ -81,19 +81,76 @@ Migration / operator mirror:
 `supabase/migrations/20260726113000_public_booking_switch_gate.sql`
 ↔ `src/supabase/public_booking_switch_gate.sql`.
 
-Postgres proof: with `bookings_enabled = false`, anon `INSERT` into `class_bookings` is denied by RLS; flipping the switch allows the insert.
+### 11. This batch — onboarding gate, archived notice pushes, refund UI, checkout burst
+| Area | Defect | Fix |
+|---|---|---|
+| Member onboarding gates | Launch guide / Account ask for Member Readiness first, but `book_session` / `join_session_waitlist` only insert `session_bookings` — incomplete members with credits could still book via PostgREST | BEFORE INSERT trigger `enforce_member_onboarding_for_booking` raises `MEMBER_ONBOARDING_REQUIRED` unless `member_onboarding_state.is_complete`; admins/service_role exempt; capability `member_onboarding_booking_gate` |
+| Announcement archive | `admin_archive_member_announcement` nulls `published_at`; `notifyTargetedAnnouncement` / `notifyClassCancellation` still pushed archived private/class notices | Both paths select `archived_at` and fail closed (`TARGETED_NOTICE_ARCHIVED` / `CLASS_NOTICE_ARCHIVED`) |
+| OrdersManager refunds | Filter changes could clear the open order while Stripe refund/reconcile was in flight; page index could point past the filtered set after load | Capture `orderId`/reason/confirmation before await; ignore filter clears while `refunding`/`reconciling`; clamp with `safePage` |
+| Rate limits (`api/checkout`) | Reusable-session recovery does not stop runaway minting after expired sessions / stale attempt ids | After reuse miss, refuse with HTTP 429 when the member created ≥ 8 orders in 10 minutes (`memberCheckoutBurstExceeded`) |
+| PT desk | Single-row status/notes update always bounced the operator to page 1 | Reload the current page |
+| CORS on `api/` | N/A for this architecture | Browser traffic is same-origin (`vercel.json` CSP `connect-src 'self'…`); iOS uses native HTTPS (no CORS). No cross-origin API surface to open. |
+
+Migration / operator mirror:
+`supabase/migrations/20260726114000_member_onboarding_booking_gate.sql`
+↔ `src/supabase/member_onboarding_booking_gate.sql`.
 
 ---
 
-## Morning next steps
+## Full ordered list — overnight migrations to apply in production
 
-1. Apply `20260726113000_public_booking_switch_gate.sql` (and
-   `20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql` if not yet
-   in production). Confirm `release_readiness_check.sql` shows
-   `public_booking_switch_gate` installed.
-2. Smoke: pause Bookings in Soft Launch → direct PostgREST insert into
-   `class_bookings` fails; re-enable → Request spot works.
-3. Smoke: iOS notice CTA `/booking#packs` opens Session Packs (not bare Book tab).
-4. Smoke: delete account → delayed fulfillment keeps null order email (batch 9).
-5. Do **not** implement staff roles yet — owner/legal gates in
-   `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.
+Apply in timestamp order (skip any already applied). Operator mirrors under
+`src/supabase/` are for idempotent re-runs / Ops Health repair, not a second
+source of truth.
+
+| # | Migration | Capability / effect |
+|---|---|---|
+| 1 | `20260726080000_cancel_booking_expired_batch_refund.sql` | `cancel_booking_expired_batch_refund` — cancel returns credits even when the pack expired |
+| 2 | `20260726103000_member_interest_health_consent.sql` | `member_interest_health_consent` — APP 3.3 health consent on member interest |
+| 3 | `20260726104000_class_session_optimistic_locking.sql` | `class_session_optimistic_locking` — concurrent class edits need `updated_at` |
+| 4 | `20260726105000_audit_subject_pii_redaction.sql` | `audit_subject_pii_redaction` — erasure redacts audit subject PII |
+| 5 | `20260726106000_credit_batch_refund_reactivation.sql` | `credit_batch_refund_reactivation` — shared refund helper reactivates expired packs |
+| 6 | `20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql` | `stripe_fulfillment_deleted_member` — live fulfillment overload tolerates deleted buyers |
+| 7 | `20260726108000_account_deletion_public_lead_cleanup.sql` | `account_deletion_public_lead_cleanup` — delete wipes email-matched public leads + anon PT |
+| 8 | `20260726109000_request_notes_health_consent.sql` | `request_notes_health_consent` — health consent on class/PT free-text notes |
+| 9 | `20260726110000_waitlist_skip_concurrency.sql` | `waitlist_skip_concurrency` — skip only the current waitlist head |
+| 10 | `20260726111000_pt_rehab_goal_health_consent.sql` | `pt_rehab_goal_health_consent` — Rehab goal requires health consent |
+| 11 | `20260726112000_fulfillment_erasure_and_refunded_pack_guard.sql` | `stripe_fulfillment_deleted_email_erasure` + `refund_skips_stripe_refunded_batches` |
+| 12 | `20260726113000_public_booking_switch_gate.sql` | `public_booking_switch_gate` — public `class_bookings` respect `bookings_enabled` |
+| 13 | `20260726114000_member_onboarding_booking_gate.sql` | `member_onboarding_booking_gate` — book/waitlist require Member Readiness |
+
+Earlier same-day migrations (`20260726000000`–`20260726019000`, plus
+`20260726070214_sql_drift_repair.sql`) may already be in production from prior
+batches; confirm via `release_readiness_check.sql` before re-applying.
+
+After applying, run `src/supabase/release_readiness_check.sql` — every row must
+show `installed = true` and `release_ready = true`, including
+`public_booking_switch_gate` and `member_onboarding_booking_gate`.
+
+---
+
+## Morning smoke checklist
+
+1. **Migrations** — Apply any missing rows from the table above through
+   `20260726114000_member_onboarding_booking_gate.sql`. Confirm readiness SQL.
+2. **Soft launch bookings** — Pause Bookings → direct PostgREST insert into
+   `class_bookings` fails; re-enable → Request spot works; sticky Book CTA only
+   when enabled.
+3. **Member readiness gate** — Signed-in member with credits but incomplete
+   readiness: `book_session` / waitlist join fail with
+   `MEMBER_ONBOARDING_REQUIRED`. Complete readiness → book succeeds.
+4. **iOS notice deep link** — `/booking#packs` opens Session Packs (not bare Book).
+5. **Announcement archive pushes** — Archive a targeted/class notice (or set
+   `archived_at`); `notify_targeted_announcement` /
+   `notify_class_cancellation` return 409 and do not APNs.
+6. **Orders refund** — Open a paid order, start typing REFUND, change a filter
+   while refunding is idle (drawer closes); start refund and confirm Stripe +
+   credits revoke; page clamp still shows rows after filter shrink.
+7. **Checkout burst** — After ≥ 8 fresh checkout rows for one member in 10
+   minutes (no reusable session), `/api/checkout` returns 429.
+8. **PT desk** — Change status on page 2; stay on page 2 after reload.
+9. **Erasure / refunded packs (batch 9)** — Delete account → delayed fulfillment
+   keeps null order email; Stripe-refunded pack does not regain credits from
+   later cancel / roll-call.
+10. **Do not** implement staff roles yet — owner/legal gates in
+    `docs/requirements/INTEGRATION_REVIEW.md` §5 still block 01–07 feature build.

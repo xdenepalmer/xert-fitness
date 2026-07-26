@@ -27,6 +27,7 @@ enum BookingErrorMessage {
         ("BOOKING_TIME_CONFLICT", "That class overlaps another active booking in your schedule."),
         ("SESSION_FULL", "That class is now full. Refresh to check whether its waitlist is available."),
         ("BOOKINGS_PAUSED", "Online class bookings are currently paused. You can still register interest and XERT will follow up."),
+        ("MEMBER_ONBOARDING_REQUIRED", "Complete Member Readiness before booking or joining a waitlist."),
         ("SESSION_INTEREST_ONLY", "This class is collecting interest only."),
         ("SESSION_HAS_CAPACITY", "A place is available now. Refresh and book the class instead."),
         ("WAITLIST_PRIORITY", "Members already on the waitlist have first claim on this place. Refresh and join the queue."),

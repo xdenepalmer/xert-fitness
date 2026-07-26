@@ -301,6 +301,7 @@ test('README operator apply order includes the newest Ops Health migrations', ()
     'pt_rehab_goal_health_consent.sql',
     'fulfillment_erasure_and_refunded_pack_guard.sql',
     'public_booking_switch_gate.sql',
+    'member_onboarding_booking_gate.sql',
   ]) {
     assert.match(
       readme,
@@ -308,14 +309,14 @@ test('README operator apply order includes the newest Ops Health migrations', ()
       `README must list ${script} so Ops Health re-runs cannot leave that capability hole`,
     );
   }
-  // Fresh + already-deployed apply sequences both end with the public booking switch gate.
+  // Fresh + already-deployed apply sequences both end with the onboarding booking gate.
   assert.match(
     readme,
-    /fulfillment_erasure_and_refunded_pack_guard\.sql` and\n`public_booking_switch_gate\.sql`\. This/,
+    /public_booking_switch_gate\.sql` and\n`member_onboarding_booking_gate\.sql`\. This/,
   );
   assert.match(
     readme,
-    /fulfillment_erasure_and_refunded_pack_guard\.sql` and\n`public_booking_switch_gate\.sql`\. The/,
+    /public_booking_switch_gate\.sql` and\n`member_onboarding_booking_gate\.sql`\. The/,
   );
 });
 

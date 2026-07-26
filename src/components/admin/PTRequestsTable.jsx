@@ -148,7 +148,9 @@ export default function PTRequestsTable() {
     try {
       await updatePTRequestStatus(id, status, adminNotes);
       toast({ title: adminNotes === undefined ? 'PT request updated' : 'Notes saved', description: adminNotes === undefined ? `Request is now ${status.replace(/_/g, ' ')}.` : undefined });
-      await load(1);
+      // Stay on the desk page the operator was working; filters already drop
+      // rows that no longer match without bouncing them back to page 1.
+      await load(page);
       if (adminNotes !== undefined) setNotesModal(null);
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });

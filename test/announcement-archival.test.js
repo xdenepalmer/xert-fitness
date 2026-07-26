@@ -45,6 +45,8 @@ test('admin clients archive published notices and reserve permanent deletion for
   assert.match(manager, /delivery history remains available/);
   assert.match(publisher, /archived_at/);
   assert.match(publisher, /Restore this announcement before publishing it/);
+  assert.match(publisher, /TARGETED_NOTICE_ARCHIVED/);
+  assert.match(publisher, /CLASS_NOTICE_ARCHIVED/);
   assert.match(publisher, /last_changed_by: user\.id/);
 });
 
