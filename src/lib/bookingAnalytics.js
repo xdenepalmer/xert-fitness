@@ -75,6 +75,5 @@ export function bookingCsvRows(bookings) {
     coach: booking.session?.coach_name || '',
     location: booking.session?.location_zone || '',
     credit_reserved: booking.credit_batch_id ? 'Yes' : 'No',
-    admin_notes: booking.admin_notes || '',
   }));
 }

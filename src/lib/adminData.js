@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { XERT_2026_EVENTS } from './eventCalendar';
 import { assertAdminMutation, assertAdminMutationVersion, assertSupabaseResponses } from './supabaseResults';
-import { leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
+import { adminLeadSelect, leadMutationError, normalizeLeadPage, normalizeLeadSearch, normalizeLeadUpdate, validateLeadMutation } from './adminLeads';
 import {
   filterMembers, normalizeMemberDirectoryQuery, normalizeMemberNote,
   normalizeMemberNoteArchive, normalizeRoleChange, normalizeTargetedMemberNotice
@@ -25,7 +25,7 @@ import { apiErrorMessage } from './apiError.js';
 
 async function getLeadPage(table, filters = {}) {
   const pagination = normalizeLeadPage(filters.page, filters.pageSize);
-  let query = supabase.from(table).select('*', { count: 'exact' })
+  let query = supabase.from(table).select(adminLeadSelect(table), { count: 'exact' })
     .order('created_at', { ascending: false })
     .order('id', { ascending: false });
   if (filters.status) query = query.eq('status', filters.status);
@@ -229,7 +229,7 @@ export async function getClassBookings(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('class_bookings')
-      .select('*, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, full_name, email, phone, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
@@ -318,7 +318,10 @@ export async function getPTRequests(filters = {}) {
   };
 
   const pageQuery = applyFilters(
-    supabase.from('private_session_requests').select('*', { count: 'exact' })
+    supabase.from('private_session_requests').select(
+      'id, full_name, email, phone, requested_session_type, preferred_day, preferred_time, training_goal, experience_level, notes, status, admin_notes, created_at',
+      { count: 'exact' }
+    )
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
   ).range(normalized.from, normalized.to);
@@ -436,6 +439,7 @@ export function getDefaultSettings() {
     countdown_enabled: true,
     max_soft_launch_class_capacity: 12,
     bookings_enabled: false,
+    prices_coming_soon: true,
     default_booking_mode: 'request_to_book',
     show_limited_capacity_badge: true,
     show_opening_in_stages_message: true,
@@ -923,23 +927,31 @@ export async function adminSendMemberNotice(userId, notice) {
   });
   if (error) throw new Error(error.message);
 
+  return notifyTargetedAnnouncementPush(announcementId);
+}
+
+async function notifyTargetedAnnouncementPush(announcementId) {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !session) {
     return { announcement_id: announcementId, push: null, warning: 'The notice was saved, but push delivery needs a fresh admin sign-in.' };
   }
-  const response = await fetch('/api/admin-publish-announcement', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ action: 'notify_targeted_announcement', announcement_id: announcementId }),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return { announcement_id: announcementId, push: null, warning: body.error || 'The notice was saved, but push delivery could not be completed.' };
+  try {
+    const response = await fetch('/api/admin-publish-announcement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ action: 'notify_targeted_announcement', announcement_id: announcementId }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { announcement_id: announcementId, push: null, warning: body.error || 'The notice was saved, but push delivery could not be completed.' };
+    }
+    return body;
+  } catch {
+    return { announcement_id: announcementId, push: null, warning: 'The notice was saved, but push delivery could not be completed.' };
   }
-  return body;
 }
 
 export async function adminListMemberFollowUps(limit = 20) {
@@ -949,6 +961,84 @@ export async function adminListMemberFollowUps(limit = 20) {
   const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
     || /admin_member_follow_up_queue.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
   if (functionUnavailable) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
+function memberActivationUnavailable(error, functionName) {
+  return ['42883', 'PGRST202'].includes(error?.code)
+    || new RegExp(`${functionName}.*(?:not found|schema cache|does not exist)`, 'i').test(error?.message || '');
+}
+
+export async function adminMemberActivationOverview(cohortDays = 30) {
+  const safeDays = Math.max(1, Math.min(3650, Number.parseInt(String(cohortDays), 10) || 30));
+  const { data, error } = await supabase.rpc('admin_member_activation_overview', {
+    p_cohort_days: safeDays,
+  });
+  if (!error) {
+    const row = data?.[0];
+    const countFields = [
+      'accounts_created', 'readiness_complete', 'training_access',
+      'first_booking', 'first_attended', 'returned',
+    ];
+    const counts = countFields.map(field => Number(row?.[field]));
+    const countsAreValid = counts.every((count, index) => row?.[countFields[index]] !== null
+      && row?.[countFields[index]] !== undefined
+      && Number.isSafeInteger(count)
+      && count >= 0
+      && (index === 0 || count <= counts[index - 1]));
+    if (!row || !row.as_of || Number(row.cohort_days) !== safeDays || !countsAreValid) {
+      throw new Error('Member activation returned an incomplete cohort summary.');
+    }
+    return {
+      available: true,
+      as_of: row.as_of,
+      cohort_days: Number(row.cohort_days),
+      accounts_created: Number(row.accounts_created),
+      readiness_complete: Number(row.readiness_complete),
+      training_access: Number(row.training_access),
+      first_booking: Number(row.first_booking),
+      first_attended: Number(row.first_attended),
+      returned: Number(row.returned),
+    };
+  }
+  if (memberActivationUnavailable(error, 'admin_member_activation_overview')) {
+    return {
+      available: false,
+      as_of: null,
+      cohort_days: safeDays,
+      accounts_created: null,
+      readiness_complete: null,
+      training_access: null,
+      first_booking: null,
+      first_attended: null,
+      returned: null,
+    };
+  }
+  throw new Error(error.message);
+}
+
+export async function adminListMemberActivationQueue(limit = 12) {
+  const safeLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 12));
+  const { data, error } = await supabase.rpc('admin_member_activation_queue', { p_limit: safeLimit });
+  if (!error) {
+    const rows = data || [];
+    const allowedReasons = new Set([
+      'setup_incomplete', 'readiness_incomplete', 'no_training_access', 'no_first_booking', 'no_first_attendance',
+    ]);
+    if (rows.some(row => !row.id
+      || row.role !== 'member'
+      || !row.joined_at
+      || !allowedReasons.has(row.reason)
+      || typeof row.has_training_access !== 'boolean'
+      || !['credits_remaining', 'bookings_count', 'total_spent_cents']
+        .every(field => Number.isSafeInteger(Number(row[field])) && Number(row[field]) >= 0))) {
+      throw new Error('Member activation returned an incomplete action queue.');
+    }
+    return { rows, available: true };
+  }
+  if (memberActivationUnavailable(error, 'admin_member_activation_queue')) {
+    return { rows: [], available: false };
+  }
   throw new Error(error.message);
 }
 
@@ -1057,31 +1147,63 @@ export async function getAdminDailyOperations() {
   throw new Error(error.message);
 }
 
-export async function adminSetBookingStatus(bookingId, status) {
+export async function adminSetBookingStatus(bookingId, status, requestId = globalThis.crypto?.randomUUID?.()) {
   const mutation = normalizeBookingStatusMutation(bookingId, status);
-  const { error } = await supabase.rpc('admin_set_booking_status', {
+  if (!requestId) throw new Error('A secure booking decision request ID could not be created. Refresh and try again.');
+  const { data, error } = await supabase.rpc('admin_set_booking_status_with_notice', {
     p_booking_id: mutation.id,
-    p_status: mutation.status
+    p_status: mutation.status,
+    p_request_id: requestId,
   });
-  if (error) {
-    if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(error.message || '')) {
-      throw new Error('Promote the next waitlisted member before reopening another booking.');
+  if (!error) {
+    const decision = Array.isArray(data) ? data[0] : data;
+    if (!decision || decision.booking_id !== mutation.id || decision.new_status !== mutation.status) {
+      throw new Error('The booking decision completed without a verifiable receipt. Refresh before continuing.');
     }
-    if (/BOOKING_TIME_CONFLICT/i.test(error.message || '')) {
-      throw new Error('This member already has another active class at the same time. Resolve that booking before confirming this place.');
-    }
-    throw new Error(error.message);
+    if (!decision.announcement_id) return { ...decision, push: null, warning: null };
+    const delivery = await notifyTargetedAnnouncementPush(decision.announcement_id);
+    return { ...decision, push: delivery.push, warning: delivery.warning || null };
   }
+
+  const message = error.message || '';
+  if (error.code === 'PGRST202' || /admin_set_booking_status_with_notice.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    throw new Error('Apply the booking decision notifications migration before changing member bookings.');
+  }
+  if (/BOOKING_DECISION_REQUEST_CONFLICT/i.test(message)) {
+    throw new Error('This booking decision request was already used for another change. Refresh and try again.');
+  }
+  if (/WAITLIST_ORDER_REQUIRED|WAITLIST_PRIORITY/i.test(message)) {
+      throw new Error('Promote the next waitlisted member before reopening another booking.');
+  }
+  if (/BOOKING_TIME_CONFLICT/i.test(message)) {
+    throw new Error('This member already has another active class at the same time. Resolve that booking before confirming this place.');
+  }
+  throw new Error(message);
 }
 
-export async function adminPromoteNextWaitlisted(sessionId) {
-  const mutation = normalizeSessionPromotion(sessionId);
-  const { data, error } = await supabase.rpc('admin_promote_next_waitlisted', {
-    p_session_id: mutation.sessionId
+export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, requestId = globalThis.crypto?.randomUUID?.()) {
+  const mutation = normalizeSessionPromotion(sessionId, expectedBookingId, requestId);
+  const { data, error } = await supabase.rpc('admin_promote_next_waitlisted_with_notice', {
+    p_session_id: mutation.sessionId,
+    p_expected_booking_id: mutation.expectedBookingId,
+    p_request_id: mutation.requestId,
   });
-  if (!error) return data;
+  if (!error) {
+    const promotion = Array.isArray(data) ? data[0] : data;
+    if (!promotion?.announcement_id || promotion.booking_id !== mutation.expectedBookingId) {
+      throw new Error('The promotion completed without a verifiable member notice receipt. Refresh the waitlist before continuing.');
+    }
+    const delivery = await notifyTargetedAnnouncementPush(promotion.announcement_id);
+    return { ...promotion, push: delivery.push, warning: delivery.warning || null };
+  }
   const message = error.message || '';
+  if (error.code === 'PGRST202' || /admin_promote_next_waitlisted_with_notice.*(?:not found|schema cache|does not exist)/i.test(message)) {
+    throw new Error('Apply the waitlist promotion notifications migration before promoting members.');
+  }
   if (/WAITLIST_EMPTY/i.test(message)) throw new Error('No members are waiting for this class.');
+  if (/WAITLIST_CHANGED|WAITLIST_PROMOTION_REQUEST_CONFLICT/i.test(message)) {
+    throw new Error('The queue changed before confirmation. Refresh and review the next member.');
+  }
   if (/WAITLIST_MEMBER_NO_CREDITS|NO_CREDITS/i.test(message)) {
     throw new Error('The next member has no available class credit. Contact them before changing the queue.');
   }
@@ -1168,12 +1290,46 @@ export async function getAllProducts() {
 }
 
 export async function createProduct(product) {
-  const { error } = await supabase.from('products').insert([product]);
-  if (error) throw new Error(error.message);
+  const { slug, ...draft } = product;
+  const created = await supabase.rpc('admin_create_product', {
+    p_slug: slug,
+    p_product: draft,
+  });
+  if (!created.error) return Array.isArray(created.data) ? created.data[0] : created.data;
+  if (/products_slug_key|duplicate key/i.test(created.error.message || '')) {
+    throw new Error('That permanent pack ID is already in use. Choose another one.');
+  }
+  const unavailable = ['42883', 'PGRST202'].includes(created.error.code)
+    || /admin_create_product.*(?:not found|schema cache|does not exist)/i.test(created.error.message || '');
+  if (unavailable) throw new Error('Install the commercial terms guard migration before creating session packs.');
+  if (/INVALID_PRODUCT_PAYLOAD/i.test(created.error.message || '')) {
+    throw new Error('Check the pack name, description, price, currency, sessions, validity and display order.');
+  }
+  throw new Error(created.error.message);
 }
 
 export async function updateProduct(id, updates, expectedUpdatedAt) {
   if (!expectedUpdatedAt) throw new Error('Session pack version is missing. Refresh the admin view and try again.');
+  if (updates.active) {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+    const response = await fetch('/api/admin-commerce-health', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        action: 'activate_product',
+        product_id: id,
+        product: updates,
+        expected_updated_at: expectedUpdatedAt,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(apiErrorMessage(body, 'The pack could not be activated safely. It remains private.'));
+    return body;
+  }
   const guarded = await supabase.rpc('admin_update_product', {
     p_product_id: id,
     p_product: updates,
@@ -1188,11 +1344,42 @@ export async function updateProduct(id, updates, expectedUpdatedAt) {
       throw new Error('Session pack update was not applied because this pack changed since you opened it. Refresh the admin view and review the latest version.');
     }
     if (/STRIPE_PRICE_REFRESH_REQUIRED/i.test(guarded.error.message || '')) {
-      throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price or currency.');
+      throw new Error('Replace or clear the Stripe Price ID before changing this pack\'s price, currency, sessions or validity.');
+    }
+    if (/ACTIVE_PRODUCT_REQUIRES_STRIPE_PRICE/i.test(guarded.error.message || '')) {
+      throw new Error('Add a Stripe Price ID before making this pack active and purchasable.');
+    }
+    if (/PRODUCT_ACTIVATION_VERIFICATION_REQUIRED/i.test(guarded.error.message || '')) {
+      throw new Error('Stripe must verify this Price before the pack can become active. Save again from the current Command Centre.');
+    }
+    if (/INVALID_PRODUCT_PAYLOAD/i.test(guarded.error.message || '')) {
+      throw new Error('Check the pack name, description, price, currency, sessions, validity and display order.');
     }
     throw new Error(guarded.error.message);
   }
   throw new Error('Install the catalog optimistic-locking migration before editing session packs.');
+}
+
+export async function provisionProductPrice(id, expectedUpdatedAt, confirmation) {
+  if (!expectedUpdatedAt) throw new Error('Session pack version is missing. Refresh pricing and try again.');
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session) throw new Error('Your admin session has expired. Sign in again.');
+  const response = await fetch('/api/admin-commerce-health', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      action: 'provision_product_price',
+      confirmation,
+      product_id: id,
+      expected_updated_at: expectedUpdatedAt,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'Stripe could not prepare this draft price.'));
+  return body;
 }
 
 // ─── Business stats (admin overview) ─────────────────────────────────────────
@@ -1277,7 +1464,8 @@ async function healthCheck(key, label, fn) {
       detail: result.detail || 'Ready',
       action: result.action || null,
       count: result.count ?? null,
-      incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : []
+      incidents: Array.isArray(result.incidents) ? result.incidents.slice(0, 10) : [],
+      phase: result.phase || null,
     };
   } catch (error) {
     return {
@@ -1381,6 +1569,27 @@ export async function getOperationsHealth() {
           };
     }),
 
+    healthCheck('platform-controls', 'Member launch switches', async () => {
+      const settings = await getSoftLaunchSettings();
+      const bookingsEnabled = settings.bookings_enabled === true;
+      const paymentsEnabled = settings.payments_enabled === true;
+      if (bookingsEnabled === paymentsEnabled) {
+        return bookingsEnabled
+          ? { phase: 'live', detail: 'Member bookings and session-pack checkout are enabled.' }
+          : { phase: 'preflight', detail: 'Member bookings and session-pack checkout are safely paused for preflight.' };
+      }
+      const paused = [
+        !bookingsEnabled ? 'bookings' : null,
+        !paymentsEnabled ? 'payments' : null,
+      ].filter(Boolean);
+      return {
+        status: 'attention',
+        detail: `Member ${paused.join(' and ')} ${paused.length === 1 ? 'is' : 'are'} still paused.`,
+        phase: 'unsafe',
+        action: 'Use Soft Launch Settings to pause both switches for preflight or enable both for the controlled live launch.',
+      };
+    }),
+
     healthCheck('products', 'Session packs', async () => {
       const { data, error } = await supabase.from('products').select('slug, active, stripe_price_id').eq('active', true);
       if (error) throw error;
@@ -1469,19 +1678,31 @@ export async function getOperationsHealth() {
       };
     }),
 
-    healthCheck('classes', 'Published classes', async () => {
-      const { count, error } = await supabase.from('class_sessions').select('id', { count: 'exact', head: true }).eq('status', 'published').eq('public_visible', true).gte('start_time', nowIso);
+    healthCheck('classes', 'Bookable launch classes', async () => {
+      const { data, error } = await supabase.from('class_sessions')
+        .select('id, booking_mode, capacity')
+        .eq('status', 'published')
+        .eq('public_visible', true)
+        .gte('start_time', nowIso);
       if (error) throw error;
-      return count > 0
+      const sessions = data || [];
+      const actionable = sessions.filter(session => (
+        ['instant_book', 'request_to_book'].includes(session.booking_mode || 'instant_book')
+        && Number.isInteger(session.capacity)
+        && session.capacity > 0
+      ));
+      return actionable.length > 0
         ? {
-            count,
-            detail: `${count} upcoming public class${count === 1 ? '' : 'es'} available.`
+            count: actionable.length,
+            detail: `${actionable.length} upcoming member-bookable class${actionable.length === 1 ? '' : 'es'} available.`
           }
         : {
             status: 'attention',
             count: 0,
-            detail: 'No upcoming public classes.',
-            action: 'Publish launch classes in Class Calendar.'
+            detail: sessions.length > 0
+              ? 'Upcoming public classes are interest-only or have invalid capacity.'
+              : 'No upcoming public classes.',
+            action: 'Publish at least one instant-book or request-to-book class with a valid capacity in Class Calendar.'
           };
     }),
 

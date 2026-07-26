@@ -6,14 +6,20 @@ const rootURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swi
 const navigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/XertNavigation.swift', import.meta.url);
 const ownerNavigationURL = new URL('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift', import.meta.url);
 const sceneCommandsURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertNavigationCommands.swift', import.meta.url);
+const hapticsURL = new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertHaptics.swift', import.meta.url);
 const modelsTestsURL = new URL('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift', import.meta.url);
 const viewURL = name => new URL(`../ios/XertFitnessApp/XertFitnessApp/Views/${name}.swift`, import.meta.url);
 
 test('native navigation uses five stable primary destinations without iOS More overflow', async () => {
-  const root = await readFile(rootURL, 'utf8');
-  const navigation = await readFile(navigationURL, 'utf8');
+  const [root, navigation, ...primaryViews] = await Promise.all([
+    readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
+    ...['HomeView', 'BookingView', 'EventsView', 'ExploreView', 'AccountView']
+      .map(name => readFile(viewURL(name), 'utf8')),
+  ]);
   assert.match(root, /struct XertNavigationDock/);
-  assert.match(root, /\.toolbar\(\.hidden, for: \.tabBar\)/);
+  assert.ok((root.match(/\.toolbar\(\.hidden, for: \.tabBar\)/g) || []).length >= 6);
+  for (const view of primaryViews) assert.match(view, /\.toolbar\(\.hidden, for: \.tabBar\)/);
   assert.match(root, /\.safeAreaInset\(edge: \.bottom, spacing: 0\)/);
   assert.match(navigation, /enum XertPrimaryDestination: Int, CaseIterable, Identifiable, Hashable/);
   for (const item of [
@@ -49,6 +55,10 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
 
 test('compact dock visibly exposes exact task context, back, and quick switching', async () => {
   const root = await readFile(rootURL, 'utf8');
+  const dock = root.slice(
+    root.indexOf('private struct XertNavigationDock'),
+    root.indexOf('private struct XertOwnerNavigationPulseBadge'),
+  );
   assert.match(root, /XertNavigationDock\([\s\S]*currentRoute: navigation\.route/);
   assert.match(root, /let currentRoute: XertMemberRoute/);
   assert.match(root, /private var taskStrip: some View/);
@@ -62,6 +72,8 @@ test('compact dock visibly exposes exact task context, back, and quick switching
   assert.match(root, /Returns to the exact previous XERT task/);
   assert.match(root, /Button\(action: onOpenCommands\)[\s\S]*magnifyingglass/);
   assert.match(root, /Searches workspaces, recent tasks and available actions/);
+  assert.doesNotMatch(dock, /Text\("Owner Command Centre"\)/);
+  assert.match(dock, /if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
 });
 
 test('member routing is typed, task-restorable, and owns native deep-link mapping', async () => {
@@ -220,13 +232,14 @@ test('quick switcher exposes a bounded authorization-aware exact-task timeline',
   assert.match(modelsTests, /testNavigationTimelineRejectsProtectedJumpsAndCommandsWhenSignedOut/);
 });
 
-test('owner command access is role-aware, full-screen, and never buried in tab overflow', async () => {
-  const [root, ownerNavigation] = await Promise.all([
+test('owner command access is role-aware, full-screen, and available through native switching', async () => {
+  const [root, navigation, ownerNavigation] = await Promise.all([
     readFile(rootURL, 'utf8'),
+    readFile(navigationURL, 'utf8'),
     readFile(ownerNavigationURL, 'utf8'),
   ]);
   assert.match(root, /isAdmin: store\.profile\?\.isAdmin == true/);
-  assert.match(root, /Text\("Owner Command Centre"\)/);
+  assert.match(navigation, /title: workspace == \.overview \? "Owner Command Centre" : workspace\.title/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
   assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(ownerNavigation, /struct XertOwnerRoute: Equatable, Hashable/);
@@ -275,11 +288,13 @@ test('owner deep links open exact protected native records without weakening wor
   assert.match(ownerView, /await admin\.resolveOwnerTask\(session: session, task: task\)/);
   assert.match(ownerView, /private func openOwnerRoute\(_ route: XertOwnerRoute[\s\S]*history\.visit\(route\)/);
   assert.match(ownerView, /private func closePresentedOwnerTask\(\)[\s\S]*ownerRouteHistory\.current\.task != nil[\s\S]*openWorkspace\(currentWorkspace\)/);
-  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length === 5);
+  assert.ok((ownerView.match(/onOpenTask: \{ openOwnerRoute\(XertOwnerRoute\(task: \$0\)\) \}/g) || []).length >= 5);
   assert.match(ownerView, /Button \{ onOpenTask\(\.member\(member\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.order\(order\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.product\(product\.id\)\) \}/);
   assert.match(ownerView, /Button \{ onOpenTask\(\.event\(event\.id\)\) \}/);
+  assert.match(ownerView, /Button \{ openMemberRecord\(member\.id\) \} label:[\s\S]*Member record/);
+  assert.match(ownerView, /\.sheet\(item: \$presentedMember\)/);
   assert.doesNotMatch(ownerView, /@State private var selectedOrder: OrderItem\?/);
   assert.match(api, /func adminMember\(session auth: AuthSession, id: UUID\)/);
   assert.match(api, /p_limit: 1,[\s\S]*p_user_id: id/);
@@ -322,7 +337,7 @@ test('owner navigation restores exact record routes with back, forward, and v1 m
   assert.match(ownerView, /private func advanceToNextOwnerRoute\(\)/);
   assert.match(ownerView, /keyboardShortcut\("\[", modifiers: \.command\)/);
   assert.match(ownerView, /keyboardShortcut\("\]", modifiers: \.command\)/);
-  assert.match(ownerView, /accessibilityLabel\("Owner navigation history"\)/);
+  assert.match(ownerView, /accessibilityLabel\(admin\.isLoading \? "Owner actions, refreshing" : "Owner actions"\)/);
   assert.match(ownerView, /workspace == current \? "checkmark" : "chevron\.right"/);
   assert.match(modelsTests, /testOwnerRouteHistoryPreservesExactTasksForwardStateAndMigration/);
   assert.match(modelsTests, /v1\|1\|members,finance/);
@@ -389,7 +404,7 @@ test('owner favorites are account-scoped and every overview shortcut uses the ce
   assert.match(ownerView, /accessibilityHint\("Updates your owner workspace shortcuts"\)/);
   assert.match(ownerView, /private struct AdminDestinationRow: View[\s\S]*let onOpen: \(\) -> Void[\s\S]*Button\(action: onOpen\)/);
   assert.doesNotMatch(ownerView, /NavigationLink\(value: workspace\)/);
-  assert.match(ownerView, /AdminDestinationRow\([\s\S]*onOpen: \{ openWorkspace\(workspace\) \}/);
+  assert.match(ownerView, /AdminDestinationRow\([\s\S]*onOpen: \{ openWorkspaceWithFeedback\(workspace\) \}/);
   assert.match(modelsTests, /testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped/);
 });
 
@@ -416,14 +431,15 @@ test('scene commands follow the active member or owner navigation scope', async 
   assert.match(ownerView, /private func executeOwnerSceneNavigationCommand/);
   assert.match(ownerView, /case \.ownerWorkspace\(let workspace\):[\s\S]*openWorkspace\(workspace\)/);
   assert.match(ownerView, /case \.refresh:[\s\S]*admin\.refresh\(session: session\)/);
-  assert.match(ownerView, /case \.closeOwner:[\s\S]*onClose\?\(\)/);
+  assert.match(ownerView, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
 });
 
 test('navigation carries operational state and native interaction feedback', async () => {
-  const [root, navigation, modelsTests] = await Promise.all([
+  const [root, navigation, modelsTests, haptics] = await Promise.all([
     readFile(rootURL, 'utf8'),
     readFile(navigationURL, 'utf8'),
     readFile(modelsTestsURL, 'utf8'),
+    readFile(hapticsURL, 'utf8'),
   ]);
   assert.match(root, /noticeCount: store\.announcements\.count/);
   assert.match(root, /let activeBookings = activeUpcomingBookings/);
@@ -432,7 +448,10 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.match(root, /creditCount: store\.creditTotal/);
   assert.match(root, /eventGoalCount: store\.eventGoalIDs\.count/);
   assert.match(root, /hasPendingCheckout: store\.isCheckoutConfirmationPending \|\| store\.isReconcilingCheckout/);
-  assert.match(root, /UISelectionFeedbackGenerator\(\)\.selectionChanged\(\)/);
+  assert.match(root, /XertHaptics\.play\(\.selection\)/);
+  assert.doesNotMatch(root, /UISelectionFeedbackGenerator/);
+  assert.match(haptics, /private static let selectionGenerator = UISelectionFeedbackGenerator\(\)/);
+  assert.match(haptics, /selectionGenerator\.prepare\(\)/);
   assert.match(root, /matchedGeometryEffect\(id: "primary-navigation-selection"/);
   assert.match(root, /dynamicTypeSize\.isAccessibilitySize \? 80 : 66/);
   assert.match(root, /activeUpcomingBookings[\s\S]*let now = Date\(\)[\s\S]*isActiveClassPlace[\s\S]*start_time >= now/);

@@ -40,8 +40,12 @@ export function normalizeSessionAttendanceMutation(sessionId, attendance) {
   return { sessionId: normalizedSessionId, attendedIds, noShowIds };
 }
 
-export function normalizeSessionPromotion(sessionId) {
-  return { sessionId: recordId(sessionId) };
+export function normalizeSessionPromotion(sessionId, expectedBookingId, requestId) {
+  return {
+    sessionId: recordId(sessionId),
+    expectedBookingId: recordId(expectedBookingId),
+    requestId: recordId(requestId),
+  };
 }
 
 export function normalizeLegacyBookingNotes(id, notes) {

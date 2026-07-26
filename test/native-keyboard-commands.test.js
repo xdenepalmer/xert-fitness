@@ -62,5 +62,5 @@ test('iPad scene commands share typed member and owner navigation with authoriza
   assert.match(owner, /scope: \.owner\(currentWorkspace\)/);
   assert.match(owner, /let isAvailable = authorizedOwnerSession != nil/);
   assert.match(owner, /case \.ownerWorkspace\(let workspace\):[\s\S]*openWorkspace\(workspace\)/);
-  assert.match(owner, /case \.closeOwner:[\s\S]*onClose\?\(\)/);
+  assert.match(owner, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
 });

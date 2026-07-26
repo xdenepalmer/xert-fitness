@@ -62,6 +62,10 @@ Use [docs/STRIPE_LAUNCH_RUNBOOK.md](docs/STRIPE_LAUNCH_RUNBOOK.md) for the
 complete test-mode setup, owner health checks, purchase/refund proof, live
 cutover and rollback sequence.
 
+Use [docs/LAUNCH_DAY_RUNBOOK.md](docs/LAUNCH_DAY_RUNBOOK.md) for the complete
+owner go/no-go check, member smoke path, kill switches, incident response and
+evidence checklist for public launch day.
+
 The live cutover uses two read-only gates: `npm run stripe:launch:check` requires
 checkout to remain paused while configuration is verified, then
 `npm run stripe:launch:verify` proves guarded activation is retained and has a
@@ -167,6 +171,20 @@ The Supabase schema is defined in:
   launch-setting and announcement actions from overwriting another administrator's work
 - `src/supabase/catalog_optimistic_locking_upgrade.sql` — adds version-aware coach,
   event and session-pack editing so concurrent administrators cannot overwrite newer catalogue work
+- `supabase/migrations/20260720000000_product_commercial_terms_guard.sql` — prevents an active pack
+  from losing its Stripe Price ID and requires a replacement Price when amount, currency, credits or validity change
+- `src/supabase/member_booking_switch_guard_upgrade.sql` — makes the owner
+  booking switch authoritative for new member places at the database boundary
+- `src/supabase/member_onboarding_upgrade.sql` — adds privacy-minimised member
+  readiness: an emergency contact, immutable versioned acknowledgements,
+  append-only acceptance receipts, completion-only owner summaries and audited
+  deliberate emergency-contact reveals; it stores no screening answers, date of
+  birth, diagnoses, injuries, free-text safety notes, waiver or clearance outcome
+- `supabase/migrations/20260721020000_member_activation_cockpit.sql` — adds an
+  admin-only, derived 30-day activation journey and bounded follow-up queue for
+  current readiness, training access, first booking and recorded attendance;
+  it exposes no emergency-contact values or document contents
+- `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
@@ -179,6 +197,8 @@ The Supabase schema is defined in:
   order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
+- `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
+  files from exposing private member notices or weakening member email protection
 - `src/supabase/public_form_staff_column_guard.sql` — moves the five public form
   insert policies into one installer and stops an anonymous submission arriving
   with a staff servicing note already filled in
@@ -222,9 +242,14 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
+`supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`waitlist_promotion_notifications_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
-`admin_settings_singleton_upgrade.sql`. Finally apply the July 2026 audit
+`admin_settings_singleton_upgrade.sql`, then
+`member_booking_switch_guard_upgrade.sql`, then
+`member_onboarding_upgrade.sql`, then
+`supabase/migrations/20260721020000_member_activation_cockpit.sql`. Finally apply the July 2026 audit
 fixes in filename order: `public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
@@ -258,9 +283,15 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `admin_daily_operations_upgrade.sql`, then
 `shared_admin_optimistic_locking_upgrade.sql`, then
 `catalog_optimistic_locking_upgrade.sql`, then
+`supabase/migrations/20260720000000_product_commercial_terms_guard.sql`, then
 `targeted_member_notices_upgrade.sql`, then
+`waitlist_promotion_notifications_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
-`admin_settings_singleton_upgrade.sql`. Finally apply the July 2026 audit
+`admin_settings_singleton_upgrade.sql`, then
+`member_booking_switch_guard_upgrade.sql`, then
+`member_onboarding_upgrade.sql`, then
+`supabase/migrations/20260721020000_member_activation_cockpit.sql`, then
+`supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql`. Finally apply the July 2026 audit
 fixes in filename order: `public_form_staff_column_guard.sql`,
 `schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
 `my_bookings_duration.sql`, `product_currency_aud_only.sql`,
@@ -273,7 +304,9 @@ connection).
 Operations Health and the TestFlight release workflow verify every database
 capability declared in `src/lib/schemaCapabilities.js`, including booking,
 waitlist, attendance, commerce, announcements, admin notes, operational request
-and schedule audit, booking lifecycle, content/configuration history, member push delivery, daily class operations, schedule integrity, public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
+and schedule audit, booking lifecycle, content/configuration history, member
+onboarding, member push delivery, daily class operations, schedule integrity,
+public-form integrity, and database security hardening. Stripe and APNs service readiness are reported separately as release warnings until their Vercel secrets are installed. A release intentionally
 stops until every required migration has been applied. Run
 `src/supabase/release_readiness_check.sql` in the production SQL editor first;
 every row must show `installed = true` and `release_ready = true`.

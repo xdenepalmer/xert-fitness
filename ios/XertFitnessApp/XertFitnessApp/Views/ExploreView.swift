@@ -371,12 +371,18 @@ private struct CoachPhoto: View {
     var body: some View {
         Group {
             if let raw = coach.photo_url, let url = URL(string: raw) {
-                AsyncImage(url: url) { image in image.resizable().scaledToFill() }
-                    placeholder: { initials }
+                XertRemoteImage(
+                    url: url,
+                    maximumPointDimension: size,
+                    contentMode: .fill
+                ) {
+                    initials
+                }
             } else { initials }
         }
         .frame(width: size, height: size).clipped()
         .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.25), lineWidth: 1))
+        .accessibilityHidden(true)
     }
 
     private var initials: some View {

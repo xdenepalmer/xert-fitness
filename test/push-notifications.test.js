@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  APNS_REQUEST_TIMEOUT_MS,
   buildAnnouncementPush,
   createAPNsProviderToken,
   inspectAPNsEnvironment,
+  sendNotification,
 } from '../api/apns.js';
 import { normalizeAnnouncementPublish } from '../api/admin-publish-announcement.js';
 import { inspectPushEnvironment } from '../api/push-health.js';
@@ -57,6 +60,103 @@ test('announcement pushes are bounded and carry a durable announcement route', (
   assert.equal(payload.announcement_id, '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45');
   assert.equal(payload.cta_url, '/account');
   assert.throws(() => buildAnnouncementPush({ title: '', body: 'Body' }), /ANNOUNCEMENT_PUSH_INVALID/);
+});
+
+test('an unresponsive APNs stream fails within a bounded request deadline', async () => {
+  class HangingStream extends EventEmitter {
+    setEncoding() {}
+    end() {}
+    close() { this.closed = true; }
+  }
+  const stream = new HangingStream();
+  const client = { request: () => stream };
+  const subscription = {
+    id: 'subscription-1',
+    user_id: 'member-1',
+    device_token: 'ab'.repeat(32),
+    environment: 'production',
+  };
+  const result = await sendNotification(
+    client,
+    subscription,
+    { id: '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45', title: 'Class update', body: 'Check your booking.' },
+    { bundleId: 'com.xertfitness.app' },
+    'provider-token',
+    5,
+  );
+
+  assert.equal(APNS_REQUEST_TIMEOUT_MS, 8_000);
+  assert.equal(result.subscription, subscription);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.reason, 'APNS_REQUEST_TIMEOUT');
+  assert.equal(stream.closed, true);
+});
+
+test('a completed APNs response clears the deadline and remains successful', async () => {
+  class SuccessfulStream extends EventEmitter {
+    setEncoding() {}
+    end() {
+      queueMicrotask(() => {
+        this.emit('response', { ':status': 200 });
+        this.emit('end');
+      });
+    }
+    close() { this.closed = true; }
+  }
+  const stream = new SuccessfulStream();
+  const result = await sendNotification(
+    { request: () => stream },
+    { id: 'subscription-2', user_id: 'member-2', device_token: 'cd'.repeat(32), environment: 'production' },
+    { id: '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45', title: 'Class update', body: 'Check your booking.' },
+    { bundleId: 'com.xertfitness.app' },
+    'provider-token',
+    50,
+  );
+
+  assert.equal(result.status, 'delivered');
+  assert.equal(result.reason, null);
+  assert.notEqual(stream.closed, true);
+});
+
+test('a synchronous APNs connection failure is returned as an auditable delivery result', async () => {
+  const subscription = {
+    id: 'subscription-3', user_id: 'member-3', device_token: 'ef'.repeat(32), environment: 'production',
+  };
+  const result = await sendNotification(
+    { request: () => { throw new Error('session unavailable'); } },
+    subscription,
+    { id: '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45', title: 'Class update', body: 'Check your booking.' },
+    { bundleId: 'com.xertfitness.app' },
+    'provider-token',
+    50,
+  );
+
+  assert.deepEqual(result, { subscription, status: 'failed', reason: 'session unavailable' });
+});
+
+test('a synchronous APNs stream write failure settles once as an auditable result', async () => {
+  class FailingWriteStream extends EventEmitter {
+    setEncoding() {}
+    end() { throw new Error('stream closed'); }
+    close() { this.closed = true; }
+  }
+  const stream = new FailingWriteStream();
+  const subscription = {
+    id: 'subscription-4', user_id: 'member-4', device_token: '12'.repeat(32), environment: 'production',
+  };
+  const result = await sendNotification(
+    { request: () => stream },
+    subscription,
+    { id: '3a9791d6-d79b-4eeb-9ad0-d8a6a66bff45', title: 'Class update', body: 'Check your booking.' },
+    { bundleId: 'com.xertfitness.app' },
+    'provider-token',
+    5,
+  );
+
+  assert.deepEqual(result, { subscription, status: 'failed', reason: 'stream closed' });
+  assert.equal(stream.closed, true);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(result, { subscription, status: 'failed', reason: 'stream closed' });
 });
 
 test('push registration accepts only APNs tokens and explicit environments', () => {

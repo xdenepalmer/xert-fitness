@@ -9,6 +9,7 @@ const NOW = new Date('2026-07-13T00:00:00.000Z');
 test('summarizes active credits expiring within seven days', () => {
   const result = summarizeExpiringCredits([
     { remaining: 2, expires_at: '2026-07-15T00:00:00.000Z' },
+    { remaining: 1, expires_at: '2026-07-15T08:00:00.000Z' },
     { remaining: 3, expires_at: '2026-07-19T00:00:00.000Z' },
     { remaining: 4, expires_at: '2026-07-21T00:00:00.000Z' },
     { remaining: 5, expires_at: null },
@@ -16,7 +17,7 @@ test('summarizes active credits expiring within seven days', () => {
     { remaining: 6, expires_at: '2026-07-12T00:00:00.000Z' },
   ], NOW);
 
-  assert.equal(result.credits, 5);
+  assert.equal(result.credits, 3);
   assert.equal(result.expiresAt.toISOString(), '2026-07-15T00:00:00.000Z');
   assert.equal(result.daysRemaining, 2);
 });

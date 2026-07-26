@@ -9,6 +9,7 @@ const contact = readFileSync(new URL('../src/pages/Contact.jsx', import.meta.url
 const stickyMobileCta = readFileSync(new URL('../src/components/public/StickyMobileCTA.jsx', import.meta.url), 'utf8');
 const account = readFileSync(new URL('../src/pages/Account.jsx', import.meta.url), 'utf8');
 const adminLogin = readFileSync(new URL('../src/pages/AdminLogin.jsx', import.meta.url), 'utf8');
+const scrollToTop = readFileSync(new URL('../src/components/ScrollToTop.jsx', import.meta.url), 'utf8');
 const packageManifest = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const formSources = [
   '../src/components/public/TrainerInterestForm.jsx',
@@ -61,7 +62,9 @@ test('member account failures stay inline and never masquerade as empty account 
   assert.match(account, /Could not refresh your account/);
   assert.match(account, /Your previously loaded details are still shown below/);
   assert.match(account, /onClick=\{refresh\}/);
-  assert.ok((account.match(/firstLoadFailed \? \(/g) || []).length >= 4);
+  assert.match(account, /firstLoadFailed \|\| bookingsUnavailable/);
+  assert.match(account, /firstLoadFailed \|\| ordersUnavailable/);
+  assert.match(account, /Credit balance unavailable/);
 });
 
 test('admin sign-in email and password fields carry an associated accessible name', () => {
@@ -83,6 +86,14 @@ test('public motion uses native reduced-motion-aware effects without a runtime d
   assert.doesNotMatch(packageManifest, /framer-motion/);
   assert.match(readFileSync(new URL('../src/index.css', import.meta.url), 'utf8'), /prefers-reduced-motion: reduce/);
   assert.match(readFileSync(new URL('../src/components/public/motion/Reveal.jsx', import.meta.url), 'utf8'), /IntersectionObserver/);
+});
+
+test('deep links wait for lazy authenticated content and respect reduced motion', () => {
+  assert.match(scrollToTop, /new MutationObserver/);
+  assert.match(scrollToTop, /observer\.observe\(document\.body, \{ childList: true, subtree: true \}\)/);
+  assert.match(scrollToTop, /prefers-reduced-motion: reduce/);
+  assert.match(scrollToTop, /scrollIntoView\(\{ behavior, block: "start" \}\)/);
+  assert.match(scrollToTop, /observer\.disconnect\(\)/);
 });
 
 test('every remaining acquisition form names custom inputs and non-input controls', () => {

@@ -52,7 +52,18 @@ test('normalizes a safe new product slug and complete checkout configuration', (
   assert.equal(product.price_cents, 8800);
   assert.equal(product.currency, 'aud');
   assert.equal(product.active, false);
+  assert.equal(product.stripe_price_id, null);
   assert.throws(() => normalizeProductCreateInput({ ...product, slug: '../unsafe', price_dollars: '88' }), /Slug/);
+});
+
+test('always creates a new pack as a private unlinked draft', () => {
+  const product = normalizeProductCreateInput({
+    slug: 'founders-6', name: 'Founders Pack', description: '', price_dollars: '120',
+    sessions_count: 6, validity_days: 42, currency: 'aud', sort_order: 5,
+    featured: true, active: true, stripe_price_id: 'price_WOULD_BE_LIVE',
+  });
+  assert.equal(product.active, false);
+  assert.equal(product.stripe_price_id, null);
 });
 
 test('rejects ambiguous prices and malformed Stripe price IDs', () => {
@@ -65,6 +76,20 @@ test('rejects ambiguous prices and malformed Stripe price IDs', () => {
   assert.throws(() => normalizeProductAdminInput({ ...valid, stripe_price_id: 'prod_ABC123' }), /price_/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, currency: 'dollars' }), /3-letter/);
   assert.throws(() => normalizeProductAdminInput({ ...valid, sort_order: -1 }), /Display order/);
+});
+
+test('keeps product input inside the shared database contract', () => {
+  const valid = {
+    name: 'Starter Pack', description: '', price_dollars: '48.00', sessions_count: 4,
+    validity_days: 28, featured: false, active: false, stripe_price_id: '',
+    currency: 'aud', sort_order: 0,
+  };
+  assert.throws(() => normalizeProductAdminInput({ ...valid, name: 'x'.repeat(121) }), /120/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, description: 'x'.repeat(2_001) }), /2,000/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, price_dollars: '21474836.48' }), /21,474,836\.47/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, sessions_count: 1_001 }), /1,000/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, validity_days: 3_651 }), /3,650/);
+  assert.throws(() => normalizeProductAdminInput({ ...valid, sort_order: 10_001 }), /10,000/);
 });
 
 test('reports the exact active packs blocking live Stripe checkout', () => {

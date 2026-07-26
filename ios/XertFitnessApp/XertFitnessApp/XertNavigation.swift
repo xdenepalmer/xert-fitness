@@ -573,17 +573,45 @@ enum XertNavigationCommandSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum XertFirstClassActivationStage: Equatable {
+    case signIn
+    case needsCredits
+    case choosingCredits
+    case checkout
+    case readyToBook
+}
+
+/// Keeps only the public class identifier needed to resume a member's chosen
+/// task. It never stores profile, payment or readiness information.
+struct XertFirstClassActivation: Equatable {
+    let sessionID: UUID
+    var stage: XertFirstClassActivationStage
+
+    func matches(_ sessionID: UUID) -> Bool {
+        self.sessionID == sessionID
+    }
+}
+
+private enum XertNavigationFormatters {
+    /// Command and status models are rebuilt as navigation state changes. A
+    /// shared formatter avoids repeatedly allocating ICU-backed formatters in
+    /// SwiftUI render paths while keeping every label in Brisbane time.
+    static let brisbaneSchedule: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
+        formatter.dateFormat = "EEE d MMM, h:mm a"
+        return formatter
+    }()
+}
+
 struct XertNextBookingNavigationContext: Equatable {
     let id: UUID
     let title: String
     let startTime: Date
 
     var scheduleLabel: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_AU")
-        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
-        formatter.dateFormat = "EEE d MMM, h:mm a"
-        return formatter.string(from: startTime)
+        XertNavigationFormatters.brisbaneSchedule.string(from: startTime)
     }
 }
 
@@ -1528,11 +1556,7 @@ final class XertNavigationCoordinator: ObservableObject {
     }
 
     private func bookingScheduleLabel(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_AU")
-        formatter.timeZone = TimeZone(identifier: "Australia/Brisbane")
-        formatter.dateFormat = "EEE d MMM, h:mm a"
-        return formatter.string(from: date)
+        XertNavigationFormatters.brisbaneSchedule.string(from: date)
     }
 
     private func noticeDetailLabel(_ record: XertMemberRecordNavigationContext) -> String {

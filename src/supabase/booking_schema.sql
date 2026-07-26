@@ -57,7 +57,9 @@ $$;
 
 -- RLS controls which rows a member can change, not which columns they can
 -- alter. Keep authority and identity fields server-owned to stop a direct
--- PostgREST request promoting a member profile to admin.
+-- PostgREST request promoting a member profile to admin. Email is created
+-- above so this hardened definition (including email immutability) is always
+-- valid and cannot be silently reverted by re-running this file.
 create or replace function public.guard_profile_write()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
@@ -123,7 +125,9 @@ declare
   v_current public.products%rowtype;
   v_update record;
 begin
-  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+  if not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
   if p_product_id is null then raise exception 'PRODUCT_REQUIRED'; end if;
   if p_product is null then raise exception 'PRODUCT_PAYLOAD_REQUIRED'; end if;
 
@@ -150,8 +154,21 @@ begin
   if v_current.stripe_price_id is not null
      and v_current.stripe_price_id = v_update.stripe_price_id
      and (v_current.price_cents <> v_update.price_cents
-       or lower(v_current.currency) <> lower(v_update.currency)) then
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days) then
     raise exception 'STRIPE_PRICE_REFRESH_REQUIRED';
+  end if;
+
+  if v_update.active and (
+       not v_current.active
+       or v_current.stripe_price_id is distinct from nullif(btrim(v_update.stripe_price_id), '')
+       or v_current.price_cents <> v_update.price_cents
+       or lower(v_current.currency) <> lower(v_update.currency)
+       or v_current.sessions_count <> v_update.sessions_count
+       or v_current.validity_days <> v_update.validity_days
+     ) then
+    raise exception 'PRODUCT_ACTIVATION_VERIFICATION_REQUIRED';
   end if;
 
   update public.products
@@ -180,6 +197,73 @@ begin
   end if;
 end;
 $$;
+
+create or replace function public.admin_create_product(p_slug text, p_product jsonb)
+returns public.products
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_product record;
+  v_created public.products%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'ADMIN_ONLY';
+  end if;
+  if p_product is null then raise exception 'PRODUCT_PAYLOAD_REQUIRED'; end if;
+
+  select * into v_product
+  from jsonb_to_record(p_product) as product_data(
+    name text,
+    description text,
+    price_cents integer,
+    currency text,
+    sessions_count integer,
+    validity_days integer,
+    featured boolean,
+    sort_order integer
+  );
+
+  if p_slug is null
+     or length(p_slug) > 80
+     or p_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+     or v_product.name is null or btrim(v_product.name) = ''
+     or length(btrim(v_product.name)) > 120
+     or length(coalesce(btrim(v_product.description), '')) > 2000
+     or v_product.price_cents is null or v_product.price_cents <= 0
+     or v_product.currency is null or v_product.currency !~ '^[a-zA-Z]{3}$'
+     or v_product.sessions_count is null or v_product.sessions_count not between 1 and 1000
+     or v_product.validity_days is null or v_product.validity_days not between 1 and 3650
+     or v_product.featured is null
+     or v_product.sort_order is null or v_product.sort_order not between 0 and 10000 then
+    raise exception 'INVALID_PRODUCT_PAYLOAD';
+  end if;
+
+  insert into public.products (
+    slug, name, description, price_cents, currency, sessions_count,
+    validity_days, stripe_price_id, featured, active, sort_order
+  ) values (
+    p_slug,
+    btrim(v_product.name),
+    nullif(btrim(v_product.description), ''),
+    v_product.price_cents,
+    lower(v_product.currency),
+    v_product.sessions_count,
+    v_product.validity_days,
+    null,
+    v_product.featured,
+    false,
+    v_product.sort_order
+  )
+  returning * into v_created;
+
+  return v_created;
+end;
+$$;
+
+revoke all on function public.admin_create_product(text, jsonb) from public, anon;
+grant execute on function public.admin_create_product(text, jsonb) to authenticated;
 
 insert into public.products (slug, name, description, price_cents, currency, sessions_count, validity_days, featured, sort_order) values
   ('single',         '1 Class Pass',                'Perfect for a drop-in session, casual training or trying your first XERT session.', 1500,  'aud', 1,  14, false, 1),
@@ -898,57 +982,6 @@ returns table (
 $$;
 
 
-create or replace function public.my_member_announcements()
-returns table (
-  id uuid, title text, body text, tone text, cta_label text, cta_url text, published_at timestamptz,
-  expires_at timestamptz, updated_at timestamptz
-)
-language plpgsql security definer set search_path = public as $$
-declare v_user_id uuid := auth.uid();
-begin
-  if v_user_id is null then raise exception 'AUTH_REQUIRED'; end if;
-  insert into public.member_announcement_receipts (announcement_id, user_id, read_at)
-  select announcement.id, v_user_id, now()
-  from public.member_announcements as announcement
-  where announcement.archived_at is null
-    and announcement.published_at is not null and announcement.published_at <= now()
-    and (announcement.expires_at is null or announcement.expires_at > now())
-  on conflict (announcement_id, user_id) do update
-    set read_at = least(member_announcement_receipts.read_at, excluded.read_at);
-  return query
-  select announcement.id, announcement.title, announcement.body, announcement.tone,
-         announcement.cta_label, announcement.cta_url, announcement.published_at,
-         announcement.expires_at, announcement.updated_at
-  from public.member_announcements as announcement
-  join public.member_announcement_receipts as receipt
-    on receipt.announcement_id = announcement.id and receipt.user_id = v_user_id
-  where announcement.archived_at is null
-    and announcement.published_at is not null and announcement.published_at <= now()
-    and (announcement.expires_at is null or announcement.expires_at > now())
-    and receipt.dismissed_at is null
-  order by announcement.published_at desc, announcement.id desc;
-end;
-$$;
-
-create or replace function public.dismiss_member_announcement(p_announcement_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare v_user_id uuid := auth.uid();
-begin
-  if v_user_id is null then raise exception 'AUTH_REQUIRED'; end if;
-  if not exists (
-    select 1 from public.member_announcements as announcement
-    where announcement.id = p_announcement_id
-      and announcement.archived_at is null
-      and announcement.published_at is not null and announcement.published_at <= now()
-      and (announcement.expires_at is null or announcement.expires_at > now())
-  ) then raise exception 'ANNOUNCEMENT_NOT_FOUND'; end if;
-  insert into public.member_announcement_receipts (announcement_id, user_id, read_at, dismissed_at)
-  values (p_announcement_id, v_user_id, now(), now())
-  on conflict (announcement_id, user_id) do update
-    set dismissed_at = coalesce(member_announcement_receipts.dismissed_at, excluded.dismissed_at);
-end;
-$$;
-
 create or replace function public.admin_announcement_metrics()
 returns table (announcement_id uuid, read_count bigint, dismissed_count bigint)
 language plpgsql security definer stable set search_path = public as $$
@@ -992,8 +1025,7 @@ create policy "products_public_read" on public.products
   for select to anon, authenticated using (active = true);
 create policy "products_admin_read" on public.products
   for select to authenticated using (public.is_admin());
-create policy "products_admin_insert" on public.products
-  for insert to authenticated with check (public.is_admin());
+revoke insert on table public.products from anon, authenticated;
 
 -- orders: a user reads own orders; admins read all. Writes happen via the
 -- service-role webhook (which bypasses RLS), so no public insert policy.
@@ -1150,20 +1182,12 @@ drop policy if exists "member_announcements_admin_delete" on public.member_annou
 -- without it, so re-running an "idempotent" script on a hardened database let
 -- every member read every other member's targeted notice. Emit whichever form
 -- the installed schema can express, never the weaker one.
-do $$
+do $announcement_policy$
 begin
-  if to_regclass('public.member_announcement_targets') is null then
-    execute $policy$
-      create policy "member_announcements_select_live_or_admin" on public.member_announcements
-        for select to authenticated using (
-          public.is_admin() or (
-            archived_at is null
-            and published_at is not null and published_at <= now()
-            and (expires_at is null or expires_at > now())
-          )
-        )
-    $policy$;
-  else
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) and to_regclass('public.member_announcement_targets') is not null then
     execute $policy$
       create policy "member_announcements_select_live_or_admin" on public.member_announcements
         for select to authenticated using (
@@ -1184,11 +1208,39 @@ begin
               )
             )
           )
-        )
+        );
+    $policy$;
+  elsif exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member_announcements' and column_name = 'audience'
+  ) then
+    -- Audience exists without targets: fail closed to broadcast-only so
+    -- re-applying this file cannot expose targeted notices.
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+            and audience = 'all'
+          )
+        );
+    $policy$;
+  else
+    execute $policy$
+      create policy "member_announcements_select_live_or_admin" on public.member_announcements
+        for select to authenticated using (
+          public.is_admin() or (
+            archived_at is null
+            and published_at is not null and published_at <= now()
+            and (expires_at is null or expires_at > now())
+          )
+        );
     $policy$;
   end if;
 end;
-$$;
+$announcement_policy$;
 create policy "member_announcements_admin_insert" on public.member_announcements
   for insert to authenticated with check (public.is_admin());
 create policy "member_announcements_admin_update" on public.member_announcements
@@ -1276,8 +1328,6 @@ revoke execute on function public.join_session_waitlist(uuid) from public, anon;
 revoke execute on function public.cancel_booking(uuid) from public, anon;
 revoke execute on function public.my_bookings() from public, anon;
 revoke execute on function public.is_admin() from public, anon;
-revoke execute on function public.my_member_announcements() from public, anon;
-revoke execute on function public.dismiss_member_announcement(uuid) from public, anon;
 revoke execute on function public.admin_announcement_metrics() from public, anon;
 revoke execute on function public.admin_archive_member_announcement(uuid, boolean) from public, anon;
 grant execute on function public.sessions_with_availability() to anon, authenticated;
@@ -1286,8 +1336,6 @@ grant execute on function public.join_session_waitlist(uuid) to authenticated;
 grant execute on function public.cancel_booking(uuid)        to authenticated;
 grant execute on function public.my_bookings()               to authenticated;
 grant execute on function public.is_admin()                  to authenticated;
-grant execute on function public.my_member_announcements() to authenticated;
-grant execute on function public.dismiss_member_announcement(uuid) to authenticated;
 grant execute on function public.admin_announcement_metrics() to authenticated;
 
 -- shared_admin_optimistic_locking_upgrade.sql supersedes this overload with a

@@ -293,6 +293,9 @@ workflows:
               "admin_role_safety",
               "audited_credit_grants",
               "booking_waitlist_withdrawal",
+              "member_booking_switch_guard",
+              "member_onboarding_foundation",
+              "member_activation_cockpit",
               "member_waitlist_join",
               "waitlist_fifo_promotion",
               "attendance_roll_call",
@@ -330,7 +333,11 @@ workflows:
               "schedule_optimistic_locking",
               "shared_admin_optimistic_locking",
               "catalog_optimistic_locking",
+              "product_commercial_terms_guard",
               "targeted_member_notices",
+              "waitlist_promotion_notifications",
+              "booking_decision_notifications",
+              "owner_stripe_price_provisioning",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

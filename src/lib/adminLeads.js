@@ -35,6 +35,70 @@ export const LEAD_STATUSES = {
   partner_interest: ['new', 'reviewing', 'contacted', 'meeting', 'approved', 'not_suitable', 'archived'],
 };
 
+const COMMON_ADMIN_LEAD_FIELDS = [
+  'id', 'full_name', 'email', 'phone', 'status', 'admin_notes',
+  'utm_source', 'utm_medium', 'utm_campaign', 'created_at',
+];
+
+export const ADMIN_LEAD_FIELDS = Object.freeze({
+  member_interest: Object.freeze([
+    ...COMMON_ADMIN_LEAD_FIELDS,
+    'suburb_town', 'current_training_level', 'main_training_goals', 'preferred_training_times',
+  ]),
+  trainer_interest: Object.freeze([
+    ...COMMON_ADMIN_LEAD_FIELDS,
+    'qualifications', 'short_intro',
+  ]),
+  partner_interest: Object.freeze([
+    ...COMMON_ADMIN_LEAD_FIELDS,
+    'business_name', 'profession', 'short_intro',
+  ]),
+});
+
+const COMMON_LEAD_EXPORT_COLUMNS = [
+  { key: 'created_at', label: 'Submitted' },
+  { key: 'status', label: 'Status' },
+  { key: 'full_name', label: 'Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+];
+
+export const LEAD_EXPORT_COLUMNS = Object.freeze({
+  member_interest: Object.freeze([
+    ...COMMON_LEAD_EXPORT_COLUMNS,
+    { key: 'suburb_town', label: 'Suburb / town' },
+    { key: 'utm_source', label: 'Campaign source' },
+    { key: 'utm_medium', label: 'Campaign medium' },
+    { key: 'utm_campaign', label: 'Campaign name' },
+  ]),
+  trainer_interest: Object.freeze([
+    ...COMMON_LEAD_EXPORT_COLUMNS,
+    { key: 'qualifications', label: 'Qualifications' },
+  ]),
+  partner_interest: Object.freeze([
+    ...COMMON_LEAD_EXPORT_COLUMNS,
+    { key: 'business_name', label: 'Business' },
+    { key: 'profession', label: 'Profession' },
+  ]),
+});
+
+export function adminLeadSelect(table) {
+  const fields = ADMIN_LEAD_FIELDS[table];
+  if (!fields) throw new Error('Unsupported lead type.');
+  return fields.join(', ');
+}
+
+export function leadExportColumns(table) {
+  const columns = LEAD_EXPORT_COLUMNS[table];
+  if (!columns) throw new Error('Unsupported lead type.');
+  return columns;
+}
+
+export function leadExportRows(table, rows = []) {
+  const keys = leadExportColumns(table).map(column => column.key);
+  return rows.map(row => Object.fromEntries(keys.map(key => [key, row?.[key] ?? ''])));
+}
+
 export function validateLeadMutation(table, status, ids = []) {
   const statuses = LEAD_STATUSES[table];
   if (!statuses) throw new Error('Unsupported lead type.');

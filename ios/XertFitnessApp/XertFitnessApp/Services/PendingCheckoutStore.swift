@@ -5,17 +5,20 @@ struct PendingCheckout: Codable, Equatable {
     let baselineOrderIDs: Set<UUID>
     let startedAt: Date
     let checkoutSessionID: String?
+    let activationSessionID: UUID?
 
     init(
         userID: UUID,
         baselineOrderIDs: Set<UUID>,
         startedAt: Date,
-        checkoutSessionID: String? = nil
+        checkoutSessionID: String? = nil,
+        activationSessionID: UUID? = nil
     ) {
         self.userID = userID
         self.baselineOrderIDs = baselineOrderIDs
         self.startedAt = startedAt
         self.checkoutSessionID = checkoutSessionID
+        self.activationSessionID = activationSessionID
     }
 }
 

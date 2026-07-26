@@ -36,7 +36,7 @@ export default function PublicFooter() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
           {/* Brand */}
           <div>
-            <img src={LOGO} alt="XERT Fitness. Beat Your Best." className="h-32 sm:h-36 w-auto mb-5 opacity-90" />
+            <img src={LOGO} alt="XERT Fitness. Beat Your Best." loading="lazy" decoding="async" width="574" height="619" className="h-32 sm:h-36 w-auto mb-5 opacity-90" />
             <p className="font-body text-xs leading-relaxed mb-3 text-xert-pale/70">
               Semi-private functional fitness coaching in Kingaroy, Queensland. Beat Your Best.
             </p>

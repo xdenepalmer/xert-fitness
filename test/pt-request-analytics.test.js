@@ -49,12 +49,14 @@ test('summarizes the filtered PT workload', () => {
   assert.deepEqual(summarizePTRequests(requests), { total: 3, requested: 1, approved: 1, completed: 1 });
 });
 
-test('exports contact, scheduling, coaching, and admin reconciliation fields', () => {
+test('exports only contact and scheduling fields', () => {
   const [row] = ptRequestCsvRows(requests);
   assert.equal(row.name, 'Alex Runner');
   assert.equal(row.session_type, '60-minute PT session');
   assert.equal(row.preferred_day, 'Monday');
-  assert.equal(row.training_goal, 'Strength');
+  for (const field of ['training_goal', 'experience_level', 'notes', 'admin_notes']) {
+    assert.equal(Object.hasOwn(row, field), false);
+  }
 });
 
 test('keeps reschedule requests actionable after staff follow-up', () => {
