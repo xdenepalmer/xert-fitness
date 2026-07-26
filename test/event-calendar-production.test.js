@@ -26,6 +26,15 @@ test('event training groups are exportable and the calendar admin remains usable
   assert.match(manager, /inline-flex min-h-11[\s\S]*mailto:/);
 });
 
+test('web event training-group roster is generation and identity scoped before render or CSV export', () => {
+  assert.match(manager, /loadedRosterEventId/);
+  assert.match(manager, /rosterLoadGenerationRef/);
+  assert.match(manager, /rosterReady=\{loadedRosterEventId === rosterEvent\.id\}/);
+  assert.match(manager, /const scopedMembers = rosterReady \? members : \[\]/);
+  assert.match(manager, /Roster not ready/);
+  assert.match(manager, /seedLockRef/);
+});
+
 test('admin event goal counts page through PostgREST instead of silently truncating', () => {
   const webData = readFileSync(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
   const nativeAPI = readFileSync(new URL('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift', import.meta.url), 'utf8');

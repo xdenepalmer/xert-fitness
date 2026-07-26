@@ -95,9 +95,11 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
       if (generation !== loadGenerationRef.current) return;
       setError(loadError.message || 'Announcements could not be loaded.');
     } finally {
-      if (generation !== loadGenerationRef.current) return;
-      setLoading(false);
-      setRefreshing(false);
+      // Prefer an equality check over `return` — eslint no-unsafe-finally.
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 

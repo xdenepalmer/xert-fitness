@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Event training-group dialog (web) is generation + identity scoped like iOS /
+  class roster: switching events cannot briefly show or CSV-export another
+  group’s contacts under the new title. Class Repeat and manual Grant Credits
+  refuse same-paint double submits; calendar Seed is locked the same way.
+  README documents the deployed `20260726107000_*_overload_fix` path for
+  deleted-member fulfillment. Lint/typecheck: announcement load `finally`
+  no longer returns early; AdminLogin rate-limit Error keeps typed status/code.
 - Waitlist desk Skip no longer reports failure after a successful remove when
   the desk refresh glitches; promote/skip keep a quiet generation-scoped desk
   refresh so a late mount response cannot restore the old FIFO head. Admin

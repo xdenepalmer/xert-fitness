@@ -173,7 +173,7 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
   );
 }
 
-function TrainingRosterDialog({ event, members, loading, error, onClose }) {
+function TrainingRosterDialog({ event, members, loading, error, rosterReady, onClose }) {
   useEffect(() => {
     const closeOnEscape = keyboardEvent => {
       if (keyboardEvent.key === 'Escape') onClose();
@@ -182,11 +182,19 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
 
+  // Only the roster loaded for this event may render or export — a switch from
+  // event A → B must not briefly show/export A's contacts under B's title.
+  const scopedMembers = rosterReady ? members : [];
+
   const exportRoster = () => {
+    if (!rosterReady) {
+      toast({ title: 'Roster not ready', description: 'Open this training group again before exporting.', variant: 'destructive' });
+      return;
+    }
     const eventSlug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'event';
     downloadCsv(
       `xert-${eventSlug}-training-group.csv`,
-      members.map(member => ({
+      scopedMembers.map(member => ({
         name: member.full_name || '',
         email: member.email || '',
         phone: member.phone || '',
@@ -211,7 +219,7 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
             <h3 id="training-roster-title" className="mt-1 font-display text-xl uppercase text-xert-offwhite">{event.name}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {!loading && !error && members.length > 0 && (
+            {!loading && !error && rosterReady && scopedMembers.length > 0 && (
               <button type="button" onClick={exportRoster} className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase text-xert-steel transition-colors hover:border-xert-steel">
                 <Download className="h-3.5 w-3.5" /> CSV
               </button>
@@ -223,16 +231,16 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
         </header>
 
         <div className="p-5">
-          {loading ? (
+          {error ? (
+            <div className="border border-xert-red/30 bg-xert-steel/5 p-4">
+              <p className="font-body text-sm text-xert-red">{error}</p>
+            </div>
+          ) : loading || !rosterReady ? (
             <div className="py-12 flex items-center justify-center" role="status">
               <Loader2 className="w-5 h-5 animate-spin text-xert-steel" />
               <span className="sr-only">Loading training group</span>
             </div>
-          ) : error ? (
-            <div className="border border-xert-red/30 bg-xert-steel/5 p-4">
-              <p className="font-body text-sm text-xert-red">{error}</p>
-            </div>
-          ) : members.length === 0 ? (
+          ) : scopedMembers.length === 0 ? (
             <div className="py-12 text-center border border-xert-steel/20">
               <Target className="w-6 h-6 mx-auto mb-3 text-xert-steel/50" />
               <p className="font-display text-lg uppercase text-xert-offwhite">No members yet</p>
@@ -240,7 +248,7 @@ function TrainingRosterDialog({ event, members, loading, error, onClose }) {
             </div>
           ) : (
             <div className="space-y-2">
-              {members.map(member => (
+              {scopedMembers.map(member => (
                 <article key={member.user_id} className="border border-xert-steel/20 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -286,30 +294,41 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
   const [seeding, setSeeding] = useState(false);
   const [rosterEvent, setRosterEvent] = useState(null);
   const [rosterMembers, setRosterMembers] = useState([]);
+  const [loadedRosterEventId, setLoadedRosterEventId] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const deleteLockRef = useRef(false);
+  const seedLockRef = useRef(false);
+  const rosterLoadGenerationRef = useRef(0);
 
   useEffect(() => {
     if (!rosterEvent) return undefined;
-    let active = true;
+    // Generation + identity scoping: a late response for event A must not paint
+    // or export over event B's training-group dialog (iOS loadedEventRosterID parity).
+    const generation = ++rosterLoadGenerationRef.current;
+    const eventId = rosterEvent.id;
     setRosterMembers([]);
+    setLoadedRosterEventId(null);
     setRosterError('');
     setRosterLoading(true);
-    getEventGoalMembers(rosterEvent.id)
+    getEventGoalMembers(eventId)
       .then(members => {
-        if (active) setRosterMembers(members);
+        if (generation !== rosterLoadGenerationRef.current) return;
+        setRosterMembers(members);
+        setLoadedRosterEventId(eventId);
       })
       .catch(error => {
-        if (active) setRosterError(error.message || 'Could not load this training group.');
+        if (generation !== rosterLoadGenerationRef.current) return;
+        setRosterError(error.message || 'Could not load this training group.');
+        setLoadedRosterEventId(null);
       })
       .finally(() => {
-        if (active) setRosterLoading(false);
+        if (generation === rosterLoadGenerationRef.current) setRosterLoading(false);
       });
     return () => {
-      active = false;
+      rosterLoadGenerationRef.current += 1;
     };
   }, [rosterEvent]);
 
@@ -367,6 +386,8 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
   };
 
   const handleSeed = async () => {
+    if (seedLockRef.current || seeding) return;
+    seedLockRef.current = true;
     setSeeding(true);
     try {
       const result = await seedXertEventCalendar();
@@ -383,6 +404,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
       });
     } finally {
       setSeeding(false);
+      seedLockRef.current = false;
     }
   };
 
@@ -503,7 +525,15 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
           members={rosterMembers}
           loading={rosterLoading}
           error={rosterError}
-          onClose={() => setRosterEvent(null)}
+          rosterReady={loadedRosterEventId === rosterEvent.id}
+          onClose={() => {
+            rosterLoadGenerationRef.current += 1;
+            setRosterEvent(null);
+            setRosterMembers([]);
+            setLoadedRosterEventId(null);
+            setRosterError('');
+            setRosterLoading(false);
+          }}
         />
       )}
       <AdminConfirmDialog

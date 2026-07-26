@@ -470,9 +470,13 @@ function RepeatModal({ session, onDone, onCancel }) {
   const [count, setCount] = useState(4);
   const [keepPublished, setKeepPublished] = useState(session.status === 'published');
   const [saving, setSaving] = useState(false);
+  // Same-paint double-click must not mint two copy batches (e.g. 8 classes for "4").
+  const repeatLockRef = useRef(false);
 
   const handleRepeat = async () => {
+    if (repeatLockRef.current || saving) return;
     if (!session.start_time) { toast({ title: 'This class needs a start time before it can be repeated.', variant: 'destructive' }); return; }
+    repeatLockRef.current = true;
     setSaving(true);
     try {
       const copies = repeatedClassSessionCopies(session, { intervalDays, count, keepPublished });
@@ -481,6 +485,7 @@ function RepeatModal({ session, onDone, onCancel }) {
     } catch (e) {
       toast({ title: 'Repeat failed', description: e.message, variant: 'destructive' });
       setSaving(false);
+      repeatLockRef.current = false;
     }
   };
 

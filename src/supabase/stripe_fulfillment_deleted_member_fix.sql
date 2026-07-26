@@ -1,5 +1,11 @@
 -- Stops a single deleted member from taking the whole store's checkout offline.
 --
+-- Deployed apply path: supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql
+-- (capability stripe_fulfillment_deleted_member). 20260726002000 targeted the
+-- retired p_expires_at overload and is superseded — do not re-apply it alone.
+-- Fresh-install / operator re-run copy: this file (cumulative with deleted-buyer
+-- email erasure also enforced by fulfillment_erasure_and_refunded_pack_guard).
+--
 -- public.orders.user_id is `references auth.users(id) on delete set null`, so
 -- deleting a member leaves their order rows in place with a NULL user_id.
 -- fulfill_stripe_checkout then rejected the order on its identity check:

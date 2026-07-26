@@ -102,7 +102,9 @@ export const SupabaseAuthProvider = ({ children }) => {
     if (error) {
       // Preserve GoTrue status/code so AdminLogin can map rate limits instead of
       // treating every failure as a bad password.
-      const wrapped = new Error(error.message || 'Sign in failed.');
+      const wrapped = /** @type {Error & { status?: number, code?: string }} */ (
+        new Error(error.message || 'Sign in failed.')
+      );
       wrapped.name = error.name || 'AuthError';
       wrapped.status = error.status;
       wrapped.code = error.code;

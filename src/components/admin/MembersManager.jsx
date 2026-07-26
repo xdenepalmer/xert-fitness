@@ -815,14 +815,19 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
   const [requestId] = useState(() => crypto.randomUUID());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // RPC is idempotent per requestId, but same-paint double-click still doubles
+  // the success toast / onDone refresh before `saving` re-renders.
+  const grantLockRef = useRef(false);
 
   const validationError = creditGrantValidationError({ sessions, validityDays, note });
 
   const handleGrant = async () => {
+    if (grantLockRef.current || saving) return;
     if (validationError) {
       setError(validationError);
       return;
     }
+    grantLockRef.current = true;
     setSaving(true);
     setError('');
     try {
@@ -832,6 +837,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
     } catch (e) {
       setError(e.message);
       setSaving(false);
+      grantLockRef.current = false;
     }
   };
 

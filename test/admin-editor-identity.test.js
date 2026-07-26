@@ -182,3 +182,19 @@ test('CMS drafts are scoped to the signed-in admin and swept on sign-out', () =>
   // signOut proactively sweeps before delegating to Supabase.
   assert.match(authContext, /const signOut = async \(\) => \{\s*clearSiteContentDrafts\(window\.localStorage\);/);
 });
+
+test('manual credit grant and class repeat refuse same-paint double submits', () => {
+  const grantModal = members.slice(
+    members.indexOf('function GrantCreditsModal'),
+    members.indexOf('export default function MembersManager'),
+  );
+  assert.match(grantModal, /grantLockRef/);
+  assert.match(grantModal, /if \(grantLockRef\.current \|\| saving\) return;/);
+
+  const repeatModal = classCalendar.slice(
+    classCalendar.indexOf('function RepeatModal'),
+    classCalendar.indexOf('export default function ClassCalendarAdmin'),
+  );
+  assert.match(repeatModal, /repeatLockRef/);
+  assert.match(repeatModal, /if \(repeatLockRef\.current \|\| saving\) return;/);
+});

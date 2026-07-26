@@ -205,7 +205,10 @@ The Supabase schema is defined in:
 - `src/supabase/stripe_fulfillment_deleted_member_fix.sql` — stops one deleted member's
   order from failing fulfilment forever and gating checkout for every other member
   (targets the live `p_credit_validity_days` overload; drops the retired
-  `p_expires_at` overload if present)
+  `p_expires_at` overload if present). Deployed databases apply the same live-overload
+  repair via `supabase/migrations/20260726107000_stripe_fulfillment_deleted_member_overload_fix.sql`
+  (capability `stripe_fulfillment_deleted_member`); do not re-apply the superseded
+  `20260726002000_stripe_fulfillment_deleted_member_fix.sql` body alone.
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
 - `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
