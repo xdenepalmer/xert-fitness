@@ -2,43 +2,62 @@
 -- Idempotent and safe to run after the lead/request tables and booking_schema.sql.
 
 alter table public.member_interest enable row level security;
-drop policy if exists "public_insert_member_interest" on public.member_interest;
-create policy "public_insert_member_interest" on public.member_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
+-- install_public_form_insert_policies() is the single authoritative definition
+-- of these policies. Writing them out here as well is how an "idempotent"
+-- re-run of this file could strip a guard a later script had added, so the
+-- local copy is only a bootstrap for a database that predates the installer.
+do $$
+begin
+  if to_regprocedure('public.install_public_form_insert_policies()') is not null then
+    perform public.install_public_form_insert_policies();
+  else
+    execute $bootstrap$
+      drop policy if exists "public_insert_member_interest" on public.member_interest;
+      create policy "public_insert_member_interest" on public.member_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_trainer_interest" on public.trainer_interest;
+      create policy "public_insert_trainer_interest" on public.trainer_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_partner_interest" on public.partner_interest;
+      create policy "public_insert_partner_interest" on public.partner_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_class_bookings" on public.class_bookings;
+      create policy "public_insert_class_bookings" on public.class_bookings
+        for insert to anon, authenticated
+        with check (status = 'requested' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
+      create policy "public_insert_private_session_requests" on public.private_session_requests
+        for insert to anon, authenticated
+        with check (status = 'requested' and consent_to_contact is true
+        and (
+          ((select auth.uid()) is null and user_id is null)
+          or ((select auth.uid()) is not null and user_id = (select auth.uid()))
+        ));
+    $bootstrap$;
+  end if;
+end;
+$$;
 
 alter table public.trainer_interest enable row level security;
-drop policy if exists "public_insert_trainer_interest" on public.trainer_interest;
-create policy "public_insert_trainer_interest" on public.trainer_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
 
 alter table public.partner_interest enable row level security;
-drop policy if exists "public_insert_partner_interest" on public.partner_interest;
-create policy "public_insert_partner_interest" on public.partner_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
 
 alter table public.class_bookings enable row level security;
-drop policy if exists "public_insert_class_bookings" on public.class_bookings;
-create policy "public_insert_class_bookings" on public.class_bookings
-  for insert to anon, authenticated
-  with check (status = 'requested' and consent_to_contact is true);
 
 alter table public.private_session_requests
   add column if not exists user_id uuid references auth.users(id) on delete set null default auth.uid();
 alter table public.private_session_requests enable row level security;
-drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
-create policy "public_insert_private_session_requests" on public.private_session_requests
-  for insert to anon, authenticated
-  with check (
-    status = 'requested'
-    and consent_to_contact is true
-    and (
-      (auth.uid() is null and user_id is null)
-      or (auth.uid() is not null and user_id = auth.uid())
-    )
-  );
 
 -- Register only after every policy above has been recreated successfully.
 create table if not exists public.xert_schema_capabilities (

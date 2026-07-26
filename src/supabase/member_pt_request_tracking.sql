@@ -25,17 +25,28 @@ where request.user_id is null
 
 alter table public.private_session_requests enable row level security;
 
-drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
-create policy "public_insert_private_session_requests" on public.private_session_requests
-  for insert to anon, authenticated
-  with check (
-    status = 'requested'
-    and consent_to_contact is true
-    and (
-      ((select auth.uid()) is null and user_id is null)
-      or ((select auth.uid()) is not null and user_id = (select auth.uid()))
-    )
-  );
+-- install_public_form_insert_policies() is the single authoritative definition
+-- of these policies. Writing them out here as well is how an "idempotent"
+-- re-run of this file could strip a guard a later script had added, so the
+-- local copy is only a bootstrap for a database that predates the installer.
+do $$
+begin
+  if to_regprocedure('public.install_public_form_insert_policies()') is not null then
+    perform public.install_public_form_insert_policies();
+  else
+    execute $bootstrap$
+      drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
+      create policy "public_insert_private_session_requests" on public.private_session_requests
+        for insert to anon, authenticated
+        with check (status = 'requested' and consent_to_contact is true
+        and (
+          ((select auth.uid()) is null and user_id is null)
+          or ((select auth.uid()) is not null and user_id = (select auth.uid()))
+        ));
+    $bootstrap$;
+  end if;
+end;
+$$;
 
 drop policy if exists "members_read_own_private_session_requests" on public.private_session_requests;
 create policy "members_read_own_private_session_requests" on public.private_session_requests

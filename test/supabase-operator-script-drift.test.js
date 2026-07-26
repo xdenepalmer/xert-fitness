@@ -90,6 +90,29 @@ test('every operator script that defines handle_new_user records the signup emai
   }
 });
 
+test('no operator script writes its own public form insert policy', () => {
+  const installer = 'install_public_form_insert_policies';
+  const bootstrapGuard = `to_regprocedure('public.${installer}()') is not null`;
+  let checked = 0;
+
+  for (const { name, sql } of scripts()) {
+    // The installer's own definition is the one place the policy text lives.
+    if (sql.includes(`create or replace function public.${installer}`)) continue;
+
+    for (const at of [...sql.matchAll(/create policy "public_insert_\w+"/g)].map(match => match.index)) {
+      checked += 1;
+      assert.ok(
+        sql.slice(0, at).includes(bootstrapGuard),
+        `${name} writes a public form insert policy outside the branch that runs only when `
+          + `${installer}() is absent, so re-running it would drop whichever guards the `
+          + 'installer adds — today the staff-note clause and the finished-class check',
+      );
+    }
+  }
+
+  assert.ok(checked >= 5, 'the public form insert policies are still bootstrapped somewhere');
+});
+
 test('no operator script re-grants an overload a later script revoked for optimistic locking', () => {
   const superseded = [
     {

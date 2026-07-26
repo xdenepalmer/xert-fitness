@@ -1,99 +1,36 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
+import { REQUIRED_SCHEMA_CAPABILITIES, summarizeSchemaCapabilities } from '../src/lib/schemaCapabilities.js';
+
+const ALL_CAPABILITIES = Object.keys(REQUIRED_SCHEMA_CAPABILITIES);
 
 test('reports the exact missing production database capabilities', () => {
-  assert.deepEqual(summarizeSchemaCapabilities([{ capability: 'admin_role_safety' }]), {
-    installed: ['admin_role_safety'],
-    missing: ['audited_credit_grants', 'booking_waitlist_withdrawal', 'member_waitlist_join', 'waitlist_fifo_promotion', 'attendance_roll_call', 'class_session_update_guard', 'product_update_guard', 'stripe_refund_reconciliation', 'checkout_reconciliation', 'stripe_payment_fulfillment', 'guarded_payment_activation', 'payment_activation_drift_guard', 'admin_settings_singleton', 'stripe_pending_order_guard', 'stripe_order_terms_snapshot', 'stripe_webhook_ledger', 'member_announcements', 'announcement_receipts', 'announcement_actions', 'announcement_archival', 'booking_time_conflict_guard', 'admin_member_notes', 'schedule_blackout_guard', 'database_security_hardening', 'rls_policy_performance', 'request_status_audit', 'member_push_notifications', 'credit_expiry_follow_up', 'member_pt_request_tracking', 'public_form_integrity', 'lead_pipeline_audit', 'schedule_change_audit', 'content_change_audit', 'booking_lifecycle_audit', 'class_cancellation_notifications', 'admin_daily_operations', 'schedule_optimistic_locking', 'shared_admin_optimistic_locking', 'catalog_optimistic_locking', 'targeted_member_notices'],
-    ready: false,
-    actions: [
-      'Apply supabase/migrations/20260714005500_credit_grant_audit.sql in Supabase.',
-      'Reapply src/supabase/booking_modes_upgrade.sql in Supabase.',
-      'Apply src/supabase/member_waitlist_upgrade.sql in Supabase.',
-      'Apply supabase/migrations/20260714004100_waitlist_fifo_promotion.sql in Supabase.',
-      'Apply src/supabase/attendance_roll_call_upgrade.sql in Supabase.',
-      'Apply supabase/migrations/20260713000000_class_session_update_guard.sql in Supabase.',
-      'Apply supabase/migrations/20260713010000_product_update_guard.sql in Supabase.',
-      'Apply supabase/migrations/20260713020000_stripe_refund_reconciliation.sql in Supabase.',
-      'Apply supabase/migrations/20260713030000_checkout_reconciliation.sql in Supabase.',
-      'Apply supabase/migrations/20260715010000_stripe_payment_fulfillment.sql in Supabase.',
-      'Apply supabase/migrations/20260716010000_guarded_payment_activation.sql in Supabase.',
-      'Apply supabase/migrations/20260716060000_payment_activation_drift_guard.sql in Supabase.',
-      'Apply supabase/migrations/20260716020000_admin_settings_singleton.sql in Supabase.',
-      'Apply supabase/migrations/20260716030000_stripe_pending_order_guard.sql in Supabase.',
-      'Apply supabase/migrations/20260716040000_stripe_order_terms_snapshot.sql in Supabase.',
-      'Apply supabase/migrations/20260716050000_stripe_webhook_ledger.sql in Supabase.',
-      'Apply supabase/migrations/20260713040000_member_announcements.sql in Supabase.',
-      'Apply supabase/migrations/20260713050000_announcement_receipts.sql in Supabase.',
-      'Apply supabase/migrations/20260714000000_announcement_actions.sql in Supabase.',
-      'Apply supabase/migrations/20260714010000_announcement_archival.sql in Supabase.',
-      'Apply supabase/migrations/20260714002000_booking_time_conflicts.sql in Supabase.',
-      'Apply supabase/migrations/20260714003000_admin_member_notes.sql in Supabase.',
-      'Apply supabase/migrations/20260714004000_schedule_blackout_guard.sql in Supabase.',
-      'Apply supabase/migrations/20260714006000_database_security_hardening.sql in Supabase.',
-      'Apply supabase/migrations/20260714007000_rls_policy_performance.sql in Supabase.',
-      'Apply supabase/migrations/20260714008000_admin_request_status_audit.sql in Supabase.',
-      'Apply supabase/migrations/20260714009000_member_push_notifications.sql in Supabase.',
-      'Apply supabase/migrations/20260713060000_credit_expiry_follow_up.sql in Supabase.',
-      'Apply supabase/migrations/20260714004200_member_pt_request_tracking.sql in Supabase.',
-      'Apply supabase/migrations/20260714004300_public_form_integrity.sql in Supabase.',
-      'Apply supabase/migrations/20260714011000_lead_pipeline_audit.sql in Supabase.',
-      'Apply supabase/migrations/20260714012000_schedule_change_audit.sql in Supabase.',
-      'Apply supabase/migrations/20260714013000_content_change_audit.sql in Supabase.',
-      'Apply supabase/migrations/20260714014000_booking_lifecycle_audit.sql in Supabase.',
-      'Apply supabase/migrations/20260714015000_class_cancellation_notifications.sql in Supabase.',
-      'Apply supabase/migrations/20260714016000_admin_daily_operations.sql in Supabase.',
-      'Apply supabase/migrations/20260714018000_schedule_optimistic_locking.sql in Supabase.',
-      'Apply supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql in Supabase.',
-      'Apply supabase/migrations/20260714020000_catalog_optimistic_locking.sql in Supabase.',
-      'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
-    ],
-  });
-  assert.equal(summarizeSchemaCapabilities([
-    { capability: 'audited_credit_grants' },
-    { capability: 'attendance_roll_call' },
-    { capability: 'class_session_update_guard' },
-    { capability: 'product_update_guard' },
-    { capability: 'stripe_refund_reconciliation' },
-    { capability: 'checkout_reconciliation' },
-    { capability: 'stripe_payment_fulfillment' },
-    { capability: 'guarded_payment_activation' },
-    { capability: 'payment_activation_drift_guard' },
-    { capability: 'admin_settings_singleton' },
-    { capability: 'stripe_pending_order_guard' },
-    { capability: 'stripe_order_terms_snapshot' },
-    { capability: 'stripe_webhook_ledger' },
-    { capability: 'member_announcements' },
-    { capability: 'announcement_receipts' },
-    { capability: 'announcement_actions' },
-    { capability: 'announcement_archival' },
-    { capability: 'booking_time_conflict_guard' },
-    { capability: 'admin_member_notes' },
-    { capability: 'schedule_blackout_guard' },
-    { capability: 'database_security_hardening' },
-    { capability: 'rls_policy_performance' },
-    { capability: 'request_status_audit' },
-    { capability: 'member_push_notifications' },
-    { capability: 'credit_expiry_follow_up' },
-    { capability: 'booking_waitlist_withdrawal' },
-    { capability: 'member_waitlist_join' },
-    { capability: 'waitlist_fifo_promotion' },
-    { capability: 'member_pt_request_tracking' },
-    { capability: 'public_form_integrity' },
-    { capability: 'lead_pipeline_audit' },
-    { capability: 'schedule_change_audit' },
-    { capability: 'content_change_audit' },
-    { capability: 'booking_lifecycle_audit' },
-    { capability: 'class_cancellation_notifications' },
-    { capability: 'admin_daily_operations' },
-    { capability: 'schedule_optimistic_locking' },
-    { capability: 'shared_admin_optimistic_locking' },
-    { capability: 'catalog_optimistic_locking' },
-    { capability: 'targeted_member_notices' },
-    { capability: 'admin_role_safety' },
-  ]).ready, true);
+  const [first, second, ...rest] = ALL_CAPABILITIES;
+  const partial = summarizeSchemaCapabilities([{ capability: first }, { capability: second }]);
+
+  assert.deepEqual(partial.installed, [first, second].sort());
+  assert.deepEqual(partial.missing, rest);
+  assert.equal(partial.ready, false);
+  assert.deepEqual(partial.actions, rest.map(capability => REQUIRED_SCHEMA_CAPABILITIES[capability]));
+  for (const action of partial.actions) {
+    assert.match(action, /^(Apply|Reapply) (src\/supabase|supabase\/migrations)\/[\w./-]+\.sql in Supabase\.$/);
+  }
+
+  assert.equal(summarizeSchemaCapabilities(ALL_CAPABILITIES.map(capability => ({ capability }))).ready, true);
+  assert.equal(summarizeSchemaCapabilities([]).ready, false);
+  assert.deepEqual(summarizeSchemaCapabilities([]).missing, ALL_CAPABILITIES);
+});
+
+// The release check is the operator's copy of the same contract. Listing them
+// separately is what lets a new capability ship without the gate that verifies
+// it, so the two lists must name exactly the same set.
+test('the release readiness check gates on every required capability', () => {
+  const sql = readFileSync(new URL('../src/supabase/release_readiness_check.sql', import.meta.url), 'utf8');
+  const listed = [...sql.matchAll(/^\s+\('([a-z0-9_]+)', '([^']+)'\)/gm)].map(match => match[1]);
+
+  assert.deepEqual([...listed].sort(), [...ALL_CAPABILITIES].sort());
+  assert.equal(new Set(listed).size, listed.length, 'no capability may be gated twice');
 });
 
 test('fresh and upgrade SQL paths register the same capability contract', () => {
@@ -300,6 +237,16 @@ test('read-only production check reports every release capability and migration'
     'shared_admin_optimistic_locking',
     'catalog_optimistic_locking',
     'targeted_member_notices',
+    'public_form_staff_column_guard',
+    'schedule_blackout_historic_edit_fix',
+    'public_enquiry_time_guard',
+    'my_bookings_duration',
+    'product_currency_aud_only',
+    'stripe_signature_failure_ledger',
+    'atomic_account_deletion',
+    'roll_call_releases_pending_requests',
+    'admin_policy_scalar_subquery',
+    'member_history_index',
   ];
 
   for (const capability of capabilities) {

@@ -43,7 +43,17 @@ with required (capability, migration) as (
     ('schedule_optimistic_locking', 'supabase/migrations/20260714018000_schedule_optimistic_locking.sql'),
     ('shared_admin_optimistic_locking', 'supabase/migrations/20260714019000_shared_admin_optimistic_locking.sql'),
     ('catalog_optimistic_locking', 'supabase/migrations/20260714020000_catalog_optimistic_locking.sql'),
-    ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql')
+    ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql'),
+    ('public_form_staff_column_guard', 'supabase/migrations/20260726010000_public_form_staff_column_guard.sql'),
+    ('schedule_blackout_historic_edit_fix', 'supabase/migrations/20260726011000_schedule_blackout_historic_edit_fix.sql'),
+    ('public_enquiry_time_guard', 'supabase/migrations/20260726012000_public_enquiry_time_guard.sql'),
+    ('my_bookings_duration', 'supabase/migrations/20260726013000_my_bookings_duration.sql'),
+    ('product_currency_aud_only', 'supabase/migrations/20260726014000_product_currency_aud_only.sql'),
+    ('stripe_signature_failure_ledger', 'supabase/migrations/20260726015000_stripe_signature_failure_ledger.sql'),
+    ('atomic_account_deletion', 'supabase/migrations/20260726016000_atomic_account_deletion.sql'),
+    ('roll_call_releases_pending_requests', 'supabase/migrations/20260726017000_roll_call_releases_pending_requests.sql'),
+    ('admin_policy_scalar_subquery', 'supabase/migrations/20260726018000_admin_policy_scalar_subquery.sql'),
+    ('member_history_index', 'supabase/migrations/20260726019000_member_history_index.sql')
 ), readiness as (
   select
     required.capability,

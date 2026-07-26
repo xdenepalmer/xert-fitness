@@ -15,38 +15,69 @@
 
 -- ── Lead / request tables: guarded public INSERT + role-gated admin access ──
 
+-- install_public_form_insert_policies() is the single authoritative definition
+-- of these policies. Writing them out here as well is how an "idempotent"
+-- re-run of this file could strip a guard a later script had added, so the
+-- local copy is only a bootstrap for a database that predates the installer.
+do $$
+begin
+  if to_regprocedure('public.install_public_form_insert_policies()') is not null then
+    perform public.install_public_form_insert_policies();
+  else
+    execute $bootstrap$
+      drop policy if exists "public_insert_member_interest" on public.member_interest;
+      create policy "public_insert_member_interest" on public.member_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_trainer_interest" on public.trainer_interest;
+      create policy "public_insert_trainer_interest" on public.trainer_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_partner_interest" on public.partner_interest;
+      create policy "public_insert_partner_interest" on public.partner_interest
+        for insert to anon, authenticated
+        with check (status = 'new' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_class_bookings" on public.class_bookings;
+      create policy "public_insert_class_bookings" on public.class_bookings
+        for insert to anon, authenticated
+        with check (status = 'requested' and consent_to_contact is true);
+    $bootstrap$;
+    execute $bootstrap$
+      drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
+      create policy "public_insert_private_session_requests" on public.private_session_requests
+        for insert to anon, authenticated
+        with check (status = 'requested' and consent_to_contact is true
+      and (
+        ((select auth.uid()) is null and user_id is null)
+        or ((select auth.uid()) is not null and user_id = (select auth.uid()))
+      ));
+    $bootstrap$;
+  end if;
+end;
+$$;
+
 -- member_interest
-drop policy if exists "public_insert_member_interest" on public.member_interest;
-create policy "public_insert_member_interest" on public.member_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_member_interest" on public.member_interest;
 create policy "admin_all_member_interest" on public.member_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- trainer_interest
-drop policy if exists "public_insert_trainer_interest" on public.trainer_interest;
-create policy "public_insert_trainer_interest" on public.trainer_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_trainer_interest" on public.trainer_interest;
 create policy "admin_all_trainer_interest" on public.trainer_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- partner_interest
-drop policy if exists "public_insert_partner_interest" on public.partner_interest;
-create policy "public_insert_partner_interest" on public.partner_interest
-  for insert to anon, authenticated
-  with check (status = 'new' and consent_to_contact is true);
 drop policy if exists "admin_all_partner_interest" on public.partner_interest;
 create policy "admin_all_partner_interest" on public.partner_interest
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- class_bookings (legacy request-to-book)
-drop policy if exists "public_insert_class_bookings" on public.class_bookings;
-create policy "public_insert_class_bookings" on public.class_bookings
-  for insert to anon, authenticated
-  with check (status = 'requested' and consent_to_contact is true);
 drop policy if exists "admin_all_class_bookings" on public.class_bookings;
 create policy "admin_all_class_bookings" on public.class_bookings
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
@@ -54,17 +85,6 @@ create policy "admin_all_class_bookings" on public.class_bookings
 -- private_session_requests
 alter table public.private_session_requests
   add column if not exists user_id uuid references auth.users(id) on delete set null default auth.uid();
-drop policy if exists "public_insert_private_session_requests" on public.private_session_requests;
-create policy "public_insert_private_session_requests" on public.private_session_requests
-  for insert to anon, authenticated
-  with check (
-    status = 'requested'
-    and consent_to_contact is true
-    and (
-      ((select auth.uid()) is null and user_id is null)
-      or ((select auth.uid()) is not null and user_id = (select auth.uid()))
-    )
-  );
 drop policy if exists "admin_all_private_session_requests" on public.private_session_requests;
 create policy "admin_all_private_session_requests" on public.private_session_requests
   for all to authenticated using (public.is_admin()) with check (public.is_admin());

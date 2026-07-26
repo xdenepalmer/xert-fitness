@@ -179,6 +179,28 @@ The Supabase schema is defined in:
   order from failing fulfilment forever and gating checkout for every other member
 - `src/supabase/roll_call_correction_double_credit_fix.sql` — stops a roll-call
   correction from charging the member a second credit for the same class
+- `src/supabase/public_form_staff_column_guard.sql` — moves the five public form
+  insert policies into one installer and stops an anonymous submission arriving
+  with a staff servicing note already filled in
+- `src/supabase/schedule_blackout_historic_edit_fix.sql` — lets a finished class
+  still be edited after a blackout is recorded over it, while a blackout still
+  cannot be recorded over a class that has yet to run
+- `src/supabase/public_enquiry_time_guard.sql` — refuses a public "Request spot"
+  enquiry against a class that has already run
+- `src/supabase/my_bookings_duration.sql` — returns the real class length so the
+  client's booking-overlap check matches the conflict trigger
+- `src/supabase/product_currency_aud_only.sql` — refuses a session pack priced in
+  a currency fulfilment can never settle, before a member is charged for it
+- `src/supabase/stripe_signature_failure_ledger.sql` — records rejected webhook
+  deliveries so a broken signing secret is visible to Operations Health
+- `src/supabase/atomic_account_deletion.sql` — deletes a member in one
+  transaction, including the legacy enquiry rows keyed only by email
+- `src/supabase/roll_call_releases_pending_requests.sql` — returns the credit held
+  by a booking request nobody actioned before the class was completed
+- `src/supabase/admin_policy_scalar_subquery.sql` — evaluates `public.is_admin()`
+  once per admin query instead of once per scanned row
+- `src/supabase/member_history_index.sql` — indexes a member's own orders so the
+  account page stops scanning the whole table
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,
@@ -202,7 +224,13 @@ run `booking_schema.sql`, `admin_cms_schema.sql`, `availability_schema.sql`,
 `catalog_optimistic_locking_upgrade.sql`, then
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
-`admin_settings_singleton_upgrade.sql`. This sequence produces the
+`admin_settings_singleton_upgrade.sql`. Finally apply the July 2026 audit
+fixes in filename order: `public_form_staff_column_guard.sql`,
+`schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
+`my_bookings_duration.sql`, `product_currency_aud_only.sql`,
+`stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
+`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`
+and `member_history_index.sql`. This sequence produces the
 hardened state: every admin-scope policy checks `public.is_admin()` (a
 signed-in user whose `profiles.role` is `'admin'`), never just "any
 authenticated user". `rls_hardening.sql` runs last because it also adds the
@@ -232,7 +260,13 @@ those prerequisites, followed by `member_pt_request_tracking.sql` and
 `catalog_optimistic_locking_upgrade.sql`, then
 `targeted_member_notices_upgrade.sql`, then
 `guarded_payment_activation_upgrade.sql`, then
-`admin_settings_singleton_upgrade.sql`. The scripts are idempotent;
+`admin_settings_singleton_upgrade.sql`. Finally apply the July 2026 audit
+fixes in filename order: `public_form_staff_column_guard.sql`,
+`schedule_blackout_historic_edit_fix.sql`, `public_enquiry_time_guard.sql`,
+`my_bookings_duration.sql`, `product_currency_aud_only.sql`,
+`stripe_signature_failure_ledger.sql`, `atomic_account_deletion.sql`,
+`roll_call_releases_pending_requests.sql`, `admin_policy_scalar_subquery.sql`
+and `member_history_index.sql`. The scripts are idempotent;
 run them in the Supabase SQL editor (or apply via the project's Postgres
 connection).
 

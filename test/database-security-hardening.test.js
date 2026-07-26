@@ -39,5 +39,8 @@ test('audited credit grants are the only browser-executable grant path', () => {
 
 test('native release documentation matches the complete capability gate', () => {
   const nativeReadme = read('../ios/XertFitnessApp/README.md');
-  assert.match(nativeReadme, /All 30 rows must show `installed = true`/);
+  // The gate grows with every capability, so the instruction must not name a
+  // count that goes stale the next time one is added.
+  assert.match(nativeReadme, /Every row must show `installed = true` and `release_ready = true`/);
+  assert.doesNotMatch(nativeReadme, /All \d+ rows must show/);
 });

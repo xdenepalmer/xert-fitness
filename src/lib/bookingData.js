@@ -61,9 +61,20 @@ export async function startCheckout(productSlug) {
 
 // ─── Credits ──────────────────────────────────────────────────────────────────
 
+// Both policies are `user_id = auth.uid() or is_admin()`, which the planner
+// compiles to a filter it cannot drive an index from. Naming the member
+// explicitly is what lets these use their user_id index instead of scanning
+// every row in the table.
+async function currentUserID() {
+  const { data } = await supabase.auth.getUser();
+  return data?.user?.id || null;
+}
+
 export async function getMyCredits() {
+  const userID = await currentUserID();
+  if (!userID) return { total: 0, batches: [] };
   const nowIso = new Date().toISOString();
-  const { data, error } = await supabase.from('credit_batches').select('*').gt('remaining', 0).or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('expires_at', { ascending: true });
+  const { data, error } = await supabase.from('credit_batches').select('*').eq('user_id', userID).gt('remaining', 0).or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('expires_at', { ascending: true });
   if (error) throw new Error(error.message);
   const batches = data || [];
   const total = batches.reduce((sum, b) => sum + (b.remaining || 0), 0);
@@ -71,7 +82,9 @@ export async function getMyCredits() {
 }
 
 export async function getMyOrders() {
-  const { data, error } = await supabase.from('orders').select('*, products(name)').order('created_at', { ascending: false });
+  const userID = await currentUserID();
+  if (!userID) return [];
+  const { data, error } = await supabase.from('orders').select('*, products(name)').eq('user_id', userID).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(200);
   if (error) throw new Error(error.message);
   return data || [];
 }
