@@ -1294,8 +1294,16 @@ final class XertStore: ObservableObject {
     }
 
     private func canApplyMemberState(_ version: Int, session: AuthSession?) -> Bool {
-        guard memberStateVersion.isCurrent(version), !Task.isCancelled, let session else { return false }
-        return authSession?.access_token == session.access_token
+        guard memberStateVersion.isCurrent(version),
+              !Task.isCancelled,
+              let session,
+              let currentSession = authSession
+        else { return false }
+        if let sessionUserID = session.user?.id,
+           let currentUserID = currentSession.user?.id {
+            return sessionUserID == currentUserID
+        }
+        return currentSession.access_token == session.access_token
     }
 
     private func beginMemberOnboardingRead() -> Int? {

@@ -7929,6 +7929,9 @@ private struct AdminSiteContentEditor: View {
     @State private var expectedUpdatedAt: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoURL = ""
+    @FocusState private var editorIsFocused: Bool
+
+    private var ownerID: UUID? { session.user?.id }
 
     init(admin: AdminStore, session: AuthSession, section: AdminSiteContentSection, row: AdminSiteContentRow?) {
         self.admin = admin
@@ -7937,7 +7940,10 @@ private struct AdminSiteContentEditor: View {
         self.row = row
         let live = (row?.data ?? AdminSiteContentData()).merged(over: .defaults(for: section))
         _baseline = State(initialValue: live)
-        _draft = State(initialValue: AdminSiteContentDraftStore.load(section) ?? live)
+        _draft = State(initialValue: AdminSiteContentDraftStore.load(
+            section,
+            ownerID: session.user?.id
+        ) ?? live)
         _expectedUpdatedAt = State(initialValue: row?.updated_at)
     }
 
@@ -7946,6 +7952,13 @@ private struct AdminSiteContentEditor: View {
     private var mutationAllowed: Bool {
         admin.siteContentIsCurrent
             && !admin.isLoadingSiteContent
+    }
+    private var canPublish: Bool {
+        dirty
+            && !isSaving
+            && !admin.isUploadingSiteImage
+            && mutationAllowed
+            && validationMessage == nil
     }
     private var validationMessage: String? {
         do {
@@ -7988,30 +8001,10 @@ private struct AdminSiteContentEditor: View {
             fields
 
             Section {
-                Button {
-                    Task {
-                        if let saved = await admin.saveSiteContent(
-                            session: session,
-                            section: section,
-                            expectedUpdatedAt: expectedUpdatedAt,
-                            draft: draft
-                        ) {
-                            let authoritative = saved.data.merged(over: .defaults(for: section))
-                            baseline = authoritative
-                            draft = authoritative
-                            expectedUpdatedAt = saved.updated_at
-                        }
-                    }
-                } label: {
+                Button(action: publish) {
                     if isSaving { ProgressView() } else { Label(dirty ? "Publish section" : "Published", systemImage: "checkmark.circle") }
                 }
-                .disabled(
-                    !dirty
-                        || isSaving
-                        || admin.isUploadingSiteImage
-                        || !mutationAllowed
-                        || validationMessage != nil
-                )
+                .disabled(!canPublish)
 
                 Button {
                     draft = .defaults(for: section)
@@ -8020,8 +8013,9 @@ private struct AdminSiteContentEditor: View {
                 }
                 if dirty {
                     Button("Discard draft", role: .destructive) {
+                        editorIsFocused = false
                         draft = baseline
-                        AdminSiteContentDraftStore.clear(section)
+                        AdminSiteContentDraftStore.clear(section, ownerID: ownerID)
                     }
                 }
             } footer: {
@@ -8032,13 +8026,51 @@ private struct AdminSiteContentEditor: View {
         .background(Color.xertNavy)
         .navigationTitle(section.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: publish) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Image(systemName: dirty ? "checkmark.circle.fill" : "checkmark.circle")
+                    }
+                }
+                .disabled(!canPublish)
+                .accessibilityLabel(dirty ? "Publish section" : "Section published")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { editorIsFocused = false }
+            }
+        }
         .onChange(of: draft) { value in
-            if value == baseline { AdminSiteContentDraftStore.clear(section) }
-            else { AdminSiteContentDraftStore.save(value, section: section) }
+            if value == baseline {
+                AdminSiteContentDraftStore.clear(section, ownerID: ownerID)
+            } else {
+                AdminSiteContentDraftStore.save(value, section: section, ownerID: ownerID)
+            }
         }
         .onChange(of: selectedPhoto) { item in
             guard let item else { return }
             Task { await upload(item) }
+        }
+    }
+
+    private func publish() {
+        guard canPublish else { return }
+        editorIsFocused = false
+        Task {
+            if let saved = await admin.saveSiteContent(
+                session: session,
+                section: section,
+                expectedUpdatedAt: expectedUpdatedAt,
+                draft: draft
+            ) {
+                let authoritative = saved.data.merged(over: .defaults(for: section))
+                baseline = authoritative
+                draft = authoritative
+                expectedUpdatedAt = saved.updated_at
+            }
         }
     }
 
@@ -8047,9 +8079,9 @@ private struct AdminSiteContentEditor: View {
         switch section {
         case .hero:
             Section("Hero copy") {
-                TextField("Headline", text: textBinding(\.headline))
-                TextField("Subheading", text: textBinding(\.subheading), axis: .vertical).lineLimit(3...8)
-                TextField("Supporting line", text: textBinding(\.supporting), axis: .vertical).lineLimit(3...8)
+                TextField("Headline", text: textBinding(\.headline)).focused($editorIsFocused)
+                TextField("Subheading", text: textBinding(\.subheading), axis: .vertical).lineLimit(3...8).focused($editorIsFocused)
+                TextField("Supporting line", text: textBinding(\.supporting), axis: .vertical).lineLimit(3...8).focused($editorIsFocused)
             }
             Section("Rotating photos") {
                 ForEach((draft.photos ?? []).indices, id: \.self) { index in
@@ -8068,6 +8100,7 @@ private struct AdminSiteContentEditor: View {
                     TextField("https://... or /assets/...", text: $photoURL)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
+                        .focused($editorIsFocused)
                     Button {
                         guard !photoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                         draft.photos = (draft.photos ?? []) + [photoURL]
@@ -8085,7 +8118,7 @@ private struct AdminSiteContentEditor: View {
             }
         case .booking:
             Section("Booking introduction") {
-                TextField("Introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(5...12)
+                TextField("Introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(5...12).focused($editorIsFocused)
             }
         case .about:
             Section("About paragraphs") {
@@ -8102,17 +8135,17 @@ private struct AdminSiteContentEditor: View {
             }
         case .contact:
             Section("Public contact") {
-                TextField("Email", text: textBinding(\.email)).keyboardType(.emailAddress).textInputAutocapitalization(.never)
-                TextField("Phone", text: textBinding(\.phone)).keyboardType(.phonePad)
-                TextField("Address or location", text: textBinding(\.address), axis: .vertical)
-                TextField("Instagram handle", text: textBinding(\.instagram_handle)).textInputAutocapitalization(.never)
-                TextField("Instagram URL", text: textBinding(\.instagram_url)).keyboardType(.URL).textInputAutocapitalization(.never)
-                TextField("Contact page introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(4...10)
+                TextField("Email", text: textBinding(\.email)).keyboardType(.emailAddress).textInputAutocapitalization(.never).focused($editorIsFocused)
+                TextField("Phone", text: textBinding(\.phone)).keyboardType(.phonePad).focused($editorIsFocused)
+                TextField("Address or location", text: textBinding(\.address), axis: .vertical).focused($editorIsFocused)
+                TextField("Instagram handle", text: textBinding(\.instagram_handle)).textInputAutocapitalization(.never).focused($editorIsFocused)
+                TextField("Instagram URL", text: textBinding(\.instagram_url)).keyboardType(.URL).textInputAutocapitalization(.never).focused($editorIsFocused)
+                TextField("Contact page introduction", text: textBinding(\.intro), axis: .vertical).lineLimit(4...10).focused($editorIsFocused)
             }
         case .faq:
             Section("Questions and answers") {
-                ForEach((draft.items ?? []).indices, id: \.self) { index in
-                    faqRow(index: index)
+                ForEach(draft.items ?? []) { item in
+                    faqRow(itemID: item.id)
                 }
                 Button {
                     draft.items = (draft.items ?? []) + [AdminFAQItem(q: "", a: "")]
@@ -8134,31 +8167,33 @@ private struct AdminSiteContentEditor: View {
 
     @ViewBuilder
     private func heroPhotoRow(index: Int) -> some View {
-        let value = (draft.photos ?? [])[index]
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                if let url = publicImageURL(value) {
-                    XertRemoteImage(url: url, maximumPointDimension: 72) {
-                        Image(systemName: "photo").foregroundStyle(Color.xertPale.opacity(0.4))
-                    }
-                    .frame(width: 58, height: 70)
-                    .clipped()
-                } else {
-                    Image(systemName: "photo")
-                        .foregroundStyle(Color.xertPale.opacity(0.4))
+        if let value = value(at: index, in: draft.photos) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    if let url = publicImageURL(value) {
+                        XertRemoteImage(url: url, maximumPointDimension: 72) {
+                            Image(systemName: "photo").foregroundStyle(Color.xertPale.opacity(0.4))
+                        }
                         .frame(width: 58, height: 70)
+                        .clipped()
+                    } else {
+                        Image(systemName: "photo")
+                            .foregroundStyle(Color.xertPale.opacity(0.4))
+                            .frame(width: 58, height: 70)
+                    }
+                    Text(value)
+                        .font(.caption)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(value)
-                    .font(.caption)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
+                    draft.photos = movingElement(from: from, to: to, in: draft.photos)
+                } remove: {
+                    editorIsFocused = false
+                    draft.photos = removingElement(at: index, from: draft.photos)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            reorderButtons(index: index, count: draft.photos?.count ?? 0) { from, to in
-                draft.photos?.swapAt(from, to)
-            } remove: {
-                draft.photos?.remove(at: index)
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -8167,37 +8202,92 @@ private struct AdminSiteContentEditor: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Paragraph \(index + 1)").font(.caption.weight(.bold))
             reorderButtons(index: index, count: draft.paragraphs?.count ?? 0) { from, to in
-                draft.paragraphs?.swapAt(from, to)
+                draft.paragraphs = movingElement(from: from, to: to, in: draft.paragraphs)
             } remove: {
-                draft.paragraphs?.remove(at: index)
+                editorIsFocused = false
+                draft.paragraphs = removingElement(at: index, from: draft.paragraphs)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            TextField("Paragraph", text: Binding(
-                get: { draft.paragraphs?[index] ?? "" },
-                set: { draft.paragraphs?[index] = $0 }
-            ), axis: .vertical).lineLimit(5...14)
+            TextField("Paragraph", text: paragraphBinding(index), axis: .vertical)
+                .lineLimit(5...14)
+                .focused($editorIsFocused)
         }
     }
 
     @ViewBuilder
-    private func faqRow(index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Question \(index + 1)").font(.caption.weight(.bold))
-            reorderButtons(index: index, count: draft.items?.count ?? 0) { from, to in
-                draft.items?.swapAt(from, to)
-            } remove: {
-                draft.items?.remove(at: index)
+    private func faqRow(itemID: UUID) -> some View {
+        if let index = draft.items?.firstIndex(where: { $0.id == itemID }) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Question \(index + 1)").font(.caption.weight(.bold))
+                reorderButtons(index: index, count: draft.items?.count ?? 0) { _, to in
+                    moveFAQItem(id: itemID, to: to)
+                } remove: {
+                    editorIsFocused = false
+                    draft.items?.removeAll { $0.id == itemID }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                TextField("Question", text: faqBinding(itemID, \.q))
+                    .focused($editorIsFocused)
+                TextField("Answer", text: faqBinding(itemID, \.a), axis: .vertical)
+                    .lineLimit(3...10)
+                    .focused($editorIsFocused)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            TextField("Question", text: Binding(
-                get: { draft.items?[index].q ?? "" },
-                set: { draft.items?[index].q = $0 }
-            ))
-            TextField("Answer", text: Binding(
-                get: { draft.items?[index].a ?? "" },
-                set: { draft.items?[index].a = $0 }
-            ), axis: .vertical).lineLimit(3...10)
         }
+    }
+
+    private func paragraphBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: { value(at: index, in: draft.paragraphs) ?? "" },
+            set: { value in
+                guard draft.paragraphs?.indices.contains(index) == true else { return }
+                draft.paragraphs?[index] = value
+            }
+        )
+    }
+
+    private func faqBinding(
+        _ itemID: UUID,
+        _ keyPath: WritableKeyPath<AdminFAQItem, String>
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                draft.items?.first(where: { $0.id == itemID })?[keyPath: keyPath] ?? ""
+            },
+            set: { value in
+                guard let index = draft.items?.firstIndex(where: { $0.id == itemID }),
+                      var item = draft.items?[index] else { return }
+                item[keyPath: keyPath] = value
+                draft.items?[index] = item
+            }
+        )
+    }
+
+    private func moveFAQItem(id: UUID, to destination: Int) {
+        guard let source = draft.items?.firstIndex(where: { $0.id == id }) else { return }
+        draft.items = movingElement(from: source, to: destination, in: draft.items)
+    }
+
+    private func value<Element>(at index: Int, in values: [Element]?) -> Element? {
+        guard let values, values.indices.contains(index) else { return nil }
+        return values[index]
+    }
+
+    private func movingElement<Element>(
+        from source: Int,
+        to destination: Int,
+        in values: [Element]?
+    ) -> [Element]? {
+        guard var values,
+              values.indices.contains(source),
+              values.indices.contains(destination) else { return values }
+        values.swapAt(source, destination)
+        return values
+    }
+
+    private func removingElement<Element>(at index: Int, from values: [Element]?) -> [Element]? {
+        guard var values, values.indices.contains(index) else { return values }
+        values.remove(at: index)
+        return values
     }
 
     private func reorderButtons(

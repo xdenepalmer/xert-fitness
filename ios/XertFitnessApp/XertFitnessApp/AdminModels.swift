@@ -2017,17 +2017,44 @@ struct AdminSiteContentRow: Identifiable, Codable, Hashable {
 
 enum AdminSiteContentDraftStore {
     private static let prefix = "xert.admin.site-content.draft."
-
-    static func load(_ section: AdminSiteContentSection, defaults: UserDefaults = .standard) -> AdminSiteContentData? {
-        defaults.data(forKey: prefix + section.rawValue).flatMap { try? JSONDecoder().decode(AdminSiteContentData.self, from: $0) }
+    private static func legacyKey(_ section: AdminSiteContentSection) -> String {
+        prefix + section.rawValue
     }
 
-    static func save(_ data: AdminSiteContentData, section: AdminSiteContentSection, defaults: UserDefaults = .standard) {
-        if let encoded = try? JSONEncoder().encode(data) { defaults.set(encoded, forKey: prefix + section.rawValue) }
+    private static func key(_ section: AdminSiteContentSection, ownerID: UUID) -> String {
+        prefix + ownerID.uuidString.lowercased() + "." + section.rawValue
     }
 
-    static func clear(_ section: AdminSiteContentSection, defaults: UserDefaults = .standard) {
-        defaults.removeObject(forKey: prefix + section.rawValue)
+    static func load(
+        _ section: AdminSiteContentSection,
+        ownerID: UUID?,
+        defaults: UserDefaults = .standard
+    ) -> AdminSiteContentData? {
+        // Unscoped drafts may contain another owner's unpublished copy.
+        defaults.removeObject(forKey: legacyKey(section))
+        guard let ownerID else { return nil }
+        return defaults.data(forKey: key(section, ownerID: ownerID))
+            .flatMap { try? JSONDecoder().decode(AdminSiteContentData.self, from: $0) }
+    }
+
+    static func save(
+        _ data: AdminSiteContentData,
+        section: AdminSiteContentSection,
+        ownerID: UUID?,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let ownerID, let encoded = try? JSONEncoder().encode(data) else { return }
+        defaults.set(encoded, forKey: key(section, ownerID: ownerID))
+    }
+
+    static func clear(
+        _ section: AdminSiteContentSection,
+        ownerID: UUID?,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.removeObject(forKey: legacyKey(section))
+        guard let ownerID else { return }
+        defaults.removeObject(forKey: key(section, ownerID: ownerID))
     }
 }
 

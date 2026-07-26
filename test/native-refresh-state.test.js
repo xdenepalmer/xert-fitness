@@ -12,6 +12,7 @@ test('native refreshes coalesce and reject results from an earlier account gener
   const refresh = store.slice(store.indexOf('func refresh()'), store.indexOf('private func performRefresh'));
   const transition = store.slice(store.indexOf('private func replaceAuthSession'), store.indexOf('private func clearMemberData'));
   const sessionRefresh = store.slice(store.indexOf('private func validAuthSession'), store.indexOf('private func canApplyRefresh'));
+  const stateAcceptance = store.slice(store.indexOf('private func canApplyMemberState'), store.indexOf('private func beginMemberOnboardingRead'));
   const checkoutReconciliation = store.slice(store.indexOf('func reconcileCheckout'), store.indexOf('func requestPrivateSession'));
 
   assert.match(version, /mutating func invalidate\(\)/);
@@ -33,6 +34,9 @@ test('native refreshes coalesce and reject results from an earlier account gener
   assert.match(sessionRefresh, /guard memberStateVersion\.isCurrent\(memberVersion\)/);
   assert.match(sessionRefresh, /authSession\?\.access_token == current\.access_token/);
   assert.match(sessionRefresh, /authSession = refreshed/);
+  assert.match(stateAcceptance, /sessionUserID == currentUserID/);
+  assert.match(stateAcceptance, /currentSession\.access_token == session\.access_token/);
+  assert.doesNotMatch(stateAcceptance, /authSession\?\.access_token == session\.access_token/);
   assert.match(checkoutReconciliation, /guard canApplyMemberState\(memberVersion, session: memberSession\)/);
 });
 

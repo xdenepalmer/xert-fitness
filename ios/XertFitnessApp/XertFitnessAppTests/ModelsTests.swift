@@ -4067,13 +4067,21 @@ final class ModelsTests: XCTestCase {
             items: [AdminFAQItem(q: "Question?", a: "Answer.")]
         )
 
-        AdminSiteContentDraftStore.save(draft, section: .hero, defaults: defaults)
-        let restored = AdminSiteContentDraftStore.load(.hero, defaults: defaults)
+        let ownerID = UUID()
+        let otherOwnerID = UUID()
+        AdminSiteContentDraftStore.save(draft, section: .faq, ownerID: ownerID, defaults: defaults)
+        let restored = AdminSiteContentDraftStore.load(.faq, ownerID: ownerID, defaults: defaults)
         XCTAssertEqual(restored?.headline, draft.headline)
         XCTAssertEqual(restored?.items?.first?.q, "Question?")
+        XCTAssertNotEqual(restored?.items?.first?.id, draft.items?.first?.id)
+        XCTAssertNil(AdminSiteContentDraftStore.load(.faq, ownerID: otherOwnerID, defaults: defaults))
 
-        AdminSiteContentDraftStore.clear(.hero, defaults: defaults)
-        XCTAssertNil(AdminSiteContentDraftStore.load(.hero, defaults: defaults))
+        defaults.set(try JSONEncoder().encode(draft), forKey: "xert.admin.site-content.draft.faq")
+        XCTAssertNil(AdminSiteContentDraftStore.load(.faq, ownerID: otherOwnerID, defaults: defaults))
+        XCTAssertNil(defaults.data(forKey: "xert.admin.site-content.draft.faq"))
+
+        AdminSiteContentDraftStore.clear(.faq, ownerID: ownerID, defaults: defaults)
+        XCTAssertNil(AdminSiteContentDraftStore.load(.faq, ownerID: ownerID, defaults: defaults))
     }
 
     func testNativeInterestSubmissionsValidateAndMapEveryDesktopPipeline() throws {

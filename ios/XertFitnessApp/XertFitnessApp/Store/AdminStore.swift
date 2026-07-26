@@ -1348,7 +1348,7 @@ final class AdminStore: ObservableObject {
             siteContentRows.sort { $0.key < $1.key }
             siteContentUnavailable = false
             siteContentStatusMessage = nil
-            AdminSiteContentDraftStore.clear(section)
+            AdminSiteContentDraftStore.clear(section, ownerID: session.user?.id)
             lastUpdatedAt = Date()
             return saved
         } catch {

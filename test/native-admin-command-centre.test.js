@@ -1854,7 +1854,7 @@ test('native site CMS cannot publish defaults over an unavailable live snapshot'
   assert.match(cms, /if admin\.hasLoadedSiteContent \{[\s\S]*Section\("Public sections"\)/);
   assert.match(cms, /private var mutationAllowed: Bool/);
   assert.match(cms, /let authoritative = saved\.data\.merged\(over: \.defaults\(for: section\)\)/);
-  assert.match(cms, /validationMessage != nil/);
+  assert.match(cms, /validationMessage == nil/);
   assert.match(cms, /Hero photography is limited to 12 images/);
   assert.match(cms, /kCGImageSourceThumbnailMaxPixelSize: 2_400/);
   assert.match(cms, /jpegData\(compressionQuality: 0\.86\)/);
