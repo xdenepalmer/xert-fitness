@@ -1413,6 +1413,19 @@ test('high-consequence owner drafts share command-centre exit protection', async
     assert.match(editor, /isBusy:/);
   }
 
+  for (const editor of [eventEditor, coachEditor]) {
+    assert.match(editor, /@FocusState private var textInputFocused: Bool/);
+    assert.match(editor, /\.scrollDismissesKeyboard\(\.interactively\)/);
+    assert.match(editor, /\.safeAreaInset\(edge: \.bottom, spacing: 0\) \{ saveBar \}/);
+    assert.match(editor, /ToolbarItemGroup\(placement: \.keyboard\)[\s\S]*Button\("Done"\)/);
+    assert.match(editor, /private var saveBar: some View/);
+    assert.match(editor, /private func save\(\)/);
+    assert.match(editor, /XertHaptics\.play\(\.success\)/);
+    assert.match(editor, /XertHaptics\.play\(\.error\)/);
+  }
+  assert.match(eventEditor, /owner\.eventEditor\.save/);
+  assert.match(coachEditor, /owner\.coachEditor\.save/);
+
   assert.ok((view.match(/\.adminOwnerExitState\(/g) || []).length >= 10);
 });
 

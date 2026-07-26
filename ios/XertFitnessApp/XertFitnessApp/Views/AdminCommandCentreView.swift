@@ -13577,6 +13577,7 @@ private struct AdminEventEditor: View {
     @State private var draft: AdminEventDraft
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
+    @FocusState private var textInputFocused: Bool
 
     private var mutationAllowed: Bool {
         admin.eventCalendarIsCurrent
@@ -13615,6 +13616,7 @@ private struct AdminEventEditor: View {
             }
             Section("Event") {
                 TextField("Event name", text: $draft.name)
+                    .focused($textInputFocused)
                 Picker("Category", selection: $draft.category) {
                     ForEach(AdminEventDraft.categories, id: \.self) { Text($0.capitalized).tag($0) }
                 }
@@ -13630,42 +13632,34 @@ private struct AdminEventEditor: View {
             }
             Section("Location and link") {
                 TextField("Location", text: $draft.location)
+                    .focused($textInputFocused)
                 TextField("Region", text: $draft.region)
+                    .focused($textInputFocused)
                 TextField("Official website", text: $draft.url)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($textInputFocused)
             }
             Section("Publishing") {
                 Toggle("Published on web and iOS", isOn: $draft.published)
                 Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
             }
-            Section {
-                Button {
-                    Task {
-                        if await admin.saveEvent(session: session, event: event, draft: draft) { dismiss() }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isBusy { ProgressView().tint(Color.xertNavy) }
-                        Text(event == nil ? "Create event" : "Save event").fontWeight(.bold)
-                        Spacer()
-                    }
-                }
-                .disabled(!canSave)
-                .listRowBackground(Color.xertSteel)
-                .foregroundStyle(Color.xertNavy)
-            }
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.xertNavy)
         .navigationTitle(event == nil ? "New Event" : "Edit Event")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .toolbar {
             if event == nil || isDirty {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(event == nil ? "Cancel" : "Close") { requestDismiss() }
                         .disabled(isBusy)
                 }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { textInputFocused = false }
             }
         }
         .navigationBarBackButtonHidden(event != nil && isDirty)
@@ -13687,9 +13681,40 @@ private struct AdminEventEditor: View {
         }
     }
 
+    private var saveBar: some View {
+        Button { save() } label: {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Text(event == nil ? "Create event" : "Save event")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.eventEditor.save")
+    }
+
     private func requestDismiss() {
+        textInputFocused = false
         if isDirty { confirmingDiscard = true }
         else { dismiss() }
+    }
+
+    private func save() {
+        guard canSave else { return }
+        textInputFocused = false
+        Task {
+            if await admin.saveEvent(session: session, event: event, draft: draft) {
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
+        }
     }
 }
 
@@ -14014,6 +14039,7 @@ private struct AdminCoachEditor: View {
     @State private var draft: AdminCoachDraft
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
+    @FocusState private var textInputFocused: Bool
 
     private var mutationAllowed: Bool {
         admin.teamDirectoryIsCurrent
@@ -14052,6 +14078,7 @@ private struct AdminCoachEditor: View {
             }
             Section("Profile") {
                 TextField("Name", text: $draft.name)
+                    .focused($textInputFocused)
                 Picker("Category", selection: $draft.category) {
                     Text("Coach").tag("coach")
                     Text("Nutritionist").tag("nutritionist")
@@ -14059,13 +14086,19 @@ private struct AdminCoachEditor: View {
                     Text("Physiotherapist").tag("physio")
                 }
                 TextField("Role", text: $draft.role)
-                TextField("Biography", text: $draft.bio, axis: .vertical).lineLimit(3...8)
+                    .focused($textInputFocused)
+                TextField("Biography", text: $draft.bio, axis: .vertical)
+                    .lineLimit(3...8)
+                    .focused($textInputFocused)
                 TextField("Experience", text: $draft.experience)
+                    .focused($textInputFocused)
                 TextField("Currently training for", text: $draft.currentlyTrainingFor)
+                    .focused($textInputFocused)
             }
             Section("Media") {
                 TextField("Photo URL", text: $draft.photoURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($textInputFocused)
                 if let url = URL(string: draft.photoURL), !draft.photoURL.isEmpty {
                     XertRemoteImage(url: url, maximumPointDimension: 640) {
                         ProgressView().tint(Color.xertSteel)
@@ -14076,39 +14109,29 @@ private struct AdminCoachEditor: View {
                 }
                 TextField("Social link", text: $draft.socialURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($textInputFocused)
             }
             Section("Publishing") {
                 Toggle("Published on the website", isOn: $draft.published)
                 Stepper("Display order: \(draft.sortOrder)", value: $draft.sortOrder, in: 0...10_000)
             }
-            Section {
-                Button {
-                    Task {
-                        if await admin.saveCoach(session: session, coach: coach, draft: draft) { dismiss() }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isBusy { ProgressView().tint(Color.xertNavy) }
-                        Text(coach == nil ? "Create profile" : "Save profile").fontWeight(.bold)
-                        Spacer()
-                    }
-                }
-                .disabled(!canSave)
-                .listRowBackground(Color.xertSteel)
-                .foregroundStyle(Color.xertNavy)
-            }
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.xertNavy)
         .navigationTitle(coach == nil ? "New Team Member" : "Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .toolbar {
             if coach == nil || isDirty {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(coach == nil ? "Cancel" : "Close") { requestDismiss() }
                         .disabled(isBusy)
                 }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { textInputFocused = false }
             }
         }
         .navigationBarBackButtonHidden(coach != nil && isDirty)
@@ -14127,9 +14150,40 @@ private struct AdminCoachEditor: View {
         }
     }
 
+    private var saveBar: some View {
+        Button { save() } label: {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Text(coach == nil ? "Create profile" : "Save profile")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.coachEditor.save")
+    }
+
     private func requestDismiss() {
+        textInputFocused = false
         if isDirty { confirmingDiscard = true }
         else { dismiss() }
+    }
+
+    private func save() {
+        guard canSave else { return }
+        textInputFocused = false
+        Task {
+            if await admin.saveCoach(session: session, coach: coach, draft: draft) {
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
+        }
     }
 }
 
