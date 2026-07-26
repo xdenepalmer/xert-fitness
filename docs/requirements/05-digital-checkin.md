@@ -1221,13 +1221,21 @@ EXISTING FILES TO EXTEND
 
 `ios/XertFitnessApp/XertFitnessApp/Info.plist` — add `NSCameraUsageDescription` ("XERT scans member check-in codes at the front desk.") for Door Mode only. Do NOT add `com.apple.developer.nfc.readersession.formats` to `XertFitnessApp.entitlements`; the design has no CoreNFC path, and an unused NFC entitlement is an App Review question you do not want to answer.
 
+## Integration constraints
+
+Cross-spec rules from [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) / [README.md](README.md):
+
+1. **Roles defer to [spec 07](07-staff-accounts-and-roles.md).** Desk RPCs use `has_capability('door_desk')` / `'roll_call'` (not a private Phase-5 `role='coach'` sketch). Device registration stays owner-only (`is_admin()` / money-admin capabilities). Do not redefine `is_admin()` to mean “any staff”.
+2. **Check-in feeds `attendanceDraft` / existing roll-call only.** Stamp `checked_in_at`; `admin_record_session_attendance` remains the only status writer. No second credit mutation on check-in.
+3. **Policy stays on `check_in_settings` singleton** (already correct — not `admin_settings`).
+
 ## Security, privacy and compliance
 
 AUTHORIZATION
-- Every new admin RPC starts with `if not public.is_admin() then raise exception 'ADMIN_ONLY'`, matching the existing convention. Every service-role RPC starts with `if auth.role() is distinct from 'service_role'`, matching `fulfill_stripe_checkout()` and `reconcile_stripe_order_refund()`.
+- Desk / operational RPCs: prefer `has_capability('door_desk')` / `'roll_call'` per [spec 07](07-staff-accounts-and-roles.md) once Phase A exists; until then `is_admin()` gates remain acceptable. Owner-only paths (device registration, payment-adjacent) stay `is_admin()`. Every service-role RPC starts with `if auth.role() is distinct from 'service_role'`, matching `fulfill_stripe_checkout()` and `reconcile_stripe_order_refund()`.
 - The kiosk holds a device key, never a Supabase session. This is the most important decision here: an iPad left signed in as an admin gives anyone who picks it up refunds (`/api/admin-refund-order`), member PII, and the payment activation switch. The device key can only reach `record_check_in`, `check_in_directory_snapshot` and `close_stale_check_ins`.
 - `check_in_devices.api_key_hash` is stored as a 32-byte SHA-256 and is NOT in the column grant to `authenticated`, so even an admin's PostgREST session cannot read it back. Raw keys are shown once at registration and are revocable in one click.
-- ROLE GAP TO FLAG: this codebase has exactly two roles, `member` and `admin` (`profiles.role`). Giving a coach the ability to run a roll call or clear a door exception means giving them `role='admin'`, which also gives them Stripe refunds, credit grants, member deletion and the payment switch. That is a real segregation-of-duties problem the door feature makes worse. I recommend a Phase 5 `role='coach'` with `public.is_staff()` used by the operational RPCs while `is_admin()` keeps the financial ones; until then, do not hand out admin accounts to casual coaches.
+- ROLE MODEL: superseded private “Phase 5 coach role” advice — use [spec 07](07-staff-accounts-and-roles.md) `front_desk` / `coach` + capabilities. Until 07 Phase A/B lands, do not hand out owner admin accounts to casual door staff.
 
 RLS
 - All six new tables have `enable row level security` plus explicit policies (written in full above). `member_check_in_credentials` and `check_ins` follow the established `user_id = (select auth.uid()) or (select public.is_admin())` shape from `session_bookings`, including the `(select ...)` wrapper that migration `20260714007000_rls_policy_performance.sql` introduced for InitPlan caching.
@@ -1272,7 +1280,7 @@ PHASE 3 — offline queue, ~1 week. Ship `checkInQueue.js`, `api/check-in-sync.j
 
 PHASE 4 — fobs and iOS Door Mode, ~1 week. Enrol fobs for the members who have asked. Ship `DoorModeView.swift` if iPad Safari camera performance proves inadequate (measure first; it usually does not).
 
-PHASE 5 — optional, only if justified by usage: Apple/Google Wallet passes, and the `role='coach'` split.
+PHASE 5 — optional, only if justified by usage: Apple/Google Wallet passes. Staff role split is **not** owned here — see [spec 07](07-staff-accounts-and-roles.md).
 
 MIGRATION AND BACKFILL
 - No backfill is required or wanted. `checked_in_at` stays NULL for all historical bookings, which is honest — you did not check them in.
@@ -1305,5 +1313,5 @@ Each of these is a business call, not an engineering one. My recommended default
 
 9. Guests and trials who "pre-register" without an account. DEFAULT: reuse what exists. The public `class_bookings` table already captures request-to-book submissions from `BookingRequestForm.jsx`. Surface those on the kiosk in staff mode, searchable by phone, so a walk-in who filled the web form is found and converted at the desk. Do NOT build a second guest-booking system — you already have two booking tables (`class_bookings` and `session_bookings`) and adding a third would be the worst decision available here.
 
-10. Who is allowed to operate the door desk? DEFAULT for v1: only `profiles.role = 'admin'`. Be aware that this means any coach you want running check-in exceptions also gets Stripe refunds and the payment switch. If more than two people need door access, do the `role='coach'` split (Phase 5) before you hand out those accounts, not after.
+10. Who is allowed to operate the door desk? DEFAULT until [spec 07](07-staff-accounts-and-roles.md) Phase B/C: owner/`is_admin()` only. After 07, door desk uses `has_capability('door_desk')` (typically `front_desk`); roll-call assist may include coaches per 07’s matrix. Do not solve this by giving casual staff `role = 'admin'`.
 

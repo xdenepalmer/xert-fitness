@@ -206,4 +206,20 @@ These are live behaviours. New specs must not regress them.
 5. Align README active-client recommendation with 03 (or owner override).
 6. Keep this file linked from `README.md`; HANDOFF §2c marks the review done.
 
+### Alignment applied (documentation only — 2026-07-26)
+
+Checklist against §8 / §2. No schema or feature implementation.
+
+| # | Patch | Status |
+|---|---|---|
+| 1 | Specs **01 + 02**: one shared agreement ledger; waiver = document kind; health answers separate; live `member_onboarding_*` = precursor to absorb | Done (`Integration constraints` in 01/02; superseded notes on parallel waiver/role DDL) |
+| 2 | Specs **02 / 03 / 04 / 05**: defer roles to **07**; mark competing role models superseded | Done |
+| 3 | Spec **03**: coach rent collection consumes **06** billing spine (not parallel Stripe Invoicing) | Done |
+| 4 | Spec **01**: `agreement_enforcement` on dedicated singleton (not `admin_settings`) | Done |
+| 5 | Spec **06**: “no coach login” for rent superseded (07 + 03 portal) | Done |
+| 6 | **README** active-client recommendation aligned with spec 03 (≥2 qualifying sessions / month) | Done |
+| 7 | This review linked from README; §8 checklist recorded | Done |
+
+**Still owner/legal gates (not closed by docs):** §5 items 1, 8–12 (and accept/override on 2–7, 13). Ledger strategy remains “extend vs replace `member_onboarding_*`” before any migration.
+
 **Do not implement features from 01–07 until the gates in §5 that apply to the chosen phase are closed.**

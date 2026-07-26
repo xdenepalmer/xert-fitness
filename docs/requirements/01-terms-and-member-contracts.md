@@ -11,7 +11,7 @@ Today XERT has no record of who agreed to what. `src/pages/Terms.jsx` is hardcod
 
 ## Recommendation
 
-ONE approach: **a document/version/acceptance-ledger triple in Postgres, with acceptance written only through a Vercel serverless function that captures trusted edge headers, and enforcement via a `session_bookings` guard trigger gated by a soft-launch-style switch on `admin_settings`.**
+ONE approach: **a document/version/acceptance-ledger triple in Postgres, with acceptance written only through a Vercel serverless function that captures trusted edge headers, and enforcement via a `session_bookings` guard trigger gated by a soft-launch-style switch on a dedicated singleton (not `admin_settings` — see Integration constraints).**
 
 Why this and not the alternatives:
 
@@ -21,11 +21,21 @@ Why this and not the alternatives:
 
 3. **Enforcement goes in a trigger on `session_bookings`, not in the UI and not by rewriting `book_session`.** `book_session` and `join_session_waitlist` are `grant execute ... to authenticated` and directly callable; a React modal is decoration. A `before insert` guard on `session_bookings` catches every path (both RPCs plus any direct insert) in ~20 lines, matching the repo's existing `guard_profile_write` / `guard_stripe_order_terms` / `class_session_update_guard` style, without me having to re-emit two large SECURITY DEFINER function bodies and risk drifting from `booking_schema.sql`.
 
-4. **`admin_settings.agreement_enforcement` ('off' | 'prompt' | 'enforce'), defaulting to 'prompt'.** This is the same guarded-switch pattern as `payments_enabled` in `20260716010000_guarded_payment_activation.sql`. Flipping a hard legal gate on before every existing member has re-accepted would stop every booking in the gym on day one. Ship at 'prompt', watch the acceptance rate in the Owner Command Centre, flip to 'enforce' when it plateaus.
+4. **`agreement_enforcement` ('off' | 'prompt' | 'enforce'), defaulting to 'prompt', on its own singleton table** (same pattern as spec 02’s `health_policy_settings` and spec 05’s `check_in_settings`). Do **not** park this on `admin_settings` — see Integration constraints. Flipping a hard legal gate on before every existing member has re-accepted would stop every booking in the gym on day one. Ship at 'prompt', watch the acceptance rate in the Owner Command Centre, flip to 'enforce' when it plateaus.
 
 5. **The "why" is deliberately NOT part of the contract.** See openQuestions — this is where I disagree with the note.
 
 6. **PDF export uses zero new dependencies.** `api/agreement-document.js` returns one self-contained, print-styled HTML document for an acceptance id. Web opens it in a tab and calls `window.print()`; iOS feeds the same HTML string to `UIMarkupTextPrintFormatter` + `UIPrintPageRenderer` to produce real PDF data for a `ShareLink`. One server-side renderer means the member's copy and the owner's copy are provably the same document. This works under the existing CSP in `vercel.json` (`style-src 'self' 'unsafe-inline'` permits the inline `<style>`; the document needs no script). Adding pdfkit/puppeteer to a Vercel function for this is a 50 MB bundle to typeset six paragraphs.
+
+## Integration constraints
+
+Cross-spec rules from [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) / [README.md](README.md). These override any conflicting DDL below until a later migration rewrite:
+
+1. **One agreement ledger with spec 02.** Specs 01 and 02 share a single document → version → acceptance ledger. The liability waiver is a document *kind* on that ledger (e.g. `liability_waiver`), not a second table family. APSS / clinical *answers* stay in spec 02’s tightly-scoped health tables — never in acceptances.
+2. **Live `member_onboarding_*` is the precursor to absorb, not a third ledger.** `member_onboarding_documents` / `member_onboarding_receipts` (`20260721010000_member_onboarding_foundation.sql`) already implement versioned acknowledgements. Evolve or replace that foundation deliberately (and migrate receipts); do **not** ship a parallel `agreement_*` triple beside it.
+3. **`health_declaration` as a standalone kind is superseded for clinical content.** Prefer the shared-ledger waiver kind for legal acceptance; screening answers belong only in 02. Keep a kind name only if it is still a non-clinical acknowledgement on the shared ledger — never a second acceptance path.
+4. **`agreement_enforcement` must not live on `admin_settings`.** `guard_session_pack_payment_activation` raises `PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE` on **any** live `admin_settings` column change while payments are on. Use a separate singleton (as 02/05 do) so an emergency legal stop does not require pausing Stripe.
+5. **Staff / coach visibility for "my why"** defers to [spec 07](07-staff-accounts-and-roles.md) (`has_capability` / coach helpers). Do not invent a private role enum in this migration.
 
 ## Data model
 
@@ -43,8 +53,13 @@ create table if not exists public.agreement_documents (
   slug text not null unique
     check (slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(slug) between 3 and 60),
   title text not null check (char_length(btrim(title)) between 3 and 120),
+  -- kinds: terms/privacy/membership here; liability_waiver is the shared kind
+  -- consumed by spec 02 (see Integration constraints). health_declaration is
+  -- retained only as a non-clinical acknowledgement kind if needed — not a
+  -- second ledger and not a place for APSS answers.
   kind text not null check (kind in (
-    'terms_of_use', 'privacy_collection', 'membership_contract', 'health_declaration'
+    'terms_of_use', 'privacy_collection', 'membership_contract',
+    'liability_waiver', 'health_declaration'
   )),
   acceptance_required boolean not null default true,
   requires_signed_name boolean not null default false,
@@ -163,12 +178,21 @@ create table if not exists public.member_training_why_history (
 create index if not exists member_training_why_history_member_idx
   on public.member_training_why_history (user_id, created_at desc, id desc);
 
--- ── enforcement switch (soft-launch pattern, same as payments_enabled) ──────
-alter table public.admin_settings
-  add column if not exists agreement_enforcement text not null default 'prompt';
-alter table public.admin_settings drop constraint if exists admin_settings_agreement_enforcement_check;
-alter table public.admin_settings add constraint admin_settings_agreement_enforcement_check
-  check (agreement_enforcement in ('off', 'prompt', 'enforce'));
+-- ── enforcement switch (SEPARATE singleton — NOT admin_settings) ───────────
+-- SUPERSEDED: do not add agreement_enforcement to admin_settings.
+-- guard_session_pack_payment_activation raises
+-- PAYMENT_SETTINGS_CHANGE_REQUIRES_PAUSE on any live admin_settings column
+-- change while payments are on. Mirror health_policy_settings / check_in_settings:
+create table if not exists public.agreement_enforcement_settings (
+  id uuid primary key default gen_random_uuid(),
+  agreement_enforcement text not null default 'prompt'
+    check (agreement_enforcement in ('off', 'prompt', 'enforce')),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists agreement_enforcement_settings_singleton_idx
+  on public.agreement_enforcement_settings ((true));
+insert into public.agreement_enforcement_settings (agreement_enforcement)
+select 'prompt' where not exists (select 1 from public.agreement_enforcement_settings);
 
 -- ── content hash ────────────────────────────────────────────────────────────
 create or replace function public.agreement_version_content_hash(
@@ -484,7 +508,7 @@ declare
 begin
   if p_user_id is null then return 'blocked'; end if;
   select coalesce(settings.agreement_enforcement, 'prompt')
-    into v_mode from public.admin_settings as settings limit 1;
+    into v_mode from public.agreement_enforcement_settings as settings limit 1;
   v_mode := coalesce(v_mode, 'prompt');
   if v_mode = 'off' then return 'ok'; end if;
 
@@ -991,7 +1015,7 @@ The HTML comes from `/api/agreement-document`, so the member's PDF is byte-for-b
 **Authorisation.** Every new admin function starts with `if not public.is_admin() then raise exception 'ADMIN_ONLY'`. RLS: documents are world-readable metadata; version bodies are readable only when published-and-effective, or by the member who accepted that exact version, or by an admin — so a member cannot read an unpublished draft of terms the owner is still working on. Acceptances are own-or-admin. `member_training_why` is own-or-admin for read and write. `api/agreement-document.js` re-checks ownership server-side; the acceptance id is a UUID but must not be treated as a bearer token.
 
 **Australian Privacy Act / APP compliance.**
-- *APP 3/6 (collection and use).* The "why" is free text a member may fill with health information — "recovering from a hysterectomy", "managing depression", "post-cancer". Health information is **sensitive information** under s 6 of the Privacy Act and needs express consent plus a higher handling standard. Mitigations built in: the field is optional, capped at 600 characters, its label and helper text steer toward goals rather than diagnoses ("What are you training for?" — not "any medical conditions?"), and `coach_visible` lets the member keep it owner-only. Health screening belongs in the separate `health_declaration` document with its own consent, not in this field.
+- *APP 3/6 (collection and use).* The "why" is free text a member may fill with health information — "recovering from a hysterectomy", "managing depression", "post-cancer". Health information is **sensitive information** under s 6 of the Privacy Act and needs express consent plus a higher handling standard. Mitigations built in: the field is optional, capped at 600 characters, its label and helper text steer toward goals rather than diagnoses ("What are you training for?" — not "any medical conditions?"), and `coach_visible` lets the member keep it owner-only. Health screening answers belong in spec 02’s clinical tables (with waiver acceptance on the shared ledger), not in this field.
 - *APP 11 (security).* No new secret material. Acceptance IP is stored as `inet`, not free text, so it cannot carry an injection payload into the printed document.
 - *APP 12/13 (access and correction).* `/account/agreements` gives the member their full record; `member_training_why` is member-editable with a versioned history so a correction is a new row, not a silent overwrite. Acceptance records are deliberately not correctable — that is the point of evidence — and the Privacy page must say so.
 - *Retention vs. erasure — the sharp edge.* `api/delete-account.js` calls `auth.admin.deleteUser`, which cascades through `profiles`. Because acceptance rows reference `auth.users` with `on delete set null` and carry a snapshotted `member_email` / `member_full_name`, they survive deletion. That is a deliberate legal hold: without it, anyone who deleted their account after an incident would erase the evidence of the waiver they signed. APP 11.2 requires destruction once information is no longer needed, and the defensible position is that it *is* still needed until the limitation period expires (six years for a simple contract in Queensland under the *Limitation of Actions Act 1974*). **Set the retention at seven years from the last agreement event and disclose it in `src/pages/Privacy.jsx` before you ship.** Retaining it without disclosing it is the actual compliance failure — not the retention itself. Ship a `scripts/purge-agreement-evidence.mjs` in phase 4 that replaces `member_email` / `member_full_name` / `client_ip` with nulls past that horizon while keeping the hash, version, and timestamp, so a de-identified proof of acceptance survives forever.
@@ -1009,11 +1033,11 @@ The HTML comes from `/api/agreement-document`, so the member's PDF is byte-for-b
 
 **Phase 3 — member prompt, no blocking (1 week live).** Ship `AgreementGate.jsx`, `agreementData.js`, `MemberWhyCard.jsx`, the iOS gate, and the "my why" surfaces. Enforcement stays at `'prompt'`: existing members see a dismissible banner with a countdown, brand-new signups see a non-dismissible cover (`never_accepted` — no grace, because they joined after the version went live). Watch `admin_agreement_overview().outstanding_members` in the Owner Command Centre. Send one `admin_send_member_notice` reminder at day 7 — the targeted-notice plumbing and APNs push already exist.
 
-**Phase 4 — enforce (1 day, reversible).** When outstanding members plateau (realistically under 5% for a soft-launch-scale gym), flip `admin_settings.agreement_enforcement` to `'enforce'` from Soft Launch Settings. New bookings, waitlist joins, and pack purchases now require a current acceptance. Reverting is a single field update — that reversibility is why the switch exists. Then ship the retention purge script.
+**Phase 4 — enforce (1 day, reversible).** When outstanding members plateau (realistically under 5% for a soft-launch-scale gym), flip `agreement_enforcement_settings.agreement_enforcement` to `'enforce'` from the agreements admin surface (not Soft Launch / `admin_settings`). New bookings, waitlist joins, and pack purchases now require a current acceptance. Reverting is a single field update — that reversibility is why the switch exists. Then ship the retention purge script.
 
 **Backfill / migration.** No data backfill exists to do: there are no historical acceptances, and inventing them would be fabricating evidence. Every existing member is genuinely un-accepted and goes through phase 3 honestly. The one seeded asymmetry is the `never_accepted` vs `update_pending` branch in `agreement_status_for_member`, which gives members who joined before the version went live their full grace period while blocking new signups immediately.
 
-**Feature flag.** `admin_settings.agreement_enforcement` ('off' | 'prompt' | 'enforce'), a singleton row (`admin_settings_singleton_idx`), read by the DB gate, the checkout API, and both clients. `'off'` is the emergency stop.
+**Feature flag.** `agreement_enforcement_settings.agreement_enforcement` ('off' | 'prompt' | 'enforce'), a dedicated singleton (not `admin_settings`), read by the DB gate, the checkout API, and both clients. `'off'` is the emergency stop.
 
 **Rollback.** Phase 4 → phase 3 is a field flip. Phases 1–3 roll back by setting `'off'`; the tables can stay because they are additive and every read path tolerates their absence (`.catch(() => [])` in `adminData.js`, `unavailableDataSources` on iOS). Never drop `member_agreement_acceptances` — that is the evidence.
 
@@ -1025,7 +1049,7 @@ The HTML comes from `/api/agreement-document`, so the member's PDF is byte-for-b
 
 **3. This system delivers agreements; it does not draft them.** Queensland regulates fitness-industry contracts through a code of practice under the *Fair Trading Act*, with prescribed content, cooling-off, and termination requirements, and the Australian Consumer Law's unfair-contract-term regime applies to standard-form consumer contracts — with penalties since the 2023 amendments. The current `src/pages/Terms.jsx` copy is a decent plain-English starting point but it was clearly not drafted by a lawyer, and clauses like "Cancellations within 12 hours generally use the credit" and the liability limitation are exactly the kind of terms that get scrutinised. *My recommendation:* budget a few hundred dollars for a Queensland small-business lawyer to review the v1 text before you publish it in phase 2. Publishing v1 through this system makes bad wording *durably binding on every member*, which is worse than the current situation where nothing is recorded at all. This is the single highest-risk item in the whole feature.
 
-**4. There is no coach role in this system.** `public.coaches` is a marketing content table with no `auth.users` link, and `profiles.role` only accepts `'member'` and `'admin'`. So "surfaced to coaches" today means "surfaced to whoever is signed in as admin", most likely on a shared iPad at the front desk. *My recommendation:* ship it that way — put the why on the roll-call roster card gated by `coach_visible`, which is exactly where a coach looks before a class. Do **not** build a coach role for this feature alone. Revisit when you hire a second coach who needs their own login, and treat it as its own project (role enum, RLS across every member-data table, admin-vs-coach scoping in ~15 policies). Tell members plainly that "your coach" means gym staff.
+**4. Coach visibility for "my why".** Role definitions defer to [spec 07](07-staff-accounts-and-roles.md). Until 07 Phase A lands, "surfaced to coaches" means admin/staff on the roll-call roster card gated by `coach_visible`. After 07, use `has_capability` / coach helpers — do not invent a private role model in this feature.
 
 **5. Grace period and what a decline actually costs.** *My recommended defaults:* 14 days' grace from `effective_at`; a decline or an overdue acceptance blocks new bookings, waitlist joins, and pack purchases, and nothing else. Members keep viewing their account, keep their existing confirmed bookings, can still cancel them, and — critically — **never forfeit credits they have paid for**. Confiscating prepaid credits because someone declined a T&C update would be a consumer-guarantee problem and probably an unfair contract term. If they decline permanently, that is a conversation and a refund, not an automated punishment.
 

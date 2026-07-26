@@ -21,7 +21,17 @@ Enforcement: hard-block the first booking on waiver + screening (a hard gate at 
 
 The coach problem is solved by inverting it: coaches never receive derived clinical facts. They receive (1) a four-state band `not_screened | clear | caution | clearance_pending`, (2) `activity_advice` — a 140-char operational instruction written by the owner after reading the detail ("no overhead pressing, no box jumps"), which carries no diagnosis, and (3) the emergency contact, which is not health information and lives in its own table. The advice line is deliberately human-authored rather than auto-derived, because any automatic derivation from the questionnaire leaks the questionnaire. It is also shown to the member in their own account — if the member can see exactly what coaches see, staff write it carefully and the member can correct it. That transparency is the strongest control in the whole design.
 
-This requires a third role. `profiles.role` becomes `member | coach | admin` and a new `public.is_staff()` is added. `public.is_admin()` is left byte-for-byte unchanged — roughly fifty existing policies depend on it, and a coach must not silently inherit admin scope anywhere. Coach access to the safety roster is additionally scoped to sessions where `class_sessions.coach_profile_id = auth.uid()` and time-boxed to a window around the class.
+**Roles (superseded locally — see Integration constraints).** Staff/coach access is defined by [spec 07](07-staff-accounts-and-roles.md), not by a private `member | coach | admin` enum in this file. Coach access to the safety roster remains scoped to assigned sessions and time-boxed around the class; clinical reads use 07’s `has_capability('health_clinical')` / coach helpers. Do not ship the embedded role DDL below.
+
+## Integration constraints
+
+Cross-spec rules from [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) / [README.md](README.md). These override any conflicting DDL below until a later migration rewrite:
+
+1. **One agreement ledger with spec 01.** Waiver *acceptance* (which version, when, IP/device evidence) lives on the shared document → version → acceptance ledger. Do **not** ship a parallel `health_document_versions` + `member_liability_waivers` acceptance family for legal text. Prefer evolving live `member_onboarding_documents` / `member_onboarding_receipts` (or the richer 01 shape that replaces them) — that foundation is the precursor to absorb, not a third ledger.
+2. **Waiver is a document kind; health answers stay separate.** `liability_waiver` (and health-consent acknowledgements if needed) are kinds on the shared ledger. APSS Stage 1 answers, clearances, and activity advice stay in this spec’s tightly-scoped clinical tables with read-audit RPCs.
+3. **Roles defer entirely to [spec 07](07-staff-accounts-and-roles.md).** Delete / do not implement section “0. Staff role” (`profiles_role_check` rewrite, private `is_staff()`, rewritten `admin_set_role`). Gate clinical and coach-safety RPCs with 07 helpers (`has_capability`, `is_coach`, etc.). `is_admin()` continues to mean owner.
+4. **Lead-form health field vs live consent.** Live path already has `health_info_consent` on member interest / booking notes. Do not null-and-drop `injuries_or_limitations_optional` while leaving consent machinery orphaned — keep the consented lead field and funnel into full APSS later, or drop field **and** consent UI/Privacy together in one migration.
+5. **Compose booking gates with 01.** Both specs add `session_bookings` before-insert checks; failure codes and order must compose, not overwrite.
 
 ## Data model
 
@@ -39,6 +49,11 @@ New migration: `supabase/migrations/20260726000000_member_health_screening.sql`.
 -- ============================================================================
 
 -- ── 0. Staff role ───────────────────────────────────────────────────────────
+-- SUPERSEDED — do not ship. Role enum, is_staff(), and admin_set_role rewrite
+-- live exclusively in spec 07 (Phase A). Keep only coach_profile_id binding
+-- below if still needed for roster scoping; gate RPCs with has_capability /
+-- is_coach from 07 instead of the private helpers sketched here.
+/*
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check check (role in ('member', 'coach', 'admin'));
@@ -87,9 +102,11 @@ begin
 end; $$;
 revoke execute on function public.admin_set_role(uuid, text) from public, anon;
 grant execute on function public.admin_set_role(uuid, text) to authenticated;
+*/
 
 -- class_sessions.coach_name is free text; bind the session to a real staff
 -- account so coach roster access can be row-scoped. Null = no coach may read.
+-- (Role privilege itself comes from profiles.role = 'coach' per spec 07.)
 alter table public.class_sessions
   add column if not exists coach_profile_id uuid
     constraint class_sessions_coach_profile_id_fkey
@@ -145,6 +162,11 @@ create trigger health_policy_settings_touch_updated_at
   for each row execute function public.touch_health_record_updated_at();
 
 -- ── 2. Versioned legal document text ───────────────────────────────────────
+-- SUPERSEDED as a separate ledger: liability_waiver / health_consent version
+-- bodies and acceptances belong on the shared 01 ledger (or evolved
+-- member_onboarding_*). Keep APSS instrument text versioning here only if it
+-- is clinical-form metadata tied to answer rows — not a second acceptance path.
+-- The sketch below is retained for shape reference; do not implement as-is.
 create table if not exists public.health_document_versions (
   id uuid primary key default gen_random_uuid(),
   doc_type text not null
@@ -218,9 +240,10 @@ create trigger member_emergency_contacts_touch_updated_at
   for each row execute function public.touch_health_record_updated_at();
 
 -- ── 4. Liability waiver — immutable, versioned, survives account deletion ───
--- user_id nulls on auth deletion; the identity snapshot preserves the legal
--- record. Same snapshot convention as admin_request_status_changes and
--- stripe_order_terms_snapshot.
+-- SUPERSEDED as a separate acceptance table: write waiver acceptances to the
+-- shared ledger (01 / member_onboarding_*). Retention-after-delete and
+-- identity-snapshot rules from this sketch still apply to that shared path.
+-- Clinical screening rows below remain in this spec.
 create table if not exists public.member_liability_waivers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
@@ -1132,13 +1155,13 @@ comment on table public.admin_member_notes is
   'this table has no read audit, no immutability guard and no retention clock. '
   'Health data belongs in member_health_screenings via member_submit_health_screening().';
 
--- ── 17. Remove the existing unlawful health collection on the lead form ────
--- member_interest is anon-INSERTable and admin-readable with no read audit and
--- no retention clock. Free-text injury data must not live there.
-update public.member_interest
-   set injuries_or_limitations_optional = null
- where injuries_or_limitations_optional is not null;
-alter table public.member_interest drop column if exists injuries_or_limitations_optional;
+-- ── 17. Lead-form health field (reconcile with live health_info_consent) ───
+-- SUPERSEDED as written: do not drop injuries_or_limitations_optional while
+-- leaving live health_info_consent / Privacy remediation orphaned. Prefer
+-- keep consented lead field → funnel into APSS; or drop field + consent UI +
+-- Privacy in one coordinated change (see Integration constraints §4).
+-- update public.member_interest set injuries_or_limitations_optional = null ...
+-- alter table public.member_interest drop column if exists ...;
 
 -- ── 18. Grants ─────────────────────────────────────────────────────────────
 revoke execute on function public.member_submit_health_screening(
@@ -1215,7 +1238,7 @@ New files:
 
 `src/lib/healthSafety.js` — pure, testable: `SAFETY_BANDS`, `safetyBandLabel(band)`, `safetyBandTone(band)` returning the existing `xert-red` / `#e0b36a` / `xert-steel` palette values, `healthGateMessage(status)`, `rescreenDueLabel(status)`.
 
-`src/pages/CoachToday.jsx` + `src/components/CoachRoute.jsx` — route `/coach`. `CoachRoute` mirrors `src/components/admin/AdminRoute.jsx` but gates on `profile.role in ('coach','admin')`. Deliberately a separate route so the 55 kB `AdminCommandCentre` chunk is never shipped to a coach. Shows today's assigned classes and, per attendee, a coloured band pill, the advice line, and a tap-to-reveal emergency contact. No link anywhere to a clinical detail view.
+`src/pages/CoachToday.jsx` + `src/components/CoachRoute.jsx` — route `/coach`. `CoachRoute` mirrors `src/components/admin/AdminRoute.jsx` but gates with [spec 07](07-staff-accounts-and-roles.md) helpers (`profiles.role = 'coach'` / `is_coach()`, owners via `is_admin()` as needed). Deliberately a separate route so the 55 kB `AdminCommandCentre` chunk is never shipped to a coach. Shows today's assigned classes and, per attendee, a coloured band pill, the advice line, and a tap-to-reveal emergency contact. No link anywhere to a clinical detail view.
 
 `src/components/admin/MemberHealthPanel.jsx` — mounted inside the member drawer in `src/components/admin/MembersManager.jsx`, next to the existing "Staff notes" and "Private notices" sections. Default state shows ONLY band, currency dates and the advice editor. "View clinical detail" is a separate button that opens `src/components/admin/AdminConfirmDialog.jsx` requiring a reason from the fixed vocabulary before `adminMemberHealthRecord` is called, with the copy "This access is recorded against your name and is visible to the member." Advice editing uses the repo's `expected_updated_at` optimistic-lock pattern.
 
@@ -1318,7 +1341,7 @@ select public.recompute_member_health_status(id) from public.profiles;
 Publish v1 of all three documents into `health_document_versions`. Verify the capability appears in Operations Health and that `npm run build` and the test suite still pass.
 
 Phase 2 — staff data model (1 day).
-Set `class_sessions.coach_profile_id` for the classes each coach runs. Promote coaches from `member` to `coach` via `admin_set_role`. Verify with a real coach login that `staff_session_safety_roster` returns rows for their own class and raises `SESSION_NOT_ASSIGNED` for someone else's. This is the step most likely to be skipped, and the coach surface is useless without it.
+Set `class_sessions.coach_profile_id` for the classes each coach runs. Promote coaches via [spec 07](07-staff-accounts-and-roles.md) invite / `admin_set_role` (not this spec’s superseded DDL). Verify with a real coach login that `staff_session_safety_roster` returns rows for their own class and raises `SESSION_NOT_ASSIGNED` for someone else's. This is the step most likely to be skipped, and the coach surface is useless without it.
 
 Phase 3 — member-facing, opt-in (1 week).
 Ship the web and iOS screening flow, the Account "Training safety" card, and the Privacy Policy rewrite. Ship the `MemberInterestForm` field removal in the same deploy as the column drop. Invite existing members by targeted notice via the existing `admin_send_member_notice` RPC ("Complete your health screening — takes a minute"), with a `/health-screening` deep link. No blocking. Watch the compliance queue fill.

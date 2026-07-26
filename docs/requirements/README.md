@@ -30,7 +30,9 @@ building any of it, because several specs want the same mechanism.
 [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) — whether these decisions still
 hold after the audit/completeness work, cross-spec conflicts, whether spec 07
 unblocks 02/03/05, build-order adjustments, owner gates, and risks from recent
-credit/deletion/privacy fixes.
+credit/deletion/privacy fixes. **Documentation alignment patches** from that
+review’s §8 are applied on the specs (see the checklist at the end of
+INTEGRATION_REVIEW.md) — still design-only; no schema implementation.
 
 ---
 
@@ -159,8 +161,10 @@ engineering:
    *Recommended:* flag first, block only for members with an outstanding doctor's
    clearance. Blocking everyone costs bookings.
 2. **Coach rent: what exactly is an "active client", and over what window?**
-   *Recommended:* a client with at least one paid session in the trailing 6 months.
-   Write it into the agreement — it will be disputed.
+   *Recommended (aligned with [spec 03](03-coach-facility-rent.md)):* a distinct
+   client with **at least two (2) qualifying facility sessions** in a Brisbane
+   calendar month; the 6-month average of those monthly counts drives the rent
+   tier. Write it into the agreement — it will be disputed.
 3. **Are coaches contractors or employees?** Blocks spec 03. Needs legal advice.
 4. **Memberships, packs, or both?** *Recommended:* both — memberships on BECS for
    regulars, packs retained for casuals.
