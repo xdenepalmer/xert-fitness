@@ -296,10 +296,9 @@ final class XertStore: ObservableObject {
             } catch {
                 guard memberStateVersion.isCurrent(memberVersion) && canApplyRefresh(refreshVersion) else { return }
                 if (error as? APIError)?.invalidatesSession == true {
-                    replaceAuthSession(with: nil)
-                    KeychainStore.clearSession()
-                    isLoading = false
-                    await ClassReminderScheduler.shared.clearAll()
+                    await expireCurrentSession(
+                        message: "Your XERT session has expired. Sign in again to continue."
+                    )
                 } else {
                     unavailableDataSources.formUnion(Self.memberDataSources)
                     isUsingStaleMemberData = memberDataUpdatedAt != nil
@@ -526,9 +525,12 @@ final class XertStore: ObservableObject {
 
     @discardableResult
     func deleteAccount() async -> Bool {
+        let memberVersion = memberStateVersion.snapshot
         errorMessage = nil
         isDeletingAccount = true
-        defer { isDeletingAccount = false }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isDeletingAccount = false }
+        }
         do {
             let authSession = try await validAuthSession()
             let currentUserID = authSession.user?.id ?? profile?.id
@@ -541,6 +543,10 @@ final class XertStore: ObservableObject {
             XertHaptics.play(.success)
             return true
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return false }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return false
+            }
             present(error)
             XertHaptics.play(.error)
             return false
@@ -809,8 +815,11 @@ final class XertStore: ObservableObject {
             XertHaptics.play(.warning)
             return
         }
+        let memberVersion = memberStateVersion.snapshot
         isUpdatingMemberPush = true
-        defer { isUpdatingMemberPush = false }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isUpdatingMemberPush = false }
+        }
 
         if enabled {
             guard await MemberPushRegistration.requestAndRegister() else {
@@ -824,10 +833,15 @@ final class XertStore: ObservableObject {
             memberPushEnabled = true
             await syncMemberPushToken()
         } else {
-            if let token = PushDeviceTokenStore.load(), let session = try? await validAuthSession() {
+            if let token = PushDeviceTokenStore.load() {
                 do {
+                    let session = try await validAuthSession()
                     try await api.updatePushSubscription(session: session, token: token, enabled: false)
                 } catch {
+                    guard memberStateVersion.isCurrent(memberVersion) else { return }
+                    if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                        return
+                    }
                     present(error)
                     XertHaptics.play(.error)
                     return
@@ -837,15 +851,21 @@ final class XertStore: ObservableObject {
             memberPushEnabled = false
             UIApplication.shared.unregisterForRemoteNotifications()
         }
+        guard memberStateVersion.isCurrent(memberVersion) else { return }
         XertHaptics.play(.lightImpact)
     }
 
     func syncMemberPushToken(_ token: DevicePushToken? = nil) async {
         guard memberPushEnabled, let token = token ?? PushDeviceTokenStore.load() else { return }
+        let memberVersion = memberStateVersion.snapshot
         do {
             let session = try await validAuthSession()
             try await api.updatePushSubscription(session: session, token: token, enabled: true)
         } catch {
+            guard memberStateVersion.isCurrent(memberVersion) else { return }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return
+            }
             present(error)
         }
     }
@@ -919,6 +939,9 @@ final class XertStore: ObservableObject {
         } catch {
             guard memberStateVersion.isCurrent(memberVersion),
                   announcementStateVersion.isCurrent(announcementVersion) else { return }
+            if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return
+            }
             unavailableDataSources.insert(.announcements)
             isUsingStaleMemberData = memberDataUpdatedAt != nil
         }
@@ -1119,6 +1142,9 @@ final class XertStore: ObservableObject {
                 guard memberStateVersion.isCurrent(memberVersion) else {
                     return .noMatchingCheckout
                 }
+                if await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                    return .noMatchingCheckout
+                }
                 unavailableDataSources.formUnion([.credits, .orders])
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
@@ -1152,9 +1178,12 @@ final class XertStore: ObservableObject {
     @discardableResult
     func requestPrivateSession(_ request: PrivateSessionRequest) async -> Bool {
         let memberVersion = memberStateVersion.snapshot
+        let beganAuthenticated = authSession != nil
         isRequestingPrivateSession = true
         errorMessage = nil
-        defer { isRequestingPrivateSession = false }
+        defer {
+            if memberStateVersion.isCurrent(memberVersion) { isRequestingPrivateSession = false }
+        }
         do {
             let memberSession = authSession == nil ? nil : try await validAuthSession()
             try await api.requestPrivateSession(request, auth: memberSession)
@@ -1168,6 +1197,10 @@ final class XertStore: ObservableObject {
             return true
         } catch {
             guard memberStateVersion.isCurrent(memberVersion) else { return false }
+            if beganAuthenticated,
+               await recoverUnauthorizedMemberSession(error, memberVersion: memberVersion) {
+                return false
+            }
             present(error)
             XertHaptics.play(.error)
             return false
@@ -1450,6 +1483,10 @@ final class XertStore: ObservableObject {
         cancellingBookingID = nil
         updatingEventGoalID = nil
         dismissingAnnouncementID = nil
+        isDeletingAccount = false
+        isRequestingPrivateSession = false
+        isUpdatingMemberPush = false
+        isUpdatingReminderPreference = false
         isSavingProfile = false
         isLoadingMemberOnboarding = false
         isSavingMemberOnboarding = false

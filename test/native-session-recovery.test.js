@@ -34,12 +34,29 @@ test('native member mutations securely recover a revoked session without treatin
   assert.match(recovery, /KeychainStore\.clearSession\(\)/);
   assert.match(recovery, /await ClassReminderScheduler\.shared\.clearAll\(\)/);
   assert.match(recovery, /Your XERT session has expired\. Sign in again to continue\./);
+  const sessionReplacement = store.slice(
+    store.indexOf('private func replaceAuthSession('),
+    store.indexOf('private func clearMemberData('),
+  );
+  for (const flag of [
+    'isDeletingAccount',
+    'isRequestingPrivateSession',
+    'isUpdatingMemberPush',
+    'isUpdatingReminderPreference',
+  ]) {
+    assert.match(sessionReplacement, new RegExp(`${flag} = false`));
+  }
 
   for (const [operation, nextOperation] of [
+    ['func deleteAccount()', 'func book(_ session:'],
     ['func book(_ session:', 'func joinWaitlist(_ session:'],
     ['func joinWaitlist(_ session:', 'func cancel(_ booking:'],
     ['func cancel(_ booking:', '/// Booking mutations only invalidate'],
+    ['func setMemberPushEnabled(', 'func syncMemberPushToken('],
+    ['func syncMemberPushToken(', 'func handlePushRegistrationFailure('],
+    ['func refreshAnnouncements(', 'func dismissAnnouncement('],
     ['func checkoutURL(', 'func hasMatchingPendingCheckout('],
+    ['func reconcileCheckout(', 'func reconcilePendingCheckout('],
     ['func updateProfile(', 'func clearMemberOnboardingError('],
     ['func saveMemberOnboarding(', 'func updatePassword('],
     ['func updatePassword(', 'private func authenticate('],
@@ -55,11 +72,24 @@ test('native member mutations securely recover a revoked session without treatin
     );
   }
 
-  const publicEnquiry = store.slice(
+  const optionalAuthEnquiry = store.slice(
     store.indexOf('func requestPrivateSession('),
     store.indexOf('func requestClassInterest('),
   );
-  assert.doesNotMatch(publicEnquiry, /recoverUnauthorizedMemberSession/);
+  assert.match(optionalAuthEnquiry, /let beganAuthenticated = authSession != nil/);
+  assert.match(
+    optionalAuthEnquiry,
+    /defer \{[\s\S]*memberStateVersion\.isCurrent\(memberVersion\)[\s\S]*isRequestingPrivateSession = false/,
+  );
+  assert.match(
+    optionalAuthEnquiry,
+    /if beganAuthenticated,[\s\S]*recoverUnauthorizedMemberSession\(error, memberVersion: memberVersion\)/,
+  );
+  const fullRefresh = store.slice(store.indexOf('func refresh()'), store.indexOf('func signIn('));
+  assert.match(
+    fullRefresh,
+    /invalidatesSession == true[\s\S]*await expireCurrentSession/,
+  );
   assert.match(swiftTests, /statusCode: 401\)\.isUnauthorized/);
   assert.match(swiftTests, /statusCode: 400\)\.isUnauthorized/);
   assert.match(swiftTests, /statusCode: 403\)\.isUnauthorized/);

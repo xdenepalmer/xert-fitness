@@ -59,15 +59,22 @@ test('native account distinguishes unavailable member data from genuine empty hi
   assert.match(root, /Task \{ await store\.refresh\(\) \}/);
 });
 
-test('temporary native token refresh failures retain stale member data for retry', async () => {
+test('native refresh expires rejected identities but retains stale data for temporary failures', async () => {
   const store = await readFile(
     new URL('../ios/XertFitnessApp/XertFitnessApp/Store/XertStore.swift', import.meta.url),
     'utf8',
   );
   const memberSession = store.slice(store.indexOf('var memberSession'), store.indexOf('if let authSession = memberSession'));
+  const sessionExpiry = store.slice(
+    store.indexOf('private func expireCurrentSession('),
+    store.indexOf('private func applyMemberOnboarding('),
+  );
 
   assert.match(memberSession, /invalidatesSession == true/);
-  assert.match(memberSession, /replaceAuthSession\(with: nil\)/);
+  assert.match(memberSession, /await expireCurrentSession/);
   assert.match(memberSession, /unavailableDataSources\.formUnion\(Self\.memberDataSources\)/);
   assert.match(memberSession, /isUsingStaleMemberData = memberDataUpdatedAt != nil/);
+  assert.match(sessionExpiry, /MemberPushRegistration\.stopReceivingPrivateNotices\(\)/);
+  assert.match(sessionExpiry, /clearLocalMemberState\(for: currentUserID\)/);
+  assert.match(sessionExpiry, /replaceAuthSession\(with: nil\)/);
 });
