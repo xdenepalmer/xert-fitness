@@ -128,6 +128,7 @@ The included `Info.plist` already contains these xcconfig substitutions:
 - Live FIFO waitlist positions with atomic next-member promotion enforced by the shared backend.
 - Staff booking approvals, waitlisting, declines and cancellations create a durable private member notice atomically, then request targeted Apple push delivery without rolling back a safe booking decision if APNs is unavailable.
 - Member-notice composition recovers unsaved owner edits for 12 hours after interruption, scoped to the authenticated owner and exact notice. Recovery is rejected when the server notice has changed, and local copy is erased after save, publish, deletion, explicit discard, sign-out, or account removal.
+- Class, session-pack, event and coach editors recover bounded unsaved owner work for 24 hours after app termination. Drafts are isolated by owner, record and exact server baseline, rejected when the live catalogue changed, and erased after successful save, deletion, explicit discard, sign-out or account removal.
 - Member-controlled device reminders before future confirmed classes; permission is requested only when enabled, reminders are removed when disabled, cancelled, or signed out, and tapping one opens the matching booking even after a cold launch or privacy unlock.
 - Interest-only class handoff to the live XERT timetable/registration form.
 - Vercel checkout launch through `/api/checkout`, with a user-bound 24-hour

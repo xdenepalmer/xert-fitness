@@ -2608,6 +2608,18 @@ final class ModelsTests: XCTestCase {
             baselineUpdatedAt: "2027-01-15T08:00:00.000Z",
             defaults: defaults
         )
+        var productDraft = AdminProductDraft()
+        productDraft.slug = "recovery-pack"
+        productDraft.name = "Recovery pack"
+        productDraft.price = "49.00"
+        AdminCatalogueDraftStore.save(
+            productDraft,
+            kind: .product,
+            ownerID: userID,
+            recordID: nil,
+            baselineToken: nil,
+            defaults: defaults
+        )
 
         MemberLocalState.clear(for: userID, defaults: defaults)
 
@@ -2633,6 +2645,15 @@ final class ModelsTests: XCTestCase {
             baselineUpdatedAt: "2027-01-15T08:00:00.000Z",
             defaults: defaults
         ))
+        let restoredProduct: AdminCatalogueDraftSnapshot<AdminProductDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .product,
+                ownerID: userID,
+                recordID: nil,
+                baselineToken: nil,
+                defaults: defaults
+            )
+        XCTAssertNil(restoredProduct)
     }
 
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
@@ -5576,6 +5597,131 @@ final class ModelsTests: XCTestCase {
             now: savedAt,
             defaults: defaults
         ))
+    }
+
+    func testAdminCatalogueDraftRecoveryIsOwnerRecordAndBaselineScoped() throws {
+        let suiteName = "AdminCatalogueDraftStoreScopeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let recordID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminProductDraft()
+        draft.slug = "launch-10"
+        draft.name = "Launch 10"
+        draft.description = "Ten sessions for launch training."
+        draft.price = "199.00"
+
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .product,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: "version-1",
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restored: AdminCatalogueDraftSnapshot<AdminProductDraft> = try XCTUnwrap(
+            AdminCatalogueDraftStore.load(
+                kind: .product,
+                ownerID: ownerID,
+                recordID: recordID,
+                baselineToken: "version-1",
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        )
+        XCTAssertEqual(restored.draft, draft)
+        XCTAssertEqual(restored.savedAt, savedAt)
+        let wrongOwner: AdminCatalogueDraftSnapshot<AdminProductDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .product,
+                ownerID: UUID(),
+                recordID: recordID,
+                baselineToken: "version-1",
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        XCTAssertNil(wrongOwner)
+        let staleBaseline: AdminCatalogueDraftSnapshot<AdminProductDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .product,
+                ownerID: ownerID,
+                recordID: recordID,
+                baselineToken: "version-2",
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        XCTAssertNil(staleBaseline)
+    }
+
+    func testAdminCatalogueDraftRecoveryExpiresRejectsOversizeAndClearsPerOwner() throws {
+        let suiteName = "AdminCatalogueDraftStoreBoundsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstOwner = UUID()
+        let secondOwner = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminCoachDraft()
+        draft.name = "Launch coach"
+
+        for ownerID in [firstOwner, secondOwner] {
+            AdminCatalogueDraftStore.save(
+                draft,
+                kind: .coach,
+                ownerID: ownerID,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt,
+                defaults: defaults
+            )
+        }
+        let expired: AdminCatalogueDraftSnapshot<AdminCoachDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .coach,
+                ownerID: firstOwner,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(AdminCatalogueDraftStore.maximumAge + 1),
+                defaults: defaults
+            )
+        XCTAssertNil(expired)
+
+        AdminCatalogueDraftStore.clearAll(ownerID: firstOwner, defaults: defaults)
+        let retained: AdminCatalogueDraftSnapshot<AdminCoachDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .coach,
+                ownerID: secondOwner,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        XCTAssertNotNil(retained)
+
+        var oversized = AdminCoachDraft()
+        oversized.name = "Oversized"
+        oversized.bio = String(repeating: "x", count: AdminCatalogueDraftStore.maximumEncodedBytes)
+        AdminCatalogueDraftStore.save(
+            oversized,
+            kind: .coach,
+            ownerID: secondOwner,
+            recordID: nil,
+            baselineToken: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+        let rejected: AdminCatalogueDraftSnapshot<AdminCoachDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .coach,
+                ownerID: secondOwner,
+                recordID: nil,
+                baselineToken: nil,
+                now: savedAt,
+                defaults: defaults
+            )
+        XCTAssertNil(rejected)
     }
 
     private func adminAnnouncement(

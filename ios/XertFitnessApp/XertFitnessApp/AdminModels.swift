@@ -1285,7 +1285,7 @@ struct AdminClassCancellationFollowUp: Identifiable, Hashable {
     }
 }
 
-struct AdminClassDraft: Equatable {
+struct AdminClassDraft: Codable, Hashable {
     static let classTypes = ["XERT Foundation", "XERT Strength", "XERT Engine", "XERT Hybrid", "XERT Event Prep", "XERT Team"]
     static let intensities = ["Low", "Moderate", "High", "Very high"]
     static let bookingModes = ["interest_only", "request_to_book", "instant_book"]
@@ -2988,7 +2988,7 @@ struct AdminProduct: Identifiable, Codable, Hashable {
     }
 }
 
-struct AdminProductDraft: Equatable {
+struct AdminProductDraft: Codable, Hashable {
     static let maximumPriceCents = Int(Int32.max)
 
     var slug: String
@@ -3103,7 +3103,7 @@ struct AdminEvent: Identifiable, Codable, Hashable {
     let updated_at: String
 }
 
-struct AdminEventDraft: Equatable {
+struct AdminEventDraft: Codable, Hashable {
     static let categories = [
         "run", "marathon", "triathlon", "ironman", "ultra", "trail", "cycling",
         "fitness", "hyrox", "crossfit", "functional", "swim", "spartan",
@@ -3231,7 +3231,7 @@ struct AdminCoach: Identifiable, Codable, Hashable {
     let updated_at: String
 }
 
-struct AdminCoachDraft: Equatable {
+struct AdminCoachDraft: Codable, Hashable {
     static let categories = ["coach", "nutritionist", "massage", "physio"]
     var name: String
     var role: String

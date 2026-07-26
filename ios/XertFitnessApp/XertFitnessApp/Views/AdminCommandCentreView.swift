@@ -6870,6 +6870,25 @@ private struct AdminClassCancellationFollowUpView: View {
     }
 }
 
+private struct AdminRecoveredCatalogueDraftNotice: View {
+    let savedAt: Date
+    let onDiscard: () -> Void
+
+    var body: some View {
+        Section {
+            Label(
+                "Recovered unsaved edits from \(savedAt.formatted(date: .omitted, time: .shortened))",
+                systemImage: "arrow.counterclockwise.circle.fill"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.xertSteel)
+            Button(role: .destructive, action: onDiscard) {
+                Label("Discard recovered edits", systemImage: "trash")
+            }
+        }
+    }
+}
+
 private struct AdminClassEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
@@ -6878,7 +6897,11 @@ private struct AdminClassEditor: View {
     let classSession: AdminClassSession?
     let mutationAllowed: Bool
     private let baseline: AdminClassDraft
+    private let baselineToken: String?
     @State private var draft: AdminClassDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var textInputFocused: Bool
@@ -6894,17 +6917,33 @@ private struct AdminClassEditor: View {
         classSession: AdminClassSession?,
         mutationAllowed: Bool
     ) {
-        let initial = AdminClassDraft(classSession: classSession)
+        let baseline = AdminClassDraft(classSession: classSession)
+        let baselineToken = AdminCatalogueDraftStore.baselineToken(for: classSession)
+        let recovered: AdminCatalogueDraftSnapshot<AdminClassDraft>? = AdminCatalogueDraftStore.load(
+            kind: .classSession,
+            ownerID: session.user?.id,
+            recordID: classSession?.id,
+            baselineToken: baselineToken
+        )
+        let initial = recovered?.draft ?? baseline
         self.admin = admin
         self.session = session
         self.classSession = classSession
         self.mutationAllowed = mutationAllowed
-        baseline = initial
+        self.baseline = baseline
+        self.baselineToken = baselineToken
         _draft = State(initialValue: initial)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -6970,15 +7009,7 @@ private struct AdminClassEditor: View {
             if !isTerminal {
                 Section {
                     Button {
-                        Task {
-                            if await admin.saveClass(session: session, classSession: classSession, draft: draft) {
-                                XertHaptics.play(.success)
-                                editorExitCoordinator?.clear(id: exitStateID)
-                                dismiss()
-                            } else {
-                                XertHaptics.play(.error)
-                            }
-                        }
+                        Task { await saveDraft() }
                     } label: {
                         HStack {
                             Spacer()
@@ -7018,6 +7049,12 @@ private struct AdminClassEditor: View {
         .onChange(of: draft.status) { status in
             if status != "published" { draft.publicVisible = false }
         }
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .adminOwnerExitState(
             id: exitStateID,
             title: editorTitle,
@@ -7031,8 +7068,7 @@ private struct AdminClassEditor: View {
             titleVisibility: .visible
         ) {
             Button("Discard changes", role: .destructive) {
-                editorExitCoordinator?.clear(id: exitStateID)
-                dismiss()
+                discardAndDismiss()
             }
             Button("Keep editing", role: .cancel) {}
         } message: {
@@ -7046,9 +7082,62 @@ private struct AdminClassEditor: View {
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearRecoveryDraft()
             editorExitCoordinator?.clear(id: exitStateID)
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .classSession,
+            ownerID: session.user?.id,
+            recordID: classSession?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    @MainActor
+    private func saveDraft() async {
+        guard mutationAllowed, !isBusy, isDirty else { return }
+        guard await admin.saveClass(session: session, classSession: classSession, draft: draft) else {
+            XertHaptics.play(.error)
+            return
+        }
+        hasCommitted = true
+        clearRecoveryDraft()
+        editorExitCoordinator?.clear(id: exitStateID)
+        XertHaptics.play(.success)
+        dismiss()
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func discardAndDismiss() {
+        clearRecoveryDraft()
+        editorExitCoordinator?.clear(id: exitStateID)
+        dismiss()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .classSession,
+            ownerID: session.user?.id,
+            recordID: classSession?.id
+        )
     }
 }
 
@@ -13645,7 +13734,11 @@ private struct AdminProductEditor: View {
     let session: AuthSession
     let product: AdminProduct?
     private let baseline: AdminProductDraft
+    private let baselineToken: String?
     @State private var draft: AdminProductDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var confirmingPriceProvision = false
     @State private var exitStateID = UUID()
@@ -13664,8 +13757,17 @@ private struct AdminProductEditor: View {
         self.product = product
         let initial = product.map { AdminProductDraft(product: $0) }
             ?? AdminProductDraft(suggestedSortOrder: suggestedSortOrder)
+        let baselineToken = product?.updated_at
+        let recovered: AdminCatalogueDraftSnapshot<AdminProductDraft>? = AdminCatalogueDraftStore.load(
+            kind: .product,
+            ownerID: session.user?.id,
+            recordID: product?.id,
+            baselineToken: baselineToken
+        )
         baseline = initial
-        _draft = State(initialValue: initial)
+        self.baselineToken = baselineToken
+        _draft = State(initialValue: recovered?.draft ?? initial)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     private var normalizedStripePriceID: String {
@@ -13698,6 +13800,12 @@ private struct AdminProductEditor: View {
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !pricingMutationAvailable {
                 Section {
                     Label(
@@ -13829,6 +13937,12 @@ private struct AdminProductEditor: View {
             isBusy: isProductMutationInFlight
         )
         .interactiveDismissDisabled(isDirty || isProductMutationInFlight)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -13846,7 +13960,7 @@ private struct AdminProductEditor: View {
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) { discardAndDismiss() }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The session-pack pricing details in this draft have not been saved.")
@@ -13860,6 +13974,8 @@ private struct AdminProductEditor: View {
                 guard let product else { return }
                 Task {
                     if await admin.provisionProductPrice(session: session, product: product) != nil {
+                        hasCommitted = true
+                        clearRecoveryDraft()
                         dismiss()
                     }
                 }
@@ -13891,20 +14007,66 @@ private struct AdminProductEditor: View {
     private func requestDismiss() {
         focusedField = nil
         if isDirty { confirmingDiscard = true }
-        else { dismiss() }
+        else {
+            clearRecoveryDraft()
+            dismiss()
+        }
     }
 
     private func save() {
         guard canSave else { return }
         focusedField = nil
-        Task {
-            if await admin.saveProduct(session: session, product: product, draft: draft) {
-                XertHaptics.play(.success)
-                dismiss()
-            } else {
-                XertHaptics.play(.error)
-            }
+        Task { await saveDraft() }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
         }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isProductMutationInFlight else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .product,
+            ownerID: session.user?.id,
+            recordID: product?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    @MainActor
+    private func saveDraft() async {
+        guard canSave else { return }
+        guard await admin.saveProduct(session: session, product: product, draft: draft) else {
+            XertHaptics.play(.error)
+            return
+        }
+        hasCommitted = true
+        clearRecoveryDraft()
+        XertHaptics.play(.success)
+        dismiss()
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func discardAndDismiss() {
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .product,
+            ownerID: session.user?.id,
+            recordID: product?.id
+        )
     }
 }
 
@@ -14110,7 +14272,13 @@ private struct AdminEventsView: View {
         ) { event in
             Button("Delete \(event.name)", role: .destructive) {
                 Task {
-                    _ = await admin.deleteEvent(session: session, event: event)
+                    if await admin.deleteEvent(session: session, event: event) {
+                        AdminCatalogueDraftStore.clear(
+                            kind: .event,
+                            ownerID: session.user?.id,
+                            recordID: event.id
+                        )
+                    }
                     pendingDelete = nil
                 }
             }
@@ -14166,7 +14334,11 @@ private struct AdminEventEditor: View {
     let session: AuthSession
     let event: AdminEvent?
     private let baseline: AdminEventDraft
+    private let baselineToken: String?
     @State private var draft: AdminEventDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var textInputFocused: Bool
@@ -14187,15 +14359,30 @@ private struct AdminEventEditor: View {
 
     init(admin: AdminStore, session: AuthSession, event: AdminEvent?) {
         let initialDraft = AdminEventDraft(event: event)
+        let baselineToken = event?.updated_at
+        let recovered: AdminCatalogueDraftSnapshot<AdminEventDraft>? = AdminCatalogueDraftStore.load(
+            kind: .event,
+            ownerID: session.user?.id,
+            recordID: event?.id,
+            baselineToken: baselineToken
+        )
         self.admin = admin
         self.session = session
         self.event = event
         baseline = initialDraft
-        _draft = State(initialValue: initialDraft)
+        self.baselineToken = baselineToken
+        _draft = State(initialValue: recovered?.draft ?? initialDraft)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -14262,8 +14449,14 @@ private struct AdminEventEditor: View {
             isBusy: isBusy
         )
         .interactiveDismissDisabled(isDirty || isBusy)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog("Discard event changes?", isPresented: $confirmingDiscard) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) { discardAndDismiss() }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("Your unsaved calendar changes will be permanently discarded.")
@@ -14293,20 +14486,66 @@ private struct AdminEventEditor: View {
     private func requestDismiss() {
         textInputFocused = false
         if isDirty { confirmingDiscard = true }
-        else { dismiss() }
+        else {
+            clearRecoveryDraft()
+            dismiss()
+        }
     }
 
     private func save() {
         guard canSave else { return }
         textInputFocused = false
-        Task {
-            if await admin.saveEvent(session: session, event: event, draft: draft) {
-                XertHaptics.play(.success)
-                dismiss()
-            } else {
-                XertHaptics.play(.error)
-            }
+        Task { await saveDraft() }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
         }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .event,
+            ownerID: session.user?.id,
+            recordID: event?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    @MainActor
+    private func saveDraft() async {
+        guard canSave else { return }
+        guard await admin.saveEvent(session: session, event: event, draft: draft) else {
+            XertHaptics.play(.error)
+            return
+        }
+        hasCommitted = true
+        clearRecoveryDraft()
+        XertHaptics.play(.success)
+        dismiss()
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func discardAndDismiss() {
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .event,
+            ownerID: session.user?.id,
+            recordID: event?.id
+        )
     }
 }
 
@@ -14611,7 +14850,13 @@ private struct AdminCoachesView: View {
         ) { coach in
             Button("Delete \(coach.name)", role: .destructive) {
                 Task {
-                    _ = await admin.deleteCoach(session: session, coach: coach)
+                    if await admin.deleteCoach(session: session, coach: coach) {
+                        AdminCatalogueDraftStore.clear(
+                            kind: .coach,
+                            ownerID: session.user?.id,
+                            recordID: coach.id
+                        )
+                    }
                     pendingDelete = nil
                 }
             }
@@ -14628,7 +14873,11 @@ private struct AdminCoachEditor: View {
     let session: AuthSession
     let coach: AdminCoach?
     private let baseline: AdminCoachDraft
+    private let baselineToken: String?
     @State private var draft: AdminCoachDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var textInputFocused: Bool
@@ -14649,15 +14898,30 @@ private struct AdminCoachEditor: View {
 
     init(admin: AdminStore, session: AuthSession, coach: AdminCoach?) {
         let initialDraft = AdminCoachDraft(coach: coach)
+        let baselineToken = coach?.updated_at
+        let recovered: AdminCatalogueDraftSnapshot<AdminCoachDraft>? = AdminCatalogueDraftStore.load(
+            kind: .coach,
+            ownerID: session.user?.id,
+            recordID: coach?.id,
+            baselineToken: baselineToken
+        )
         self.admin = admin
         self.session = session
         self.coach = coach
         baseline = initialDraft
-        _draft = State(initialValue: initialDraft)
+        self.baselineToken = baselineToken
+        _draft = State(initialValue: recovered?.draft ?? initialDraft)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -14734,8 +14998,14 @@ private struct AdminCoachEditor: View {
             isBusy: isBusy
         )
         .interactiveDismissDisabled(isDirty || isBusy)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog("Discard team profile changes?", isPresented: $confirmingDiscard) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) { discardAndDismiss() }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("Your unsaved team profile changes will be permanently discarded.")
@@ -14762,20 +15032,66 @@ private struct AdminCoachEditor: View {
     private func requestDismiss() {
         textInputFocused = false
         if isDirty { confirmingDiscard = true }
-        else { dismiss() }
+        else {
+            clearRecoveryDraft()
+            dismiss()
+        }
     }
 
     private func save() {
         guard canSave else { return }
         textInputFocused = false
-        Task {
-            if await admin.saveCoach(session: session, coach: coach, draft: draft) {
-                XertHaptics.play(.success)
-                dismiss()
-            } else {
-                XertHaptics.play(.error)
-            }
+        Task { await saveDraft() }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
         }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .coach,
+            ownerID: session.user?.id,
+            recordID: coach?.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    @MainActor
+    private func saveDraft() async {
+        guard canSave else { return }
+        guard await admin.saveCoach(session: session, coach: coach, draft: draft) else {
+            XertHaptics.play(.error)
+            return
+        }
+        hasCommitted = true
+        clearRecoveryDraft()
+        XertHaptics.play(.success)
+        dismiss()
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func discardAndDismiss() {
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .coach,
+            ownerID: session.user?.id,
+            recordID: coach?.id
+        )
     }
 }
 
@@ -15064,7 +15380,7 @@ private struct AdminAnnouncementComposer: View {
             return
         }
         try? await Task.sleep(nanoseconds: 350_000_000)
-        guard !Task.isCancelled, !isBusy else { return }
+        guard !Task.isCancelled, !hasCommitted, !isBusy else { return }
         AdminAnnouncementDraftStore.save(
             draft,
             ownerID: ownerID,
