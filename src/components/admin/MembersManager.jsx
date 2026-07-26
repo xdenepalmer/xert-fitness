@@ -46,6 +46,10 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
   const [noticeError, setNoticeError] = useState('');
   const [discardNoticeOpen, setDiscardNoticeOpen] = useState(false);
   const detailGenerationRef = useRef(0);
+  // admin_send_member_notice is not idempotent — same-paint double submit mints
+  // two private notices and two APNs deliveries before `noticeSaving` re-renders.
+  const noticeLockRef = useRef(false);
+  const noteLockRef = useRef(false);
   const noticeDirty = Boolean(noticeDraft.title.trim() || noticeDraft.body.trim());
 
   useEffect(() => {
@@ -79,6 +83,8 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
 
   const handleAddNote = async event => {
     event.preventDefault();
+    if (noteLockRef.current || noteSaving) return;
+    noteLockRef.current = true;
     setNoteSaving(true);
     setNoteError('');
     try {
@@ -91,11 +97,14 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
       setNoteError(error.message || 'Could not add the staff note.');
     } finally {
       setNoteSaving(false);
+      noteLockRef.current = false;
     }
   };
 
   const handleNoteArchive = async note => {
+    if (noteLockRef.current || noteSaving) return;
     const shouldArchive = !note.archived_at;
+    noteLockRef.current = true;
     setNoteSaving(true);
     setNoteError('');
     try {
@@ -106,6 +115,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
       setNoteError(error.message || 'Could not update the staff note.');
     } finally {
       setNoteSaving(false);
+      noteLockRef.current = false;
     }
   };
 
@@ -119,6 +129,8 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
 
   const handleSendNotice = async event => {
     event.preventDefault();
+    if (noticeLockRef.current || noticeSaving) return;
+    noticeLockRef.current = true;
     setNoticeSaving(true);
     setNoticeError('');
     try {
@@ -137,6 +149,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged, onDirtyChange 
       setNoticeError(error.message || 'Could not send the private member notice.');
     } finally {
       setNoticeSaving(false);
+      noticeLockRef.current = false;
     }
   };
 
@@ -738,9 +751,13 @@ function FollowUpModal({ member, onDone, onCancel }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Double Mark Contacted before re-render inserts two follow-up notes.
+  const saveLockRef = useRef(false);
 
   const handleSubmit = async event => {
     event.preventDefault();
+    if (saveLockRef.current || saving) return;
+    saveLockRef.current = true;
     setSaving(true);
     setError('');
     try {
@@ -751,6 +768,7 @@ function FollowUpModal({ member, onDone, onCancel }) {
     } catch (submitError) {
       setError(submitError.message || 'Could not record this follow-up.');
       setSaving(false);
+      saveLockRef.current = false;
     }
   };
 

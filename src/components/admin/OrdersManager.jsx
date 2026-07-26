@@ -40,6 +40,10 @@ export default function OrdersManager() {
   const [reconciling, setReconciling] = useState(false);
   // Same-paint double-click must not fire two Stripe reconciles.
   const reconcileLockRef = useRef(false);
+  // Stripe refund create is idempotent per order, but same-paint double-click
+  // still races two reconcile_stripe_order_refund calls + duplicate toasts
+  // before `refunding` re-renders (reconcile already uses reconcileLockRef).
+  const refundLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -135,7 +139,8 @@ export default function OrdersManager() {
     const orderId = selectedOrder?.id;
     const reason = refundReason;
     const confirmation = refundConfirmation;
-    if (!orderId) return;
+    if (!orderId || refundLockRef.current || refunding || reconciling) return;
+    refundLockRef.current = true;
     setRefunding(true);
     try {
       const result = await refundOrder(orderId, reason, confirmation);
@@ -153,6 +158,7 @@ export default function OrdersManager() {
       toast({ title: 'Refund failed', description: error.message, variant: 'destructive' });
     } finally {
       setRefunding(false);
+      refundLockRef.current = false;
     }
   };
 

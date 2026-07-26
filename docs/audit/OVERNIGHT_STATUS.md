@@ -8,6 +8,10 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Bookings inbox status / notes refuse same-paint double submits (parity with
+  PT desk) so Confirmed→Waitlisted cannot both land with a fresh `request_id`
+  each click; Orders full-refund matches reconcile’s lock; Members private
+  notice / staff note / follow-up log cannot mint duplicates before re-render.
 - Admin “Check Stripe Outcome” cannot double-fire on the same paint; concurrent
   reconcile no longer claims a second credit grant; audit markers only stamp
   paid rows (refund races fail closed).
@@ -267,6 +271,15 @@ Migration / operator mirror:
 `supabase/migrations/20260726116000_member_interest_health_reveal_authz.sql`
 ↔ `src/supabase/member_interest_health_reveal_authz.sql`.
 
+### 20. This batch — booking inbox / refund / member notice same-paint locks
+| Area | Defect | Fix |
+|---|---|---|
+| BookingRequestsTable status | Same-paint Confirmed / Waitlisted (etc.) each minted a new `request_id`, so two transitions + notices/credit moves could both land before `updatingKey` re-rendered (PT desk already had `updateLockRef`) | `updateLockRef` + bulk mutual exclusion; `notesLockRef` on legacy notes Save |
+| OrdersManager refund | Reconcile used `reconcileLockRef`; Refund only React `refunding` — same-paint double-click raced two refund API calls | `refundLockRef` (and refuse while reconciling) |
+| MembersManager notice / notes | `admin_send_member_notice` is not idempotent; double Send privately / Add note / Mark Contacted could mint two notices or two follow-up notes | `noticeLockRef` / `noteLockRef` / FollowUpModal `saveLockRef` |
+
+No new migration for this batch (app-only tip after `4c4a424`). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -385,3 +398,6 @@ show `installed = true` and `release_ready = true`, including
 22. **Pack create / Account delete / iOS Sign Out** — Double-click Create pack
     and Delete account confirm stay single-flight; iPhone Sign Out ignores a
     second tap.
+23. **Booking inbox / Orders refund / private notice** — Double-click booking
+    status stays single-flight; Refund button matches reconcile lock; Send
+    privately / Mark Contacted ignore a second same-paint submit.

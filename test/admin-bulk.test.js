@@ -59,4 +59,8 @@ test('destructive admin bulk updates use the accessible confirmation surface', (
   }
   assert.match(ptRequests, /const updateLockRef = useRef\(false\)/);
   assert.match(ptRequests, /if \(updateLockRef\.current \|\| updatingId !== null/);
+  assert.match(bookings, /const updateLockRef = useRef\(false\)/);
+  assert.match(bookings, /if \(updateLockRef\.current \|\| updatingKey \|\| bulkLockRef\.current \|\| bulkSaving\) return/);
+  assert.match(bookings, /const notesLockRef = useRef\(false\)/);
+  assert.match(bookings, /if \(!selectedBooking \|\| notesLockRef\.current \|\| savingNotes\) return/);
 });

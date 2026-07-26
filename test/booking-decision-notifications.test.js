@@ -37,6 +37,15 @@ test('web booking decisions deliver targeted push after the durable receipt', ()
   assert.match(roster, /Booking updated and member notified/);
 });
 
+test('booking inbox status and notes lock against same-paint double submits', () => {
+  const inbox = read('../src/components/admin/BookingRequestsTable.jsx');
+  assert.match(inbox, /const updateLockRef = useRef\(false\)/);
+  assert.match(inbox, /if \(updateLockRef\.current \|\| updatingKey \|\| bulkLockRef\.current \|\| bulkSaving\) return/);
+  assert.match(inbox, /updateLockRef\.current = true/);
+  assert.match(inbox, /const notesLockRef = useRef\(false\)/);
+  assert.match(inbox, /if \(!selectedBooking \|\| notesLockRef\.current \|\| savingNotes\) return/);
+});
+
 test('native booking decisions use the same receipt and non-blocking push contract', () => {
   const models = read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift');
   const api = read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift');

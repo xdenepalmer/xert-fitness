@@ -29,6 +29,17 @@ test('member admin renders direct contact actions and refreshes after staff foll
   assert.match(source, /onNotesChanged=\{refresh\}/);
 });
 
+test('member private notice, staff notes and follow-up log refuse same-paint double submits', () => {
+  const source = read('../src/components/admin/MembersManager.jsx');
+  assert.match(source, /const noticeLockRef = useRef\(false\)/);
+  assert.match(source, /if \(noticeLockRef\.current \|\| noticeSaving\) return/);
+  assert.match(source, /noticeLockRef\.current = true/);
+  assert.match(source, /const noteLockRef = useRef\(false\)/);
+  assert.match(source, /if \(noteLockRef\.current \|\| noteSaving\) return/);
+  assert.match(source, /function FollowUpModal[\s\S]*const saveLockRef = useRef\(false\)/);
+  assert.match(source, /function FollowUpModal[\s\S]*if \(saveLockRef\.current \|\| saving\) return/);
+});
+
 for (const path of ['../src/supabase/admin_cms_schema.sql', '../src/supabase/admin_member_follow_up_upgrade.sql']) {
   test(`${path} installs a secure, indexed and bounded follow-up queue`, () => {
     const sql = read(path);

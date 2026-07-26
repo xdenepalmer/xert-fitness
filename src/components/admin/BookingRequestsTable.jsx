@@ -40,6 +40,11 @@ export default function BookingRequestsTable() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
   const bulkLockRef = useRef(false);
+  // Same-paint status clicks mint a fresh request_id each call, so Confirmed
+  // then Waitlisted (or double Confirmed→cancelled credit churn) can both land
+  // before `updatingKey` re-renders. PT desk already uses updateLockRef.
+  const updateLockRef = useRef(false);
+  const notesLockRef = useRef(false);
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -122,7 +127,9 @@ export default function BookingRequestsTable() {
   }, [daysFilter, search, sourceFilter, statusFilter]);
 
   const handleStatusUpdate = async (booking, status) => {
+    if (updateLockRef.current || updatingKey || bulkLockRef.current || bulkSaving) return;
     const actionKey = `${booking.source}-${booking.id}`;
+    updateLockRef.current = true;
     setUpdatingKey(actionKey);
     try {
       let result = null;
@@ -147,11 +154,13 @@ export default function BookingRequestsTable() {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingKey('');
+      updateLockRef.current = false;
     }
   };
 
   const saveNotes = async () => {
-    if (!selectedBooking) return;
+    if (!selectedBooking || notesLockRef.current || savingNotes) return;
+    notesLockRef.current = true;
     setSavingNotes(true);
     try {
       await updateLegacyBookingNotes(selectedBooking.id, notes);
@@ -163,11 +172,12 @@ export default function BookingRequestsTable() {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
     } finally {
       setSavingNotes(false);
+      notesLockRef.current = false;
     }
   };
 
   const handleBulkUpdate = async () => {
-    if (bulkLockRef.current || bulkSaving) return;
+    if (bulkLockRef.current || bulkSaving || updateLockRef.current || updatingKey) return;
     if (!bulkStatus || selectedKeys.size === 0 || !bulkStatusOptions.includes(bulkStatus)) return;
     const selected = selectedBookings;
     const nextStatus = bulkStatus;
