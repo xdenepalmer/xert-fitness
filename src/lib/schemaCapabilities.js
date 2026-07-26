@@ -46,6 +46,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   targeted_member_notices: 'Apply supabase/migrations/20260714021000_targeted_member_notices.sql in Supabase.',
   waitlist_promotion_notifications: 'Apply supabase/migrations/20260721030000_waitlist_promotion_notifications.sql in Supabase.',
   booking_decision_notifications: 'Apply supabase/migrations/20260722000000_booking_decision_notifications.sql in Supabase.',
+  staff_assisted_booking: 'Apply supabase/migrations/20260727010000_staff_assisted_booking.sql in Supabase.',
   owner_stripe_price_provisioning: 'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
 });
 

@@ -203,6 +203,7 @@ struct AdminMemberNotice: Identifiable, Codable, Hashable {
         switch source_kind {
         case "booking_decision": return "Booking decision"
         case "waitlist_promotion": return "Waitlist promotion"
+        case "staff_booking": return "Staff-assisted booking"
         default: return "Direct notice"
         }
     }
@@ -1384,6 +1385,29 @@ struct AdminBookingDecisionOutcome: Hashable {
     let decision: AdminBookingDecision
     let pushDelivered: Bool
     let warning: String?
+}
+
+struct AdminStaffBookingReceipt: Codable, Hashable {
+    let request_id: UUID
+    let booking_id: UUID
+    let session_id: UUID
+    let member_id: UUID
+    let booking_status: String
+    let credit_batch_id: UUID?
+    let announcement_id: UUID?
+    let created_at: Date
+}
+
+struct AdminStaffBookingOutcome: Hashable {
+    let receipt: AdminStaffBookingReceipt
+    let pushDelivered: Bool
+    let warning: String?
+}
+
+struct AdminStaffBookingFeedback: Equatable {
+    let sessionID: UUID
+    let message: String
+    let needsAttention: Bool
 }
 
 struct AdminFollowUp: Identifiable, Codable, Hashable {
@@ -2741,6 +2765,7 @@ enum AdminSchemaReadiness {
         "catalog_optimistic_locking", "product_commercial_terms_guard", "targeted_member_notices",
         "waitlist_promotion_notifications",
         "booking_decision_notifications",
+        "staff_assisted_booking",
         "member_onboarding_foundation", "member_activation_cockpit"
     ]
 

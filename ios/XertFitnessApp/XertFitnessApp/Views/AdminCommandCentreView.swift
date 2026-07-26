@@ -5290,6 +5290,7 @@ private struct AdminClassRosterView: View {
     @State private var exitStateID = UUID()
     @State private var presentedMember: AdminMemberSummary?
     @State private var openingMemberID: UUID?
+    @State private var showingAddMember = false
 
     private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
     private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
@@ -5309,6 +5310,23 @@ private struct AdminClassRosterView: View {
     private var canRecordAttendance: Bool {
         rosterIsCurrent && attendanceSummary.isComplete && operation.start_time <= Date()
             && !isBusy
+    }
+    private var canAddMember: Bool {
+        let assumedEnd = operation.end_time
+            ?? operation.start_time.addingTimeInterval(3 * 60 * 60)
+        return rosterIsCurrent
+            && !loadFailed
+            && !isDirty
+            && ["published", "full"].contains(operation.status.lowercased())
+            && assumedEnd > Date()
+            && admin.addingRosterMemberID == nil
+    }
+    private var activeRosterMemberIDs: Set<UUID> {
+        Set(roster.compactMap { member in
+            ["requested", "confirmed", "waitlisted", "attended", "no_show"].contains(member.status)
+                ? member.member_id
+                : nil
+        })
     }
 
     var body: some View {
@@ -5391,6 +5409,35 @@ private struct AdminClassRosterView: View {
             }
 
             Section("Member roster") {
+                if let feedback = admin.staffBookingFeedback,
+                   feedback.sessionID == operation.id {
+                    Label(
+                        feedback.message,
+                        systemImage: feedback.needsAttention
+                            ? "exclamationmark.circle.fill"
+                            : "checkmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(feedback.needsAttention ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("owner.roster.staffBookingFeedback")
+                }
+                Button {
+                    showingAddMember = true
+                } label: {
+                    Label("Add existing member", systemImage: "person.badge.plus")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+                .disabled(!canAddMember)
+                .accessibilityHint(
+                    isDirty
+                        ? "Save or discard attendance marks before changing the roster"
+                        : "Searches member accounts and safely confirms or waitlists one member"
+                )
+
                 if !rosterIsCurrent, admin.loadingRosterSessionID == operation.id {
                     HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
                 } else if !rosterIsCurrent, loadFailed {
@@ -5516,6 +5563,14 @@ private struct AdminClassRosterView: View {
             NavigationStack {
                 AdminMemberDetailView(admin: admin, session: session, member: member)
             }
+        }
+        .sheet(isPresented: $showingAddMember) {
+            AdminRosterMemberPicker(
+                admin: admin,
+                session: session,
+                operation: operation,
+                existingMemberIDs: activeRosterMemberIDs
+            )
         }
         .navigationBarBackButtonHidden(isDirty)
         .toolbar {
@@ -5788,6 +5843,198 @@ private struct AdminClassRosterView: View {
             attendance = AdminAttendanceDraft(roster: admin.classRoster)
             attendanceBaseline = attendance
         }
+    }
+}
+
+private struct AdminRosterMemberPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var admin: AdminStore
+    let session: AuthSession
+    let operation: AdminDailyOperation
+    let existingMemberIDs: Set<UUID>
+    @State private var query = ""
+    @State private var candidate: AdminMemberSummary?
+    @State private var requestID = UUID()
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(operation.title)
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text(
+                            "\(operation.start_time.formatted(date: .abbreviated, time: .shortened))"
+                                + " · \(operation.confirmed_count) confirmed"
+                                + " · \(operation.waitlist_count) waiting"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.64))
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .listRowBackground(Color.xertInk)
+                }
+
+                Section("Member search") {
+                    if normalizedQuery.count < 2 {
+                        Label(
+                            "Enter at least two letters, an email or a phone number.",
+                            systemImage: "magnifyingglass"
+                        )
+                        .foregroundStyle(Color.xertPale.opacity(0.68))
+                    } else if admin.isSearchingOwnerMembers {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(Color.xertSteel)
+                            Text("Searching member accounts...")
+                        }
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                    } else if let error = admin.ownerMemberSearchError {
+                        Label(error, systemImage: "wifi.exclamationmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                    } else if admin.ownerMemberSearchResults.isEmpty {
+                        Label("No matching member accounts.", systemImage: "person.slash")
+                            .foregroundStyle(Color.xertPale.opacity(0.68))
+                    } else {
+                        ForEach(admin.ownerMemberSearchResults) { member in
+                            memberRow(member)
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.xertNavy)
+            .navigationTitle("Add member")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, prompt: "Name, email or phone")
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .disabled(admin.addingRosterMemberID != nil)
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+        .interactiveDismissDisabled(admin.addingRosterMemberID != nil)
+        .task(id: normalizedQuery) {
+            guard normalizedQuery.count >= 2 else {
+                admin.resetOwnerMemberSearch()
+                return
+            }
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await admin.searchOwnerMembers(session: session, query: normalizedQuery)
+        }
+        .onDisappear {
+            admin.resetOwnerMemberSearch()
+        }
+        .confirmationDialog(
+            "Add \(candidate?.displayName ?? "member")?",
+            isPresented: Binding(
+                get: { candidate != nil },
+                set: { if !$0 { candidate = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: candidate
+        ) { member in
+            Button("Confirm staff booking") {
+                Task {
+                    let succeeded = await admin.bookMemberIntoClass(
+                        session: session,
+                        classSessionID: operation.id,
+                        member: member,
+                        requestID: requestID
+                    )
+                    if succeeded {
+                        requestID = UUID()
+                        XertHaptics.play(.success)
+                        dismiss()
+                    } else {
+                        XertHaptics.play(.error)
+                    }
+                }
+            }
+            Button("Review member", role: .cancel) {}
+        } message: { member in
+            Text(
+                "XERT will confirm \(member.displayName) when capacity and one valid credit are available. "
+                    + "Otherwise the member joins the FIFO waitlist without using a credit. "
+                    + "The member receives a private in-app notice."
+            )
+        }
+    }
+
+    private func memberRow(_ member: AdminMemberSummary) -> some View {
+        let isExisting = existingMemberIDs.contains(member.id)
+        let isMember = member.role.lowercased() == "member"
+        let isUnavailable = isExisting || !isMember
+        let isAdding = admin.addingRosterMemberID == member.id
+        let availabilityText: String
+        if isExisting {
+            availabilityText = "Already on this roster"
+        } else if !isMember {
+            availabilityText = "Not a member account"
+        } else {
+            availabilityText = "\(member.credits_remaining) available credit\(member.credits_remaining == 1 ? "" : "s")"
+        }
+        let availabilityColor: Color = isExisting
+            ? .green
+            : (isMember && member.credits_remaining > 0 ? Color.xertSteel : .orange)
+        return Button {
+            candidate = member
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isExisting ? "person.crop.circle.badge.checkmark" : "person.crop.circle")
+                    .font(.title3)
+                    .foregroundStyle(isExisting ? Color.green : Color.xertSteel)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(member.displayName)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                    if let email = member.email?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !email.isEmpty {
+                        Text(email)
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
+                            .lineLimit(1)
+                    }
+                    Text(availabilityText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(availabilityColor)
+                }
+                Spacer(minLength: 8)
+                if isAdding {
+                    ProgressView().tint(Color.xertSteel)
+                } else if !isUnavailable {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(Color.xertSteel)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isUnavailable || admin.addingRosterMemberID != nil)
+        .accessibilityHint(isExisting
+            ? "This member already has an active roster entry"
+            : (isMember
+                ? "Reviews a staff-assisted booking for this member"
+                : "Only member accounts can be added to a class"))
+        .listRowBackground(Color.xertInk)
     }
 }
 

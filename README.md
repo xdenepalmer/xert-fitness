@@ -180,6 +180,9 @@ The Supabase schema is defined in:
 - `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
+- `src/supabase/staff_assisted_booking_upgrade.sql` — lets Class Desk safely
+  confirm or FIFO-waitlist an existing member with atomic capacity and credit
+  enforcement, retry receipts, and a private member notice
 - `src/supabase/class_cancellation_credit_refund_fix.sql` — repairs the class-cancellation
   refund so members get their credit back when staff cancel a class (the original refund
   filtered on the post-update status and therefore always refunded nothing)

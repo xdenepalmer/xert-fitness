@@ -50,6 +50,7 @@ with required (capability, migration) as (
     ('targeted_member_notices', 'supabase/migrations/20260714021000_targeted_member_notices.sql'),
     ('waitlist_promotion_notifications', 'supabase/migrations/20260721030000_waitlist_promotion_notifications.sql'),
     ('booking_decision_notifications', 'supabase/migrations/20260722000000_booking_decision_notifications.sql'),
+    ('staff_assisted_booking', 'supabase/migrations/20260727010000_staff_assisted_booking.sql'),
     ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql')
 ), readiness as (
   select

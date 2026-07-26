@@ -125,6 +125,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var promotionNoticeWarning: String?
     @Published private(set) var bookingDecisionNoticeWarning: String?
+    @Published private(set) var addingRosterMemberID: UUID?
+    @Published private(set) var staffBookingFeedback: AdminStaffBookingFeedback?
     @Published private(set) var loggingFollowUpMemberID: UUID?
     @Published private(set) var isSavingSettings = false
     @Published private(set) var updatingPTRequestID: UUID?
@@ -1883,6 +1885,9 @@ final class AdminStore: ObservableObject {
         classSessionID: UUID,
         preserveCurrent: Bool = false
     ) async -> Bool {
+        if requestedRosterSessionID != classSessionID {
+            staffBookingFeedback = nil
+        }
         rosterLoadGeneration &+= 1
         let generation = rosterLoadGeneration
         requestedRosterSessionID = classSessionID
@@ -1956,6 +1961,101 @@ final class AdminStore: ObservableObject {
             return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func bookMemberIntoClass(
+        session: AuthSession,
+        classSessionID: UUID,
+        member: AdminMemberSummary,
+        requestID: UUID
+    ) async -> Bool {
+        guard addingRosterMemberID == nil,
+              requestedRosterSessionID == classSessionID,
+              loadedRosterSessionID == classSessionID,
+              rosterLoadErrorSessionID != classSessionID else { return false }
+        addingRosterMemberID = member.id
+        staffBookingFeedback = nil
+        defer { addingRosterMemberID = nil }
+
+        do {
+            let outcome = try await api.adminBookMemberIntoClass(
+                session: session,
+                classSessionID: classSessionID,
+                memberID: member.id,
+                requestID: requestID
+            )
+            var refreshFailures: [String] = []
+            let rosterRefreshed = await loadClassRoster(
+                session: session,
+                classSessionID: classSessionID,
+                preserveCurrent: true
+            )
+            if !rosterRefreshed { refreshFailures.append("roster") }
+            do {
+                dailyOperations = try await api.adminDailyOperations(session: session)
+                loadedSources.insert("today's classes")
+                refreshUnavailableSources.removeAll { $0 == "today's classes" }
+            } catch {
+                refreshFailures.append("today's classes")
+                if !refreshUnavailableSources.contains("today's classes") {
+                    refreshUnavailableSources.append("today's classes")
+                }
+            }
+            do {
+                waitlist = try await api.adminWaitlist(session: session)
+                loadedSources.insert("waitlists")
+                refreshUnavailableSources.removeAll { $0 == "waitlists" }
+            } catch {
+                refreshFailures.append("waitlist")
+                if !refreshUnavailableSources.contains("waitlists") {
+                    refreshUnavailableSources.append("waitlists")
+                }
+            }
+
+            let placement = outcome.receipt.booking_status == "confirmed"
+                ? "confirmed in the class"
+                : "added to the FIFO waitlist"
+            var details = ["\(member.displayName) was \(placement)."]
+            if let warning = outcome.warning { details.append(warning) }
+            if !refreshFailures.isEmpty {
+                details.append(
+                    "\(refreshFailures.joined(separator: " and ").capitalized) could not refresh."
+                )
+            }
+            staffBookingFeedback = AdminStaffBookingFeedback(
+                sessionID: classSessionID,
+                message: details.joined(separator: " "),
+                needsAttention: outcome.warning != nil || !refreshFailures.isEmpty
+            )
+            lastUpdatedAt = Date()
+            return true
+        } catch {
+            let message = error.localizedDescription
+            if message.localizedCaseInsensitiveContains("MEMBER_HAS_NO_CREDITS") {
+                errorMessage = "\(member.displayName) has no available class credits. Grant credits or choose a session pack first."
+            } else if message.localizedCaseInsensitiveContains("MEMBER_ALREADY_ON_ROSTER") {
+                errorMessage = "\(member.displayName) already has an active place or waitlist entry for this class."
+            } else if message.localizedCaseInsensitiveContains("STAFF_BOOKING_REQUEST_CONFLICT") {
+                errorMessage = "This booking request was already used for another member. Close the picker and try again."
+            } else if message.localizedCaseInsensitiveContains("CLASS_CAPACITY_INVALID") {
+                errorMessage = "Set a valid class capacity before adding members."
+            } else if message.localizedCaseInsensitiveContains("SESSION_FINISHED") {
+                errorMessage = "This class has finished and can no longer accept roster additions."
+            } else if message.localizedCaseInsensitiveContains("SESSION_INTEREST_ONLY") {
+                errorMessage = "This class collects interest only and cannot accept roster bookings."
+            } else if message.localizedCaseInsensitiveContains("SESSION_NOT_BOOKABLE") {
+                errorMessage = "This class is not currently open for roster bookings."
+            } else if message.localizedCaseInsensitiveContains("BOOKING_TIME_CONFLICT") {
+                errorMessage = "\(member.displayName) already has another class at this time."
+            } else if message.localizedCaseInsensitiveContains("MEMBER_NOT_BOOKABLE") {
+                errorMessage = "Choose an active member account. Staff and administrator accounts cannot be booked into classes."
+            } else if message.localizedCaseInsensitiveContains("admin_book_member_into_class") {
+                errorMessage = "Apply the staff-assisted booking migration before adding members from Class Desk."
+            } else {
+                errorMessage = message
+            }
             return false
         }
     }

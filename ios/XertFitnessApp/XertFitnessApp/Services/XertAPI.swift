@@ -618,6 +618,62 @@ final class XertAPI {
         }
     }
 
+    func adminBookMemberIntoClass(
+        session auth: AuthSession,
+        classSessionID: UUID,
+        memberID: UUID,
+        requestID: UUID
+    ) async throws -> AdminStaffBookingOutcome {
+        let rows: [AdminStaffBookingReceipt] = try await rpc(
+            path: "admin_book_member_into_class",
+            body: AdminStaffBookingRequest(
+                p_session_id: classSessionID,
+                p_member_id: memberID,
+                p_request_id: requestID
+            ),
+            auth: auth
+        )
+        guard rows.count == 1, let receipt = rows.first,
+              receipt.request_id == requestID,
+              receipt.session_id == classSessionID,
+              receipt.member_id == memberID,
+              ["confirmed", "waitlisted"].contains(receipt.booking_status) else {
+            throw APIError(
+                message: "The staff booking completed without a verifiable receipt. Refresh the roster before continuing."
+            )
+        }
+        guard let announcementID = receipt.announcement_id else {
+            return AdminStaffBookingOutcome(
+                receipt: receipt,
+                pushDelivered: false,
+                warning: "The roster changed, but no private member notice was returned."
+            )
+        }
+        do {
+            let response: AdminTargetedNoticeResponse = try await vercelRequest(
+                path: "/api/admin-publish-announcement",
+                body: AdminTargetedNoticeRequest(
+                    action: "notify_targeted_announcement",
+                    announcement_id: announcementID
+                ),
+                auth: auth
+            )
+            return AdminStaffBookingOutcome(
+                receipt: receipt,
+                pushDelivered: (response.push?.delivered ?? 0) > 0,
+                warning: response.push?.configured == false
+                    ? "The private notice is live, but Apple push is not configured."
+                    : nil
+            )
+        } catch {
+            return AdminStaffBookingOutcome(
+                receipt: receipt,
+                pushDelivered: false,
+                warning: "The private notice is live, but Apple push delivery needs attention."
+            )
+        }
+    }
+
     @discardableResult
     func adminRecordAttendance(
         session auth: AuthSession,
@@ -2729,6 +2785,11 @@ private struct AdminWaitlistPromotionRequest: Encodable {
 private struct AdminBookingStatusRequest: Encodable {
     let p_booking_id: UUID
     let p_status: String
+    let p_request_id: UUID
+}
+private struct AdminStaffBookingRequest: Encodable {
+    let p_session_id: UUID
+    let p_member_id: UUID
     let p_request_id: UUID
 }
 private struct AdminAttendanceRequest: Encodable {

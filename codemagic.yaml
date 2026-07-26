@@ -337,6 +337,7 @@ workflows:
               "targeted_member_notices",
               "waitlist_promotion_notifications",
               "booking_decision_notifications",
+              "staff_assisted_booking",
               "owner_stripe_price_provisioning",
             ];
             const missing = required.filter(item => !installed.has(item));
