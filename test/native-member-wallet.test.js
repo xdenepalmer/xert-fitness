@@ -37,5 +37,8 @@ test('native account presents one-off credits as an honest, accessible member wa
   assert.match(wallet, /dynamicTypeSize\.isAccessibilitySize/);
   assert.match(wallet, /minHeight: 44/);
   assert.match(wallet, /xertfitness:\/\/booking\/packs/);
-  assert.match(wallet, /Label\("Buy session packs"/);
+  assert.match(wallet, /Buy session packs/);
+  // Soft-launch: packs CTA fails closed to Explore interest while bookings paused.
+  assert.match(wallet, /store\.memberBookingsEnabled \? "Buy session packs" : "Register interest"/);
+  assert.match(wallet, /xertfitness:\/\/explore/);
 });

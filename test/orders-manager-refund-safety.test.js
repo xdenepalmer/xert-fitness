@@ -21,6 +21,14 @@ test('OrdersManager refund locks against same-paint double submits', async () =>
   assert.match(source, /refundLockRef\.current = false/);
 });
 
+test('OrdersManager CSV locks against same-paint PII downloads and export while loading', async () => {
+  const source = await readFile(new URL('../src/components/admin/OrdersManager.jsx', import.meta.url), 'utf8');
+  assert.match(source, /const exportLockRef = useRef\(false\)/);
+  assert.match(source, /if \(exportLockRef\.current \|\| exporting \|\| loading \|\| filteredOrders\.length === 0\) return/);
+  assert.match(source, /exportLockRef\.current = true/);
+  assert.match(source, /disabled=\{filteredOrders\.length === 0 \|\| exporting \|\| loading\}/);
+});
+
 test('PT desk keeps the operator on the current page after a status update', async () => {
   const source = await readFile(new URL('../src/components/admin/PTRequestsTable.jsx', import.meta.url), 'utf8');
   assert.match(source, /await load\(page\);/);

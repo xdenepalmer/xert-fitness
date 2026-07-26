@@ -28,6 +28,9 @@ export default function AvailabilityManager() {
   const [pendingRemoval, setPendingRemoval] = useState(null);
   // Same-paint Save can mint two blocks / blackouts before `saving` re-renders.
   const saveLockRef = useRef(false);
+  // Confirm clears the dialog before `removingId` paints — keep a lock so a
+  // second Remove cannot race two deletes (Coaches / Events deleteLockRef parity).
+  const deleteLockRef = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -114,6 +117,7 @@ export default function AvailabilityManager() {
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setRemovingId(null);
+      deleteLockRef.current = false;
     }
   };
 
@@ -127,14 +131,18 @@ export default function AvailabilityManager() {
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setRemovingId(null);
+      deleteLockRef.current = false;
     }
   };
 
   const confirmRemoval = () => {
     const pending = pendingRemoval;
+    if (!pending || deleteLockRef.current || removingId !== null) return;
+    deleteLockRef.current = true;
     setPendingRemoval(null);
-    if (pending?.kind === 'availability') void deleteBlock(pending.item);
-    if (pending?.kind === 'blackout') void deleteBlackout(pending.item);
+    if (pending.kind === 'availability') void deleteBlock(pending.item);
+    else if (pending.kind === 'blackout') void deleteBlackout(pending.item);
+    else deleteLockRef.current = false;
   };
 
   return (

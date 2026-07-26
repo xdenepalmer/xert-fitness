@@ -288,6 +288,16 @@ test('soft-launch public booking gate keeps class_bookings inserts behind bookin
   const iosHome = read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift');
   assert.match(iosHome, /bookingsEnabled: store\.memberBookingsEnabled/);
   assert.match(iosHome, /Register interest/);
+
+  const account = read('../src/pages/Account.jsx');
+  assert.match(account, /const bookingsEnabled = launchSettings\.bookings_enabled === true/);
+  assert.match(account, /bookingsEnabled \? 'Book A Class' : 'Register interest'/);
+  assert.match(account, /to=\{bookingsEnabled \? '\/booking' : '\/#eoi'\}/);
+
+  const iosAccount = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
+  assert.match(iosAccount, /store\.memberBookingsEnabled/);
+  assert.match(iosAccount, /Register interest/);
+  assert.match(iosAccount, /xertfitness:\/\/explore/);
 });
 
 test('account profile save and public event goals refuse same-paint double submits', () => {

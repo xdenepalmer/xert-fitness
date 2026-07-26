@@ -25,6 +25,26 @@ test('native booking keeps discovery fast, honest and operable at large text siz
   assert.ok((source.match(/interactiveDismissDisabled\(store\.isRequesting/g) || []).length >= 2);
 });
 
+test('native account Book CTAs fail closed to Register interest while bookings are paused', async () => {
+  const source = await readView('AccountView');
+  const progress = source.slice(
+    source.indexOf('private func trainingProgressCard'),
+    source.indexOf('private func trainingProgressMetric'),
+  );
+  assert.match(progress, /store\.memberBookingsEnabled/);
+  assert.match(progress, /Register interest/);
+  assert.match(progress, /xertfitness:\/\/explore/);
+
+  const membership = source.slice(
+    source.indexOf('private var membershipSection'),
+    source.indexOf('private var creditSummary'),
+  );
+  assert.match(membership, /store\.memberBookingsEnabled/);
+  assert.match(membership, /Buy session packs/);
+  assert.match(membership, /Register interest/);
+  assert.match(membership, /xertfitness:\/\/explore/);
+});
+
 test('native account prioritizes member activity and fully supports keyboard and haptic preferences', async () => {
   const source = await readView('AccountView');
   const signedIn = source.slice(

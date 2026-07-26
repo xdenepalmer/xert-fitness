@@ -20,6 +20,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 import { authPathWithNext } from '@/lib/authRedirect';
+import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 
 function formatDateTime(iso) {
   if (!iso) return '';
@@ -121,6 +122,9 @@ export default function Account() {
   const goalRemoveLockRef = useRef(false);
   const [removingGoalId, setRemovingGoalId] = useState(null);
   const [memberReadiness, setMemberReadiness] = useState(null);
+  // Fail closed: Account Book CTAs stay off until bookings_enabled (Home / marketing parity).
+  const [launchSettings, setLaunchSettings] = useState(getDefaultSettings());
+  const bookingsEnabled = launchSettings.bookings_enabled === true;
   const [readinessForm, setReadinessForm] = useState(emptyReadinessForm);
   const [adultEligibilityConfirmed, setAdultEligibilityConfirmed] = useState(false);
   const [contactIsAware, setContactIsAware] = useState(false);
@@ -272,6 +276,10 @@ export default function Account() {
       if (accountRequestID === accountRefreshRequestIDRef.current) setLoading(false);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    getSoftLaunchSettings().then(s => { if (s) setLaunchSettings(s); }).catch(() => {});
+  }, []);
 
   const accountUserID = user?.id || '';
   useEffect(() => {
@@ -1097,8 +1105,11 @@ export default function Account() {
               <p className="min-w-0 flex-1 font-body text-sm text-xert-pale">
                 {expiringCredits.credits} class credit{expiringCredits.credits === 1 ? '' : 's'} expire{expiringCredits.credits === 1 ? 's' : ''} in {expiringCredits.daysRemaining} day{expiringCredits.daysRemaining === 1 ? '' : 's'}, on {formatDate(expiringCredits.expiresAt)}.
               </p>
-              <Link to="/booking" className="inline-flex min-h-11 items-center px-4 font-display text-sm uppercase text-xert-navy bg-[#e0b36a]">
-                Book A Class
+              <Link
+                to={bookingsEnabled ? '/booking' : '/#eoi'}
+                className="inline-flex min-h-11 items-center px-4 font-display text-sm uppercase text-xert-navy bg-[#e0b36a]"
+              >
+                {bookingsEnabled ? 'Book A Class' : 'Register interest'}
               </Link>
             </div>
           )}
@@ -1120,8 +1131,14 @@ export default function Account() {
                   Next expiry: {formatDate(credits.batches.find(batch => batch.expires_at)?.expires_at)}
                 </p>
               )}
-              <Link to="/booking" className="px-5 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-                {accountReady && credits?.total > 0 ? 'Book A Class' : 'Buy A Pack'}
+              <Link
+                to={bookingsEnabled ? '/booking' : '/#eoi'}
+                className="px-5 py-3 font-display text-base uppercase tracking-wide"
+                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+              >
+                {bookingsEnabled
+                  ? (accountReady && credits?.total > 0 ? 'Book A Class' : 'Buy A Pack')
+                  : 'Register interest'}
               </Link>
             </div>
           </div>
@@ -1138,8 +1155,12 @@ export default function Account() {
                 Based only on attendance recorded by XERT.
               </p>
             </div>
-            <Link to="/booking" className="inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-              Book next class
+            <Link
+              to={bookingsEnabled ? '/booking' : '/#eoi'}
+              className="inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider"
+              style={{ color: '#7BA7BC' }}
+            >
+              {bookingsEnabled ? 'Book next class' : 'Register interest'}
             </Link>
           </div>
 
@@ -1345,10 +1366,21 @@ export default function Account() {
             <div className="border p-6" style={cardStyle}>
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
                 No upcoming classes booked.{' '}
-                <Link to="/booking" style={{ color: '#7BA7BC' }}>
-                  Browse the timetable
-                </Link>{' '}
-                to book your next session.
+                {bookingsEnabled ? (
+                  <>
+                    <Link to="/booking" style={{ color: '#7BA7BC' }}>
+                      Browse the timetable
+                    </Link>
+                    {' '}to book your next session.
+                  </>
+                ) : (
+                  <>
+                    <Link to="/#eoi" style={{ color: '#7BA7BC' }}>
+                      Register interest
+                    </Link>
+                    {' '}while bookings are paused.
+                  </>
+                )}
               </p>
             </div>
           ) : (

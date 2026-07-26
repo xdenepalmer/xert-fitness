@@ -44,6 +44,10 @@ export default function OrdersManager() {
   // still races two reconcile_stripe_order_refund calls + duplicate toasts
   // before `refunding` re-renders (reconcile already uses reconcileLockRef).
   const refundLockRef = useRef(false);
+  // Orders CSV includes buyer email — refuse same-paint double download and
+  // export while the desk is still loading (LeadTable / Members / booking ops parity).
+  const exportLockRef = useRef(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -95,6 +99,32 @@ export default function OrdersManager() {
       toast({ title: 'Copied to clipboard' });
     } catch {
       toast({ title: 'Could not copy', description: 'Select the identifier and copy it manually.', variant: 'destructive' });
+    }
+  };
+
+  const handleExport = () => {
+    if (exportLockRef.current || exporting || loading || filteredOrders.length === 0) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    try {
+      downloadCsv(`xert-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+        orderCsvRows(filteredOrders), [
+          { key: 'created_at', label: 'Created' }, { key: 'paid_at', label: 'Paid' },
+          { key: 'product', label: 'Product' }, { key: 'email', label: 'Email' },
+          { key: 'amount', label: 'Amount' }, { key: 'currency', label: 'Currency' },
+          { key: 'credit_total', label: 'Purchased session credits' },
+          { key: 'credit_validity_days', label: 'Purchased validity days' },
+          { key: 'status', label: 'Status' }, { key: 'checkout_session', label: 'Stripe Checkout Session' },
+          { key: 'payment_intent', label: 'Stripe Payment Intent' },
+          { key: 'reconciled_at', label: 'Admin reconciled' }, { key: 'reconciled_by', label: 'Reconciled by admin ID' },
+          { key: 'refunded_at', label: 'Refunded' }, { key: 'refunded_amount', label: 'Refund amount' },
+          { key: 'credits_revoked', label: 'Unused credits revoked' },
+          { key: 'credits_consumed_before_refund', label: 'Credits used before refund' },
+          { key: 'bookings_cancelled', label: 'Future bookings cancelled' },
+        ]);
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
     }
   };
 
@@ -167,24 +197,11 @@ export default function OrdersManager() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h2 className="font-display text-lg text-xert-offwhite uppercase">Orders &amp; Revenue</h2>
         <button
-          onClick={() => downloadCsv(`xert-orders-${new Date().toISOString().slice(0, 10)}.csv`,
-            orderCsvRows(filteredOrders), [
-              { key: 'created_at', label: 'Created' }, { key: 'paid_at', label: 'Paid' },
-              { key: 'product', label: 'Product' }, { key: 'email', label: 'Email' },
-              { key: 'amount', label: 'Amount' }, { key: 'currency', label: 'Currency' },
-              { key: 'credit_total', label: 'Purchased session credits' },
-              { key: 'credit_validity_days', label: 'Purchased validity days' },
-              { key: 'status', label: 'Status' }, { key: 'checkout_session', label: 'Stripe Checkout Session' },
-              { key: 'payment_intent', label: 'Stripe Payment Intent' },
-              { key: 'reconciled_at', label: 'Admin reconciled' }, { key: 'reconciled_by', label: 'Reconciled by admin ID' },
-              { key: 'refunded_at', label: 'Refunded' }, { key: 'refunded_amount', label: 'Refund amount' },
-              { key: 'credits_revoked', label: 'Unused credits revoked' },
-              { key: 'credits_consumed_before_refund', label: 'Credits used before refund' },
-              { key: 'bookings_cancelled', label: 'Future bookings cancelled' },
-            ])}
-          disabled={filteredOrders.length === 0}
+          type="button"
+          onClick={handleExport}
+          disabled={filteredOrders.length === 0 || exporting || loading}
           className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
-          <Download className="w-3.5 h-3.5" /> CSV
+          <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
         </button>
       </div>
 

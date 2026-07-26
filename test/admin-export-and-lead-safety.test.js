@@ -84,6 +84,25 @@ test('class calendar Dupe refuses same-paint double creates', async () => {
   assert.match(dupe, /duplicateLockRef\.current = true/);
 });
 
+test('class calendar roster and request status refuse same-paint double updates', async () => {
+  const calendar = await read('../src/components/admin/ClassCalendarAdmin.jsx');
+  assert.match(calendar, /const bookingStatusLockRef = useRef\(false\)/);
+  const roster = calendar.slice(
+    calendar.indexOf('const handleRosterStatus'),
+    calendar.indexOf('const handlePromoteNext'),
+  );
+  assert.match(roster, /if \(!sessionId \|\| bookingStatusLockRef\.current \|\| updatingBookingId\) return/);
+  assert.match(roster, /bookingStatusLockRef\.current = true/);
+  const request = calendar.slice(
+    calendar.indexOf('const handleBookingStatus'),
+    calendar.indexOf('const scopedRosterFor'),
+  );
+  assert.match(request, /if \(!sessionId \|\| bookingStatusLockRef\.current \|\| updatingBookingId\) return/);
+  assert.match(request, /bookingStatusLockRef\.current = true/);
+  assert.match(calendar, /disabled=\{Boolean\(updatingBookingId\) \|\| s\.status !== 'published'\}/);
+  assert.match(calendar, /disabled=\{Boolean\(updatingBookingId\)\}/);
+});
+
 test('native platform settings freeze edits while payment-activation confirm is open', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const platform = view.slice(

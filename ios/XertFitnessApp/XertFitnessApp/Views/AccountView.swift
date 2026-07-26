@@ -293,10 +293,18 @@ struct AccountView: View {
             }
 
             Button {
-                guard let url = URL(string: "xertfitness://booking") else { return }
+                // Soft-launch parity with Home / Explore: when bookings are paused,
+                // do not deep-link into Book — send members to Explore interest.
+                let target = store.memberBookingsEnabled
+                    ? "xertfitness://booking"
+                    : "xertfitness://explore"
+                guard let url = URL(string: target) else { return }
                 openURL(url)
             } label: {
-                Label("Book your next class", systemImage: "calendar.badge.plus")
+                Label(
+                    store.memberBookingsEnabled ? "Book your next class" : "Register interest",
+                    systemImage: store.memberBookingsEnabled ? "calendar.badge.plus" : "person.crop.circle.badge.plus"
+                )
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.xertPrimary)
@@ -347,14 +355,26 @@ struct AccountView: View {
                 creditBatchWallet
 
                 Button {
-                    guard let url = URL(string: "xertfitness://booking/packs") else { return }
+                    // Pack checkout is blocked while bookings stay paused — fail closed
+                    // to Explore interest (web Account Buy/Book → Register interest parity).
+                    let target = store.memberBookingsEnabled
+                        ? "xertfitness://booking/packs"
+                        : "xertfitness://explore"
+                    guard let url = URL(string: target) else { return }
                     openURL(url)
                 } label: {
-                    Label("Buy session packs", systemImage: "plus.circle.fill")
+                    Label(
+                        store.memberBookingsEnabled ? "Buy session packs" : "Register interest",
+                        systemImage: store.memberBookingsEnabled ? "plus.circle.fill" : "person.crop.circle.badge.plus"
+                    )
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.xertPrimary)
-                .accessibilityHint("Opens session packs on the Book page")
+                .accessibilityHint(
+                    store.memberBookingsEnabled
+                        ? "Opens session packs on the Book page"
+                        : "Opens Explore so you can register interest while bookings are paused"
+                )
             }
             .padding(14)
             .xertCardStyle()

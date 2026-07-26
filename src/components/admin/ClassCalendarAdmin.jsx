@@ -563,6 +563,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
+  // Roster / class-request status calls admin_set_booking_status_with_notice with a
+  // fresh request_id each click — same-paint double change (or a second row while
+  // the first is still mounting busy) can mint two notices / credit moves
+  // (Booking Operations updateLockRef parity).
+  const bookingStatusLockRef = useRef(false);
   const [promotingSessionId, setPromotingSessionId] = useState(null);
   const [promotionCandidate, setPromotionCandidate] = useState(null);
   const [skippingSessionId, setSkippingSessionId] = useState(null);
@@ -741,12 +746,13 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
   const handleRosterStatus = async (bookingId, status) => {
     const sessionId = expandedBookings;
-    if (!sessionId) return;
+    if (!sessionId || bookingStatusLockRef.current || updatingBookingId) return;
     const session = sessions.find(item => item.id === sessionId);
     if (session?.status !== 'published') {
       toast({ title: 'Class is not open for booking', description: 'Publish the class before reopening a member booking.', variant: 'destructive' });
       return;
     }
+    bookingStatusLockRef.current = true;
     setUpdatingBookingId(bookingId);
     try {
       const result = await adminSetBookingStatus(bookingId, status);
@@ -768,6 +774,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingBookingId(null);
+      bookingStatusLockRef.current = false;
     }
   };
 
@@ -933,7 +940,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
   const handleBookingStatus = async (id, status) => {
     const sessionId = expandedBookings;
-    if (!sessionId) return;
+    if (!sessionId || bookingStatusLockRef.current || updatingBookingId) return;
+    bookingStatusLockRef.current = true;
     setUpdatingBookingId(id);
     try {
       await updateBookingStatus(id, status);
@@ -943,6 +951,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingBookingId(null);
+      bookingStatusLockRef.current = false;
     }
   };
 
@@ -1216,7 +1225,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                             {waitlistPosition && <p className="font-body text-[11px] text-xert-steel mt-1">Waitlist position {waitlistPosition}</p>}
                           </div>
-                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || s.status !== 'published'}
+                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={Boolean(updatingBookingId) || s.status !== 'published'}
                             aria-label={`Roster status for ${r.full_name || r.email || 'member'}`}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {rosterStatusOptions(r.status, s.status, waitlistedRoster.length > 0).map(st => <option key={st} value={st}>{st}</option>)}
@@ -1239,7 +1248,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                             <p className="font-body text-sm text-xert-offwhite">{b.full_name}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.training_level}</p>
                           </div>
-                          <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={updatingBookingId === b.id}
+                          <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={Boolean(updatingBookingId)}
                             aria-label={`Booking request status for ${b.full_name || b.email || 'member'}`}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}

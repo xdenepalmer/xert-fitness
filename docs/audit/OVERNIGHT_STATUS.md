@@ -8,6 +8,13 @@ commit on `cursor/xert-audit-continuation-8c8e` (see git log). Staff roles
 were **not** built.
 
 **What was made safer overnight (plain English)**
+- Orders CSV matches LeadTable / Members / booking ops: no same-paint double
+  download (buyer email PII) and export stays off while the desk is loading.
+  Class Calendar roster + class-request status selects share a lock so a second
+  paint cannot mint two `admin_set_booking_status_with_notice` receipts/notices.
+  Member Account Book / Buy CTAs (web + iPhone) fail closed to Register interest
+  while bookings are paused. Availability Remove confirms refuse same-paint
+  double deletes (Coaches / Events deleteLockRef parity).
 - Booking Operations CSV, class roster CSV and event training-group CSV match
   LeadTable / Members / PT: no same-paint double download and booking CSV stays
   off while the desk is loading. Class Calendar Dupe refuses same-paint double
@@ -369,6 +376,16 @@ No new migration for this batch (app-only tip). Apply through **26116** remains 
 
 No new migration for this batch (app-only tip). Apply through **26116** remains current.
 
+### 26. This batch — Orders CSV, roster status lock, Account paused Book CTAs, availability delete
+| Area | Defect | Fix |
+|---|---|---|
+| Orders & Revenue CSV | Export stayed enabled during desk load and had no same-paint lock — buyer email / Stripe ids could download twice or against a mid-refresh filter | `exportLockRef` + `disabled` while `loading` (LeadTable / Members / booking ops parity) |
+| Class Calendar roster / request status | Only React `updatingBookingId` — same-paint (or sibling-row) status change could mint two notice receipts with fresh `request_id`s before busy painted | `bookingStatusLockRef` + freeze every status select while one update is in flight (Booking Operations parity) |
+| Member Account Book CTAs | Marketing / Home gated Book while bookings paused; Account still offered Book A Class / Buy A Pack / Book next class (web + iPhone) | Fail-closed `bookingsEnabled` / `memberBookingsEnabled` → Register interest (`/#eoi` / Explore) |
+| Availability Remove | Confirm cleared the dialog before `removingId` painted and had no delete lock — second Remove could race two deletes | `deleteLockRef` (Coaches / Events parity) |
+
+No new migration for this batch (app-only tip). Apply through **26116** remains current.
+
 ---
 
 ## Full ordered list — overnight migrations to apply in production
@@ -535,3 +552,8 @@ show `installed = true` and `release_ready = true`, including
     roster / event training-group CSV refuse double download (booking CSV off
     while loading); class Dupe and Account Remove goal ignore a second
     same-paint submit; iPhone Account Save details ignores a second Task.
+29. **Orders CSV + roster status + Account paused Book + availability delete** —
+    Orders CSV refuses double download and stays off while loading; class
+    roster / request status selects ignore a second same-paint change; with
+    bookings off, Account Book/Buy CTAs (web + iPhone) say Register interest;
+    Availability Remove ignore a second same-paint Confirm.

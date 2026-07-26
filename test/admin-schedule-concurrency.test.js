@@ -45,3 +45,12 @@ test('availability and blackout editors refuse same-paint double saves', () => {
     assert.match(body, /saveLockRef\.current = false/);
   }
 });
+
+test('availability Remove confirms refuse same-paint double deletes', () => {
+  assert.match(managerSource, /const deleteLockRef = useRef\(false\)/);
+  const start = managerSource.indexOf('const confirmRemoval');
+  assert.notEqual(start, -1);
+  const confirm = managerSource.slice(start, start + 450);
+  assert.match(confirm, /if \(!pending \|\| deleteLockRef\.current \|\| removingId !== null\) return/);
+  assert.match(confirm, /deleteLockRef\.current = true/);
+});
