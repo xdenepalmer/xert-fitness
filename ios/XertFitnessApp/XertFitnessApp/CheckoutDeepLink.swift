@@ -11,13 +11,13 @@ enum CheckoutReturnStatus: String, Identifiable {
     var id: String { rawValue }
 
     var title: String {
-        self == .success ? "Payment received" : "Checkout cancelled"
+        self == .success ? "Purchase confirmed" : "Checkout cancelled"
     }
 
     var message: String {
         switch self {
         case .success:
-            return "Your payment is being confirmed. Credits and purchase history are refreshing now."
+            return "Your session pack is active and your credit balance has been refreshed."
         case .cancelled:
             return "No payment was taken. You can choose a session pack whenever you are ready."
         }
@@ -72,6 +72,14 @@ enum CheckoutReconciliation {
     static let retryDelaysNanoseconds: [UInt64] = [0, 2_000_000_000, 3_000_000_000, 5_000_000_000]
 
     enum Settlement: Equatable {
+        case pending
+        case confirmed
+        case failed
+        case refunded
+    }
+
+    enum Result: Equatable {
+        case noMatchingCheckout
         case pending
         case confirmed
         case failed

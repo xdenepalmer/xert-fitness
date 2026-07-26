@@ -2221,38 +2221,53 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: PendingCheckoutStore.storageKey))
     }
 
-    func testPendingCheckoutRecoversFromAValidatedReturnWithoutReplacingStoredIdentity() throws {
+    func testPendingCheckoutReturnMustMatchStoredIdentity() throws {
         let suiteName = "PendingCheckoutReturnTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let userID = UUID()
         let baselineOrderIDs: Set<UUID> = [UUID()]
         let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let pending = PendingCheckout(
+            userID: userID,
+            baselineOrderIDs: baselineOrderIDs,
+            startedAt: now,
+            checkoutSessionID: "cs_test_ReturnRecovery123"
+        )
+        PendingCheckoutStore.save(pending, defaults: defaults)
 
-        let recovered = try XCTUnwrap(PendingCheckoutStore.resolve(
+        let matched = try XCTUnwrap(PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: "cs_test_ReturnRecovery123",
-            baselineOrderIDs: baselineOrderIDs,
             now: now,
             defaults: defaults
         ))
-        XCTAssertEqual(recovered.checkoutSessionID, "cs_test_ReturnRecovery123")
-        XCTAssertEqual(recovered.baselineOrderIDs, baselineOrderIDs)
+        XCTAssertEqual(matched, pending)
 
-        let stored = try XCTUnwrap(PendingCheckoutStore.resolve(
+        XCTAssertNil(PendingCheckoutStore.resolve(
             for: userID,
             callbackSessionID: "cs_test_DifferentReturn456",
-            baselineOrderIDs: [],
             now: now.addingTimeInterval(60),
             defaults: defaults
         ))
-        XCTAssertEqual(stored, recovered)
+        XCTAssertEqual(
+            PendingCheckoutStore.load(for: userID, now: now, defaults: defaults),
+            pending
+        )
+        XCTAssertEqual(
+            PendingCheckoutStore.resolve(
+                for: userID,
+                callbackSessionID: nil,
+                now: now,
+                defaults: defaults
+            ),
+            pending
+        )
 
         PendingCheckoutStore.clear(defaults: defaults)
         XCTAssertNil(PendingCheckoutStore.resolve(
             for: userID,
-            callbackSessionID: "not-stripe",
-            baselineOrderIDs: baselineOrderIDs,
+            callbackSessionID: "cs_test_ReturnRecovery123",
             now: now,
             defaults: defaults
         ))

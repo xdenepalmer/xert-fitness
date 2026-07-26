@@ -963,18 +963,61 @@ final class XertStore: ObservableObject {
         }
     }
 
-    func reconcileCheckout(callbackSessionID: String? = nil) async {
+    func hasMatchingPendingCheckout(callbackSessionID: String) -> Bool {
+        guard let userID = authSession?.user?.id else { return false }
+        return PendingCheckoutStore.resolve(
+            for: userID,
+            callbackSessionID: callbackSessionID
+        ) != nil
+    }
+
+    func hasPendingCheckoutForCurrentUser() -> Bool {
+        guard let userID = authSession?.user?.id else { return false }
+        return PendingCheckoutStore.load(for: userID) != nil
+    }
+
+    @discardableResult
+    func reconcileCheckout(
+        callbackSessionID: String? = nil
+    ) async -> CheckoutReconciliation.Result {
         guard
             let userID = authSession?.user?.id,
             !isReconcilingCheckout
-        else { return }
+        else { return .noMatchingCheckout }
         let memberVersion = memberStateVersion.snapshot
-        let pendingCheckout = PendingCheckoutStore.resolve(
+        let storedCheckout = PendingCheckoutStore.load(for: userID)
+        if callbackSessionID != nil,
+           storedCheckout != nil,
+           PendingCheckoutStore.resolve(
+               for: userID,
+               callbackSessionID: callbackSessionID
+           ) == nil {
+            isCheckoutConfirmationPending = true
+            return .noMatchingCheckout
+        }
+
+        var pendingCheckout = PendingCheckoutStore.resolve(
             for: userID,
-            callbackSessionID: callbackSessionID,
-            baselineOrderIDs: Set(orders.map(\.id))
+            callbackSessionID: callbackSessionID
         )
-        isCheckoutConfirmationPending = pendingCheckout != nil
+        // A cold return may have lost local handoff state. Keep its identity
+        // ephemeral until this member's server-side order confirms the session.
+        if pendingCheckout == nil,
+           let checkoutSessionID = CheckoutSessionIdentity.normalize(callbackSessionID) {
+            pendingCheckout = PendingCheckout(
+                userID: userID,
+                baselineOrderIDs: Set(orders.map(\.id)),
+                startedAt: Date(),
+                checkoutSessionID: checkoutSessionID
+            )
+        }
+        guard let pendingCheckout else {
+            isCheckoutConfirmationPending = false
+            return .noMatchingCheckout
+        }
+
+        var identityWasServerMatched = storedCheckout != nil
+        isCheckoutConfirmationPending = identityWasServerMatched
         isReconcilingCheckout = true
         defer {
             if memberStateVersion.isCurrent(memberVersion) {
@@ -982,29 +1025,45 @@ final class XertStore: ObservableObject {
             }
         }
 
-        for delay in CheckoutReconciliation.retryDelaysNanoseconds {
+        let retryDelays = identityWasServerMatched
+            ? CheckoutReconciliation.retryDelaysNanoseconds
+            : [0]
+        for delay in retryDelays {
             if delay > 0 {
                 do {
                     try await Task.sleep(nanoseconds: delay)
                 } catch {
-                    return
+                    return identityWasServerMatched ? .pending : .noMatchingCheckout
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                return identityWasServerMatched ? .pending : .noMatchingCheckout
+            }
 
             do {
                 let memberSession = try await validAuthSession()
                 async let creditRequest = api.credits(session: memberSession)
                 async let orderRequest = api.orders(session: memberSession)
                 let (loadedCredits, loadedOrders) = try await (creditRequest, orderRequest)
-                guard canApplyMemberState(memberVersion, session: memberSession) else { return }
+                guard canApplyMemberState(memberVersion, session: memberSession) else {
+                    return .noMatchingCheckout
+                }
                 credits = loadedCredits
                 creditBalanceLoaded = true
                 orders = loadedOrders
                 unavailableDataSources.subtract([.credits, .orders])
                 memberDataUpdatedAt = Date()
 
-                guard let pendingCheckout else { return }
+                if !identityWasServerMatched {
+                    guard let checkoutSessionID = pendingCheckout.checkoutSessionID,
+                          loadedOrders.contains(where: {
+                              $0.stripe_checkout_session_id == checkoutSessionID
+                          }) else { continue }
+                    identityWasServerMatched = true
+                    PendingCheckoutStore.save(pendingCheckout)
+                    isCheckoutConfirmationPending = true
+                }
+
                 let settlement = CheckoutReconciliation.settlement(
                     pendingCheckout: pendingCheckout,
                     credits: loadedCredits,
@@ -1016,21 +1075,26 @@ final class XertStore: ObservableObject {
                     if settlement == .failed {
                         errorMessage = "Checkout did not complete. No session pack was activated."
                         XertHaptics.play(.warning)
+                        return .failed
                     } else if settlement == .refunded {
                         errorMessage = "This payment was refunded. No purchased credits remain on the order."
                         XertHaptics.play(.warning)
+                        return .refunded
                     } else {
                         checkoutActivatedSessionID = pendingCheckout.activationSessionID
                         XertHaptics.play(.success)
+                        return .confirmed
                     }
-                    return
                 }
             } catch {
-                guard memberStateVersion.isCurrent(memberVersion) else { return }
+                guard memberStateVersion.isCurrent(memberVersion) else {
+                    return .noMatchingCheckout
+                }
                 unavailableDataSources.formUnion([.credits, .orders])
                 isUsingStaleMemberData = memberDataUpdatedAt != nil
             }
         }
+        return identityWasServerMatched ? .pending : .noMatchingCheckout
     }
 
     func reconcilePendingCheckout() async {

@@ -1,6 +1,11 @@
 import SwiftUI
 import UIKit
 
+private enum CheckoutURLSource: Equatable {
+    case external
+    case authenticatedBrowser
+}
+
 struct RootView: View {
     @EnvironmentObject private var store: XertStore
     @Environment(\.scenePhase) private var scenePhase
@@ -11,6 +16,8 @@ struct RootView: View {
     @StateObject private var navigation = XertNavigationCoordinator()
     @StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore()
     @State private var checkoutReturnStatus: CheckoutReturnStatus?
+    @State private var pendingCheckoutCallback: CheckoutCallback?
+    @State private var isProcessingCheckoutCallback = false
     @State private var isPrivacyUnlocked = false
     @State private var isUnlocking = false
     @State private var privacyLockError: String?
@@ -55,6 +62,7 @@ struct RootView: View {
             }
             resumePendingProtectedNavigation()
             resumePendingOwnerNavigation()
+            processPendingCheckoutCallbackIfReady()
             guard privacyLockEnabled else {
                 isPrivacyUnlocked = true
                 privacyLockError = nil
@@ -79,6 +87,7 @@ struct RootView: View {
             guard hasBootstrapped else { return }
             restoreMemberWorkspaceWhenReady()
             refreshOwnerNavigationPulse()
+            processPendingCheckoutCallbackIfReady()
             if !store.isSignedIn, navigation.containsProtectedHistory {
                 resetMemberNavigationAfterSignOut(clearPendingIntent: false)
             }
@@ -94,7 +103,9 @@ struct RootView: View {
             }
             lockAndAuthenticate()
         }
-        .onOpenURL(perform: handleOpenURL)
+        .onOpenURL { url in
+            handleOpenURL(url, source: .external)
+        }
         .userActivity(XertRouteUserActivity.activityType, isActive: shouldAdvertiseCurrentRoute) { activity in
             XertRouteUserActivity.configure(activity, route: navigation.route)
         }
@@ -142,7 +153,7 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .xertCheckoutCallback)) { notification in
             guard let url = notification.object as? URL else { return }
-            handleOpenURL(url)
+            handleOpenURL(url, source: .authenticatedBrowser)
         }
     }
 
@@ -787,21 +798,19 @@ struct RootView: View {
         }
     }
 
-    private func handleOpenURL(_ url: URL) {
+    private func handleOpenURL(_ url: URL, source: CheckoutURLSource) {
         if let callback = CheckoutDeepLink.callback(from: url) {
-            checkoutReturnStatus = callback.status
-            let canReconcile = openMemberRoute(.purchaseConfirmation, source: .checkout)
-            Task {
-                if callback.status == .success {
-                    if canReconcile {
-                        await store.reconcileCheckout(
-                            callbackSessionID: callback.checkoutSessionID
-                        )
-                    }
-                } else {
+            if callback.status == .cancelled {
+                guard source == .authenticatedBrowser,
+                      store.hasPendingCheckoutForCurrentUser() else { return }
+                checkoutReturnStatus = .cancelled
+                Task {
                     store.cancelPendingCheckout()
                     await store.refresh()
                 }
+            } else {
+                pendingCheckoutCallback = callback
+                processPendingCheckoutCallbackIfReady()
             }
             return
         }
@@ -811,6 +820,45 @@ struct RootView: View {
         }
         guard let route = XertMemberRoute.route(for: url) else { return }
         openMemberRoute(route, source: .deepLink)
+    }
+
+    private func processPendingCheckoutCallbackIfReady() {
+        guard store.hasBootstrapped,
+              let callback = pendingCheckoutCallback,
+              !isProcessingCheckoutCallback else { return }
+        guard store.isSignedIn else {
+            navigation.open(.account, source: .checkout)
+            return
+        }
+        guard let checkoutSessionID = callback.checkoutSessionID else {
+            pendingCheckoutCallback = nil
+            return
+        }
+
+        pendingCheckoutCallback = nil
+        isProcessingCheckoutCallback = true
+        let hasLocalMatch = store.hasMatchingPendingCheckout(
+            callbackSessionID: checkoutSessionID
+        )
+        if hasLocalMatch {
+            openMemberRoute(.purchaseConfirmation, source: .checkout)
+        }
+        Task {
+            let result = await store.reconcileCheckout(
+                callbackSessionID: checkoutSessionID
+            )
+            isProcessingCheckoutCallback = false
+            switch result {
+            case .confirmed:
+                openMemberRoute(.purchaseConfirmation, source: .checkout)
+                checkoutReturnStatus = .success
+            case .pending, .failed, .refunded:
+                openMemberRoute(.purchaseConfirmation, source: .checkout)
+            case .noMatchingCheckout:
+                break
+            }
+            processPendingCheckoutCallbackIfReady()
+        }
     }
 
     private func openOwnerCommandCentre(_ workspace: XertOwnerWorkspace? = nil) {
