@@ -38,15 +38,19 @@ test('native announcement publishing preserves one durable request identity', ()
 
 test('announcement endpoint replays the owner-scoped record before any second insert or push', () => {
   const endpoint = read('api/admin-publish-announcement.js')
-  const replayLookup = endpoint.indexOf(".eq('id', publish.requestId)")
+  const replayLookup = endpoint.indexOf('findAnnouncementPublishReplay(admin, publish.requestId, user.id)')
   const insert = endpoint.indexOf('.insert({')
   const push = endpoint.indexOf('sendMemberAnnouncementPushes({ admin, announcement: result.data })')
 
   assert.ok(replayLookup > 0)
   assert.ok(replayLookup < insert)
   assert.ok(insert < push)
-  assert.match(endpoint, /\.eq\('created_by', user\.id\)/)
+  assert.match(endpoint, /\.eq\('created_by', ownerId\)/)
   assert.match(endpoint, /\.eq\('audience', 'all'\)/)
   assert.match(endpoint, /replayed: true/)
   assert.match(endpoint, /id: publish\.requestId \|\| randomUUID\(\)/)
+  assert.match(
+    endpoint,
+    /result\.error\?\.code === '23505'[\s\S]*findAnnouncementPublishReplay\(admin, publish\.requestId, user\.id\)[\s\S]*if \(replay\) return json\(replay\)/,
+  )
 })

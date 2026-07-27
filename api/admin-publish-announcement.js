@@ -66,6 +66,29 @@ export function summarizePreviousClassAlertPushes(rows = []) {
   };
 }
 
+async function findAnnouncementPublishReplay(admin, requestId, ownerId) {
+  const result = await admin
+    .from('member_announcements')
+    .select('*')
+    .eq('id', requestId)
+    .eq('created_by', ownerId)
+    .eq('audience', 'all')
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) return null;
+
+  const previous = await admin
+    .from('push_notification_deliveries')
+    .select('status')
+    .eq('announcement_id', result.data.id);
+  if (previous.error) throw previous.error;
+  return {
+    announcement: result.data,
+    push: summarizePreviousClassAlertPushes(previous.data || []),
+    replayed: true,
+  };
+}
+
 export async function notifyClassCancellation(admin, sessionId) {
   if (!UUID.test(sessionId)) throw new Error('CLASS_NOTICE_SESSION_INVALID');
   const { data: announcement, error: announcementError } = await admin
@@ -213,37 +236,23 @@ export default async function handler(request, response) {
       if (!result.data) return json({ error: 'Announcement not found.' }, 404);
       existing = result.data;
     } else if (publish.requestId) {
-      const result = await admin
-        .from('member_announcements')
-        .select('*')
-        .eq('id', publish.requestId)
-        .eq('created_by', user.id)
-        .eq('audience', 'all')
-        .maybeSingle();
-      if (result.error) throw result.error;
-      if (result.data) {
-        const previous = await admin
-          .from('push_notification_deliveries')
-          .select('status')
-          .eq('announcement_id', result.data.id);
-        if (previous.error) throw previous.error;
-        return json({
-          announcement: result.data,
-          push: summarizePreviousClassAlertPushes(previous.data || []),
-          replayed: true,
-        });
-      }
+      const replay = await findAnnouncementPublishReplay(admin, publish.requestId, user.id);
+      if (replay) return json(replay);
     }
     if (existing?.archived_at) return json({ error: 'Restore this announcement before publishing it.' }, 409);
     const publishedAt = existing?.published_at || new Date().toISOString();
     const mutation = { ...publish.announcement, published_at: publishedAt, last_changed_by: user.id };
-    const result = publish.id
+    let result = publish.id
       ? await admin.from('member_announcements').update(mutation).eq('id', publish.id).eq('updated_at', publish.expectedUpdatedAt).select('*').maybeSingle()
       : await admin.from('member_announcements').insert({
           id: publish.requestId || randomUUID(),
           ...mutation,
           created_by: user.id,
         }).select('*').single();
+    if (result.error?.code === '23505' && publish.requestId && !publish.id) {
+      const replay = await findAnnouncementPublishReplay(admin, publish.requestId, user.id);
+      if (replay) return json(replay);
+    }
     if (result.error) throw result.error;
     if (publish.id && !result.data) {
       return json({ error: 'This announcement changed since you opened it. Refresh the admin view and review the latest version.' }, 409);
