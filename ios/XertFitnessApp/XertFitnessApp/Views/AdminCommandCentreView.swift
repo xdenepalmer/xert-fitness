@@ -7606,10 +7606,16 @@ private struct AdminAvailabilityView: View {
             .listRowBackground(Color.xertNavy)
 
             if let warning = admin.scheduleMutationWarning {
-                Label(warning, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                Label(
+                    warning,
+                    systemImage: admin.scheduleMutationIsWarning
+                        ? "checkmark.shield.fill"
+                        : "checkmark.circle.fill"
+                )
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.orange)
+                    .foregroundStyle(admin.scheduleMutationIsWarning ? Color.orange : Color.green)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
                     .listRowBackground(Color.xertInk)
             }
 
@@ -7723,10 +7729,18 @@ private struct AdminAvailabilityView: View {
         ) { removal in
             Button("Remove", role: .destructive) {
                 Task {
+                    let succeeded: Bool
                     switch removal {
-                    case .availability(let block): _ = await admin.deleteAvailability(session: session, block: block)
-                    case .blackout(let period): _ = await admin.deleteBlackout(session: session, period: period)
+                    case .availability(let block):
+                        succeeded = await admin.deleteAvailability(session: session, block: block)
+                    case .blackout(let period):
+                        succeeded = await admin.deleteBlackout(session: session, period: period)
                     }
+                    XertHaptics.play(
+                        !succeeded
+                            ? .error
+                            : (admin.scheduleMutationIsWarning ? .warning : .success)
+                    )
                     pendingRemoval = nil
                 }
             }
@@ -7958,7 +7972,10 @@ private struct AdminAvailabilityEditor: View {
                     hasCommitted = true
                     clearRecoveryDraft()
                     editorExitCoordinator?.clear(id: exitStateID)
+                    XertHaptics.play(admin.scheduleMutationIsWarning ? .warning : .success)
                     dismiss()
+                } else {
+                    XertHaptics.play(.error)
                 }
             }
         } label: {
@@ -8197,7 +8214,10 @@ private struct AdminBlackoutEditor: View {
                     hasCommitted = true
                     clearRecoveryDraft()
                     editorExitCoordinator?.clear(id: exitStateID)
+                    XertHaptics.play(admin.scheduleMutationIsWarning ? .warning : .success)
                     dismiss()
+                } else {
+                    XertHaptics.play(.error)
                 }
             }
         } label: {

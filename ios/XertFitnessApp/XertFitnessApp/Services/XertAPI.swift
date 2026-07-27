@@ -511,7 +511,7 @@ final class XertAPI {
         )
     }
 
-    func adminSaveAvailability(session auth: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async throws {
+    func adminSaveAvailability(session auth: AuthSession, block: AdminAvailabilityBlock?, draft: AdminAvailabilityDraft) async throws -> AdminAvailabilityBlock {
         guard AdminAvailabilityDraft.types.contains(draft.type) else { throw APIError(message: "Choose a valid availability type.") }
         guard draft.endTime > draft.startTime else { throw APIError(message: "Availability must end after it starts.") }
         let payload = AdminAvailabilityPayload(
@@ -522,10 +522,16 @@ final class XertAPI {
             notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             is_bookable: draft.isBookable
         )
-        try await adminScheduleMutation(path: "/rest/v1/availability_blocks", id: block?.id, version: block?.updated_at, payload: payload, auth: auth)
+        return try await adminScheduleMutation(
+            path: "/rest/v1/availability_blocks",
+            id: block?.id,
+            version: block?.updated_at,
+            payload: payload,
+            auth: auth
+        )
     }
 
-    func adminSaveBlackout(session auth: AuthSession, period: AdminBlackoutPeriod?, draft: AdminBlackoutDraft) async throws {
+    func adminSaveBlackout(session auth: AuthSession, period: AdminBlackoutPeriod?, draft: AdminBlackoutDraft) async throws -> AdminBlackoutPeriod {
         guard AdminBlackoutDraft.scopes.contains(draft.affects) else { throw APIError(message: "Choose a valid blackout scope.") }
         guard AdminBlackoutDraft.reasons.contains(draft.reason) else { throw APIError(message: "Choose a valid blackout reason.") }
         guard draft.endTime > draft.startTime else { throw APIError(message: "Blackout must end after it starts.") }
@@ -537,21 +543,33 @@ final class XertAPI {
             notes: draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         )
         do {
-            try await adminScheduleMutation(path: "/rest/v1/blackout_periods", id: period?.id, version: period?.updated_at, payload: payload, auth: auth)
+            return try await adminScheduleMutation(
+                path: "/rest/v1/blackout_periods",
+                id: period?.id,
+                version: period?.updated_at,
+                payload: payload,
+                auth: auth
+            )
         } catch let error as APIError where error.message.localizedCaseInsensitiveContains("BLACKOUT_OVERLAPS_PUBLISHED_CLASS") {
             throw APIError(message: "This blackout overlaps a published class. Cancel or reschedule that class first.")
         }
     }
 
-    func adminDeleteAvailability(session auth: AuthSession, block: AdminAvailabilityBlock) async throws {
+    func adminDeleteAvailability(session auth: AuthSession, block: AdminAvailabilityBlock) async throws -> UUID {
         try await adminScheduleDelete(path: "/rest/v1/availability_blocks", id: block.id, version: block.updated_at, auth: auth)
     }
 
-    func adminDeleteBlackout(session auth: AuthSession, period: AdminBlackoutPeriod) async throws {
+    func adminDeleteBlackout(session auth: AuthSession, period: AdminBlackoutPeriod) async throws -> UUID {
         try await adminScheduleDelete(path: "/rest/v1/blackout_periods", id: period.id, version: period.updated_at, auth: auth)
     }
 
-    private func adminScheduleMutation<Payload: Encodable>(path: String, id: UUID?, version: String?, payload: Payload, auth: AuthSession) async throws {
+    private func adminScheduleMutation<Record: Decodable, Payload: Encodable>(
+        path: String,
+        id: UUID?,
+        version: String?,
+        payload: Payload,
+        auth: AuthSession
+    ) async throws -> Record {
         var queryItems: [URLQueryItem] = []
         if id != nil && version == nil {
             throw APIError(message: "This schedule record has no version. Refresh before editing it.")
@@ -564,14 +582,16 @@ final class XertAPI {
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(id == nil ? "return=minimal" : "return=representation", forHTTPHeaderField: "Prefer")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        if id == nil { try await perform(request); return }
-        let rows: [AdminMutationID] = try await decode(request)
-        guard !rows.isEmpty else { throw APIError(message: "This schedule record changed elsewhere. Refresh and review the latest version.") }
+        let rows: [Record] = try await decode(request)
+        guard rows.count == 1, let record = rows.first else {
+            throw APIError(message: "No exact schedule change was confirmed. Refresh and review the latest records.")
+        }
+        return record
     }
 
-    private func adminScheduleDelete(path: String, id: UUID, version: String, auth: AuthSession) async throws {
+    private func adminScheduleDelete(path: String, id: UUID, version: String, auth: AuthSession) async throws -> UUID {
         var request = try request(baseURL: AppConfig.supabaseURL, path: path, queryItems: [
             URLQueryItem(name: "id", value: "eq.\(id.uuidString)"), URLQueryItem(name: "updated_at", value: "eq.\(version)")
         ])
@@ -580,7 +600,10 @@ final class XertAPI {
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         let rows: [AdminMutationID] = try await decode(request)
-        guard !rows.isEmpty else { throw APIError(message: "This schedule record changed elsewhere. Refresh before removing it.") }
+        guard rows.count == 1, rows[0].id == id else {
+            throw APIError(message: "This schedule record changed elsewhere. Refresh before removing it.")
+        }
+        return id
     }
 
     @discardableResult

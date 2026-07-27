@@ -168,6 +168,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var isRefreshingScheduleControls = false
     @Published private(set) var scheduleMutationWarning: String?
+    @Published private(set) var scheduleMutationIsWarning = false
     @Published private(set) var classMutationStatusMessage: String?
     @Published private(set) var classMutationStatusIsWarning = false
     @Published private(set) var loadingMemberDetailID: UUID?
@@ -3526,14 +3527,20 @@ final class AdminStore: ObservableObject {
             return false
         }
         savingScheduleWindowID = block?.id ?? UUID()
+        scheduleMutationWarning = nil
+        scheduleMutationIsWarning = false
         defer { savingScheduleWindowID = nil }
         do {
-            try await api.adminSaveAvailability(session: session, block: block, draft: draft)
-            await refreshAvailabilitySnapshot(
-                session: session,
-                completedAction: block == nil ? "Availability created" : "Availability updated"
-            )
-            lastUpdatedAt = Date(); return true
+            let saved = try await api.adminSaveAvailability(session: session, block: block, draft: draft)
+            mergeAvailability(saved)
+            let refreshed = await refreshAvailabilitySnapshot(session: session)
+            let action = block == nil ? "Availability created" : "Availability updated"
+            scheduleMutationIsWarning = !refreshed
+            scheduleMutationWarning = refreshed
+                ? "\(action). Record \(saved.id.uuidString.lowercased())."
+                : "\(action), but the latest availability list could not reload. Record \(saved.id.uuidString.lowercased()). Do not repeat this change; refresh Schedule Controls."
+            lastUpdatedAt = Date()
+            return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
@@ -3544,14 +3551,20 @@ final class AdminStore: ObservableObject {
             return false
         }
         savingScheduleWindowID = period?.id ?? UUID()
+        scheduleMutationWarning = nil
+        scheduleMutationIsWarning = false
         defer { savingScheduleWindowID = nil }
         do {
-            try await api.adminSaveBlackout(session: session, period: period, draft: draft)
-            await refreshBlackoutSnapshot(
-                session: session,
-                completedAction: period == nil ? "Blackout created" : "Blackout updated"
-            )
-            lastUpdatedAt = Date(); return true
+            let saved = try await api.adminSaveBlackout(session: session, period: period, draft: draft)
+            mergeBlackout(saved)
+            let refreshed = await refreshBlackoutSnapshot(session: session)
+            let action = period == nil ? "Blackout created" : "Blackout updated"
+            scheduleMutationIsWarning = !refreshed
+            scheduleMutationWarning = refreshed
+                ? "\(action). Record \(saved.id.uuidString.lowercased())."
+                : "\(action), but the latest blackout list could not reload. Record \(saved.id.uuidString.lowercased()). Do not repeat this change; refresh Schedule Controls."
+            lastUpdatedAt = Date()
+            return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
@@ -3562,11 +3575,19 @@ final class AdminStore: ObservableObject {
             return false
         }
         deletingScheduleWindowID = block.id
+        scheduleMutationWarning = nil
+        scheduleMutationIsWarning = false
         defer { deletingScheduleWindowID = nil }
         do {
-            try await api.adminDeleteAvailability(session: session, block: block)
-            await refreshAvailabilitySnapshot(session: session, completedAction: "Availability removed")
-            lastUpdatedAt = Date(); return true
+            let removedID = try await api.adminDeleteAvailability(session: session, block: block)
+            availabilityBlocks.removeAll { $0.id == removedID }
+            let refreshed = await refreshAvailabilitySnapshot(session: session)
+            scheduleMutationIsWarning = !refreshed
+            scheduleMutationWarning = refreshed
+                ? "Availability removed. Record \(removedID.uuidString.lowercased())."
+                : "Availability removed, but the latest list could not reload. Record \(removedID.uuidString.lowercased()). Do not repeat this removal; refresh Schedule Controls."
+            lastUpdatedAt = Date()
+            return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
@@ -3577,11 +3598,19 @@ final class AdminStore: ObservableObject {
             return false
         }
         deletingScheduleWindowID = period.id
+        scheduleMutationWarning = nil
+        scheduleMutationIsWarning = false
         defer { deletingScheduleWindowID = nil }
         do {
-            try await api.adminDeleteBlackout(session: session, period: period)
-            await refreshBlackoutSnapshot(session: session, completedAction: "Blackout removed")
-            lastUpdatedAt = Date(); return true
+            let removedID = try await api.adminDeleteBlackout(session: session, period: period)
+            blackoutPeriods.removeAll { $0.id == removedID }
+            let refreshed = await refreshBlackoutSnapshot(session: session)
+            scheduleMutationIsWarning = !refreshed
+            scheduleMutationWarning = refreshed
+                ? "Blackout removed. Record \(removedID.uuidString.lowercased())."
+                : "Blackout removed, but the latest list could not reload. Record \(removedID.uuidString.lowercased()). Do not repeat this removal; refresh Schedule Controls."
+            lastUpdatedAt = Date()
+            return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
@@ -3590,6 +3619,7 @@ final class AdminStore: ObservableObject {
         isRefreshingScheduleControls = true
         defer { isRefreshingScheduleControls = false }
         scheduleMutationWarning = nil
+        scheduleMutationIsWarning = false
 
         async let availabilityRequest = api.adminAvailabilityBlocks(session: session)
         async let blackoutRequest = api.adminBlackoutPeriods(session: session)
@@ -3620,29 +3650,42 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
         } else {
             scheduleMutationWarning = "Could not refresh \(failures.joined(separator: " and ")). Last loaded records remain read-only."
+            scheduleMutationIsWarning = true
         }
     }
 
-    private func refreshAvailabilitySnapshot(session: AuthSession, completedAction: String) async {
+    private func refreshAvailabilitySnapshot(session: AuthSession) async -> Bool {
         do {
             availabilityBlocks = try await api.adminAvailabilityBlocks(session: session)
             markScheduleSourceCurrent("availability")
-            scheduleMutationWarning = nil
+            return true
         } catch {
             markScheduleSourceUnavailable("availability")
-            scheduleMutationWarning = "\(completedAction), but the latest availability list could not be loaded. Refresh before making another change."
+            return false
         }
     }
 
-    private func refreshBlackoutSnapshot(session: AuthSession, completedAction: String) async {
+    private func refreshBlackoutSnapshot(session: AuthSession) async -> Bool {
         do {
             blackoutPeriods = try await api.adminBlackoutPeriods(session: session)
             markScheduleSourceCurrent("blackouts")
-            scheduleMutationWarning = nil
+            return true
         } catch {
             markScheduleSourceUnavailable("blackouts")
-            scheduleMutationWarning = "\(completedAction), but the latest blackout list could not be loaded. Refresh before making another change."
+            return false
         }
+    }
+
+    private func mergeAvailability(_ saved: AdminAvailabilityBlock) {
+        availabilityBlocks.removeAll { $0.id == saved.id }
+        availabilityBlocks.append(saved)
+        availabilityBlocks.sort { $0.start_time < $1.start_time }
+    }
+
+    private func mergeBlackout(_ saved: AdminBlackoutPeriod) {
+        blackoutPeriods.removeAll { $0.id == saved.id }
+        blackoutPeriods.append(saved)
+        blackoutPeriods.sort { $0.start_time < $1.start_time }
     }
 
     private func markScheduleSourceCurrent(_ source: String) {

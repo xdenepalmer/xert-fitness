@@ -1957,16 +1957,17 @@ test('native schedule controls preserve mutation truth and preview blackout conf
   );
   assert.match(store, /@Published private\(set\) var isRefreshingScheduleControls/);
   assert.match(store, /@Published private\(set\) var scheduleMutationWarning/);
+  assert.match(store, /@Published private\(set\) var scheduleMutationIsWarning/);
   assert.match(scheduleStore, /func refreshScheduleControls\(session: AuthSession\)/);
   assert.match(scheduleStore, /guard scheduleSourceIsCurrent\("availability"\)/);
   assert.match(scheduleStore, /guard scheduleSourceIsCurrent\("blackouts"\), scheduleSourceIsCurrent\("full timetable"\)/);
   assert.match(scheduleStore, /async let availabilityRequest = api\.adminAvailabilityBlocks/);
   assert.match(scheduleStore, /async let blackoutRequest = api\.adminBlackoutPeriods/);
   assert.match(scheduleStore, /async let timetableRequest = api\.adminClassSessions/);
-  assert.match(scheduleStore, /Availability created[\s\S]*lastUpdatedAt = Date\(\); return true/);
-  assert.match(scheduleStore, /Blackout created[\s\S]*lastUpdatedAt = Date\(\); return true/);
-  assert.match(scheduleStore, /but the latest availability list could not be loaded/);
-  assert.match(scheduleStore, /but the latest blackout list could not be loaded/);
+  assert.match(scheduleStore, /Availability created[\s\S]*lastUpdatedAt = Date\(\)[\s\S]*return true/);
+  assert.match(scheduleStore, /Blackout created[\s\S]*lastUpdatedAt = Date\(\)[\s\S]*return true/);
+  assert.match(scheduleStore, /latest availability list could not reload/);
+  assert.match(scheduleStore, /latest blackout list could not reload/);
 
   const scheduleView = view.slice(
     view.indexOf('private struct AdminAvailabilityView'),
