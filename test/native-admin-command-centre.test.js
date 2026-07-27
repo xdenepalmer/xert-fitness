@@ -1370,7 +1370,10 @@ test('native class rosters surface privacy-safe readiness and reject stale class
   assert.match(rosterLoader, /guard rosterLoadGeneration == generation else \{ return false \}/);
   assert.match(rosterLoader, /rosterLoadErrorSessionID = classSessionID[\s\S]*rosterLoadErrorMessage = error\.localizedDescription/);
   assert.match(rosterLoader, /adminMemberOnboardingSummaries[\s\S]*Dictionary\([\s\S]*summaries\.map \{ \(\$0\.user_id, \$0\) \}/);
-  assert.match(bookingMutation, /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID else \{ return false \}/);
+  assert.match(
+    bookingMutation,
+    /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID,[\s\S]*rosterLoadErrorSessionID != classSessionID else \{[\s\S]*Refresh this class roster before changing another booking/,
+  );
   assert.match(bookingMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);
   assert.match(attendanceMutation, /requestedRosterSessionID == classSessionID,[\s\S]*loadedRosterSessionID == classSessionID else \{ return false \}/);
   assert.match(attendanceMutation, /if requestedRosterSessionID == classSessionID \{[\s\S]*preserveCurrent: true/);

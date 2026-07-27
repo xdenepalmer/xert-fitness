@@ -5985,6 +5985,27 @@ private struct AdminClassRosterView: View {
             }
 
             Section("Member roster") {
+                if admin.bookingDecisionStatusSessionID == operation.id,
+                   let status = admin.bookingDecisionStatusMessage {
+                    Label(
+                        status,
+                        systemImage: admin.bookingDecisionStatusIsWarning
+                            ? "checkmark.shield.fill"
+                            : "checkmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(admin.bookingDecisionStatusIsWarning ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("owner.roster.bookingDecisionReceipt")
+                }
+                if admin.bookingDecisionStatusSessionID == operation.id,
+                   let warning = admin.bookingDecisionNoticeWarning {
+                    Label(warning, systemImage: "bell.badge.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let feedback = admin.staffBookingFeedback,
                    feedback.sessionID == operation.id {
                     Label(
@@ -6062,11 +6083,18 @@ private struct AdminClassRosterView: View {
                                     ForEach(actions) { action in
                                         Button(role: action.role) {
                                             Task {
-                                                _ = await admin.setBookingStatus(
+                                                let succeeded = await admin.setBookingStatus(
                                                     session: session,
                                                     classSessionID: operation.id,
                                                     bookingID: member.id,
                                                     status: action.status
+                                                )
+                                                XertHaptics.play(
+                                                    !succeeded
+                                                        ? .error
+                                                        : (admin.bookingDecisionStatusIsWarning
+                                                            ? .warning
+                                                            : .success)
                                                 )
                                             }
                                         } label: { Label(action.label, systemImage: action.icon) }
@@ -6074,7 +6102,7 @@ private struct AdminClassRosterView: View {
                                 } label: {
                                     Image(systemName: "ellipsis.circle").font(.title3)
                                 }
-                                .disabled(admin.updatingBookingID != nil)
+                                .disabled(admin.updatingBookingID != nil || loadFailed)
                                 .accessibilityLabel("Manage \(member.displayName) booking")
                             }
                         }
@@ -9254,7 +9282,8 @@ private struct AdminBookingRequestsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.xertInk)
             }
-            if let warning = admin.bookingDecisionNoticeWarning {
+            if admin.bookingDecisionStatusSessionID == nil,
+               let warning = admin.bookingDecisionNoticeWarning {
                 Section("Member notification") {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)

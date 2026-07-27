@@ -135,6 +135,9 @@ final class AdminStore: ObservableObject {
     @Published private(set) var promotionStatusMessage: String?
     @Published private(set) var promotionStatusIsWarning = false
     @Published private(set) var bookingDecisionNoticeWarning: String?
+    @Published private(set) var bookingDecisionStatusMessage: String?
+    @Published private(set) var bookingDecisionStatusIsWarning = false
+    @Published private(set) var bookingDecisionStatusSessionID: UUID?
     @Published private(set) var addingRosterMemberID: UUID?
     @Published private(set) var staffBookingFeedback: AdminStaffBookingFeedback?
     @Published private(set) var loggingFollowUpMemberID: UUID?
@@ -1875,6 +1878,7 @@ final class AdminStore: ObservableObject {
         updatingBookingRequestIDs = [booking.id]
         defer { updatingBookingRequestIDs = [] }
         do {
+            bookingDecisionStatusSessionID = nil
             bookingDecisionNoticeWarning = nil
             let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
             bookingDecisionNoticeWarning = warning
@@ -1901,6 +1905,7 @@ final class AdminStore: ObservableObject {
             return Set(bookings.map(\.id))
         }
         updatingBookingRequestIDs = Set(bookings.map(\.id))
+        bookingDecisionStatusSessionID = nil
         defer { updatingBookingRequestIDs = [] }
         var failed: Set<String> = []
         for booking in bookings {
@@ -2117,28 +2122,66 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard updatingBookingID == nil,
               requestedRosterSessionID == classSessionID,
-              loadedRosterSessionID == classSessionID else { return false }
+              loadedRosterSessionID == classSessionID,
+              rosterLoadErrorSessionID != classSessionID else {
+            errorMessage = "Refresh this class roster before changing another booking."
+            return false
+        }
         updatingBookingID = bookingID
+        bookingDecisionNoticeWarning = nil
+        bookingDecisionStatusMessage = nil
+        bookingDecisionStatusIsWarning = false
+        bookingDecisionStatusSessionID = nil
         defer { updatingBookingID = nil }
+
+        let outcome: AdminBookingDecisionOutcome
         do {
-            bookingDecisionNoticeWarning = nil
-            let outcome = try await api.adminSetBookingStatus(session: session, bookingID: bookingID, status: status)
-            bookingDecisionNoticeWarning = outcome.warning
-            if requestedRosterSessionID == classSessionID {
-                await loadClassRoster(
-                    session: session,
-                    classSessionID: classSessionID,
-                    preserveCurrent: true
-                )
-            }
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            waitlist = try await api.adminWaitlist(session: session)
-            lastUpdatedAt = Date()
-            return true
+            outcome = try await api.adminSetBookingStatus(
+                session: session,
+                bookingID: bookingID,
+                status: status
+            )
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+
+        bookingDecisionNoticeWarning = outcome.warning
+        bookingDecisionStatusSessionID = classSessionID
+        var unavailableReadbacks: [String] = []
+        if requestedRosterSessionID == classSessionID {
+            let rosterRefreshed = await loadClassRoster(
+                session: session,
+                classSessionID: classSessionID,
+                preserveCurrent: true
+            )
+            if !rosterRefreshed {
+                unavailableReadbacks.append("class roster")
+            }
+        }
+        do {
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            markCatalogueSourceCurrent("today's classes")
+        } catch {
+            markCatalogueSourceUnavailable("today's classes")
+            unavailableReadbacks.append("today's classes")
+        }
+        do {
+            waitlist = try await api.adminWaitlist(session: session)
+            markCatalogueSourceCurrent("waitlists")
+        } catch {
+            markCatalogueSourceUnavailable("waitlists")
+            unavailableReadbacks.append("waitlists")
+        }
+
+        let receipt = outcome.decision.booking_id.uuidString.lowercased()
+        let updatedStatus = outcome.decision.new_status.replacingOccurrences(of: "_", with: " ")
+        bookingDecisionStatusIsWarning = outcome.warning != nil || !unavailableReadbacks.isEmpty
+        bookingDecisionStatusMessage = unavailableReadbacks.isEmpty
+            ? "Booking \(receipt) is now \(updatedStatus)."
+            : "Booking \(receipt) is now \(updatedStatus), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Do not repeat this decision; refresh the roster."
+        lastUpdatedAt = Date()
+        return true
     }
 
     func bookMemberIntoClass(
