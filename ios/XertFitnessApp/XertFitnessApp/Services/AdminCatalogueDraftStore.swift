@@ -8,6 +8,7 @@ enum AdminCatalogueDraftKind: String, Codable, CaseIterable {
     case event
     case coach
     case memberNotice
+    case platformSettings
 }
 
 struct AdminCatalogueDraftSnapshot<Draft: Codable & Hashable>: Codable, Hashable {

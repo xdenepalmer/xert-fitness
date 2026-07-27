@@ -23,6 +23,10 @@ test('native catalogue recovery is bounded, account scoped, and stale-baseline s
   ]) {
     assert.match(models, new RegExp(`struct ${draft}: Codable, Hashable`))
   }
+  assert.match(
+    models,
+    /struct AdminPlatformSettings: Identifiable, Codable, Hashable/,
+  )
   assert.match(store, /maximumAge: TimeInterval = 24 \* 60 \* 60/)
   assert.match(store, /maximumEncodedBytes = 64 \* 1_024/)
   assert.match(store, /snapshot\.ownerID == ownerID/)
@@ -46,6 +50,7 @@ test('all high-value native catalogue editors recover and atomically clear draft
     'event',
     'coach',
     'memberNotice',
+    'platformSettings',
   ]) {
     assert.match(
       view,

@@ -1075,7 +1075,7 @@ test('native owner cross-workspace actions preserve compact workflow context', a
   assert.match(view, /case \.closeOwner:\s*requestOwnerExit\(\.close\)/);
   assert.match(view, /Button \{ requestOwnerExit\(\.close\) \}/);
   assert.match(view, /private var compactNavigationPath:[\s\S]*hasUnsavedPlatformDraft[\s\S]*requestOwnerExit/);
-  assert.match(platform, /initialDraft \?\? admin\.settings/);
+  assert.match(platform, /draft = initialDraft \?\? recovered\?\.draft \?\? live/);
   assert.match(platform, /requestPricingNavigation\(\)[\s\S]*onOpenPricing\(\)/);
   assert.doesNotMatch(platform, /confirmingPricingNavigation/);
 });

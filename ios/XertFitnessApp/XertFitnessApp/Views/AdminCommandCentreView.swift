@@ -462,6 +462,7 @@ struct AdminCommandCentreView: View {
             isSavingPlatformExit = false
             if didSave {
                 XertHaptics.play(.success)
+                clearPlatformRecoveryDraft()
                 platformDraftSnapshot = admin.settings
                 performOwnerExit(request)
             } else {
@@ -472,9 +473,18 @@ struct AdminCommandCentreView: View {
     }
 
     private func discardPlatformDraftAndComplete(_ request: OwnerExitRequest) {
+        clearPlatformRecoveryDraft()
         platformDraftSnapshot = admin.settings
         XertHaptics.play(.softImpact)
         performOwnerExit(request)
+    }
+
+    private func clearPlatformRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .platformSettings,
+            ownerID: authorizedOwnerSession?.user?.id,
+            recordID: platformDraftSnapshot?.id ?? admin.settings?.id
+        )
     }
 
     private func platformExitMessage(for request: OwnerExitRequest) -> String {
@@ -12022,6 +12032,8 @@ private struct AdminPlatformView: View {
     @State private var saved = false
     @State private var confirmingPaymentActivation = false
     @State private var staleDraftRequiresReset = false
+    @State private var recoveredDraftAt: Date?
+    @State private var hasEditedDuringPresentation = false
 
     private var pricingDataUnavailable: Bool {
         admin.refreshUnavailableSources.contains("session packs")
@@ -12041,6 +12053,12 @@ private struct AdminPlatformView: View {
             && !admin.isLoading
             && !admin.isSavingSettings
             && !isExitSaving
+            && !liveDraftConflict
+    }
+
+    private var liveDraftConflict: Bool {
+        guard let draft, let live = admin.settings else { return false }
+        return draft.id != live.id || draft.updated_at != live.updated_at
     }
 
     private var stripeHealthIsCurrent: Bool {
@@ -12068,6 +12086,32 @@ private struct AdminPlatformView: View {
         Group {
             if draft != nil {
                 Form {
+                    if let recoveredDraftAt {
+                        AdminRecoveredCatalogueDraftNotice(
+                            savedAt: recoveredDraftAt,
+                            onDiscard: resetToLatestLiveSettings
+                        )
+                    }
+                    if liveDraftConflict {
+                        Section {
+                            Label(
+                                "Live controls changed after this draft began. Review the latest settings before making another change.",
+                                systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                            )
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            Button {
+                                resetToLatestLiveSettings()
+                            } label: {
+                                Label("Load latest live controls", systemImage: "arrow.clockwise")
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.orange)
+                        }
+                        .accessibilityIdentifier("owner.platform.versionConflict")
+                    }
                     if platformDataUnavailable {
                         Section {
                             Label(
@@ -12223,16 +12267,35 @@ private struct AdminPlatformView: View {
         .background(Color.xertNavy)
         .navigationTitle("Member App Controls")
         .onAppear {
-            draft = initialDraft ?? admin.settings
-            lastLoadedSettings = admin.settings
+            let live = admin.settings
+            let recovered: AdminCatalogueDraftSnapshot<AdminPlatformSettings>? =
+                initialDraft == nil
+                    ? AdminCatalogueDraftStore.load(
+                        kind: .platformSettings,
+                        ownerID: session.user?.id,
+                        recordID: live?.id,
+                        baselineToken: live?.updated_at
+                    )
+                    : nil
+            draft = initialDraft ?? recovered?.draft ?? live
+            recoveredDraftAt = recovered?.savedAt
+            lastLoadedSettings = live
             staleDraftRequiresReset = platformDataUnavailable
             onDraftChange(draft)
         }
         .onChange(of: admin.settings) { settings in
-            if draft == nil || draft == lastLoadedSettings { draft = settings }
+            if draft == nil || draft == lastLoadedSettings {
+                draft = settings
+                recoveredDraftAt = nil
+                clearRecoveryDraft()
+            } else if draft?.updated_at != settings?.updated_at {
+                recoveredDraftAt = nil
+                clearRecoveryDraft()
+            }
             lastLoadedSettings = settings
         }
         .onChange(of: draft) { value in
+            hasEditedDuringPresentation = true
             if value != admin.settings { saved = false }
             onDraftChange(value)
         }
@@ -12241,10 +12304,12 @@ private struct AdminPlatformView: View {
                 staleDraftRequiresReset = true
                 saved = false
             } else if staleDraftRequiresReset {
-                draft = admin.settings
-                lastLoadedSettings = admin.settings
+                resetToLatestLiveSettings()
                 staleDraftRequiresReset = false
             }
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if draft != nil { platformSaveBar }
@@ -12307,11 +12372,60 @@ private struct AdminPlatformView: View {
             saved = await admin.saveSettings(session: session, draft: settings)
             if saved {
                 XertHaptics.play(.success)
+                recoveredDraftAt = nil
+                clearRecoveryDraft()
                 draft = admin.settings
             } else {
                 XertHaptics.play(.error)
             }
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard
+            let draft,
+            let live = admin.settings,
+            draft != live,
+            draft.id == live.id,
+            draft.updated_at == live.updated_at,
+            platformDataIsCurrent
+        else {
+            if hasEditedDuringPresentation && draft == admin.settings {
+                clearRecoveryDraft()
+            }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard
+            !Task.isCancelled,
+            !admin.isSavingSettings,
+            draft == self.draft,
+            draft.updated_at == admin.settings?.updated_at
+        else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .platformSettings,
+            ownerID: session.user?.id,
+            recordID: live.id,
+            baselineToken: live.updated_at
+        )
+    }
+
+    private func resetToLatestLiveSettings() {
+        clearRecoveryDraft()
+        draft = admin.settings
+        lastLoadedSettings = admin.settings
+        recoveredDraftAt = nil
+        saved = false
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .platformSettings,
+            ownerID: session.user?.id,
+            recordID: draft?.id ?? admin.settings?.id
+        )
     }
 
     private func settingBinding<Value>(_ keyPath: WritableKeyPath<AdminPlatformSettings, Value>) -> Binding<Value> {

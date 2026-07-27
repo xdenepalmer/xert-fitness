@@ -5743,6 +5743,58 @@ final class ModelsTests: XCTestCase {
         XCTAssertNil(rejected)
     }
 
+    func testAdminPlatformSettingsDraftRecoveryRequiresTheExactLiveVersion() throws {
+        let suiteName = "AdminPlatformSettingsDraftStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let settingsID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var draft = AdminPlatformSettings(
+            id: settingsID,
+            target_launch_date: "2026-09-01",
+            countdown_enabled: true,
+            bookings_enabled: false,
+            payments_enabled: false,
+            announcement_banner_text: "Launch training starts soon.",
+            announcement_banner_enabled: true,
+            updated_at: "2026-07-27T01:00:00Z"
+        )
+        draft.bookings_enabled = true
+
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .platformSettings,
+            ownerID: ownerID,
+            recordID: settingsID,
+            baselineToken: draft.updated_at,
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restored: AdminCatalogueDraftSnapshot<AdminPlatformSettings> =
+            try XCTUnwrap(AdminCatalogueDraftStore.load(
+                kind: .platformSettings,
+                ownerID: ownerID,
+                recordID: settingsID,
+                baselineToken: "2026-07-27T01:00:00Z",
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            ))
+        XCTAssertEqual(restored.draft, draft)
+
+        let stale: AdminCatalogueDraftSnapshot<AdminPlatformSettings>? =
+            AdminCatalogueDraftStore.load(
+                kind: .platformSettings,
+                ownerID: ownerID,
+                recordID: settingsID,
+                baselineToken: "2026-07-27T01:05:00Z",
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        XCTAssertNil(stale)
+    }
+
     func testAdminScheduleWindowDraftsRoundTripWithoutColliding() throws {
         let suiteName = "AdminScheduleDraftStoreTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
