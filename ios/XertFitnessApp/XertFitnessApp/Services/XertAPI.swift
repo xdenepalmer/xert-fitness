@@ -2300,13 +2300,13 @@ final class XertAPI {
         status: String,
         adminNotes: String? = nil,
         updateNotes: Bool = false
-    ) async throws {
+    ) async throws -> UUID {
         let allowed = ["requested", "approved", "declined", "reschedule_requested", "completed", "cancelled"]
         guard allowed.contains(status) else { throw APIError(message: "Choose a valid PT request status.") }
         if let adminNotes, adminNotes.count > 5_000 {
             throw APIError(message: "Admin notes must be 5,000 characters or fewer.")
         }
-        let _: UUID? = try await rpc(
+        let receipt: UUID? = try await rpc(
             path: "admin_update_request",
             body: AdminRequestUpdate(
                 p_request_type: "private_session",
@@ -2317,6 +2317,10 @@ final class XertAPI {
             ),
             auth: auth
         )
+        guard let receipt else {
+            throw APIError(message: "No PT request change was confirmed. Refresh and review the latest request.")
+        }
+        return receipt
     }
 
     func adminUpdatePlatformSettings(

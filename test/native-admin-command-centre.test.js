@@ -1562,7 +1562,10 @@ test('native intake notes remain retryable and cannot be discarded through sheet
     assert.match(editor, /\.interactiveDismissDisabled\(isDirty \|\| is[A-Z][A-Za-z]+\)/);
     assert.match(editor, /ToolbarItemGroup\(placement: \.keyboard\)/);
     assert.match(editor, /confirmationDialog\(/);
-    assert.match(editor, /XertHaptics\.play\(\.success\)/);
+    assert.match(
+      editor,
+      /XertHaptics\.play\((?:\.success|admin\.ptRequestStatusIsWarning \? \.warning : \.success)\)/,
+    );
     assert.match(editor, /XertHaptics\.play\(\.error\)/);
   }
 
@@ -2060,7 +2063,8 @@ test('native intake desks never hide failed loads or lose confirmed mutation out
   assert.match(store, /completedAction[\s\S]*could not refresh/);
   assert.match(store, /var ptRequestsAreCurrent: Bool/);
   assert.match(store, /guard ptRequestsAreCurrent/);
-  assert.match(store, /refreshPTRequestsAfterMutation[\s\S]*latest queue could not be loaded/);
+  assert.match(store, /let queueRefreshed = await refreshPTRequestsAfterMutation[\s\S]*latest queue could not reload/);
+  assert.match(store, /private func refreshPTRequestsAfterMutation\(session: AuthSession\) async -> Bool/);
   assert.match(store, /func bulkUpdatePTRequests/);
   assert.match(store, /Array\(requests\.prefix\(50\)\)/);
   assert.match(store, /They remain selected for retry/);
@@ -2097,7 +2101,10 @@ test('native intake desks never hide failed loads or lose confirmed mutation out
   assert.match(intakeViews, /\.searchable\(text: \$query, prompt: "Name, contact, goal or notes"\)/);
   assert.match(intakeViews, /Picker\("Session type", selection: \$sessionTypeFilter\)/);
   assert.match(intakeViews, /Section\(requestsAreCurrent \? "Matching workload" : "Last matching workload"\)/);
-  assert.match(intakeViews, /selectedIDs = await admin\.bulkUpdatePTRequests/);
+  assert.match(
+    intakeViews,
+    /let failedIDs = await admin\.bulkUpdatePTRequests[\s\S]*selectedIDs = failedIDs/,
+  );
   assert.match(intakeViews, /Only requests that fail will remain selected for retry/);
   assert.match(intakeViews, /AdminIntakeCSVDocument\(csv: report\.csv\)/);
   assert.match(intakeViews, /defaultFilename: "xert-pt-requests-/);

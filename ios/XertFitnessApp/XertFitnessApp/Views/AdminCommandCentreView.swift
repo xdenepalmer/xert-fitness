@@ -11448,10 +11448,16 @@ private struct AdminPTRequestsView: View {
     var body: some View {
         List {
             if let message = admin.ptRequestStatusMessage {
-                Label(message, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                Label(
+                    message,
+                    systemImage: admin.ptRequestStatusIsWarning
+                        ? "checkmark.shield.fill"
+                        : "checkmark.circle.fill"
+                )
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.orange)
+                    .foregroundStyle(admin.ptRequestStatusIsWarning ? Color.orange : Color.green)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
                     .listRowBackground(Color.xertInk)
             }
             Section("Filters") {
@@ -11646,10 +11652,16 @@ private struct AdminPTRequestsView: View {
             Button("Move to \(bulkStatus.replacingOccurrences(of: "_", with: " ").capitalized)") {
                 let requests = selectedRequests
                 Task {
-                    selectedIDs = await admin.bulkUpdatePTRequests(
+                    let failedIDs = await admin.bulkUpdatePTRequests(
                         session: session,
                         requests: requests,
                         status: bulkStatus
+                    )
+                    selectedIDs = failedIDs
+                    XertHaptics.play(
+                        failedIDs.isEmpty && !admin.ptRequestStatusIsWarning
+                            ? .success
+                            : .warning
                     )
                     if selectedIDs.isEmpty { bulkStatus = "" }
                 }
@@ -11787,7 +11799,18 @@ private struct AdminPTRequestsView: View {
     @ViewBuilder
     private func requestAction(_ title: String, status: String, request: AdminPTRequest) -> some View {
         Button(title) {
-            Task { _ = await admin.updatePTRequest(session: session, request: request, status: status) }
+            Task {
+                let succeeded = await admin.updatePTRequest(
+                    session: session,
+                    request: request,
+                    status: status
+                )
+                XertHaptics.play(
+                    !succeeded
+                        ? .error
+                        : (admin.ptRequestStatusIsWarning ? .warning : .success)
+                )
+            }
         }
     }
 
@@ -12061,7 +12084,7 @@ private struct AdminPTRequestDetailView: View {
             if didSave {
                 hasCommitted = true
                 clearRecoveryDraft()
-                XertHaptics.play(.success)
+                XertHaptics.play(admin.ptRequestStatusIsWarning ? .warning : .success)
                 dismiss()
             } else {
                 XertHaptics.play(.error)
@@ -12083,7 +12106,7 @@ private struct AdminPTRequestDetailView: View {
             if didSave {
                 hasCommitted = true
                 clearRecoveryDraft()
-                XertHaptics.play(.success)
+                XertHaptics.play(admin.ptRequestStatusIsWarning ? .warning : .success)
                 dismiss()
             } else {
                 XertHaptics.play(.error)

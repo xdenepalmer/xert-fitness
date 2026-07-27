@@ -205,6 +205,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var bookingRequestStatusMessage: String?
     @Published private(set) var updatingBookingRequestIDs: Set<String> = []
     @Published private(set) var ptRequestStatusMessage: String?
+    @Published private(set) var ptRequestStatusIsWarning = false
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var operationalUpdatedAt: Date?
@@ -398,6 +399,7 @@ final class AdminStore: ObservableObject {
             ptRequests = try await ptRequest
             successfulSources.insert("PT requests")
             ptRequestStatusMessage = nil
+            ptRequestStatusIsWarning = false
             loadedSource = true
         }
         catch { failures.append("PT requests"); queueFailures.append("PT requests") }
@@ -629,6 +631,7 @@ final class AdminStore: ObservableObject {
             ptRequests = next
             successfulSources.insert("PT requests")
             ptRequestStatusMessage = nil
+            ptRequestStatusIsWarning = false
         } catch {
             guard !Task.isCancelled, generation == operationalRefreshGeneration else { return false }
             failures.append("PT requests")
@@ -2558,25 +2561,33 @@ final class AdminStore: ObservableObject {
             return false
         }
         updatingPTRequestID = request.id
+        ptRequestStatusMessage = nil
+        ptRequestStatusIsWarning = false
         defer { updatingPTRequestID = nil }
+
+        let receipt: UUID
         do {
-            try await api.adminUpdatePTRequest(
+            receipt = try await api.adminUpdatePTRequest(
                 session: session,
                 requestID: request.id,
                 status: status,
                 adminNotes: notes,
                 updateNotes: updateNotes
             )
-            await refreshPTRequestsAfterMutation(
-                session: session,
-                completedAction: "\(request.displayName)'s PT request was updated"
-            )
-            lastUpdatedAt = Date()
-            return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+
+        let queueRefreshed = await refreshPTRequestsAfterMutation(session: session)
+        let action = updateNotes ? "Private PT notes saved" : "PT request updated"
+        let receiptText = receipt.uuidString.lowercased()
+        ptRequestStatusIsWarning = !queueRefreshed
+        ptRequestStatusMessage = queueRefreshed
+            ? "\(action). Audit receipt \(receiptText)."
+            : "\(action), but the latest queue could not reload. Audit receipt \(receiptText). Do not repeat this change; refresh PT Requests."
+        lastUpdatedAt = Date()
+        return true
     }
 
     func sendOwnerPushSmokeTest(session: AuthSession) async -> Bool {
@@ -2661,18 +2672,22 @@ final class AdminStore: ObservableObject {
             return Set(requests.map(\.id))
         }
         bulkUpdatingPTRequestIDs = Set(boundedRequests.map(\.id))
+        ptRequestStatusMessage = nil
+        ptRequestStatusIsWarning = false
         defer { bulkUpdatingPTRequestIDs = [] }
 
         var mutationFailures = Set<UUID>()
+        var auditReceipts: [UUID] = []
         for request in boundedRequests {
             do {
-                try await api.adminUpdatePTRequest(
+                let receipt = try await api.adminUpdatePTRequest(
                     session: session,
                     requestID: request.id,
                     status: status,
                     adminNotes: nil,
                     updateNotes: false
                 )
+                auditReceipts.append(receipt)
             } catch {
                 mutationFailures.insert(request.id)
             }
@@ -2681,10 +2696,15 @@ final class AdminStore: ObservableObject {
         let succeededCount = boundedRequests.count - mutationFailures.count
         let failures = mutationFailures.union(requests.dropFirst(50).map(\.id))
         if succeededCount > 0 {
-            await refreshPTRequestsAfterMutation(
-                session: session,
-                completedAction: "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated"
-            )
+            let queueRefreshed = await refreshPTRequestsAfterMutation(session: session)
+            let visibleReceipts = auditReceipts.prefix(3).map { $0.uuidString.lowercased() }
+            let remainingReceiptCount = max(0, auditReceipts.count - visibleReceipts.count)
+            let receiptSummary = visibleReceipts.joined(separator: ", ")
+                + (remainingReceiptCount > 0 ? " + \(remainingReceiptCount) more in Admin Audit" : "")
+            ptRequestStatusIsWarning = !queueRefreshed || !failures.isEmpty
+            ptRequestStatusMessage = queueRefreshed
+                ? "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated. Audit receipts: \(receiptSummary)."
+                : "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated, but the queue could not reload. Audit receipts: \(receiptSummary). Do not repeat successful changes; refresh PT Requests."
             lastUpdatedAt = Date()
         }
         if !failures.isEmpty {
@@ -2708,29 +2728,28 @@ final class AdminStore: ObservableObject {
             loadedSources.insert("PT requests")
             refreshUnavailableSources.removeAll { $0 == "PT requests" }
             ptRequestStatusMessage = nil
+            ptRequestStatusIsWarning = false
             lastUpdatedAt = Date()
         } catch {
             if !refreshUnavailableSources.contains("PT requests") {
                 refreshUnavailableSources.append("PT requests")
             }
             ptRequestStatusMessage = "PT Requests could not refresh. Last loaded requests remain read-only."
+            ptRequestStatusIsWarning = true
         }
     }
 
-    private func refreshPTRequestsAfterMutation(
-        session: AuthSession,
-        completedAction: String
-    ) async {
+    private func refreshPTRequestsAfterMutation(session: AuthSession) async -> Bool {
         do {
             ptRequests = try await api.adminPTRequests(session: session)
             loadedSources.insert("PT requests")
             refreshUnavailableSources.removeAll { $0 == "PT requests" }
-            ptRequestStatusMessage = nil
+            return true
         } catch {
             if !refreshUnavailableSources.contains("PT requests") {
                 refreshUnavailableSources.append("PT requests")
             }
-            ptRequestStatusMessage = "\(completedAction), but the latest queue could not be loaded. Refresh before making another change."
+            return false
         }
     }
 
