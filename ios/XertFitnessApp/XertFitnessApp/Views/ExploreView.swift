@@ -216,23 +216,10 @@ private struct NativeInterestFormView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("interest.validation")
                 }
-                Button {
-                    submit()
-                } label: {
-                    HStack {
-                        if store.isSubmittingInterest { ProgressView() }
-                        Text(store.isSubmittingInterest ? "Submitting..." : "Submit \(kind.title)")
-                    }
-                }
-                .disabled(store.isSubmittingInterest)
-                .accessibilityHint(
-                    attemptedSubmit && validationMessage != nil
-                        ? validationMessage ?? ""
-                        : "Sends this enquiry to XERT's protected owner CRM"
-                )
             } footer: {
                 Text("Your details go directly to XERT's protected owner CRM for follow-up.")
             }
+            XertScrollEndSpacer()
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
@@ -240,6 +227,9 @@ private struct NativeInterestFormView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            interestSubmitBar
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: requestDismiss) {
@@ -375,6 +365,43 @@ private struct NativeInterestFormView: View {
         }
     }
 
+    private var interestSubmitBar: some View {
+        VStack(spacing: 0) {
+            Divider().overlay(Color.xertSteel.opacity(0.24))
+            Button(action: submit) {
+                HStack(spacing: 10) {
+                    if store.isSubmittingInterest {
+                        ProgressView().tint(Color.xertNavy)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                    }
+                    Text(store.isSubmittingInterest ? "Submitting..." : "Submit \(kind.title)")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                    Spacer(minLength: 0)
+                    if !store.isSubmittingInterest {
+                        Image(systemName: "arrow.right")
+                            .font(.subheadline.weight(.bold))
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.xertNavy)
+            .background(Color.xertSteel)
+            .disabled(store.isSubmittingInterest)
+            .accessibilityIdentifier("interest.submit")
+            .accessibilityHint(
+                attemptedSubmit && validationMessage != nil
+                    ? validationMessage ?? ""
+                    : "Sends this enquiry to XERT's protected owner CRM"
+            )
+        }
+        .background(.ultraThinMaterial)
+    }
+
     private func prefillContact() {
         if draft.fullName.isEmpty {
             draft.fullName = store.profile?.full_name ?? ""
@@ -487,6 +514,7 @@ private struct CoachProfileView: View {
                 }
             }
             .padding()
+            .padding(.bottom, XertScreenLayout.scrollEndClearance)
         }
         .xertScreenBackground()
         .navigationTitle("The Team")
@@ -547,6 +575,7 @@ private struct TrainingGuideDetailView: View {
                 Text(topic.body).font(.body).foregroundStyle(Color.xertPale).fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
+            .padding(.bottom, XertScreenLayout.scrollEndClearance)
         }
         .xertScreenBackground()
         .navigationTitle("Training Guide")
