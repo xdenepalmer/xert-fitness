@@ -8969,9 +8969,43 @@ private struct AdminOrderDetailView: View {
     @State private var resultMessage: String?
 
     private var isOperating: Bool { admin.operatingOrderID == order.id }
+    private var orderLedgerIsCurrent: Bool {
+        admin.loadedSources.contains("orders")
+            && !admin.refreshUnavailableSources.contains("orders")
+            && !admin.isLoading
+    }
 
     var body: some View {
         List {
+            if let operationStatus = admin.orderOperationStatusMessage {
+                Section {
+                    Label(
+                        operationStatus,
+                        systemImage: admin.orderOperationStatusIsWarning
+                            ? "exclamationmark.triangle.fill"
+                            : "checkmark.shield.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(admin.orderOperationStatusIsWarning ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
+            if !orderLedgerIsCurrent && admin.orderOperationStatusMessage == nil {
+                Section {
+                    Label(
+                        "The order ledger is no longer current. Close this record and refresh Orders before moving money or granting credits.",
+                        systemImage: "lock.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .listRowBackground(Color.xertInk)
+                .accessibilityIdentifier("owner.order.staleGuard")
+            }
+
             Section("Order") {
                 orderValue("Product", order.products?.name ?? "Session pack")
                 orderValue("Buyer", (order.email?.isEmpty == false ? order.email : nil) ?? "Anonymized buyer")
@@ -8996,7 +9030,7 @@ private struct AdminOrderDetailView: View {
                     Button { confirmingReconciliation = true } label: {
                         Label(isOperating ? "Checking Stripe..." : "Check Stripe outcome", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .disabled(isOperating)
+                    .disabled(isOperating || !orderLedgerIsCurrent)
                 }
             }
 
@@ -9032,13 +9066,18 @@ private struct AdminOrderDetailView: View {
                                 confirmation: refundConfirmation
                             ) {
                                 let outcome = result.recovered == true ? "Stripe refund recovered and reconciled." : "Refund complete."
-                                resultMessage = "\(outcome) \(result.credits_revoked) unused credits revoked, \(result.credits_consumed) already consumed, and \(result.bookings_cancelled) future bookings cancelled."
+                                resultMessage = [
+                                    "\(outcome) \(result.credits_revoked) unused credits revoked, \(result.credits_consumed) already consumed, and \(result.bookings_cancelled) future bookings cancelled.",
+                                    admin.orderOperationStatusIsWarning ? admin.orderOperationStatusMessage : nil
+                                ]
+                                .compactMap { $0 }
+                                .joined(separator: " ")
                             }
                         }
                     } label: {
                         Label(isOperating ? "Refunding..." : "Refund \(order.displayAmount)", systemImage: "arrow.uturn.backward.circle")
                     }
-                    .disabled(isOperating || refundConfirmation != "REFUND")
+                    .disabled(isOperating || !orderLedgerIsCurrent || refundConfirmation != "REFUND")
                 }
             }
         }
@@ -9051,11 +9090,17 @@ private struct AdminOrderDetailView: View {
             Button("Check and reconcile") {
                 Task {
                     if let result = await admin.reconcileOrder(session: session, order: order) {
-                        resultMessage = result.status == "failed" && result.checkout_status == "expired"
+                        let outcome = result.status == "failed" && result.checkout_status == "expired"
                             ? "Stripe confirms no payment was taken. The expired checkout is closed without granting credits."
                             : result.already_paid
                             ? "Fulfilment verified. \(result.credits_granted) session credits are attached to this order."
                             : "Payment reconciled. \(result.credits_granted) session credits were granted."
+                        resultMessage = [
+                            outcome,
+                            admin.orderOperationStatusIsWarning ? admin.orderOperationStatusMessage : nil
+                        ]
+                        .compactMap { $0 }
+                        .joined(separator: " ")
                     }
                 }
             }

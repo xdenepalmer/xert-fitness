@@ -164,6 +164,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var sendingMemberNoticeID: UUID?
     @Published private(set) var servicingMemberID: UUID?
     @Published private(set) var operatingOrderID: UUID?
+    @Published private(set) var orderOperationStatusMessage: String?
+    @Published private(set) var orderOperationStatusIsWarning = false
     @Published private(set) var loadingLeadPipeline: AdminLeadPipeline?
     @Published private(set) var loadedLeadPipelines: Set<AdminLeadPipeline> = []
     @Published private(set) var unavailableLeadPipelines: Set<AdminLeadPipeline> = []
@@ -371,7 +373,13 @@ final class AdminStore: ObservableObject {
                 failures.append("members")
             }
         }
-        do { orders = try await orderRequest; successfulSources.insert("orders"); loadedSource = true }
+        do {
+            orders = try await orderRequest
+            orderOperationStatusMessage = nil
+            orderOperationStatusIsWarning = false
+            successfulSources.insert("orders")
+            loadedSource = true
+        }
         catch { failures.append("orders"); queueFailures.append("orders") }
         do { settings = try await settingsRequest; successfulSources.insert("platform controls"); loadedSource = true }
         catch { failures.append("platform controls") }
@@ -1374,21 +1382,33 @@ final class AdminStore: ObservableObject {
 
     func reconcileOrder(session: AuthSession, order: OrderItem) async -> AdminReconciliationResult? {
         guard operatingOrderID == nil else { return nil }
+        guard loadedSources.contains("orders"),
+              !refreshUnavailableSources.contains("orders"),
+              !isLoading else {
+            errorMessage = "Refresh Orders before reconciling a payment."
+            return nil
+        }
         guard order.isRecoverable else {
             errorMessage = "Only unresolved orders with a Stripe Checkout Session can be reconciled."
             return nil
         }
         operatingOrderID = order.id
+        orderOperationStatusMessage = nil
+        orderOperationStatusIsWarning = false
         defer { operatingOrderID = nil }
+        let result: AdminReconciliationResult
         do {
-            let result = try await api.adminReconcileOrder(session: session, orderID: order.id)
-            orders = try await api.adminOrders(session: session)
-            lastUpdatedAt = Date()
-            return result
+            result = try await api.adminReconcileOrder(session: session, orderID: order.id)
         } catch {
             errorMessage = error.localizedDescription
             return nil
         }
+        await refreshOrdersAfterConfirmedOperation(
+            session: session,
+            staleMessage: "Stripe reconciliation was confirmed, but the order ledger could not refresh. Do not repeat the reconciliation; refresh Orders to verify the latest record."
+        )
+        lastUpdatedAt = Date()
+        return result
     }
 
     func refundOrder(
@@ -1398,25 +1418,56 @@ final class AdminStore: ObservableObject {
         confirmation: String
     ) async -> AdminRefundResult? {
         guard operatingOrderID == nil else { return nil }
+        guard loadedSources.contains("orders"),
+              !refreshUnavailableSources.contains("orders"),
+              !isLoading else {
+            errorMessage = "Refresh Orders before submitting a refund."
+            return nil
+        }
         guard order.isRefundable else {
             errorMessage = "Only a fully paid, unreimbursed Stripe order can be refunded."
             return nil
         }
         operatingOrderID = order.id
+        orderOperationStatusMessage = nil
+        orderOperationStatusIsWarning = false
         defer { operatingOrderID = nil }
+        let result: AdminRefundResult
         do {
-            let result = try await api.adminRefundOrder(
+            result = try await api.adminRefundOrder(
                 session: session,
                 orderID: order.id,
                 reason: reason,
                 confirmation: confirmation
             )
-            orders = try await api.adminOrders(session: session)
-            lastUpdatedAt = Date()
-            return result
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+        await refreshOrdersAfterConfirmedOperation(
+            session: session,
+            staleMessage: "Stripe refund was confirmed, but the order ledger could not refresh. Do not submit another refund; refresh Orders to verify the latest record."
+        )
+        lastUpdatedAt = Date()
+        return result
+    }
+
+    private func refreshOrdersAfterConfirmedOperation(
+        session: AuthSession,
+        staleMessage: String
+    ) async {
+        do {
+            orders = try await api.adminOrders(session: session)
+            loadedSources.insert("orders")
+            refreshUnavailableSources.removeAll { $0 == "orders" }
+            orderOperationStatusMessage = "Order ledger refreshed and verified."
+            orderOperationStatusIsWarning = false
+        } catch {
+            if !refreshUnavailableSources.contains("orders") {
+                refreshUnavailableSources.append("orders")
+            }
+            orderOperationStatusMessage = staleMessage
+            orderOperationStatusIsWarning = true
         }
     }
 
