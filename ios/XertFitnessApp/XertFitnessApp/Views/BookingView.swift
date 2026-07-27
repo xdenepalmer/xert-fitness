@@ -133,7 +133,9 @@ struct BookingView: View {
         handledRouteSequence = routeSequence
         Task { @MainActor in
             await Task.yield()
-            withAnimation { proxy.scrollTo(target, anchor: .top) }
+            withAnimation {
+                proxy.scrollTo(target, anchor: XertScreenLayout.routedContentAnchor)
+            }
         }
     }
 

@@ -132,6 +132,9 @@ extension EnvironmentValues {
 
 enum XertScreenLayout {
     static let minimumHeroTopInset: CGFloat = 18
+    /// Programmatic routes should settle below navigation and search chrome,
+    /// leaving the destination heading and its first actions fully visible.
+    static let routedContentAnchor = UnitPoint(x: 0.5, y: 0.2)
     /// Extra scroll runway above the persistent custom dock. The safe-area
     /// inset reserves the dock itself; this lets the final action scroll fully
     /// into view above it on short iPhones and with large Dynamic Type.

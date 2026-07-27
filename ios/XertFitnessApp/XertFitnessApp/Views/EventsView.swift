@@ -151,7 +151,9 @@ struct EventsView: View {
         handledRouteSequence = routeSequence
         Task { @MainActor in
             await Task.yield()
-            withAnimation { proxy.scrollTo(ScrollTarget.goals, anchor: .top) }
+            withAnimation {
+                proxy.scrollTo(ScrollTarget.goals, anchor: XertScreenLayout.routedContentAnchor)
+            }
         }
     }
 
