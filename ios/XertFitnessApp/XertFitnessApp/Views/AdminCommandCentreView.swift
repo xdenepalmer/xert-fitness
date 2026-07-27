@@ -4307,6 +4307,23 @@ private struct AdminMemberDetailView: View {
             }
             .listRowBackground(Color.xertInk)
 
+            if let noteStatus = admin.memberNoteStatusMessage {
+                Section {
+                    Label(
+                        noteStatus,
+                        systemImage: admin.memberNoteStatusIsWarning
+                            ? "exclamationmark.triangle.fill"
+                            : "checkmark.shield.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(admin.memberNoteStatusIsWarning ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                }
+                .listRowBackground(Color.xertInk)
+                .accessibilityIdentifier("owner.member.staffNote.receipt")
+            }
+
             Section("Add staff note") {
                 Picker("Category", selection: $noteCategory) {
                     Text("General").tag("general"); Text("Coaching").tag("coaching")
@@ -4356,7 +4373,17 @@ private struct AdminMemberDetailView: View {
                                     .font(.caption2.weight(.bold)).foregroundStyle(Color.xertSteel)
                                 Spacer()
                                 Button {
-                                    Task { _ = await admin.archiveMemberNote(session: session, memberID: current.id, note: note) }
+                                    Task {
+                                        if await admin.archiveMemberNote(
+                                            session: session,
+                                            memberID: current.id,
+                                            note: note
+                                        ) {
+                                            XertHaptics.play(admin.memberNoteStatusIsWarning ? .warning : .success)
+                                        } else {
+                                            XertHaptics.play(.error)
+                                        }
+                                    }
                                 } label: { Image(systemName: note.archived_at == nil ? "archivebox" : "arrow.uturn.backward.circle") }
                                     .buttonStyle(.plain)
                                     .disabled(!memberRecordMutationsAllowed)
@@ -4535,7 +4562,7 @@ private struct AdminMemberDetailView: View {
                 clearStaffNoteDraft()
                 recoveredStaffNoteAt = nil
                 noteBody = ""
-                XertHaptics.play(.success)
+                XertHaptics.play(admin.memberNoteStatusIsWarning ? .warning : .success)
             } else {
                 XertHaptics.play(.error)
             }

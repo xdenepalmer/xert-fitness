@@ -64,6 +64,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var memberDirectoryCredit = "all"
     @Published private(set) var memberDirectoryPage = 1
     @Published private(set) var memberNotes: [AdminMemberNote] = []
+    @Published private(set) var memberNoteStatusMessage: String?
+    @Published private(set) var memberNoteStatusIsWarning = false
     @Published private(set) var memberNotices: [AdminMemberNotice] = []
     @Published private(set) var memberNoticeStatusMessage: String?
     @Published private(set) var memberNoticeStatusIsWarning = false
@@ -1018,6 +1020,8 @@ final class AdminStore: ObservableObject {
         memberDetailUnavailableSources = []
         if !canPreserveCurrent {
             memberNotes = []
+            memberNoteStatusMessage = nil
+            memberNoteStatusIsWarning = false
             memberNotices = []
             memberCreditBatches = []
             memberCreditGrants = []
@@ -1043,6 +1047,8 @@ final class AdminStore: ObservableObject {
             let notes = try await notesRequest
             guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
             memberNotes = notes
+            memberNoteStatusMessage = nil
+            memberNoteStatusIsWarning = false
         } catch {
             guard memberDetailGeneration == generation, loadedMemberDetailID == memberID else { return }
             failures.append("staff timeline")
@@ -1115,6 +1121,8 @@ final class AdminStore: ObservableObject {
         revealingEmergencyContactMemberID = nil
         sendingMemberNoticeID = nil
         memberNotes = []
+        memberNoteStatusMessage = nil
+        memberNoteStatusIsWarning = false
         memberNotices = []
         memberNoticeStatusMessage = nil
         memberNoticeStatusIsWarning = false
@@ -1174,24 +1182,44 @@ final class AdminStore: ObservableObject {
         }
         let generation = memberDetailGeneration
         servicingMemberID = memberID
+        memberNoteStatusMessage = nil
+        memberNoteStatusIsWarning = false
         defer {
             if servicingMemberID == memberID { servicingMemberID = nil }
         }
+        let noteID: UUID
         do {
-            _ = try await api.adminAddMemberNote(session: session, memberID: memberID, category: category, body: body)
-            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
-            guard memberDetailGeneration == generation,
-                  loadedMemberDetailID == memberID else { return true }
-            memberNotes = notes
-            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
-            lastUpdatedAt = Date()
-            return true
+            noteID = try await api.adminAddMemberNote(
+                session: session,
+                memberID: memberID,
+                category: category,
+                body: body
+            )
         } catch {
             guard memberDetailGeneration == generation,
                   loadedMemberDetailID == memberID else { return false }
             errorMessage = error.localizedDescription
             return false
         }
+        do {
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
+            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
+            memberNoteStatusMessage = "Staff note saved and timeline verified."
+            memberNoteStatusIsWarning = false
+        } catch {
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            if !memberDetailUnavailableSources.contains("staff timeline") {
+                memberDetailUnavailableSources.append("staff timeline")
+            }
+            memberNoteStatusMessage = "Staff note saved with receipt \(noteID.uuidString.lowercased()), but the timeline could not refresh. Do not add it again; pull down to verify."
+            memberNoteStatusIsWarning = true
+        }
+        lastUpdatedAt = Date()
+        return true
     }
 
     func archiveMemberNote(session: AuthSession, memberID: UUID, note: AdminMemberNote) async -> Bool {
@@ -1204,24 +1232,42 @@ final class AdminStore: ObservableObject {
         }
         let generation = memberDetailGeneration
         servicingMemberID = memberID
+        memberNoteStatusMessage = nil
+        memberNoteStatusIsWarning = false
         defer {
             if servicingMemberID == memberID { servicingMemberID = nil }
         }
         do {
             try await api.adminArchiveMemberNote(session: session, noteID: note.id, archived: note.archived_at == nil)
-            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
-            guard memberDetailGeneration == generation,
-                  loadedMemberDetailID == memberID else { return true }
-            memberNotes = notes
-            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
-            lastUpdatedAt = Date()
-            return true
         } catch {
             guard memberDetailGeneration == generation,
                   loadedMemberDetailID == memberID else { return false }
             errorMessage = error.localizedDescription
             return false
         }
+        do {
+            let notes = try await api.adminMemberNotes(session: session, memberID: memberID)
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            memberNotes = notes
+            memberDetailUnavailableSources.removeAll { $0 == "staff timeline" }
+            memberNoteStatusMessage = note.archived_at == nil
+                ? "Staff note archived and timeline verified."
+                : "Staff note restored and timeline verified."
+            memberNoteStatusIsWarning = false
+        } catch {
+            guard memberDetailGeneration == generation,
+                  loadedMemberDetailID == memberID else { return true }
+            if !memberDetailUnavailableSources.contains("staff timeline") {
+                memberDetailUnavailableSources.append("staff timeline")
+            }
+            memberNoteStatusMessage = note.archived_at == nil
+                ? "The note was archived, but the timeline could not refresh. Do not repeat the action; pull down to verify."
+                : "The note was restored, but the timeline could not refresh. Do not repeat the action; pull down to verify."
+            memberNoteStatusIsWarning = true
+        }
+        lastUpdatedAt = Date()
+        return true
     }
 
     func sendMemberNotice(
