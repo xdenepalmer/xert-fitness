@@ -87,6 +87,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var commerceHealth: AdminCommerceHealth?
     @Published private(set) var resolvingStripeIncidentID: String?
     @Published private(set) var retryingStripeIncidentID: String?
+    @Published private(set) var stripeIncidentStatusMessage: String?
+    @Published private(set) var stripeIncidentStatusIsWarning = false
     @Published private(set) var pushHealth: AdminPushHealth?
     @Published private(set) var isSendingOwnerPushTest = false
     @Published private(set) var ownerPushTestStatusMessage: String?
@@ -412,11 +414,19 @@ final class AdminStore: ObservableObject {
         }
         do { schemaCapabilities = try await capabilitiesRequest; successfulSources.insert("schema health"); loadedSource = true }
         catch { failures.append("schema health") }
-        do { commerceHealth = try await commerceRequest; successfulSources.insert("Stripe health"); loadedSource = true }
+        do {
+            commerceHealth = try await commerceRequest
+            stripeIncidentStatusMessage = nil
+            stripeIncidentStatusIsWarning = false
+            successfulSources.insert("Stripe health")
+            loadedSource = true
+        }
         catch {
             if !loadedSources.contains("Stripe health"), !Task.isCancelled {
                 do {
                     commerceHealth = try await api.adminCommerceHealth(session: session)
+                    stripeIncidentStatusMessage = nil
+                    stripeIncidentStatusIsWarning = false
                     successfulSources.insert("Stripe health")
                     loadedSource = true
                 } catch { failures.append("Stripe health") }
@@ -689,6 +699,8 @@ final class AdminStore: ObservableObject {
             let nextCommerceHealth = try await commerceRequest
             guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
             commerceHealth = nextCommerceHealth
+            stripeIncidentStatusMessage = nil
+            stripeIncidentStatusIsWarning = false
             successfulSources.insert("Stripe health")
         } catch {
             guard !Task.isCancelled, generation == healthRefreshGeneration else { return }
@@ -2405,23 +2417,41 @@ final class AdminStore: ObservableObject {
         incident: AdminCommerceHealth.WebhookDelivery.Incident
     ) async -> Bool {
         guard resolvingStripeIncidentID == nil, let errorCode = incident.error_code else { return false }
+        guard healthSourceIsCurrent("Stripe health") else {
+            errorMessage = "Refresh Operations Health before marking this Stripe incident handled."
+            return false
+        }
         healthRefreshGeneration &+= 1
         launchGateUpdatedAt = nil
+        stripeIncidentStatusMessage = nil
+        stripeIncidentStatusIsWarning = false
         resolvingStripeIncidentID = incident.event_id
         defer { resolvingStripeIncidentID = nil }
+
+        let receipt: AdminStripeReviewResolutionResponse
         do {
-            try await api.adminResolveStripeReview(
+            receipt = try await api.adminResolveStripeReview(
                 session: session,
                 eventID: incident.event_id,
                 errorCode: errorCode
             )
-            commerceHealth = try await api.adminCommerceHealth(session: session)
-            lastUpdatedAt = Date()
-            return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+
+        do {
+            commerceHealth = try await api.adminCommerceHealth(session: session)
+            markCatalogueSourceCurrent("Stripe health")
+        } catch {
+            markCatalogueSourceUnavailable("Stripe health")
+            stripeIncidentStatusIsWarning = true
+        }
+        stripeIncidentStatusMessage = stripeIncidentStatusIsWarning
+            ? "Stripe incident \(receipt.event_id) was marked handled, but Operations Health could not reload. Do not mark it again; refresh this screen."
+            : "Stripe incident \(receipt.event_id) was marked handled."
+        lastUpdatedAt = Date()
+        return true
     }
 
     func retryStripeEvent(
@@ -2429,19 +2459,43 @@ final class AdminStore: ObservableObject {
         incident: AdminCommerceHealth.WebhookDelivery.Incident
     ) async -> Bool {
         guard retryingStripeIncidentID == nil, incident.resolution == nil else { return false }
+        guard healthSourceIsCurrent("Stripe health") else {
+            errorMessage = "Refresh Operations Health before retrying this Stripe incident."
+            return false
+        }
         healthRefreshGeneration &+= 1
         launchGateUpdatedAt = nil
+        stripeIncidentStatusMessage = nil
+        stripeIncidentStatusIsWarning = false
         retryingStripeIncidentID = incident.event_id
         defer { retryingStripeIncidentID = nil }
+
+        let receipt: AdminStripeRetryResponse
         do {
-            _ = try await api.adminRetryStripeEvent(session: session, eventID: incident.event_id)
-            commerceHealth = try await api.adminCommerceHealth(session: session)
-            lastUpdatedAt = Date()
-            return true
+            receipt = try await api.adminRetryStripeEvent(session: session, eventID: incident.event_id)
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+
+        var details = receipt.duplicate
+            ? "Stripe incident \(receipt.event_id) was already processed safely."
+            : "Stripe incident \(receipt.event_id) retry finished with status \(receipt.status)."
+        if receipt.status == "failed" {
+            stripeIncidentStatusIsWarning = true
+            details += " Owner review is still required."
+        }
+        do {
+            commerceHealth = try await api.adminCommerceHealth(session: session)
+            markCatalogueSourceCurrent("Stripe health")
+        } catch {
+            markCatalogueSourceUnavailable("Stripe health")
+            stripeIncidentStatusIsWarning = true
+            details += " Operations Health could not reload. Do not retry it again; refresh this screen."
+        }
+        stripeIncidentStatusMessage = details
+        lastUpdatedAt = Date()
+        return true
     }
 
     func updatePTRequest(

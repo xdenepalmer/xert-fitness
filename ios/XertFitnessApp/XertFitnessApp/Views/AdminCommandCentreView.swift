@@ -13653,6 +13653,21 @@ private struct AdminOperationsHealthView: View {
                     }
                 }
             }
+            if let status = admin.stripeIncidentStatusMessage {
+                Section("Latest Stripe operation") {
+                    Label(
+                        status,
+                        systemImage: admin.stripeIncidentStatusIsWarning
+                            ? "checkmark.shield.fill"
+                            : "checkmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(admin.stripeIncidentStatusIsWarning ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .listRowBackground(Color.xertInk)
+                }
+            }
             if let commerce = admin.commerceHealth, stripeHealthIsCurrent {
                 Section("Stripe launch checklist") {
                     HealthValueRow(label: "Mode", value: commerce.mode?.uppercased() ?? "Unknown")
@@ -13929,7 +13944,14 @@ private struct AdminOperationsHealthView: View {
             presenting: pendingResolution
         ) { incident in
             Button("Mark handled") {
-                Task { _ = await admin.resolveStripeReview(session: session, incident: incident) }
+                Task {
+                    let succeeded = await admin.resolveStripeReview(session: session, incident: incident)
+                    XertHaptics.play(
+                        !succeeded
+                            ? .error
+                            : (admin.stripeIncidentStatusIsWarning ? .warning : .success)
+                    )
+                }
             }
             Button("Keep unresolved", role: .cancel) {}
         } message: { incident in
@@ -13944,7 +13966,14 @@ private struct AdminOperationsHealthView: View {
             presenting: pendingRetry
         ) { incident in
             Button("Retry event") {
-                Task { _ = await admin.retryStripeEvent(session: session, incident: incident) }
+                Task {
+                    let succeeded = await admin.retryStripeEvent(session: session, incident: incident)
+                    XertHaptics.play(
+                        !succeeded
+                            ? .error
+                            : (admin.stripeIncidentStatusIsWarning ? .warning : .success)
+                    )
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: { incident in

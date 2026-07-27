@@ -1655,8 +1655,12 @@ final class XertAPI {
         try await vercelGet(path: "/api/admin-commerce-health", auth: auth)
     }
 
-    func adminResolveStripeReview(session auth: AuthSession, eventID: String, errorCode: String) async throws {
-        let _: AdminStripeReviewResolutionResponse = try await vercelRequest(
+    func adminResolveStripeReview(
+        session auth: AuthSession,
+        eventID: String,
+        errorCode: String
+    ) async throws -> AdminStripeReviewResolutionResponse {
+        let response: AdminStripeReviewResolutionResponse = try await vercelRequest(
             path: "/api/admin-commerce-health",
             body: AdminStripeReviewResolutionRequest(
                 action: "resolve_stripe_review",
@@ -1666,10 +1670,14 @@ final class XertAPI {
             ),
             auth: auth
         )
+        guard response.event_id == eventID, response.status == "ignored" else {
+            throw APIError(message: "XERT could not verify the handled Stripe incident receipt.")
+        }
+        return response
     }
 
     func adminRetryStripeEvent(session auth: AuthSession, eventID: String) async throws -> AdminStripeRetryResponse {
-        try await vercelRequest(
+        let response: AdminStripeRetryResponse = try await vercelRequest(
             path: "/api/admin-commerce-health",
             body: AdminStripeRetryRequest(
                 action: "retry_stripe_event",
@@ -1678,6 +1686,11 @@ final class XertAPI {
             ),
             auth: auth
         )
+        guard response.event_id == eventID,
+              ["processed", "ignored", "failed"].contains(response.status) else {
+            throw APIError(message: "XERT could not verify the Stripe retry receipt.")
+        }
+        return response
     }
 
     func adminPushHealth(session auth: AuthSession) async throws -> AdminPushHealth {
@@ -3010,7 +3023,7 @@ private struct AdminStripeReviewResolutionRequest: Encodable {
     let event_id: String
     let error_code: String
 }
-private struct AdminStripeReviewResolutionResponse: Decodable {
+struct AdminStripeReviewResolutionResponse: Decodable, Hashable {
     let event_id: String
     let status: String
 }
