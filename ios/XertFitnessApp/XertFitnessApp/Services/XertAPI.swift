@@ -2480,12 +2480,20 @@ final class XertAPI {
         category: String,
         body: String
     ) async throws -> UUID {
-        try await rpc(
+        let normalizedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ["general", "coaching", "follow_up", "billing"].contains(normalizedCategory) else {
+            throw APIError(message: "Choose a valid staff note category.")
+        }
+        guard (3...1_000).contains(normalizedBody.count) else {
+            throw APIError(message: "Add a staff note between 3 and 1,000 characters.")
+        }
+        return try await rpc(
             path: "admin_add_member_note",
             body: AdminMemberNoteRequest(
                 p_user_id: memberID,
-                p_category: category,
-                p_body: body
+                p_category: normalizedCategory,
+                p_body: normalizedBody
             ),
             auth: auth
         )

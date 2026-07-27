@@ -4130,6 +4130,9 @@ private struct AdminMemberDetailView: View {
     private var hasNoteDraft: Bool {
         !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+    private var normalizedNoteBody: String {
+        noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     private var memberRecordIsCurrent: Bool {
         admin.loadedMemberDetailID == current.id
     }
@@ -4266,18 +4269,17 @@ private struct AdminMemberDetailView: View {
                 TextField("Operational context", text: $noteBody, axis: .vertical)
                     .lineLimit(3...7)
                     .focused($noteFocused)
-                Button("Add note") {
-                    noteFocused = false
-                    Task {
-                        if await admin.addMemberNote(session: session, memberID: current.id, category: noteCategory, body: noteBody) {
-                            noteBody = ""
-                            XertHaptics.play(.success)
-                        } else {
-                            XertHaptics.play(.error)
-                        }
+                    .onChange(of: noteBody) { value in
+                        if value.count > 1_000 { noteBody = String(value.prefix(1_000)) }
                     }
+                HStack {
+                    Text("Private operational record")
+                    Spacer()
+                    Text("\(noteBody.count)/1000")
+                        .monospacedDigit()
                 }
-                .disabled(!memberRecordMutationsAllowed || noteBody.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                .font(.caption2)
+                .foregroundStyle(normalizedNoteBody.count < 3 ? Color.orange : Color.xertPale.opacity(0.55))
             }
             .id("owner.member.staffNote")
             .listRowBackground(Color.xertInk)
@@ -4329,7 +4331,9 @@ private struct AdminMemberDetailView: View {
             .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !noteFocused {
+                if noteFocused || hasNoteDraft {
+                    staffNoteSaveBar
+                } else {
                     memberActionDock {
                         withAnimation(.easeInOut(duration: 0.22)) {
                             proxy.scrollTo("owner.member.staffNote", anchor: .center)
@@ -4429,6 +4433,50 @@ private struct AdminMemberDetailView: View {
                 Button("Keep writing", role: .cancel) {}
             } message: {
                 Text("The unsaved note for \(current.displayName) will be lost.")
+            }
+        }
+    }
+
+    private var staffNoteSaveBar: some View {
+        Button(action: addStaffNote) {
+            HStack(spacing: 10) {
+                if isBusy { ProgressView().tint(Color.xertNavy) }
+                Label(isBusy ? "Adding note..." : "Add staff note", systemImage: "note.text.badge.plus")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canAddStaffNote ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canAddStaffNote)
+        .accessibilityIdentifier("owner.member.staffNote.save")
+        .accessibilityHint(
+            canAddStaffNote
+                ? "Adds this private note to \(current.displayName)'s permanent staff timeline"
+                : "Enter an operational note between 3 and 1,000 characters"
+        )
+    }
+
+    private var canAddStaffNote: Bool {
+        memberRecordMutationsAllowed && (3...1_000).contains(normalizedNoteBody.count)
+    }
+
+    private func addStaffNote() {
+        guard canAddStaffNote else { return }
+        noteFocused = false
+        Task {
+            if await admin.addMemberNote(
+                session: session,
+                memberID: current.id,
+                category: noteCategory,
+                body: normalizedNoteBody
+            ) {
+                noteBody = ""
+                XertHaptics.play(.success)
+            } else {
+                XertHaptics.play(.error)
             }
         }
     }
@@ -5158,6 +5206,7 @@ private struct AdminCreditGrantView: View {
     @State private var noExpiry = false
     @State private var reason = ""
     @State private var requestID = UUID()
+    @State private var confirmingGrant = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var reasonFocused: Bool
@@ -5169,10 +5218,35 @@ private struct AdminCreditGrantView: View {
             || !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     private var isBusy: Bool { admin.servicingMemberID != nil }
+    private var creditMutationAllowed: Bool {
+        admin.loadedMemberDetailID == member.id
+            && admin.loadingMemberDetailID == nil
+            && !admin.memberDetailUnavailableSources.contains("credit audit")
+    }
+    private var normalizedReason: String {
+        reason.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var canReviewGrant: Bool {
+        creditMutationAllowed && !isBusy && (3...500).contains(normalizedReason.count)
+    }
+    private var expirySummary: String {
+        noExpiry ? "These credits will not expire." : "These credits will expire \(validityDays) days after the grant."
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if !creditMutationAllowed {
+                    Section {
+                        Label(
+                            "The verified credit audit is no longer current. Close this sheet and refresh the member record before granting credits.",
+                            systemImage: "lock.trianglebadge.exclamationmark"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Section("Credit grant") {
                     Stepper("Credits: \(sessions)", value: $sessions, in: 1...100)
                     Toggle("No expiry", isOn: $noExpiry)
@@ -5180,32 +5254,49 @@ private struct AdminCreditGrantView: View {
                     TextField("Reason", text: $reason, axis: .vertical)
                         .lineLimit(3...6)
                         .focused($reasonFocused)
+                        .onChange(of: reason) { value in
+                            if value.count > 500 { reason = String(value.prefix(500)) }
+                        }
+                    HStack {
+                        Text("Required for the permanent audit trail")
+                        Spacer()
+                        Text("\(reason.count)/500")
+                            .monospacedDigit()
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(normalizedReason.count < 3 ? Color.orange : Color.xertPale.opacity(0.55))
                     Text("Manual grants are permanently audited and idempotent.").font(.caption).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Grant to \(member.displayName)").navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button {
+                    reasonFocused = false
+                    confirmingGrant = true
+                } label: {
+                    Label("Review \(sessions) credit\(sessions == 1 ? "" : "s")", systemImage: "checkmark.shield")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.xertNavy)
+                .background(canReviewGrant ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+                .disabled(!canReviewGrant)
+                .accessibilityIdentifier("owner.creditGrant.review")
+                .accessibilityHint(
+                    !creditMutationAllowed
+                        ? "Refresh the member record before granting credits"
+                        : canReviewGrant
+                        ? "Reviews the exact member, quantity, expiry and audit reason before granting"
+                        : "Enter an audit reason between 3 and 500 characters"
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: requestDismiss)
                         .disabled(isBusy)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Grant") {
-                        reasonFocused = false
-                        let id = requestID
-                        Task {
-                            if await admin.grantCredits(session: session, memberID: member.id, sessions: sessions,
-                                                        validityDays: noExpiry ? nil : validityDays, requestID: id, note: reason) {
-                                requestID = UUID()
-                                XertHaptics.play(.success)
-                                dismiss()
-                            } else {
-                                XertHaptics.play(.error)
-                            }
-                        }
-                    }
-                    .disabled(isBusy || reason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -5221,6 +5312,19 @@ private struct AdminCreditGrantView: View {
         )
         .interactiveDismissDisabled(isDirty || isBusy)
         .confirmationDialog(
+            "Grant \(sessions) class credit\(sessions == 1 ? "" : "s") to \(member.displayName)?",
+            isPresented: $confirmingGrant,
+            titleVisibility: .visible
+        ) {
+            Button("Grant \(sessions) credit\(sessions == 1 ? "" : "s")") {
+                performGrant()
+            }
+            .disabled(!canReviewGrant)
+            Button("Keep reviewing", role: .cancel) {}
+        } message: {
+            Text("\(expirySummary) Audit reason: \(normalizedReason)")
+        }
+        .confirmationDialog(
             "Discard manual credit grant?",
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
@@ -5229,6 +5333,27 @@ private struct AdminCreditGrantView: View {
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("No credits have been granted yet. The amount, expiry and audit reason will be lost.")
+        }
+    }
+
+    private func performGrant() {
+        guard canReviewGrant else { return }
+        let id = requestID
+        Task {
+            if await admin.grantCredits(
+                session: session,
+                memberID: member.id,
+                sessions: sessions,
+                validityDays: noExpiry ? nil : validityDays,
+                requestID: id,
+                note: normalizedReason
+            ) {
+                requestID = UUID()
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
         }
     }
 

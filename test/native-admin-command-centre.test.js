@@ -1495,6 +1495,8 @@ test('high-consequence owner drafts share command-centre exit protection', async
   assert.match(creditGrant, /Discard manual credit grant\?/);
   assert.match(creditGrant, /ToolbarItemGroup\(placement: \.keyboard\)/);
   assert.match(creditGrant, /\.interactiveDismissDisabled\(isDirty \|\| isBusy\)/);
+  assert.match(creditGrant, /\.safeAreaInset\(edge: \.bottom, spacing: 0\)/);
+  assert.match(creditGrant, /confirmingGrant/);
 
   for (const editor of [
     memberNotice,
