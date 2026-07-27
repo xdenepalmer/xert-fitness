@@ -10,6 +10,7 @@ enum MemberLocalState {
         AdminAttendanceDraftStore.clearAll(ownerID: userID, defaults: defaults)
         AdminAnnouncementDraftStore.clearAll(ownerID: userID, defaults: defaults)
         AdminCatalogueDraftStore.clearAll(ownerID: userID, defaults: defaults)
+        AdminIntakeDraftStore.clearAll(ownerID: userID, defaults: defaults)
         MemberBookingCache.clear(for: userID, defaults: defaults)
         ClassReminderNavigation.clearPending(defaults: defaults)
         AnnouncementPushNavigation.clearPending(defaults: defaults)

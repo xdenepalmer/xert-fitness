@@ -2620,6 +2620,18 @@ final class ModelsTests: XCTestCase {
             baselineToken: nil,
             defaults: defaults
         )
+        let intakeBaseline = AdminIntakeDraftStore.baselineToken(
+            status: "new",
+            notes: ""
+        )
+        AdminIntakeDraftStore.save(
+            AdminIntakeDraft(status: "contacted", notes: "Call completed"),
+            kind: .lead,
+            ownerID: userID,
+            recordID: "members:123",
+            baselineToken: intakeBaseline,
+            defaults: defaults
+        )
 
         MemberLocalState.clear(for: userID, defaults: defaults)
 
@@ -2654,6 +2666,13 @@ final class ModelsTests: XCTestCase {
                 defaults: defaults
             )
         XCTAssertNil(restoredProduct)
+        XCTAssertNil(AdminIntakeDraftStore.load(
+            kind: .lead,
+            ownerID: userID,
+            recordID: "members:123",
+            baselineToken: intakeBaseline,
+            defaults: defaults
+        ))
     }
 
     func testMemberSignUpNormalizesIdentityAndEncodesProfileMetadata() throws {
@@ -5785,6 +5804,84 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(restoredBlackout.draft, blackout)
         XCTAssertEqual(restoredAvailability.kind, .availability)
         XCTAssertEqual(restoredBlackout.kind, .blackout)
+    }
+
+    func testAdminIntakeDraftRecoveryIsBoundedScopedAndExpiring() throws {
+        let suiteName = "AdminIntakeDraftStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let recordID = "members:lead/123"
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let baseline = AdminIntakeDraftStore.baselineToken(status: "new", notes: "")
+        let draft = AdminIntakeDraft(status: "contacted", notes: "Called and booked a tour")
+
+        AdminIntakeDraftStore.save(
+            draft,
+            kind: .lead,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restored = try XCTUnwrap(AdminIntakeDraftStore.load(
+            kind: .lead,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        XCTAssertEqual(restored.draft, draft)
+        XCTAssertEqual(restored.ownerID, ownerID)
+        XCTAssertEqual(restored.recordID, recordID)
+
+        XCTAssertNil(AdminIntakeDraftStore.load(
+            kind: .lead,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: AdminIntakeDraftStore.baselineToken(status: "contacted", notes: ""),
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+
+        AdminIntakeDraftStore.save(
+            draft,
+            kind: .ptRequest,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt,
+            defaults: defaults
+        )
+        XCTAssertNil(AdminIntakeDraftStore.load(
+            kind: .ptRequest,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt.addingTimeInterval(AdminIntakeDraftStore.maximumAge + 1),
+            defaults: defaults
+        ))
+
+        AdminIntakeDraftStore.save(
+            AdminIntakeDraft(status: nil, notes: String(repeating: "x", count: 5_001)),
+            kind: .bookingRequest,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt,
+            defaults: defaults
+        )
+        XCTAssertNil(AdminIntakeDraftStore.load(
+            kind: .bookingRequest,
+            ownerID: ownerID,
+            recordID: recordID,
+            baselineToken: baseline,
+            now: savedAt,
+            defaults: defaults
+        ))
     }
 
     private func adminAnnouncement(

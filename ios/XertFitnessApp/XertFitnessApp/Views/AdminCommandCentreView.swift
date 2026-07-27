@@ -9085,7 +9085,11 @@ private struct AdminBookingRequestDetailView: View {
     let booking: AdminBookingRequest
     let mutationAllowed: Bool
     private let baselineNotes: String
+    private let baselineToken: String
     @State private var notes: String
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var pendingStatus: String?
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
@@ -9102,8 +9106,22 @@ private struct AdminBookingRequestDetailView: View {
         self.booking = booking
         self.mutationAllowed = mutationAllowed
         let initialNotes = booking.adminNotes ?? ""
+        let baselineToken = AdminIntakeDraftStore.baselineToken(
+            status: booking.status,
+            notes: initialNotes
+        )
+        let recovered = booking.source == .enquiry
+            ? AdminIntakeDraftStore.load(
+                kind: .bookingRequest,
+                ownerID: session.user?.id,
+                recordID: booking.id,
+                baselineToken: baselineToken
+            )
+            : nil
         baselineNotes = initialNotes
-        _notes = State(initialValue: initialNotes)
+        self.baselineToken = baselineToken
+        _notes = State(initialValue: recovered?.draft.notes ?? initialNotes)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     private var isUpdating: Bool { admin.updatingBookingRequestIDs.contains(booking.id) }
@@ -9111,6 +9129,12 @@ private struct AdminBookingRequestDetailView: View {
 
     var body: some View {
         List {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Label(
                     "This booking snapshot is not current. Contact and class details remain available, but decisions and staff notes are read-only.",
@@ -9168,18 +9192,6 @@ private struct AdminBookingRequestDetailView: View {
                         .focused($notesFocused)
                     Text("\(notes.count)/5,000").font(.caption2)
                         .foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
-                    Button {
-                        notesFocused = false
-                        Task {
-                            if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) {
-                                XertHaptics.play(.success)
-                                dismiss()
-                            } else {
-                                XertHaptics.play(.error)
-                            }
-                        }
-                    } label: { Label(isUpdating ? "Saving..." : "Save notes", systemImage: "note.text") }
-                    .disabled(!mutationAllowed || !isDirty || isUpdating || notes.count > 5_000)
                 }
                 .disabled(!mutationAllowed)
             }
@@ -9189,6 +9201,11 @@ private struct AdminBookingRequestDetailView: View {
         .navigationTitle("Booking Detail")
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if booking.source == .enquiry {
+                bookingNotesSaveBar
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: requestDismiss)
@@ -9206,6 +9223,12 @@ private struct AdminBookingRequestDetailView: View {
             isBusy: isUpdating
         )
         .interactiveDismissDisabled(isDirty || isUpdating)
+        .onChange(of: notes) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: notes) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog("Move booking to \(statusLabel(pendingStatus ?? ""))?", isPresented: Binding(
             get: { pendingStatus != nil },
             set: { if !$0 { pendingStatus = nil } }
@@ -9214,6 +9237,8 @@ private struct AdminBookingRequestDetailView: View {
                 Button(statusLabel(pendingStatus), role: pendingStatus == "cancelled" || pendingStatus == "declined" ? .destructive : nil) {
                     Task {
                         if await admin.updateBookingRequest(session: session, booking: booking, status: pendingStatus) {
+                            hasCommitted = true
+                            clearRecoveryDraft()
                             XertHaptics.play(.success)
                             dismiss()
                         } else {
@@ -9233,10 +9258,50 @@ private struct AdminBookingRequestDetailView: View {
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard notes", role: .destructive) { dismiss() }
+            Button("Discard notes", role: .destructive) {
+                clearRecoveryDraft()
+                dismiss()
+            }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The unsaved staff notes for \(booking.fullName) will be lost.")
+        }
+    }
+
+    private var bookingNotesSaveBar: some View {
+        Button(action: saveNotes) {
+            HStack(spacing: 10) {
+                if isUpdating { ProgressView().tint(Color.xertNavy) }
+                Label(isUpdating ? "Saving notes..." : "Save staff notes", systemImage: "note.text")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSaveNotes ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSaveNotes)
+        .accessibilityIdentifier("owner.bookingRequest.notes.save")
+        .accessibilityHint(isDirty ? "Saves private staff notes for this booking enquiry" : "Edit the notes before saving")
+    }
+
+    private var canSaveNotes: Bool {
+        mutationAllowed && isDirty && !isUpdating && notes.count <= 5_000
+    }
+
+    private func saveNotes() {
+        guard canSaveNotes else { return }
+        notesFocused = false
+        Task {
+            if await admin.saveLegacyBookingNotes(session: session, booking: booking, notes: notes) {
+                hasCommitted = true
+                clearRecoveryDraft()
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
         }
     }
 
@@ -9245,8 +9310,41 @@ private struct AdminBookingRequestDetailView: View {
         if isDirty {
             confirmingDiscard = true
         } else if !isUpdating {
+            clearRecoveryDraft()
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard booking.source == .enquiry, !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isUpdating, notes.count <= 5_000 else { return }
+        AdminIntakeDraftStore.save(
+            AdminIntakeDraft(status: nil, notes: notes),
+            kind: .bookingRequest,
+            ownerID: session.user?.id,
+            recordID: booking.id,
+            baselineToken: baselineToken
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        notes = baselineNotes
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearRecoveryDraft() {
+        AdminIntakeDraftStore.clear(
+            kind: .bookingRequest,
+            ownerID: session.user?.id,
+            recordID: booking.id
+        )
     }
 
     private func statusLabel(_ value: String) -> String { value.replacingOccurrences(of: "_", with: " ").capitalized }
@@ -10515,8 +10613,13 @@ private struct AdminLeadDetailView: View {
     let mutationAllowed: Bool
     private let baselineStatus: String
     private let baselineNotes: String
+    private let baselineToken: String
+    private let recoveryRecordID: String
     @State private var status: String
     @State private var notes: String
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var notesFocused: Bool
@@ -10535,19 +10638,42 @@ private struct AdminLeadDetailView: View {
         self.mutationAllowed = mutationAllowed
         let initialStatus = lead.effectiveStatus
         let initialNotes = lead.admin_notes ?? ""
+        let recoveryRecordID = "\(pipeline.rawValue):\(lead.id.value)"
+        let baselineToken = AdminIntakeDraftStore.baselineToken(
+            status: initialStatus,
+            notes: initialNotes
+        )
+        let recovered = AdminIntakeDraftStore.load(
+            kind: .lead,
+            ownerID: session.user?.id,
+            recordID: recoveryRecordID,
+            baselineToken: baselineToken
+        )
         baselineStatus = initialStatus
         baselineNotes = initialNotes
-        _status = State(initialValue: initialStatus)
-        _notes = State(initialValue: initialNotes)
+        self.baselineToken = baselineToken
+        self.recoveryRecordID = recoveryRecordID
+        _status = State(initialValue: recovered?.draft.status ?? initialStatus)
+        _notes = State(initialValue: recovered?.draft.notes ?? initialNotes)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     private var isSaving: Bool { admin.savingLeadIDs.contains(lead.id) }
     private var isDirty: Bool {
         status != baselineStatus || notes != baselineNotes
     }
+    private var intakeDraft: AdminIntakeDraft {
+        AdminIntakeDraft(status: status, notes: notes)
+    }
 
     var body: some View {
         List {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Label(
                     "This pipeline snapshot is not current. Contact details remain available, but status and notes are read-only.",
@@ -10627,20 +10753,6 @@ private struct AdminLeadDetailView: View {
                     }
                 Text("\(notes.count)/5,000")
                     .font(.caption2).foregroundStyle(notes.count > 5_000 ? Color.red : Color.xertPale.opacity(0.45))
-                Button {
-                    notesFocused = false
-                    Task {
-                        if await admin.saveLead(session: session, pipeline: pipeline, lead: lead, status: status, notes: notes) {
-                            XertHaptics.play(.success)
-                            dismiss()
-                        } else {
-                            XertHaptics.play(.error)
-                        }
-                    }
-                } label: {
-                    Label(isSaving ? "Saving..." : "Save pipeline changes", systemImage: "checkmark.circle")
-                }
-                .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
             }
             .disabled(!mutationAllowed)
         }
@@ -10649,6 +10761,9 @@ private struct AdminLeadDetailView: View {
         .navigationTitle(lead.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            leadSaveBar
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: requestDismiss)
@@ -10666,15 +10781,67 @@ private struct AdminLeadDetailView: View {
             isBusy: isSaving
         )
         .interactiveDismissDisabled(isDirty || isSaving)
+        .onChange(of: intakeDraft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: intakeDraft) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog(
             "Discard lead changes?",
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) {
+                clearRecoveryDraft()
+                dismiss()
+            }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The unsaved status or notes for \(lead.displayName) will be lost.")
+        }
+    }
+
+    private var leadSaveBar: some View {
+        Button(action: saveLead) {
+            HStack(spacing: 10) {
+                if isSaving { ProgressView().tint(Color.xertNavy) }
+                Label(isSaving ? "Saving changes..." : "Save pipeline changes", systemImage: "checkmark.circle")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.lead.save")
+        .accessibilityHint(isDirty ? "Saves this lead's pipeline status and private notes" : "Change the status or notes before saving")
+    }
+
+    private var canSave: Bool {
+        mutationAllowed && isDirty && !isSaving && notes.count <= 5_000
+    }
+
+    private func saveLead() {
+        guard canSave else { return }
+        notesFocused = false
+        Task {
+            if await admin.saveLead(
+                session: session,
+                pipeline: pipeline,
+                lead: lead,
+                status: status,
+                notes: notes
+            ) {
+                hasCommitted = true
+                clearRecoveryDraft()
+                XertHaptics.play(.success)
+                dismiss()
+            } else {
+                XertHaptics.play(.error)
+            }
         }
     }
 
@@ -10683,6 +10850,7 @@ private struct AdminLeadDetailView: View {
         if isDirty {
             confirmingDiscard = true
         } else if !isSaving {
+            clearRecoveryDraft()
             dismiss()
         }
     }
@@ -10698,12 +10866,47 @@ private struct AdminLeadDetailView: View {
                 status: "contacted",
                 notes: notes
             ) {
+                hasCommitted = true
+                clearRecoveryDraft()
                 XertHaptics.play(.success)
                 dismiss()
             } else {
                 XertHaptics.play(.error)
             }
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isSaving, notes.count <= 5_000 else { return }
+        AdminIntakeDraftStore.save(
+            intakeDraft,
+            kind: .lead,
+            ownerID: session.user?.id,
+            recordID: recoveryRecordID,
+            baselineToken: baselineToken
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        status = baselineStatus
+        notes = baselineNotes
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearRecoveryDraft() {
+        AdminIntakeDraftStore.clear(
+            kind: .lead,
+            ownerID: session.user?.id,
+            recordID: recoveryRecordID
+        )
     }
 
     @ViewBuilder
@@ -11186,7 +11389,11 @@ private struct AdminPTRequestDetailView: View {
     let request: AdminPTRequest
     let mutationAllowed: Bool
     private let baselineNotes: String
+    private let baselineToken: String
     @State private var notes: String
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var notesFocused: Bool
@@ -11202,8 +11409,20 @@ private struct AdminPTRequestDetailView: View {
         self.request = request
         self.mutationAllowed = mutationAllowed
         let initialNotes = request.admin_notes ?? ""
+        let baselineToken = AdminIntakeDraftStore.baselineToken(
+            status: request.status,
+            notes: initialNotes
+        )
+        let recovered = AdminIntakeDraftStore.load(
+            kind: .ptRequest,
+            ownerID: session.user?.id,
+            recordID: request.id.uuidString,
+            baselineToken: baselineToken
+        )
         baselineNotes = initialNotes
-        _notes = State(initialValue: initialNotes)
+        self.baselineToken = baselineToken
+        _notes = State(initialValue: recovered?.draft.notes ?? initialNotes)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
     }
 
     private var isDirty: Bool { notes != baselineNotes }
@@ -11211,6 +11430,12 @@ private struct AdminPTRequestDetailView: View {
 
     var body: some View {
         Form {
+            if let recoveredAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredAt,
+                    onDiscard: discardRecoveredEdits
+                )
+            }
             if !mutationAllowed {
                 Section {
                     Label(
@@ -11315,14 +11540,13 @@ private struct AdminPTRequestDetailView: View {
         .navigationTitle(request.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ptNotesSaveBar
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: requestDismiss)
                     .disabled(isSaving)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button(isSaving ? "Saving..." : "Save", action: save)
-                    .disabled(!mutationAllowed || !isDirty || isSaving || notes.count > 5_000)
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -11336,16 +11560,47 @@ private struct AdminPTRequestDetailView: View {
             isBusy: isSaving
         )
         .interactiveDismissDisabled(isDirty || isSaving)
+        .onChange(of: notes) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: notes) {
+            await persistRecoveryDraft()
+        }
         .confirmationDialog(
             "Discard PT notes?",
             isPresented: $confirmingDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard notes", role: .destructive) { dismiss() }
+            Button("Discard notes", role: .destructive) {
+                clearRecoveryDraft()
+                dismiss()
+            }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The unsaved private notes for \(request.displayName) will be lost.")
         }
+    }
+
+    private var ptNotesSaveBar: some View {
+        Button(action: save) {
+            HStack(spacing: 10) {
+                if isSaving { ProgressView().tint(Color.xertNavy) }
+                Label(isSaving ? "Saving notes..." : "Save private notes", systemImage: "checkmark.circle")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.xertNavy)
+        .background(canSave ? Color.xertSteel : Color.xertSteel.opacity(0.45))
+        .disabled(!canSave)
+        .accessibilityIdentifier("owner.ptRequest.notes.save")
+        .accessibilityHint(isDirty ? "Saves private owner notes for this PT request" : "Edit the notes before saving")
+    }
+
+    private var canSave: Bool {
+        mutationAllowed && isDirty && !isSaving && notes.count <= 5_000
     }
 
     private func updateStatus(_ status: String) {
@@ -11358,6 +11613,8 @@ private struct AdminPTRequestDetailView: View {
                 status: status
             )
             if didSave {
+                hasCommitted = true
+                clearRecoveryDraft()
                 XertHaptics.play(.success)
                 dismiss()
             } else {
@@ -11367,6 +11624,7 @@ private struct AdminPTRequestDetailView: View {
     }
 
     private func save() {
+        guard canSave else { return }
         notesFocused = false
         Task {
             let didSave = await admin.updatePTRequest(
@@ -11377,6 +11635,8 @@ private struct AdminPTRequestDetailView: View {
                 updateNotes: true
             )
             if didSave {
+                hasCommitted = true
+                clearRecoveryDraft()
                 XertHaptics.play(.success)
                 dismiss()
             } else {
@@ -11390,8 +11650,41 @@ private struct AdminPTRequestDetailView: View {
         if isDirty {
             confirmingDiscard = true
         } else if !isSaving {
+            clearRecoveryDraft()
             dismiss()
         }
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isSaving, notes.count <= 5_000 else { return }
+        AdminIntakeDraftStore.save(
+            AdminIntakeDraft(status: nil, notes: notes),
+            kind: .ptRequest,
+            ownerID: session.user?.id,
+            recordID: request.id.uuidString,
+            baselineToken: baselineToken
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        notes = baselineNotes
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearRecoveryDraft() {
+        AdminIntakeDraftStore.clear(
+            kind: .ptRequest,
+            ownerID: session.user?.id,
+            recordID: request.id.uuidString
+        )
     }
 
     private func requestDetailRow(_ label: String, _ value: String) -> some View {
