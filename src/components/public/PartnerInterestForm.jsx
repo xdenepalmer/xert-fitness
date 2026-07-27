@@ -33,7 +33,7 @@ function MultiSelect({ options, value = [], onChange }) {
         <button type="button" key={opt}
           onClick={() => toggle(opt)}
           aria-pressed={value.includes(opt)}
-          className={`px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
+          className={`min-h-11 px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
             ? 'border-xert-red bg-xert-steel/10 text-xert-red'
             : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
           {opt}

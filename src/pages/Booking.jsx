@@ -152,6 +152,12 @@ export default function Booking() {
   ]);
 
   const handleBuy = async (product) => {
+    // Never sell a pack whose price the site is hiding: while "prices coming
+    // soon" is on, checkout stays closed even if payments are switched on.
+    if (comingSoon) {
+      toast({ title: 'Pricing coming soon', description: 'Pack prices are being finalised. Register your interest and we will let you know the moment they are live.' });
+      return;
+    }
     if (!paymentsEnabled) {
       toast({ title: 'Pack purchases are paused', description: 'XERT will reopen secure checkout when the next release checks are complete.' });
       return;
@@ -317,16 +323,24 @@ export default function Booking() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleBuy(pack)}
-                    disabled={!paymentsEnabled || buyingSlug === pack.slug}
-                    className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
-                    {!paymentsEnabled
-                      ? 'Purchases Paused'
-                      : buyingSlug === pack.slug
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <>{packCta(pack.slug)}<ArrowRight className="w-4 h-4" /></>}
-                  </button>
+                  {comingSoon ? (
+                    <Link
+                      to="/contact"
+                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide`}>
+                      Register Your Interest<ArrowRight className="w-4 h-4" />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => handleBuy(pack)}
+                      disabled={!paymentsEnabled || buyingSlug === pack.slug}
+                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
+                      {!paymentsEnabled
+                        ? 'Purchases Paused'
+                        : buyingSlug === pack.slug
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <>{packCta(pack.slug)}<ArrowRight className="w-4 h-4" /></>}
+                    </button>
+                  )}
                 </article>
               ))}
             </div>

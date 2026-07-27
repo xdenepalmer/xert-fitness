@@ -700,11 +700,12 @@ struct AdminCommandCentreView: View {
                     XertHaptics.play(succeeded ? .success : .error)
                     return succeeded
                 },
-                onPublish: { draft in
+                onPublish: { draft, requestID in
                     let succeeded = await admin.publishAnnouncement(
                         session: session,
                         announcement: nil,
-                        draft: draft
+                        draft: draft,
+                        requestID: requestID
                     )
                     if succeeded { quickNoticeDraft = nil }
                     XertHaptics.play(succeeded ? .success : .error)
@@ -12912,11 +12913,12 @@ private struct AdminAnnouncementDetailView: View {
                     XertHaptics.play(succeeded ? .success : .error)
                     return succeeded
                 },
-                onPublish: { draft in
+                onPublish: { draft, requestID in
                     let succeeded = await admin.publishAnnouncement(
                         session: session,
                         announcement: context.announcement,
-                        draft: draft
+                        draft: draft,
+                        requestID: requestID
                     )
                     XertHaptics.play(succeeded ? .success : .error)
                     return succeeded
@@ -13296,11 +13298,12 @@ private struct AdminCommunicationsView: View {
                     XertHaptics.play(succeeded ? .success : .error)
                     return succeeded
                 },
-                onPublish: { draft in
+                onPublish: { draft, requestID in
                     let succeeded = await admin.publishAnnouncement(
                         session: session,
                         announcement: context.announcement,
-                        draft: draft
+                        draft: draft,
+                        requestID: requestID
                     )
                     XertHaptics.play(succeeded ? .success : .error)
                     return succeeded
@@ -16183,7 +16186,7 @@ private struct AdminAnnouncementComposer: View {
     let isSaving: Bool
     let isPublishing: Bool
     let onSave: (AdminAnnouncementDraft) async -> Bool
-    let onPublish: (AdminAnnouncementDraft) async -> Bool
+    let onPublish: (AdminAnnouncementDraft, UUID) async -> Bool
     private let baseline: AdminAnnouncementDraft
     private let baselineUpdatedAt: String?
     @State private var draft: AdminAnnouncementDraft
@@ -16192,6 +16195,7 @@ private struct AdminAnnouncementComposer: View {
     @State private var hasEditedDuringPresentation = false
     @State private var hasCommitted = false
     @State private var confirmingPublish: Bool
+    @State private var publishRequestID: UUID
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
     @FocusState private var focusedField: Field?
@@ -16211,7 +16215,7 @@ private struct AdminAnnouncementComposer: View {
         isSaving: Bool,
         isPublishing: Bool,
         onSave: @escaping (AdminAnnouncementDraft) async -> Bool,
-        onPublish: @escaping (AdminAnnouncementDraft) async -> Bool
+        onPublish: @escaping (AdminAnnouncementDraft, UUID) async -> Bool
     ) {
         let baseline = announcement.map(AdminAnnouncementDraft.init)
             ?? initialDraft
@@ -16237,6 +16241,7 @@ private struct AdminAnnouncementComposer: View {
         _hasExpiry = State(initialValue: initial.expiresAt != nil)
         _recoveredAt = State(initialValue: recovered?.savedAt)
         _confirmingPublish = State(initialValue: publishesOnOpen)
+        _publishRequestID = State(initialValue: recovered?.publishRequestID ?? UUID())
     }
 
     private var isBusy: Bool { isSaving || isPublishing }
@@ -16465,6 +16470,7 @@ private struct AdminAnnouncementComposer: View {
             draft,
             ownerID: ownerID,
             announcementID: announcement?.id,
+            publishRequestID: publishRequestID,
             baselineUpdatedAt: baselineUpdatedAt
         )
     }
@@ -16479,7 +16485,7 @@ private struct AdminAnnouncementComposer: View {
     @MainActor
     private func publishDraft() async {
         guard !isBusy, publishValidation == nil else { return }
-        guard await onPublish(draft) else { return }
+        guard await onPublish(draft, publishRequestID) else { return }
         finishCommittedDraft()
     }
 

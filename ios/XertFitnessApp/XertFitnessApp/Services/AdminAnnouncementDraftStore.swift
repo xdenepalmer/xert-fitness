@@ -1,11 +1,12 @@
 import Foundation
 
 struct AdminAnnouncementDraftSnapshot: Codable, Equatable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let schemaVersion: Int
     let ownerID: UUID
     let announcementID: UUID?
+    let publishRequestID: UUID
     let baselineUpdatedAt: String?
     let draft: AdminAnnouncementDraft
     let savedAt: Date
@@ -13,6 +14,7 @@ struct AdminAnnouncementDraftSnapshot: Codable, Equatable {
     init(
         ownerID: UUID,
         announcementID: UUID?,
+        publishRequestID: UUID = UUID(),
         baselineUpdatedAt: String?,
         draft: AdminAnnouncementDraft,
         savedAt: Date
@@ -20,6 +22,7 @@ struct AdminAnnouncementDraftSnapshot: Codable, Equatable {
         schemaVersion = Self.currentSchemaVersion
         self.ownerID = ownerID
         self.announcementID = announcementID
+        self.publishRequestID = publishRequestID
         self.baselineUpdatedAt = baselineUpdatedAt
         self.draft = draft
         self.savedAt = savedAt
@@ -61,6 +64,7 @@ enum AdminAnnouncementDraftStore {
         _ draft: AdminAnnouncementDraft,
         ownerID: UUID?,
         announcementID: UUID?,
+        publishRequestID: UUID = UUID(),
         baselineUpdatedAt: String?,
         now: Date = Date(),
         defaults: UserDefaults = .standard
@@ -77,6 +81,7 @@ enum AdminAnnouncementDraftStore {
         let snapshot = AdminAnnouncementDraftSnapshot(
             ownerID: ownerID,
             announcementID: announcementID,
+            publishRequestID: publishRequestID,
             baselineUpdatedAt: baselineUpdatedAt,
             draft: draft,
             savedAt: now

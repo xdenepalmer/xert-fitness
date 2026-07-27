@@ -77,7 +77,7 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
             <button type="button" key={l}
               onClick={() => set('training_level', l)}
               aria-pressed={form.training_level === l}
-              className={`px-3 py-2 text-sm font-body border transition-all ${form.training_level === l ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              className={`min-h-11 px-3 py-2 text-sm font-body border transition-all ${form.training_level === l ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
               {l}
             </button>
           ))}

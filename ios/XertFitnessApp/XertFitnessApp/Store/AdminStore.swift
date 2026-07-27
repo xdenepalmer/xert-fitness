@@ -2810,7 +2810,8 @@ final class AdminStore: ObservableObject {
     func publishAnnouncement(
         session: AuthSession,
         announcement: AdminAnnouncement?,
-        draft: AdminAnnouncementDraft
+        draft: AdminAnnouncementDraft,
+        requestID: UUID = UUID()
     ) async -> Bool {
         guard announcementMutationAvailable, !isPublishingAnnouncement else { return false }
         isPublishingAnnouncement = true
@@ -2820,7 +2821,8 @@ final class AdminStore: ObservableObject {
             let outcome = try await api.adminPublishAnnouncement(
                 session: session,
                 announcement: announcement,
-                draft: draft
+                draft: draft,
+                requestID: requestID
             )
             mergeAnnouncement(outcome.announcement)
             markAnnouncementsCurrent()

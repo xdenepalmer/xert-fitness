@@ -94,5 +94,14 @@ test('every remaining acquisition form names custom inputs and non-input control
     // Browser autofill must never fill the spam honeypot: a filled honeypot
     // silently drops the lead while the UI still reports success.
     assert.match(source, /name="company_website"[\s\S]{0,200}?autoComplete="off"/);
+    // Chip option buttons meet the 44px touch-target minimum.
+    assert.match(source, /min-h-11 px-3 py-2/);
   }
+  // The member form's chips share the same pattern.
+  assert.match(memberForm, /min-h-11 px-3 py-2/);
+});
+
+test('the shared dialog close control meets the 44px touch-target minimum', () => {
+  const dialog = readFileSync(new URL('../src/components/ui/dialog.jsx', import.meta.url), 'utf8');
+  assert.match(dialog, /h-11 w-11 items-center justify-center/);
 });

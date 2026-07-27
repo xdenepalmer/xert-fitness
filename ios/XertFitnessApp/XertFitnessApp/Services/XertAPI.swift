@@ -2279,7 +2279,8 @@ final class XertAPI {
     func adminPublishAnnouncement(
         session auth: AuthSession,
         announcement: AdminAnnouncement?,
-        draft: AdminAnnouncementDraft
+        draft: AdminAnnouncementDraft,
+        requestID: UUID = UUID()
     ) async throws -> AdminAnnouncementPublishOutcome {
         if announcement?.archived_at != nil {
             throw APIError(message: "Restore this notice before publishing it.")
@@ -2289,6 +2290,7 @@ final class XertAPI {
             path: "/api/admin-publish-announcement",
             body: AdminAnnouncementPublishRequest(
                 id: announcement?.id,
+                request_id: requestID,
                 announcement: payload,
                 expected_updated_at: announcement?.updated_at
             ),
@@ -3103,6 +3105,7 @@ private struct AdminAnnouncementCreatePayload: Encodable {
 }
 private struct AdminAnnouncementPublishRequest: Encodable {
     let id: UUID?
+    let request_id: UUID
     let announcement: AdminAnnouncementPayload
     let expected_updated_at: String?
 }

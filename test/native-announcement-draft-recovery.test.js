@@ -35,7 +35,7 @@ test('every native notice composer persists and clears recoverable edits', async
   assert.match(view, /AdminAnnouncementDraftStore\.load\([\s\S]*baselineUpdatedAt: announcement\?\.updated_at/)
   assert.match(view, /guard !hasCommitted else \{ return \}/)
   assert.match(view, /guard await onSave\(draft\) else \{ return \}[\s\S]*finishCommittedDraft\(\)/)
-  assert.match(view, /guard await onPublish\(draft\) else \{ return \}[\s\S]*finishCommittedDraft\(\)/)
+  assert.match(view, /guard await onPublish\(draft, publishRequestID\) else \{ return \}[\s\S]*finishCommittedDraft\(\)/)
   assert.match(view, /hasCommitted = true[\s\S]*clearRecoveryDraft\(\)[\s\S]*dismiss\(\)/)
   assert.ok((view.match(/AdminAnnouncementDraftStore\.clear\(/g) || []).length >= 3)
 })

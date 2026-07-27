@@ -43,6 +43,16 @@ test('both public pricing surfaces gate the amount behind the flag', () => {
   }
 });
 
+test('hidden prices never expose a purchase path', () => {
+  const booking = read('../src/pages/Booking.jsx');
+  // The card CTA swaps to an interest link while prices are hidden…
+  assert.match(booking, /comingSoon \? \(\s*<Link\s*to="\/contact"/);
+  assert.match(booking, /Register Your Interest/);
+  // …and handleBuy refuses to start checkout even if the UI drifts: the
+  // comingSoon guard must appear inside the function before any await.
+  assert.match(booking, /const handleBuy = async \(product\) => \{[\s\S]{0,400}?if \(comingSoon\) \{/);
+});
+
 test('the admin command centre exposes a prices toggle', () => {
   const settings = read('../src/components/admin/SoftLaunchSettings.jsx');
   assert.match(settings, /field="prices_coming_soon"/);
