@@ -4116,8 +4116,12 @@ private struct AdminMemberDetailView: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let member: AdminMemberSummary
+    private let staffNoteBaselineToken: String
     @State private var noteCategory = "general"
     @State private var noteBody = ""
+    @State private var recoveredStaffNoteAt: Date?
+    @State private var hasEditedStaffNoteDuringPresentation = false
+    @State private var hasCommittedStaffNote = false
     @State private var showingGrant = false
     @State private var showingNoticeComposer = false
     @State private var pendingRole: String?
@@ -4126,12 +4130,38 @@ private struct AdminMemberDetailView: View {
     @State private var exitStateID = UUID()
     @FocusState private var noteFocused: Bool
 
+    init(admin: AdminStore, session: AuthSession, member: AdminMemberSummary) {
+        let baselineToken = AdminIntakeDraftStore.baselineToken(status: "general", notes: "")
+        let recovered = AdminIntakeDraftStore.load(
+            kind: .memberStaffNote,
+            ownerID: session.user?.id,
+            recordID: member.id.uuidString,
+            baselineToken: baselineToken
+        )
+        let allowedCategories = Set(["general", "coaching", "follow_up", "billing"])
+
+        self.admin = admin
+        self.session = session
+        self.member = member
+        staffNoteBaselineToken = baselineToken
+        _noteCategory = State(
+            initialValue: recovered?.draft.status.flatMap {
+                allowedCategories.contains($0) ? $0 : nil
+            } ?? "general"
+        )
+        _noteBody = State(initialValue: recovered?.draft.notes ?? "")
+        _recoveredStaffNoteAt = State(initialValue: recovered?.savedAt)
+    }
+
     private var current: AdminMemberSummary { admin.members.first(where: { $0.id == member.id }) ?? member }
     private var hasNoteDraft: Bool {
         !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     private var normalizedNoteBody: String {
         noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var staffNoteDraft: AdminIntakeDraft {
+        AdminIntakeDraft(status: noteCategory, notes: noteBody)
     }
     private var memberRecordIsCurrent: Bool {
         admin.loadedMemberDetailID == current.id
@@ -4153,6 +4183,12 @@ private struct AdminMemberDetailView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
+            if let recoveredStaffNoteAt {
+                AdminRecoveredCatalogueDraftNotice(
+                    savedAt: recoveredStaffNoteAt,
+                    onDiscard: discardRecoveredStaffNote
+                )
+            }
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(current.displayName).xertDisplay(25).foregroundStyle(Color.xertOffWhite)
@@ -4374,6 +4410,15 @@ private struct AdminMemberDetailView: View {
             .task(id: current.id) {
                 await admin.loadMemberDetail(session: session, memberID: current.id)
             }
+            .onChange(of: staffNoteDraft) { _ in
+                hasEditedStaffNoteDuringPresentation = true
+                if hasCommittedStaffNote && hasNoteDraft {
+                    hasCommittedStaffNote = false
+                }
+            }
+            .task(id: staffNoteDraft) {
+                await persistStaffNoteDraft()
+            }
             .refreshable {
                 await admin.loadMemberDetail(
                     session: session,
@@ -4394,21 +4439,21 @@ private struct AdminMemberDetailView: View {
             }
             .sheet(isPresented: $showingNoticeComposer) {
                 AdminMemberNoticeComposer(
+                    session: session,
+                    memberID: current.id,
                     memberName: current.displayName,
                     isSending: admin.sendingMemberNoticeID == current.id,
                     onSend: { draft in
-                        Task {
-                            if await admin.sendMemberNotice(
-                                session: session,
-                                memberID: current.id,
-                                draft: draft
-                            ) {
-                                showingNoticeComposer = false
-                                XertHaptics.play(admin.memberNoticeStatusIsWarning ? .warning : .success)
-                            } else {
-                                XertHaptics.play(.error)
-                            }
+                        if await admin.sendMemberNotice(
+                            session: session,
+                            memberID: current.id,
+                            draft: draft
+                        ) {
+                            XertHaptics.play(admin.memberNoticeStatusIsWarning ? .warning : .success)
+                            return true
                         }
+                        XertHaptics.play(.error)
+                        return false
                     }
                 )
             }
@@ -4429,7 +4474,10 @@ private struct AdminMemberDetailView: View {
                 isPresented: $confirmingDiscardNote,
                 titleVisibility: .visible
             ) {
-                Button("Discard note", role: .destructive) { dismiss() }
+                Button("Discard note", role: .destructive) {
+                    clearStaffNoteDraft()
+                    dismiss()
+                }
                 Button("Keep writing", role: .cancel) {}
             } message: {
                 Text("The unsaved note for \(current.displayName) will be lost.")
@@ -4473,6 +4521,9 @@ private struct AdminMemberDetailView: View {
                 category: noteCategory,
                 body: normalizedNoteBody
             ) {
+                hasCommittedStaffNote = true
+                clearStaffNoteDraft()
+                recoveredStaffNoteAt = nil
                 noteBody = ""
                 XertHaptics.play(.success)
             } else {
@@ -4547,8 +4598,42 @@ private struct AdminMemberDetailView: View {
         if hasNoteDraft {
             confirmingDiscardNote = true
         } else if !isBusy {
+            clearStaffNoteDraft()
             dismiss()
         }
+    }
+
+    private func persistStaffNoteDraft() async {
+        guard !hasCommittedStaffNote else { return }
+        guard hasNoteDraft else {
+            if hasEditedStaffNoteDuringPresentation { clearStaffNoteDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommittedStaffNote, !isBusy else { return }
+        AdminIntakeDraftStore.save(
+            staffNoteDraft,
+            kind: .memberStaffNote,
+            ownerID: session.user?.id,
+            recordID: current.id.uuidString,
+            baselineToken: staffNoteBaselineToken
+        )
+    }
+
+    private func discardRecoveredStaffNote() {
+        noteCategory = "general"
+        noteBody = ""
+        recoveredStaffNoteAt = nil
+        clearStaffNoteDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearStaffNoteDraft() {
+        AdminIntakeDraftStore.clear(
+            kind: .memberStaffNote,
+            ownerID: session.user?.id,
+            recordID: current.id.uuidString
+        )
     }
 
     private var accountHistorySection: some View {
@@ -5033,10 +5118,16 @@ private struct AdminMemberNoticeHistoryRow: View {
 
 private struct AdminMemberNoticeComposer: View {
     @Environment(\.dismiss) private var dismiss
+    let session: AuthSession
+    let memberID: UUID
     let memberName: String
     let isSending: Bool
-    let onSend: (AdminMemberNoticeDraft) -> Void
-    @State private var draft = AdminMemberNoticeDraft()
+    let onSend: (AdminMemberNoticeDraft) async -> Bool
+    private let baseline: AdminMemberNoticeDraft
+    @State private var draft: AdminMemberNoticeDraft
+    @State private var recoveredAt: Date?
+    @State private var hasEditedDuringPresentation = false
+    @State private var hasCommitted = false
     @State private var confirmingSend = false
     @State private var confirmingDiscard = false
     @State private var exitStateID = UUID()
@@ -5047,12 +5138,43 @@ private struct AdminMemberNoticeComposer: View {
         case body
     }
 
-    private var isDirty: Bool { draft != AdminMemberNoticeDraft() }
+    init(
+        session: AuthSession,
+        memberID: UUID,
+        memberName: String,
+        isSending: Bool,
+        onSend: @escaping (AdminMemberNoticeDraft) async -> Bool
+    ) {
+        let baseline = AdminMemberNoticeDraft()
+        let recovered: AdminCatalogueDraftSnapshot<AdminMemberNoticeDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .memberNotice,
+                ownerID: session.user?.id,
+                recordID: memberID,
+                baselineToken: nil
+            )
+        self.session = session
+        self.memberID = memberID
+        self.memberName = memberName
+        self.isSending = isSending
+        self.onSend = onSend
+        self.baseline = baseline
+        _draft = State(initialValue: recovered?.draft ?? baseline)
+        _recoveredAt = State(initialValue: recovered?.savedAt)
+    }
+
+    private var isDirty: Bool { draft != baseline }
     private var validation: String? { draft.validationMessage() }
 
     var body: some View {
         NavigationStack {
             Form {
+                if let recoveredAt {
+                    AdminRecoveredCatalogueDraftNotice(
+                        savedAt: recoveredAt,
+                        onDiscard: discardRecoveredEdits
+                    )
+                }
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("PRIVATE MEMBER MESSAGE", systemImage: "person.crop.circle.badge.exclamationmark")
@@ -5160,7 +5282,9 @@ private struct AdminMemberNoticeComposer: View {
                 isPresented: $confirmingSend,
                 titleVisibility: .visible
             ) {
-                Button("Send private notice") { onSend(draft) }
+                Button("Send private notice") {
+                    Task { await sendDraft() }
+                }
                     .disabled(isSending || validation != nil)
                 Button("Keep editing", role: .cancel) {}
             } message: {
@@ -5171,7 +5295,10 @@ private struct AdminMemberNoticeComposer: View {
                 isPresented: $confirmingDiscard,
                 titleVisibility: .visible
             ) {
-                Button("Discard draft", role: .destructive) { dismiss() }
+                Button("Discard draft", role: .destructive) {
+                    clearRecoveryDraft()
+                    dismiss()
+                }
                 Button("Keep writing", role: .cancel) {}
             } message: {
                 Text("The title, message and delivery choices will be lost.")
@@ -5184,6 +5311,12 @@ private struct AdminMemberNoticeComposer: View {
             isBusy: isSending
         )
         .interactiveDismissDisabled(isDirty || isSending)
+        .onChange(of: draft) { _ in
+            hasEditedDuringPresentation = true
+        }
+        .task(id: draft) {
+            await persistRecoveryDraft()
+        }
     }
 
     private func requestClose() {
@@ -5191,8 +5324,51 @@ private struct AdminMemberNoticeComposer: View {
         if isDirty {
             confirmingDiscard = true
         } else {
+            clearRecoveryDraft()
             dismiss()
         }
+    }
+
+    @MainActor
+    private func sendDraft() async {
+        guard !isSending, validation == nil else { return }
+        focusedField = nil
+        guard await onSend(draft) else { return }
+        hasCommitted = true
+        clearRecoveryDraft()
+        dismiss()
+    }
+
+    private func persistRecoveryDraft() async {
+        guard !hasCommitted else { return }
+        guard isDirty else {
+            if hasEditedDuringPresentation { clearRecoveryDraft() }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled, !hasCommitted, !isSending else { return }
+        AdminCatalogueDraftStore.save(
+            draft,
+            kind: .memberNotice,
+            ownerID: session.user?.id,
+            recordID: memberID,
+            baselineToken: nil
+        )
+    }
+
+    private func discardRecoveredEdits() {
+        draft = baseline
+        recoveredAt = nil
+        clearRecoveryDraft()
+        XertHaptics.play(.softImpact)
+    }
+
+    private func clearRecoveryDraft() {
+        AdminCatalogueDraftStore.clear(
+            kind: .memberNotice,
+            ownerID: session.user?.id,
+            recordID: memberID
+        )
     }
 }
 

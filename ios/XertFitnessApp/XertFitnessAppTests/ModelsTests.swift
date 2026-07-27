@@ -5884,6 +5884,83 @@ final class ModelsTests: XCTestCase {
         ))
     }
 
+    func testAdminMemberServiceDraftsRoundTripPerMemberAndOwner() throws {
+        let suiteName = "AdminMemberServiceDraftStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ownerID = UUID()
+        let memberID = UUID()
+        let otherMemberID = UUID()
+        let savedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let staffBaseline = AdminIntakeDraftStore.baselineToken(status: "general", notes: "")
+        let staffDraft = AdminIntakeDraft(status: "follow_up", notes: "Call after the next coached session")
+        var noticeDraft = AdminMemberNoticeDraft()
+        noticeDraft.title = "Booking follow-up"
+        noticeDraft.body = "Your coach has added a new session option."
+        noticeDraft.tone = "action"
+        noticeDraft.action = .booking
+        noticeDraft.expiryDays = 7
+
+        AdminIntakeDraftStore.save(
+            staffDraft,
+            kind: .memberStaffNote,
+            ownerID: ownerID,
+            recordID: memberID.uuidString,
+            baselineToken: staffBaseline,
+            now: savedAt,
+            defaults: defaults
+        )
+        AdminCatalogueDraftStore.save(
+            noticeDraft,
+            kind: .memberNotice,
+            ownerID: ownerID,
+            recordID: memberID,
+            baselineToken: nil,
+            now: savedAt,
+            defaults: defaults
+        )
+
+        let restoredStaff = try XCTUnwrap(AdminIntakeDraftStore.load(
+            kind: .memberStaffNote,
+            ownerID: ownerID,
+            recordID: memberID.uuidString,
+            baselineToken: staffBaseline,
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        ))
+        let restoredNotice: AdminCatalogueDraftSnapshot<AdminMemberNoticeDraft> =
+            try XCTUnwrap(AdminCatalogueDraftStore.load(
+                kind: .memberNotice,
+                ownerID: ownerID,
+                recordID: memberID,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            ))
+        XCTAssertEqual(restoredStaff.draft, staffDraft)
+        XCTAssertEqual(restoredNotice.draft, noticeDraft)
+
+        let wrongMemberStaff = AdminIntakeDraftStore.load(
+            kind: .memberStaffNote,
+            ownerID: ownerID,
+            recordID: otherMemberID.uuidString,
+            baselineToken: staffBaseline,
+            now: savedAt.addingTimeInterval(60),
+            defaults: defaults
+        )
+        let wrongMemberNotice: AdminCatalogueDraftSnapshot<AdminMemberNoticeDraft>? =
+            AdminCatalogueDraftStore.load(
+                kind: .memberNotice,
+                ownerID: ownerID,
+                recordID: otherMemberID,
+                baselineToken: nil,
+                now: savedAt.addingTimeInterval(60),
+                defaults: defaults
+            )
+        XCTAssertNil(wrongMemberStaff)
+        XCTAssertNil(wrongMemberNotice)
+    }
+
     private func adminAnnouncement(
         publishedAt: Date?,
         expiresAt: Date? = nil,

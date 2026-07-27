@@ -16,6 +16,7 @@ test('native catalogue recovery is bounded, account scoped, and stale-baseline s
     'AdminClassDraft',
     'AdminAvailabilityDraft',
     'AdminBlackoutDraft',
+    'AdminMemberNoticeDraft',
     'AdminProductDraft',
     'AdminEventDraft',
     'AdminCoachDraft',
@@ -44,6 +45,7 @@ test('all high-value native catalogue editors recover and atomically clear draft
     'product',
     'event',
     'coach',
+    'memberNotice',
   ]) {
     assert.match(
       view,

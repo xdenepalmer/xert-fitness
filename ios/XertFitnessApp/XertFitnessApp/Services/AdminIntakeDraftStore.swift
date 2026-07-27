@@ -4,6 +4,7 @@ enum AdminIntakeDraftKind: String, Codable, CaseIterable {
     case bookingRequest
     case lead
     case ptRequest
+    case memberStaffNote
 }
 
 struct AdminIntakeDraft: Codable, Hashable {

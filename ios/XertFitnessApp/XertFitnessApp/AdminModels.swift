@@ -221,7 +221,7 @@ struct AdminMemberNotice: Identifiable, Codable, Hashable {
     }
 }
 
-enum AdminMemberNoticeAction: String, CaseIterable, Identifiable, Hashable {
+enum AdminMemberNoticeAction: String, CaseIterable, Identifiable, Codable, Hashable {
     case none
     case booking
     case account
@@ -248,7 +248,7 @@ enum AdminMemberNoticeAction: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct AdminMemberNoticeDraft: Equatable {
+struct AdminMemberNoticeDraft: Codable, Hashable {
     var title = ""
     var body = ""
     var tone = "info"

@@ -591,7 +591,7 @@ test('native member records can send and audit private member notices', async ()
   ]);
 
   assert.match(models, /struct AdminMemberNotice: Identifiable, Codable, Hashable/);
-  assert.match(models, /struct AdminMemberNoticeDraft: Equatable/);
+  assert.match(models, /struct AdminMemberNoticeDraft: Codable, Hashable/);
   assert.match(models, /case \.booking: return \("Book a class", "\/booking"\)/);
   assert.match(models, /guard \[7, 30, 90\]\.contains\(expiryDays\)/);
   assert.match(api, /func adminMemberNotices[\s\S]*path: "admin_list_member_notices"/);
