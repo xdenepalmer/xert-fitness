@@ -5645,6 +5645,19 @@ private struct AdminClassesView: View {
                 }
             }
             Section("Waitlist desk") {
+                if let status = admin.promotionStatusMessage {
+                    Label(
+                        status,
+                        systemImage: admin.promotionStatusIsWarning
+                            ? "checkmark.shield.fill"
+                            : "checkmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(admin.promotionStatusIsWarning ? Color.orange : Color.green)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .listRowBackground(Color.xertInk)
+                }
                 if let warning = admin.promotionNoticeWarning {
                     operationalWarningRow(warning)
                 }
@@ -5698,11 +5711,18 @@ private struct AdminClassesView: View {
         ) { item in
             Button("Confirm promotion") {
                 Task {
-                    _ = await admin.promoteNext(
+                    let succeeded = await admin.promoteNext(
                         session: session,
                         classSessionID: item.session_id,
                         expectedBookingID: item.next_booking_id,
                         requestID: UUID()
+                    )
+                    XertHaptics.play(
+                        !succeeded
+                            ? .error
+                            : (admin.promotionStatusIsWarning || admin.promotionNoticeWarning != nil
+                                ? .warning
+                                : .success)
                     )
                 }
             }

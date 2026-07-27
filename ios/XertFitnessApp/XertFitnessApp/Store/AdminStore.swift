@@ -130,6 +130,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var ownerTaskResolutionErrorMessage: String?
     @Published private(set) var promotingSessionID: UUID?
     @Published private(set) var promotionNoticeWarning: String?
+    @Published private(set) var promotionStatusMessage: String?
+    @Published private(set) var promotionStatusIsWarning = false
     @Published private(set) var bookingDecisionNoticeWarning: String?
     @Published private(set) var addingRosterMemberID: UUID?
     @Published private(set) var staffBookingFeedback: AdminStaffBookingFeedback?
@@ -507,6 +509,11 @@ final class AdminStore: ObservableObject {
             launchGateUpdatedAt = refreshedAt
         }
         refreshUnavailableSources = failures
+        if successfulSources.contains("waitlists"),
+           successfulSources.contains("today's classes") {
+            promotionStatusMessage = nil
+            promotionStatusIsWarning = false
+        }
         if successfulSources.contains("full timetable"),
            successfulSources.contains("today's classes") {
             classMutationStatusMessage = nil
@@ -1981,19 +1988,18 @@ final class AdminStore: ObservableObject {
         guard promotingSessionID == nil else { return false }
         promotingSessionID = classSessionID
         promotionNoticeWarning = nil
+        promotionStatusMessage = nil
+        promotionStatusIsWarning = false
         defer { promotingSessionID = nil }
+
+        let outcome: AdminWaitlistPromotionOutcome
         do {
-            let outcome = try await api.adminPromoteNextWaitlisted(
+            outcome = try await api.adminPromoteNextWaitlisted(
                 session: session,
                 classSessionID: classSessionID,
                 expectedBookingID: expectedBookingID,
                 requestID: requestID
             )
-            promotionNoticeWarning = outcome.warning
-            waitlist = try await api.adminWaitlist(session: session)
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            lastUpdatedAt = Date()
-            return true
         } catch {
             let message = error.localizedDescription
             if message.localizedCaseInsensitiveContains("WAITLIST_CHANGED")
@@ -2006,6 +2012,33 @@ final class AdminStore: ObservableObject {
             }
             return false
         }
+
+        promotionNoticeWarning = outcome.warning
+        var unavailableReadbacks: [String] = []
+        do {
+            waitlist = try await api.adminWaitlist(session: session)
+            markScheduleSourceCurrent("waitlists")
+        } catch {
+            markScheduleSourceUnavailable("waitlists")
+            unavailableReadbacks.append("waitlists")
+        }
+        do {
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            markScheduleSourceCurrent("today's classes")
+        } catch {
+            markScheduleSourceUnavailable("today's classes")
+            unavailableReadbacks.append("today's classes")
+        }
+
+        let bookingReceipt = outcome.promotion.booking_id.uuidString.lowercased()
+        if unavailableReadbacks.isEmpty {
+            promotionStatusMessage = "Member promoted. Booking receipt \(bookingReceipt)."
+        } else {
+            promotionStatusIsWarning = true
+            promotionStatusMessage = "Member promoted, but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Booking receipt \(bookingReceipt). Do not promote another member; refresh Class Desk."
+        }
+        lastUpdatedAt = Date()
+        return true
     }
 
     @discardableResult
