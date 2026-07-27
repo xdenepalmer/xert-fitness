@@ -6815,6 +6815,20 @@ private struct AdminScheduleView: View {
             }
             .listRowBackground(Color.xertInk)
 
+            if let status = admin.classMutationStatusMessage {
+                Label(
+                    status,
+                    systemImage: admin.classMutationStatusIsWarning
+                        ? "checkmark.shield.fill"
+                        : "checkmark.circle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(admin.classMutationStatusIsWarning ? Color.orange : Color.green)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .listRowBackground(Color.xertInk)
+            }
+
             if timetableIsLoading {
                 HStack(spacing: 10) {
                     ProgressView().tint(Color.xertSteel)
@@ -7466,7 +7480,7 @@ private struct AdminClassEditor: View {
         hasCommitted = true
         clearRecoveryDraft()
         editorExitCoordinator?.clear(id: exitStateID)
-        XertHaptics.play(.success)
+        XertHaptics.play(admin.classMutationStatusIsWarning ? .warning : .success)
         dismiss()
     }
 

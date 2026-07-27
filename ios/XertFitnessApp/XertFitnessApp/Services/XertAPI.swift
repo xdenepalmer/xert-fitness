@@ -403,26 +403,32 @@ final class XertAPI {
         )
     }
 
-    func adminCreateClass(session auth: AuthSession, draft: AdminClassDraft) async throws {
+    @discardableResult
+    func adminCreateClass(session auth: AuthSession, draft: AdminClassDraft) async throws -> UUID {
         let payload = try adminClassPayload(draft)
         var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/class_sessions")
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
         request.httpBody = try JSONEncoder().encode(payload)
-        try await perform(request)
+        let rows: [AdminMutationID] = try await decode(request)
+        guard let created = rows.first, rows.count == 1 else {
+            throw APIError(message: "XERT could not confirm the created class.")
+        }
+        return created.id
     }
 
-    func adminUpdateClass(session auth: AuthSession, classSession: AdminClassSession, draft: AdminClassDraft) async throws {
+    @discardableResult
+    func adminUpdateClass(session auth: AuthSession, classSession: AdminClassSession, draft: AdminClassDraft) async throws -> UUID {
         guard !["cancelled", "completed"].contains(classSession.status) else {
             throw APIError(message: "Cancelled and completed classes cannot be reopened. Create a new class instead.")
         }
         guard !["cancelled", "completed"].contains(draft.status) else {
             throw APIError(message: "Use cancellation or attendance to close this class safely.")
         }
-        let _: UUID = try await rpc(
+        return try await rpc(
             path: "admin_update_class_session",
             body: AdminClassUpdateRequest(
                 p_session_id: classSession.id,

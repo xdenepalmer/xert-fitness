@@ -161,6 +161,8 @@ final class AdminStore: ObservableObject {
     @Published private(set) var deletingScheduleWindowID: UUID?
     @Published private(set) var isRefreshingScheduleControls = false
     @Published private(set) var scheduleMutationWarning: String?
+    @Published private(set) var classMutationStatusMessage: String?
+    @Published private(set) var classMutationStatusIsWarning = false
     @Published private(set) var loadingMemberDetailID: UUID?
     @Published private(set) var revealingEmergencyContactMemberID: UUID?
     @Published private(set) var sendingMemberNoticeID: UUID?
@@ -505,6 +507,11 @@ final class AdminStore: ObservableObject {
             launchGateUpdatedAt = refreshedAt
         }
         refreshUnavailableSources = failures
+        if successfulSources.contains("full timetable"),
+           successfulSources.contains("today's classes") {
+            classMutationStatusMessage = nil
+            classMutationStatusIsWarning = false
+        }
         hasCompletedRefresh = true
         operationalQueueState = queueFailures.isEmpty
             ? .ready
@@ -3188,22 +3195,53 @@ final class AdminStore: ObservableObject {
         guard savingClassID == nil else { return false }
         healthRefreshGeneration &+= 1
         launchGateUpdatedAt = nil
+        classMutationStatusMessage = nil
+        classMutationStatusIsWarning = false
         savingClassID = classSession?.id ?? UUID()
         defer { savingClassID = nil }
+
+        let mutationID: UUID
         do {
             if let classSession {
-                try await api.adminUpdateClass(session: session, classSession: classSession, draft: draft)
+                mutationID = try await api.adminUpdateClass(
+                    session: session,
+                    classSession: classSession,
+                    draft: draft
+                )
             } else {
-                try await api.adminCreateClass(session: session, draft: draft)
+                mutationID = try await api.adminCreateClass(session: session, draft: draft)
             }
-            classSessions = try await api.adminClassSessions(session: session)
-            dailyOperations = try await api.adminDailyOperations(session: session)
-            lastUpdatedAt = Date()
-            return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+
+        var unavailableReadbacks: [String] = []
+        do {
+            classSessions = try await api.adminClassSessions(session: session)
+            markScheduleSourceCurrent("full timetable")
+        } catch {
+            markScheduleSourceUnavailable("full timetable")
+            unavailableReadbacks.append("full timetable")
+        }
+        do {
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            markScheduleSourceCurrent("today's classes")
+        } catch {
+            markScheduleSourceUnavailable("today's classes")
+            unavailableReadbacks.append("today's classes")
+        }
+
+        let action = classSession == nil ? "Class created" : "Class updated"
+        let receipt = mutationID.uuidString.lowercased()
+        if unavailableReadbacks.isEmpty {
+            classMutationStatusMessage = "\(action). Receipt \(receipt)."
+        } else {
+            classMutationStatusIsWarning = true
+            classMutationStatusMessage = "\(action), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Receipt \(receipt). Do not save or create it again; refresh Class Desk."
+        }
+        lastUpdatedAt = Date()
+        return true
     }
 
     func duplicateClass(session: AuthSession, classSession: AdminClassSession) async -> Bool {
