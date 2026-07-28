@@ -30,6 +30,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
 const AppLanding = lazy(() => import('./pages/AppLanding'));
+const WorkoutDisplay = lazy(() => import('./pages/WorkoutDisplay'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
 const NativeTaskBridge = lazy(() => import('./pages/NativeTaskBridge'));
 
@@ -61,6 +62,9 @@ const AppRoutes = () => (
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/app" element={<AppLanding />} />
+      {/* Club TV kiosk. Public because a television cannot sign in; only
+          published workouts are readable, and the page is kept out of search. */}
+      <Route path="/display" element={<WorkoutDisplay />} />
       <Route path="/checkout-return" element={<CheckoutReturn />} />
       <Route path="/open/*" element={<NativeTaskBridge />} />
       <Route path="/contact" element={<Contact />} />

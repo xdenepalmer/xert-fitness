@@ -29,9 +29,16 @@ const PUBLIC_METADATA = Object.freeze({
   '/terms': { title: 'Terms of Use | XERT Fitness', description: 'Read the terms that apply to XERT Fitness services, bookings, session packs and digital products.' },
 });
 
+// Real pages that must never be indexed. The club TV kiosk is public (a
+// television cannot sign in) but has no business appearing in search results.
+const NOINDEX_TITLES = Object.freeze({
+  '/display': 'Workout Display | XERT Fitness',
+});
+
 const NOINDEX_PATHS = new Set([
   '/account',
   '/admin',
+  '/display',
   '/checkout-return',
   '/forgot-password',
   '/login',
@@ -47,7 +54,8 @@ export function metadataForPath(pathname) {
 
   const isPrivate = normalized.startsWith('/admin/') || NOINDEX_PATHS.has(normalized);
   return {
-    title: isPrivate ? `${SITE_NAME} | Member Access` : `Page Not Found | ${SITE_NAME}`,
+    title: NOINDEX_TITLES[normalized]
+      || (isPrivate ? `${SITE_NAME} | Member Access` : `Page Not Found | ${SITE_NAME}`),
     description: HOME_DESCRIPTION,
     indexable: false,
     path: normalized,

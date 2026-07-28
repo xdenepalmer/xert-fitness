@@ -1900,3 +1900,66 @@ export async function saveSiteContent(key, contentData, expectedUpdatedAt) {
   if (error) throw new Error(error.message);
   return data;
 }
+
+// ─── Workout of the day ───────────────────────────────────────────────────────
+
+/** Recent and upcoming workouts for the admin list (drafts included). */
+export async function getAdminWorkouts(limit = 21) {
+  const { data, error } = await supabase
+    .from('workouts_of_the_day')
+    .select('workout_date,title,body,published_at,updated_at')
+    .order('workout_date', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/** Single day's workout for editing, draft or published. */
+export async function getAdminWorkout(workoutDate) {
+  const { data, error } = await supabase
+    .from('workouts_of_the_day')
+    .select('workout_date,title,body,published_at,updated_at')
+    .eq('workout_date', workoutDate)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+/**
+ * Creates or replaces the workout for a day. workout_date is the primary key,
+ * so the upsert structurally guarantees one workout per day — the operating
+ * model the gym runs on.
+ */
+export async function saveWorkoutOfTheDay(input) {
+  const { data: userData } = await supabase.auth.getUser();
+  const actorId = userData?.user?.id || null;
+  const row = {
+    workout_date: input.workout_date,
+    title: input.title,
+    body: input.body,
+    published_at: input.published ? new Date().toISOString() : null,
+    last_changed_by: actorId,
+  };
+  const existing = await getAdminWorkout(input.workout_date);
+  if (!existing) row.created_by = actorId;
+  // Keep the original publish timestamp so re-editing a live workout does not
+  // look like it was published again.
+  if (existing?.published_at && input.published) row.published_at = existing.published_at;
+
+  const { data, error } = await supabase
+    .from('workouts_of_the_day')
+    .upsert(row, { onConflict: 'workout_date' })
+    .select('workout_date,title,body,published_at,updated_at')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Removes a day's workout entirely. */
+export async function deleteWorkoutOfTheDay(workoutDate) {
+  const { error } = await supabase
+    .from('workouts_of_the_day')
+    .delete()
+    .eq('workout_date', workoutDate);
+  if (error) throw new Error(error.message);
+}

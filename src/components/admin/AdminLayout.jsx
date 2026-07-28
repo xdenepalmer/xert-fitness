@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
   Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
-  BellRing, CircleAlert, ShieldCheck, ScrollText,
+  BellRing, CircleAlert, ShieldCheck, ScrollText, Tv,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     heading: 'Classes',
     items: [
       { key: 'calendar', label: 'Class Calendar', icon: CalendarDays },
+      { key: 'workouts', label: 'Workout Of The Day', icon: Tv },
       { key: 'bookings', label: 'Booking Requests', icon: Inbox },
       { key: 'pt-requests', label: 'PT Requests', icon: Dumbbell },
       { key: 'availability', label: 'Availability / Blackouts', icon: CalendarRange },

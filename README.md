@@ -195,6 +195,10 @@ The Supabase schema is defined in:
   correction from charging the member a second credit for the same class
 - `src/supabase/sql_drift_repair.sql` — prevents re-running documented setup
   files from exposing private member notices or weakening member email protection
+- `src/supabase/workout_of_the_day_upgrade.sql` — one workout per day for the
+  in-club TV display (`/display`); `workout_date` is the primary key so a second
+  workout can never exist for the same day, published rows are readable by anon
+  because a television cannot sign in, and drafts stay admin-only
 - `src/supabase/seed_events.sql` — the XERT 2026 South East Queensland event calendar
 
 For a fresh database: first create the lead/request tables (`member_interest`,

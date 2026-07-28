@@ -14,6 +14,24 @@ export async function getProducts() {
   return data || [];
 }
 
+// ─── Workout of the day (public TV display) ───────────────────────────────────
+
+/**
+ * Published workout for a Brisbane calendar day. Returns null when nothing is
+ * published yet — RLS hides drafts from anonymous readers, so the kiosk cannot
+ * leak a workout the coach has not released.
+ */
+export async function getPublishedWorkout(workoutDate) {
+  const { data, error } = await supabase
+    .from('workouts_of_the_day')
+    .select('workout_date,title,body,published_at')
+    .eq('workout_date', workoutDate)
+    .not('published_at', 'is', null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
 export async function getSessionPackPaymentAvailability() {
   const { data, error } = await supabase
     .from('admin_settings')
