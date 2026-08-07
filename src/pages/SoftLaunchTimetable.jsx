@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import Countdown from '@/components/public/Countdown';
+import { DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
 import BookingRequestForm from '@/components/public/BookingRequestForm';
 import PTRequestForm from '@/components/public/PTRequestForm';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
@@ -148,7 +149,7 @@ export default function SoftLaunchTimetable() {
         </section>
 
         {/* Countdown */}
-        <Countdown targetDate={settings.target_launch_date || '2026-08-01'} enabled={settings.countdown_enabled !== false} />
+        <Countdown targetDate={settings.target_launch_date || DEFAULT_TARGET_LAUNCH_DATE} enabled={settings.countdown_enabled !== false} />
 
         {/* Classes */}
         <section className="py-16 px-6">

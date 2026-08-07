@@ -18,6 +18,7 @@ import ScrollProgress from '@/components/public/motion/ScrollProgress';
 import Reveal from '@/components/public/motion/Reveal';
 import PWAInstallPrompt from '@/components/public/PWAInstallPrompt';
 import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
 
 export default function Home() {
   const [settings, setSettings] = useState(getDefaultSettings());
@@ -41,7 +42,7 @@ export default function Home() {
       <main>
         <Hero />
         <Countdown
-          targetDate={settings.target_launch_date || '2026-08-01'}
+          targetDate={settings.target_launch_date || DEFAULT_TARGET_LAUNCH_DATE}
           enabled={settings.countdown_enabled !== false}
         />
 

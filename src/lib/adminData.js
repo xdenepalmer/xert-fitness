@@ -7,6 +7,7 @@ import {
   normalizeMemberNoteArchive, normalizeRoleChange, normalizeTargetedMemberNotice
 } from './memberAdmin';
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
+import { DEFAULT_TARGET_LAUNCH_DATE } from './launchSettings';
 import { blackoutPeriodMutationError, classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
 import {
   normalizeBookingStatusMutation,
@@ -411,7 +412,7 @@ export async function getSoftLaunchSettings() {
 export function getDefaultSettings() {
   return {
     soft_launch_mode: true,
-    target_launch_date: '2026-08-01',
+    target_launch_date: DEFAULT_TARGET_LAUNCH_DATE,
     countdown_enabled: true,
     max_soft_launch_class_capacity: 12,
     bookings_enabled: false,

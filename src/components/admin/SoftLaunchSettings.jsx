@@ -3,7 +3,7 @@ import { toast } from '@/components/ui/use-toast';
 import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
-import { launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
+import { countdownVisibility, launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
 
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
@@ -103,6 +103,18 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   if (loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
   if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
 
+  // Shows staff what the public site is doing right now, so a passed date is
+  // visible here instead of only being discovered by members on the website.
+  const countdownState = (() => {
+    if (!settings.countdown_enabled) {
+      return { label: 'Countdown is switched off — nothing shows on the public site.', tone: 'rgba(209,221,230,0.45)' };
+    }
+    if (countdownVisibility(settings.target_launch_date, true) === 'counting') {
+      return { label: 'Live: the public site is counting down to this date.', tone: '#7ec98f' };
+    }
+    return { label: 'This date has passed — the countdown is hidden on the public site. Set a future date to show it again.', tone: '#e0b36a' };
+  })();
+
   const Toggle = ({ label, desc, field, disabled = false }) => (
     <div className="flex items-start justify-between gap-4 py-4 border-b border-xert-steel/20">
       <div id={`${field}-description`}>
@@ -146,7 +158,16 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         <div>
           <label htmlFor="target-launch-date" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Target launch date</label>
           <input id="target-launch-date" type="date" value={settings.target_launch_date || ''} onChange={e => set('target_launch_date', e.target.value)}
+            aria-describedby="target-launch-date-help"
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+          <p id="target-launch-date-help" className="font-body text-xs text-xert-concrete/40 mt-2">
+            The public countdown counts down to this date. Once it passes, the countdown
+            disappears from the site — it will not announce that the gym is open.
+            To tell the public you have opened, use the announcement banner below.
+          </p>
+          <p className="font-body text-xs mt-2" role="status" style={{ color: countdownState.tone }}>
+            {countdownState.label}
+          </p>
         </div>
         <div>
           <label htmlFor="announcement-banner-text" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Announcement banner text</label>

@@ -1,3 +1,12 @@
+/**
+ * Fallback opening date, used only when no admin settings row supplies one.
+ * The live value is `admin_settings.target_launch_date`, editable in the admin
+ * panel under Platform Settings -> Target launch date. Keep this in one place:
+ * it was previously duplicated across four files, so moving the date meant
+ * finding all four.
+ */
+export const DEFAULT_TARGET_LAUNCH_DATE = '2026-09-14';
+
 function normalizeDate(value) {
   const normalized = String(value || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) throw new Error('Choose a valid target launch date.');
@@ -48,4 +57,26 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'announcement_banner_text',
   ];
   return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
+}
+
+/**
+ * Decides whether the public soft-launch countdown should render.
+ *
+ * A countdown reaching zero says the target date arrived. It does NOT say the
+ * gym opened — that is a business fact the timer cannot know. The countdown
+ * previously flipped to a hardcoded "We're Open — XERT Fitness is now open in
+ * Kingaroy." the moment the date rolled past, which the public read as fact.
+ * Staff had no way to retract it: the copy was not editable anywhere, and the
+ * only control was a toggle that hid the entire section.
+ *
+ * An expired countdown is therefore hidden. Announcing an opening is a
+ * deliberate act and belongs to the announcement banner
+ * (`announcement_banner_text` / `announcement_banner_enabled`), which is
+ * admin-authored and can be switched off again.
+ */
+export function countdownVisibility(targetDate, enabled, now = new Date()) {
+  if (!enabled) return 'hidden';
+  const target = new Date(targetDate).getTime();
+  if (!Number.isFinite(target)) return 'hidden';
+  return target - now.getTime() <= 0 ? 'hidden' : 'counting';
 }
