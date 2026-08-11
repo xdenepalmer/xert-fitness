@@ -1847,12 +1847,14 @@ struct AdminCommandCentreView: View {
                 hasUnavailableSources: admin.operationalQueueHasUnavailableSources,
                 now: context.date
             )
-            let unavailableSources: [String]
-            if case .partial(let sources) = admin.operationalQueueState {
-                unavailableSources = sources
-            } else {
-                unavailableSources = []
-            }
+            // Computed in a closure rather than a deferred `let` plus if/else:
+            // this is a @ViewBuilder body, so ViewBuilder tries to build the
+            // if/else as a conditional view and the assignments inside it are
+            // not Views ("'buildExpression' is unavailable").
+            let unavailableSources: [String] = {
+                if case .partial(let sources) = admin.operationalQueueState { return sources }
+                return []
+            }()
             let briefing = AdminShiftBriefing(
                 generatedAt: context.date,
                 sourceUpdatedAt: admin.operationalUpdatedAt,
@@ -5868,262 +5870,284 @@ private struct AdminClassRosterView: View {
         })
     }
 
-    var body: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(operation.start_time.formatted(date: .abbreviated, time: .shortened)).font(.headline)
-                    Text([operation.coach_name, operation.location_zone].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                    Text("\(operation.confirmed_count) confirmed · \(operation.requested_count) requested · \(operation.waitlist_count) waiting")
-                        .font(.caption).foregroundStyle(Color.xertSteel)
-                    if rosterIsCurrent, let loadedAt = admin.loadedRosterAt {
-                        Label(
-                            "Roster verified \(loadedAt.formatted(date: .omitted, time: .shortened))",
-                            systemImage: "checkmark.shield.fill"
-                        )
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(loadFailed ? Color.orange : Color.green)
-                        .accessibilityIdentifier("owner.roster.verifiedAt")
-                    }
+    // The body was one 436-line List whose four sections the type-checker
+    // could not solve inside its time budget ("unable to type-check this
+    // expression in reasonable time"). Each section is its own property now,
+    // so each is solved independently. Keep them separate when adding rows.
+
+    @ViewBuilder
+    private var rosterSummarySection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(operation.start_time.formatted(date: .abbreviated, time: .shortened)).font(.headline)
+                Text([operation.coach_name, operation.location_zone].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
+                Text("\(operation.confirmed_count) confirmed · \(operation.requested_count) requested · \(operation.waitlist_count) waiting")
+                    .font(.caption).foregroundStyle(Color.xertSteel)
+                if rosterIsCurrent, let loadedAt = admin.loadedRosterAt {
+                    Label(
+                        "Roster verified \(loadedAt.formatted(date: .omitted, time: .shortened))",
+                        systemImage: "checkmark.shield.fill"
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(loadFailed ? Color.orange : Color.green)
+                    .accessibilityIdentifier("owner.roster.verifiedAt")
                 }
-                .listRowBackground(Color.xertInk)
             }
+            .listRowBackground(Color.xertInk)
+        }
+    }
 
-            if operation.start_time <= Date(), !eligible.isEmpty {
-                Section("Roll call") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if let recoveredDraftAt {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label(
-                                    "Recovered unsaved marks from \(recoveredDraftAt.formatted(date: .omitted, time: .shortened)).",
-                                    systemImage: "arrow.counterclockwise.circle.fill"
-                                )
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(Color.xertSteel)
-                                .fixedSize(horizontal: false, vertical: true)
-                                Button("Discard recovered marks") {
-                                    attendance = attendanceBaseline
-                                    recoveredDraftAt = nil
-                                    clearPersistedAttendanceDraft()
-                                }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.orange)
-                            }
-                            .accessibilityIdentifier("owner.roster.recoveredDraft")
-                        }
-
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 14) { attendanceProgressLabels }
-                            VStack(alignment: .leading, spacing: 6) { attendanceProgressLabels }
-                        }
-
-                        ProgressView(
-                            value: Double(attendanceSummary.marked),
-                            total: Double(max(attendanceSummary.total, 1))
-                        )
-                        .tint(attendanceSummary.isComplete ? Color.green : Color.xertSteel)
-
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 10) { attendanceBulkActions }
-                            VStack(spacing: 10) { attendanceBulkActions }
-                        }
-
-                        if attendanceSummary.unmarked > 0 {
+    @ViewBuilder
+    private var rollCallSection: some View {
+        if operation.start_time <= Date(), !eligible.isEmpty {
+            Section("Roll call") {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let recoveredDraftAt {
+                        VStack(alignment: .leading, spacing: 8) {
                             Label(
-                                "Mark every member present or no show before saving.",
-                                systemImage: "exclamationmark.circle"
-                            )
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.orange)
-                        }
-
-                        if !unresolvedRequests.isEmpty {
-                            Label(
-                                "\(unresolvedRequests.count) booking request\(unresolvedRequests.count == 1 ? "" : "s") must be confirmed or declined before this class can close.",
-                                systemImage: "person.crop.circle.badge.questionmark"
+                                "Recovered unsaved marks from \(recoveredDraftAt.formatted(date: .omitted, time: .shortened)).",
+                                systemImage: "arrow.counterclockwise.circle.fill"
                             )
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.orange)
+                            .foregroundStyle(Color.xertSteel)
                             .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("owner.roster.pendingRequestGuard")
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .listRowBackground(Color.xertInk)
-                }
-            }
-
-            if rosterIsCurrent, !readinessRelevant.isEmpty {
-                Section("Training readiness") {
-                    if let warning = admin.rosterReadinessStatusMessage {
-                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            Button("Discard recovered marks") {
+                                attendance = attendanceBaseline
+                                recoveredDraftAt = nil
+                                clearPersistedAttendanceDraft()
+                            }
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else if admin.loadingRosterSessionID == operation.id {
-                        HStack(spacing: 10) {
-                            ProgressView().tint(Color.xertSteel)
-                            Text("Checking member readiness...")
                         }
-                        .foregroundStyle(Color.xertPale.opacity(0.72))
-                    } else if incompleteReadiness.isEmpty {
+                        .accessibilityIdentifier("owner.roster.recoveredDraft")
+                    }
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 14) { attendanceProgressLabels }
+                        VStack(alignment: .leading, spacing: 6) { attendanceProgressLabels }
+                    }
+
+                    ProgressView(
+                        value: Double(attendanceSummary.marked),
+                        total: Double(max(attendanceSummary.total, 1))
+                    )
+                    .tint(attendanceSummary.isComplete ? Color.green : Color.xertSteel)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { attendanceBulkActions }
+                        VStack(spacing: 10) { attendanceBulkActions }
+                    }
+
+                    if attendanceSummary.unmarked > 0 {
                         Label(
-                            "Every active booking has completed the required readiness steps.",
-                            systemImage: "checkmark.shield.fill"
+                            "Mark every member present or no show before saving.",
+                            systemImage: "exclamationmark.circle"
                         )
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.green)
-                    } else {
+                        .foregroundStyle(Color.orange)
+                    }
+
+                    if !unresolvedRequests.isEmpty {
                         Label(
-                            "\(incompleteReadiness.count) active booking\(incompleteReadiness.count == 1 ? "" : "s") need readiness review before training.",
-                            systemImage: "person.crop.circle.badge.exclamationmark"
+                            "\(unresolvedRequests.count) booking request\(unresolvedRequests.count == 1 ? "" : "s") must be confirmed or declined before this class can close.",
+                            systemImage: "person.crop.circle.badge.questionmark"
                         )
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("owner.roster.pendingRequestGuard")
                     }
                 }
+                .padding(.vertical, 4)
                 .listRowBackground(Color.xertInk)
             }
+        }
+    }
 
-            Section("Member roster") {
-                if admin.bookingDecisionStatusSessionID == operation.id,
-                   let status = admin.bookingDecisionStatusMessage {
-                    Label(
-                        status,
-                        systemImage: admin.bookingDecisionStatusIsWarning
-                            ? "checkmark.shield.fill"
-                            : "checkmark.circle.fill"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(admin.bookingDecisionStatusIsWarning ? Color.orange : Color.green)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("owner.roster.bookingDecisionReceipt")
-                }
-                if admin.bookingDecisionStatusSessionID == operation.id,
-                   let warning = admin.bookingDecisionNoticeWarning {
-                    Label(warning, systemImage: "bell.badge.fill")
+    @ViewBuilder
+    private var trainingReadinessSection: some View {
+        if rosterIsCurrent, !readinessRelevant.isEmpty {
+            Section("Training readiness") {
+                if let warning = admin.rosterReadinessStatusMessage {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-                if let feedback = admin.staffBookingFeedback,
-                   feedback.sessionID == operation.id {
+                } else if admin.loadingRosterSessionID == operation.id {
+                    HStack(spacing: 10) {
+                        ProgressView().tint(Color.xertSteel)
+                        Text("Checking member readiness...")
+                    }
+                    .foregroundStyle(Color.xertPale.opacity(0.72))
+                } else if incompleteReadiness.isEmpty {
                     Label(
-                        feedback.message,
-                        systemImage: feedback.needsAttention
-                            ? "exclamationmark.circle.fill"
-                            : "checkmark.circle.fill"
+                        "Every active booking has completed the required readiness steps.",
+                        systemImage: "checkmark.shield.fill"
                     )
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(feedback.needsAttention ? Color.orange : Color.green)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("owner.roster.staffBookingFeedback")
-                }
-                Button {
-                    showingAddMember = true
-                } label: {
-                    Label("Add existing member", systemImage: "person.badge.plus")
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.xertSteel)
-                .foregroundStyle(Color.xertNavy)
-                .disabled(!canAddMember)
-                .accessibilityHint(
-                    isDirty
-                        ? "Save or discard attendance marks before changing the roster"
-                        : "Searches member accounts and safely confirms or waitlists one member"
-                )
-
-                if !rosterIsCurrent, admin.loadingRosterSessionID == operation.id {
-                    HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
-                } else if !rosterIsCurrent, loadFailed {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Roster unavailable", systemImage: "wifi.exclamationmark")
-                            .font(.headline)
-                            .foregroundStyle(Color.orange)
-                        Text(admin.rosterLoadErrorMessage ?? "The class roster could not be loaded.")
-                            .font(.caption)
-                            .foregroundStyle(Color.xertPale.opacity(0.72))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button {
-                            Task { await loadRoster(preserveCurrent: false) }
-                        } label: {
-                            Label("Retry roster", systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.xertSteel)
-                        .foregroundStyle(Color.xertNavy)
-                    }
-                    .padding(.vertical, 4)
-                } else if rosterIsCurrent, loadFailed {
+                    .foregroundStyle(Color.green)
+                } else {
                     Label(
-                        "Showing the last verified roster. Refresh failed: \(admin.rosterLoadErrorMessage ?? "connection unavailable")",
-                        systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                        "\(incompleteReadiness.count) active booking\(incompleteReadiness.count == 1 ? "" : "s") need readiness review before training.",
+                        systemImage: "person.crop.circle.badge.exclamationmark"
                     )
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .listRowBackground(Color.xertInk)
+        }
+    }
+
+    @ViewBuilder
+    private var memberRosterSection: some View {
+        Section("Member roster") {
+            if admin.bookingDecisionStatusSessionID == operation.id,
+               let status = admin.bookingDecisionStatusMessage {
+                Label(
+                    status,
+                    systemImage: admin.bookingDecisionStatusIsWarning
+                        ? "checkmark.shield.fill"
+                        : "checkmark.circle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(admin.bookingDecisionStatusIsWarning ? Color.orange : Color.green)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("owner.roster.bookingDecisionReceipt")
+            }
+            if admin.bookingDecisionStatusSessionID == operation.id,
+               let warning = admin.bookingDecisionNoticeWarning {
+                Label(warning, systemImage: "bell.badge.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                } else if rosterIsCurrent, roster.isEmpty {
-                    Text("No member bookings for this class.")
-                }
-                ForEach(roster) { member in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(member.displayName).font(.headline)
-                                Text(member.status.replacingOccurrences(of: "_", with: " ").uppercased())
-                                    .font(.caption2.weight(.bold)).foregroundStyle(statusColour(member.status))
-                            }
-                            Spacer()
-                            if !member.attendanceEligible || operation.start_time > Date(),
-                               let actions = bookingActions(member.status), !actions.isEmpty {
-                                Menu {
-                                    ForEach(actions) { action in
-                                        Button(role: action.role) {
-                                            Task {
-                                                let succeeded = await admin.setBookingStatus(
-                                                    session: session,
-                                                    classSessionID: operation.id,
-                                                    bookingID: member.id,
-                                                    status: action.status
-                                                )
-                                                XertHaptics.play(
-                                                    !succeeded
-                                                        ? .error
-                                                        : (admin.bookingDecisionStatusIsWarning
-                                                            ? .warning
-                                                            : .success)
-                                                )
-                                            }
-                                        } label: { Label(action.label, systemImage: action.icon) }
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle").font(.title3)
-                                }
-                                .disabled(admin.updatingBookingID != nil || loadFailed)
-                                .accessibilityLabel("Manage \(member.displayName) booking")
-                            }
-                        }
-                        readinessBadge(for: member)
-                        if member.attendanceEligible && operation.start_time <= Date() {
-                            attendanceControl(for: member)
-                        }
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 14) { memberActions(for: member) }
-                            VStack(alignment: .leading, spacing: 10) { memberActions(for: member) }
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.xertSteel)
-                    }
-                    .padding(.vertical, 5)
-                    .listRowBackground(Color.xertInk)
-                }
             }
+            if let feedback = admin.staffBookingFeedback,
+               feedback.sessionID == operation.id {
+                Label(
+                    feedback.message,
+                    systemImage: feedback.needsAttention
+                        ? "exclamationmark.circle.fill"
+                        : "checkmark.circle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(feedback.needsAttention ? Color.orange : Color.green)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("owner.roster.staffBookingFeedback")
+            }
+            Button {
+                showingAddMember = true
+            } label: {
+                Label("Add existing member", systemImage: "person.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.xertSteel)
+            .foregroundStyle(Color.xertNavy)
+            .disabled(!canAddMember)
+            .accessibilityHint(
+                isDirty
+                    ? "Save or discard attendance marks before changing the roster"
+                    : "Searches member accounts and safely confirms or waitlists one member"
+            )
+
+            if !rosterIsCurrent, admin.loadingRosterSessionID == operation.id {
+                HStack { Spacer(); ProgressView().tint(Color.xertSteel); Spacer() }
+            } else if !rosterIsCurrent, loadFailed {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Roster unavailable", systemImage: "wifi.exclamationmark")
+                        .font(.headline)
+                        .foregroundStyle(Color.orange)
+                    Text(admin.rosterLoadErrorMessage ?? "The class roster could not be loaded.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await loadRoster(preserveCurrent: false) }
+                    } label: {
+                        Label("Retry roster", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
+                    .foregroundStyle(Color.xertNavy)
+                }
+                .padding(.vertical, 4)
+            } else if rosterIsCurrent, loadFailed {
+                Label(
+                    "Showing the last verified roster. Refresh failed: \(admin.rosterLoadErrorMessage ?? "connection unavailable")",
+                    systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            } else if rosterIsCurrent, roster.isEmpty {
+                Text("No member bookings for this class.")
+            }
+            ForEach(roster) { member in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(member.displayName).font(.headline)
+                            Text(member.status.replacingOccurrences(of: "_", with: " ").uppercased())
+                                .font(.caption2.weight(.bold)).foregroundStyle(statusColour(member.status))
+                        }
+                        Spacer()
+                        if !member.attendanceEligible || operation.start_time > Date(),
+                           let actions = bookingActions(member.status), !actions.isEmpty {
+                            Menu {
+                                ForEach(actions) { action in
+                                    Button(role: action.role) {
+                                        Task {
+                                            let succeeded = await admin.setBookingStatus(
+                                                session: session,
+                                                classSessionID: operation.id,
+                                                bookingID: member.id,
+                                                status: action.status
+                                            )
+                                            XertHaptics.play(
+                                                !succeeded
+                                                    ? .error
+                                                    : (admin.bookingDecisionStatusIsWarning
+                                                        ? .warning
+                                                        : .success)
+                                            )
+                                        }
+                                    } label: { Label(action.label, systemImage: action.icon) }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle").font(.title3)
+                            }
+                            .disabled(admin.updatingBookingID != nil || loadFailed)
+                            .accessibilityLabel("Manage \(member.displayName) booking")
+                        }
+                    }
+                    readinessBadge(for: member)
+                    if member.attendanceEligible && operation.start_time <= Date() {
+                        attendanceControl(for: member)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 14) { memberActions(for: member) }
+                        VStack(alignment: .leading, spacing: 10) { memberActions(for: member) }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.xertSteel)
+                }
+                .padding(.vertical, 5)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+    }
+
+    var body: some View {
+        List {
+            rosterSummarySection
+            rollCallSection
+            trainingReadinessSection
+            memberRosterSection
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if operation.start_time <= Date() {
