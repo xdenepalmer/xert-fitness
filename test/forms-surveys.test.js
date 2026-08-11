@@ -10,7 +10,7 @@ test('forms schema is public-submit bounded and owner-administered without clien
   assert.match(sql, /create table if not exists public\.xert_form_responses/);
   assert.match(sql, /create or replace function public\.xert_public_form/);
   assert.match(sql, /create or replace function public\.submit_xert_form_response/);
-  assert.match(sql, /jsonb_object_length\(p_answers\) > 100/);
+  assert.match(sql, /jsonb_array_length\(jsonb_path_query_array\(p_answers, '\$\.\*'\)\) > 100/);
   assert.match(sql, /octet_length\(p_answers::text\) > 524288/);
   assert.match(sql, /v_form\.one_response_per_email/);
   assert.match(sql, /Please complete every required question/);
