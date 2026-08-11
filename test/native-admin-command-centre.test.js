@@ -471,7 +471,10 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
   assert.match(view, /case \.newCoach:[\s\S]*AdminCoachEditor\([\s\S]*coach: nil/);
   assert.match(view, /case \.newEvent:[\s\S]*AdminEventEditor\([\s\S]*event: nil/);
-  assert.match(view, /title: "Edit site content"[\s\S]*openWorkspaceWithFeedback\(\.content\)/);
+  // `.siteContent` is the XertOwnerWorkspace case. This previously asserted
+  // `.content`, which is not a case on that enum and never compiled — the
+  // assertion matched the source text of code the Swift build rejected.
+  assert.match(view, /title: "Edit site content"[\s\S]*openWorkspaceWithFeedback\(\.siteContent\)/);
   assert.match(view, /quickToolDetail\(source: "team directory"/);
   assert.match(view, /quickToolDetail\(source: "event calendar"/);
 
