@@ -1689,7 +1689,7 @@ struct AdminCommandCentreView: View {
                     detail: "Hero, contact details and FAQs",
                     icon: "text.badge.star"
                 ) {
-                    openWorkspaceWithFeedback(.content)
+                    openWorkspaceWithFeedback(.siteContent)
                 }
                 AdminQuickToolButton(
                     title: "Access control",
@@ -11837,22 +11837,26 @@ private struct AdminPTRequestsView: View {
         }
     }
 
-    private func leadAgeLabel(_ lead: AdminLead, now: Date = Date()) -> String {
-        guard lead.effectiveStatus == "new" else {
-            return lead.created_at.formatted(date: .abbreviated, time: .omitted)
-        }
-        let hours = max(Int(now.timeIntervalSince(lead.created_at) / 3_600), 0)
-        if hours < 1 { return "Waiting <1h" }
-        if hours < 24 { return "Waiting \(hours)h" }
-        return "Waiting \(max(hours / 24, 1))d"
-    }
+}
 
-    private func leadAgeColour(_ lead: AdminLead, now: Date = Date()) -> Color {
-        guard lead.effectiveStatus == "new" else {
-            return Color.xertPale.opacity(0.42)
-        }
-        return now.timeIntervalSince(lead.created_at) >= 86_400 ? Color.red : Color.orange
+// Called from AdminLeadsView but previously declared inside AdminPTRequestsView,
+// so both call sites failed with "cannot find 'leadAgeLabel' in scope". Declared
+// at file scope now, which is where a helper shared between two desks belongs.
+private func leadAgeLabel(_ lead: AdminLead, now: Date = Date()) -> String {
+    guard lead.effectiveStatus == "new" else {
+        return lead.created_at.formatted(date: .abbreviated, time: .omitted)
     }
+    let hours = max(Int(now.timeIntervalSince(lead.created_at) / 3_600), 0)
+    if hours < 1 { return "Waiting <1h" }
+    if hours < 24 { return "Waiting \(hours)h" }
+    return "Waiting \(max(hours / 24, 1))d"
+}
+
+private func leadAgeColour(_ lead: AdminLead, now: Date = Date()) -> Color {
+    guard lead.effectiveStatus == "new" else {
+        return Color.xertPale.opacity(0.42)
+    }
+    return now.timeIntervalSince(lead.created_at) >= 86_400 ? Color.red : Color.orange
 }
 
 private struct AdminIntakeCSVDocument: FileDocument {
