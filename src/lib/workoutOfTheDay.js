@@ -53,12 +53,22 @@ export function brisbaneClock(value = new Date()) {
 }
 
 /**
+ * @typedef {Object} WorkoutOfTheDay
+ * @property {string} workout_date Brisbane date key, `YYYY-MM-DD`.
+ * @property {string} [title]
+ * @property {string} [body]
+ */
+
+/**
  * What the TV should render right now.
  *
  * The critical rule: a workout is only ever shown on its own day. A cached
  * workout from a previous day must NEVER survive midnight onto the screen — a
  * TV left running overnight would otherwise show yesterday's session to the
  * 5:15am class.
+ *
+ * @param {{ workout?: WorkoutOfTheDay | null, todayKey?: string, loadFailed?: boolean }} [options]
+ * @returns {{ status: 'ready' | 'unavailable' | 'empty', workout: WorkoutOfTheDay | null, dateKey: string, stale: boolean }}
  */
 export function workoutDisplayState({ workout, todayKey, loadFailed = false } = {}) {
   const key = todayKey || brisbaneDateKey();

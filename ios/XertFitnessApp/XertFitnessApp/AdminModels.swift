@@ -537,28 +537,47 @@ struct AdminOrderReport {
             "Unused credits revoked", "Credits used before refund", "Future bookings cancelled"
         ].joined(separator: ",")
         let formatter = ISO8601DateFormatter()
-        let body = rows.map { order in
+        // Every element is annotated and the money/String.init conversions are
+        // hoisted into locals. As one 18-element literal of mixed optional
+        // chaining, `??`, `map(String.init)` and `String(format:)` expressions,
+        // the solver had to infer the element type across all of them at once
+        // and gave up: "the compiler is unable to type-check this expression in
+        // reasonable time". Keep the pieces separate when adding a column.
+        let body: [String] = rows.map { order -> String in
             let refund = order.refund
-            return [
-                formatter.string(from: order.created_at),
-                order.paid_at.map { formatter.string(from: $0) } ?? "",
+            let amount = Self.moneyField(order.amount_cents)
+            let refundedAmount = order.refunded_amount_cents.map(Self.money) ?? ""
+            let creditTotal = order.credit_total.map { String($0) } ?? ""
+            let creditValidityDays = order.credit_validity_days.map { String($0) } ?? ""
+            let createdAt = formatter.string(from: order.created_at)
+            let paidAt = order.paid_at.map { formatter.string(from: $0) } ?? ""
+            let reconciledAt = order.reconciled_at.map { formatter.string(from: $0) } ?? ""
+            let refundedAt = order.refunded_at.map { formatter.string(from: $0) } ?? ""
+            let creditsRevoked = refund.map { String($0.credits_revoked) } ?? ""
+            let creditsConsumed = refund.map { String($0.credits_consumed) } ?? ""
+            let bookingsCancelled = refund.map { String($0.bookings_cancelled) } ?? ""
+
+            let fields: [String] = [
+                createdAt,
+                paidAt,
                 order.products?.name ?? "Session pack",
                 order.email ?? "",
-                String(format: "%.2f", Double(order.amount_cents ?? 0) / 100),
+                amount,
                 Self.currencyCode(order),
-                order.credit_total.map(String.init) ?? "",
-                order.credit_validity_days.map(String.init) ?? "",
+                creditTotal,
+                creditValidityDays,
                 order.status,
                 order.stripe_checkout_session_id ?? "",
                 order.stripe_payment_intent_id ?? "",
-                order.reconciled_at.map { formatter.string(from: $0) } ?? "",
+                reconciledAt,
                 order.reconciled_by?.uuidString ?? "",
-                order.refunded_at.map { formatter.string(from: $0) } ?? "",
-                order.refunded_amount_cents.map { String(format: "%.2f", Double($0) / 100) } ?? "",
-                refund.map { String($0.credits_revoked) } ?? "",
-                refund.map { String($0.credits_consumed) } ?? "",
-                refund.map { String($0.bookings_cancelled) } ?? ""
-            ].map(Self.csvField).joined(separator: ",")
+                refundedAt,
+                refundedAmount,
+                creditsRevoked,
+                creditsConsumed,
+                bookingsCancelled
+            ]
+            return fields.map(Self.csvField).joined(separator: ",")
         }
         return ([header] + body).joined(separator: "\n")
     }
@@ -566,6 +585,16 @@ struct AdminOrderReport {
     private static func currencyCode(_ order: OrderItem) -> String {
         let code = order.currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
         return code.isEmpty ? "AUD" : code
+    }
+
+    /// Cents rendered as a two-decimal amount. Split out of the CSV row literal
+    /// so the type-checker resolves the numeric conversion once, in isolation.
+    private static func money(_ cents: Int) -> String {
+        String(format: "%.2f", Double(cents) / 100)
+    }
+
+    private static func moneyField(_ cents: Int?) -> String {
+        money(cents ?? 0)
     }
 
     private static func csvField(_ value: String) -> String {
