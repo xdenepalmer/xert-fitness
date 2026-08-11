@@ -1422,17 +1422,22 @@ export async function getBusinessStats() {
 // ─── Sidebar badge counts (things needing attention) ─────────────────────────
 
 export async function getAdminBadgeCounts() {
-  const [newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT] = await Promise.all([
+  const [newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT, formResponses] = await Promise.all([
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
-    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested')
+    supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
+    supabase.from('xert_form_responses').select('id', { count: 'exact', head: true }).eq('status', 'new').is('archived_at', null)
   ]);
   assertSupabaseResponses([newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT]);
+  if (formResponses.error && formResponses.error.code !== '42P01') {
+    assertSupabaseResponses([formResponses]);
+  }
   return {
     members: newLeads.count || 0,
     bookings: (pendingLegacyBookings.count || 0) + (pendingMemberBookings.count || 0),
-    'pt-requests': pendingPT.count || 0
+    'pt-requests': pendingPT.count || 0,
+    forms: formResponses.error ? 0 : formResponses.count || 0
   };
 }
 

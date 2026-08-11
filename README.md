@@ -178,6 +178,7 @@ The Supabase schema is defined in:
   current readiness, training access, first booking and recorded attendance;
   it exposes no emergency-contact values or document contents
 - `supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql` — lets the authenticated owner create or reuse an exact Stripe Price from Command Centre and atomically link it to the unchanged private draft without publishing it
+- `supabase/migrations/20260811010000_xert_forms_surveys.sql` — adds the owner Forms & Surveys builder, bounded public submissions, response workflows and analytics storage for web and iOS; it intentionally contains no client linking or competition draw data
 - `src/supabase/targeted_member_notices_upgrade.sql` — lets administrators send one member a private,
   auditable in-app notice with optional APNs delivery and read/dismiss history
 - `src/supabase/staff_assisted_booking_upgrade.sql` — lets Class Desk safely

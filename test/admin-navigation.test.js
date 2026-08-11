@@ -15,6 +15,7 @@ test('recognises every supported admin section', () => {
   assert.equal(new Set(ADMIN_SECTION_KEYS).size, ADMIN_SECTION_KEYS.length);
   assert.equal(isAdminSection('events'), true);
   assert.equal(isAdminSection('announcements'), true);
+  assert.equal(isAdminSection('forms'), true);
   assert.equal(isAdminSection('not-a-tool'), false);
 });
 
@@ -23,6 +24,7 @@ test('maps durable admin URLs to their operational sections', () => {
   assert.equal(getAdminSectionFromPath('/admin/audit'), 'audit');
   assert.equal(getAdminSectionFromPath('/admin/events'), 'events');
   assert.equal(getAdminSectionFromPath('/admin/announcements'), 'announcements');
+  assert.equal(getAdminSectionFromPath('/admin/forms'), 'forms');
   assert.equal(getAdminSectionFromPath('/admin/gym-members/'), 'gym-members');
   assert.equal(getAdminSectionFromPath('/admin/bookings?status=requested'), 'bookings');
 });

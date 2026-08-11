@@ -50,6 +50,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   booking_decision_notifications: 'Apply supabase/migrations/20260722000000_booking_decision_notifications.sql in Supabase.',
   staff_assisted_booking: 'Apply supabase/migrations/20260727010000_staff_assisted_booking.sql in Supabase.',
   owner_stripe_price_provisioning: 'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
+  forms_surveys_builder: 'Apply supabase/migrations/20260811010000_xert_forms_surveys.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

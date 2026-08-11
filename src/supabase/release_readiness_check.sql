@@ -53,7 +53,8 @@ with required (capability, migration) as (
     ('waitlist_promotion_notifications', 'supabase/migrations/20260721030000_waitlist_promotion_notifications.sql'),
     ('booking_decision_notifications', 'supabase/migrations/20260722000000_booking_decision_notifications.sql'),
     ('staff_assisted_booking', 'supabase/migrations/20260727010000_staff_assisted_booking.sql'),
-    ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql')
+    ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql'),
+    ('forms_surveys_builder', 'supabase/migrations/20260811010000_xert_forms_surveys.sql')
 ), readiness as (
   select
     required.capability,

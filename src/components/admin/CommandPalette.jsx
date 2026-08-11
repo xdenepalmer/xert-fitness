@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
   CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
-  BellRing, Handshake, Settings, BarChart3, ExternalLink, Plus, User, ShieldCheck, ScrollText,
+  BellRing, Handshake, Settings, BarChart3, ExternalLink, Plus, User, ShieldCheck, ScrollText, ListChecks,
 } from 'lucide-react';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -21,6 +21,7 @@ const NAV_COMMANDS = [
   { key: 'bookings', label: 'Booking Requests', icon: Inbox },
   { key: 'pt-requests', label: 'PT Requests', icon: Dumbbell },
   { key: 'availability', label: 'Availability / Blackouts', icon: CalendarRange },
+  { key: 'forms', label: 'Forms & Surveys', icon: ListChecks },
   { key: 'announcements', label: 'Member Notices', icon: BellRing },
   { key: 'content', label: 'Site Content (CMS)', icon: PenSquare },
   { key: 'coaches', label: 'Coaches & Team', icon: UserSquare2 },
@@ -38,6 +39,7 @@ const QUICK_COMMANDS = [
   { key: 'coaches', label: 'Add a coach or practitioner', icon: Plus },
   { key: 'events', label: 'Add an event', icon: Plus },
   { key: 'announcements', label: 'Create a member notice', icon: BellRing },
+  { key: 'forms', label: 'Create a form or survey', icon: ListChecks },
 ];
 
 /**

@@ -33,6 +33,7 @@ const AppLanding = lazy(() => import('./pages/AppLanding'));
 const WorkoutDisplay = lazy(() => import('./pages/WorkoutDisplay'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
 const NativeTaskBridge = lazy(() => import('./pages/NativeTaskBridge'));
+const PublicForm = lazy(() => import('./pages/PublicForm'));
 
 function RouteLoader() {
   return (
@@ -67,6 +68,7 @@ const AppRoutes = () => (
       <Route path="/display" element={<WorkoutDisplay />} />
       <Route path="/checkout-return" element={<CheckoutReturn />} />
       <Route path="/open/*" element={<NativeTaskBridge />} />
+      <Route path="/forms/:slug" element={<PublicForm />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />
       {/* ADMIN — requires a signed-in user whose profiles.role = 'admin'.

@@ -3257,3 +3257,206 @@ struct AdminCoachDraft: Codable, Hashable {
         published = coach?.published ?? true
     }
 }
+
+struct AdminFormSkipRule: Codable, Hashable {
+    var option: String
+    var skip_to: Int
+}
+
+struct AdminFormQuestion: Identifiable, Codable, Hashable {
+    var id: String
+    var type: String
+    var question: String
+    var description: String?
+    var required: Bool
+    var hidden: Bool?
+    var placeholder: String?
+    var options: [String]?
+    var allow_other: Bool?
+    var scale_min: Int?
+    var scale_max: Int?
+    var scale_min_label: String?
+    var scale_max_label: String?
+    var media_type: String?
+    var media_url: String?
+    var media_caption: String?
+    var correct_answer: String?
+    var points: Int?
+    var content: String?
+    var skip_rules: [AdminFormSkipRule]?
+
+    static func blank(type: String = "short_text") -> Self {
+        Self(
+            id: UUID().uuidString.lowercased(), type: type, question: "", description: nil,
+            required: false, hidden: false, placeholder: nil,
+            options: ["Option 1", "Option 2", "Option 3"], allow_other: false,
+            scale_min: type == "nps" ? 0 : 1, scale_max: type == "star_rating" ? 5 : 10,
+            scale_min_label: nil, scale_max_label: nil, media_type: nil, media_url: nil,
+            media_caption: nil, correct_answer: nil, points: 0, content: nil, skip_rules: []
+        )
+    }
+
+    var displayTitle: String {
+        let value = ["section_break", "statement"].contains(type) ? content : question
+        return value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Untitled field"
+    }
+}
+
+struct AdminForm: Identifiable, Codable, Hashable {
+    let id: UUID
+    let title: String
+    let description: String
+    let form_type: String
+    let slug: String
+    let questions: [AdminFormQuestion]
+    let is_active: Bool
+    let show_progress_bar: Bool
+    let thank_you_message: String
+    let redirect_url: String?
+    let header_media_type: String?
+    let header_media_url: String?
+    let header_media_caption: String?
+    let collect_name: Bool
+    let collect_name_required: Bool
+    let collect_email: Bool
+    let collect_email_required: Bool
+    let collect_phone: Bool
+    let collect_phone_required: Bool
+    let one_response_per_email: Bool
+    let notify_admin: Bool
+    let tags: [String]
+    let response_count: Int
+    let created_at: Date
+    let updated_at: String
+
+    var publicURL: URL { AppConfig.webURL(path: "forms/\(slug)") }
+}
+
+struct AdminFormDraft: Equatable {
+    static let types = [
+        "contact", "registration", "application", "feedback", "booking",
+        "survey", "quiz", "waiver", "order", "custom"
+    ]
+    static let fieldTypes = [
+        "short_text", "long_text", "number", "email", "phone", "url",
+        "single_choice", "multiple_choice", "dropdown", "yes_no", "star_rating",
+        "linear_scale", "nps", "date", "time", "datetime", "file_upload",
+        "signature", "address", "name_fields", "section_break", "statement"
+    ]
+
+    var title: String
+    var description: String
+    var formType: String
+    var slug: String
+    var questions: [AdminFormQuestion]
+    var isActive: Bool
+    var showProgressBar: Bool
+    var thankYouMessage: String
+    var redirectURL: String
+    var headerMediaType: String
+    var headerMediaURL: String
+    var headerMediaCaption: String
+    var collectName: Bool
+    var collectNameRequired: Bool
+    var collectEmail: Bool
+    var collectEmailRequired: Bool
+    var collectPhone: Bool
+    var collectPhoneRequired: Bool
+    var oneResponsePerEmail: Bool
+    var notifyAdmin: Bool
+    var tags: [String]
+
+    init(form: AdminForm? = nil) {
+        title = form?.title ?? "New Survey"
+        description = form?.description ?? ""
+        formType = form?.form_type ?? "survey"
+        slug = form?.slug ?? "survey-\(UUID().uuidString.lowercased().prefix(6))"
+        questions = form?.questions ?? [.blank()]
+        isActive = form?.is_active ?? false
+        showProgressBar = form?.show_progress_bar ?? true
+        thankYouMessage = form?.thank_you_message ?? "Thanks — your response has been received."
+        redirectURL = form?.redirect_url ?? ""
+        headerMediaType = form?.header_media_type ?? ""
+        headerMediaURL = form?.header_media_url ?? ""
+        headerMediaCaption = form?.header_media_caption ?? ""
+        collectName = form?.collect_name ?? true
+        collectNameRequired = form?.collect_name_required ?? false
+        collectEmail = form?.collect_email ?? true
+        collectEmailRequired = form?.collect_email_required ?? false
+        collectPhone = form?.collect_phone ?? false
+        collectPhoneRequired = form?.collect_phone_required ?? false
+        oneResponsePerEmail = form?.one_response_per_email ?? false
+        notifyAdmin = form?.notify_admin ?? true
+        tags = form?.tags ?? []
+    }
+
+    var validationMessage: String? {
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Add a form title." }
+        if slug.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) == nil {
+            return "Use lowercase letters, numbers and hyphens in the public link."
+        }
+        if questions.isEmpty { return "Add at least one field." }
+        if questions.contains(where: { !["section_break", "statement"].contains($0.type) && $0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return "Every response field needs a question or label."
+        }
+        if oneResponsePerEmail && !collectEmail { return "Collect email before limiting responses by email." }
+        return nil
+    }
+}
+
+enum AdminFormAnswer: Codable, Hashable {
+    case string(String)
+    case number(Double)
+    case boolean(Bool)
+    case array([AdminFormAnswer])
+    case object([String: AdminFormAnswer])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .null }
+        else if let value = try? container.decode(Bool.self) { self = .boolean(value) }
+        else if let value = try? container.decode(Double.self) { self = .number(value) }
+        else if let value = try? container.decode(String.self) { self = .string(value) }
+        else if let value = try? container.decode([AdminFormAnswer].self) { self = .array(value) }
+        else { self = .object(try container.decode([String: AdminFormAnswer].self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .boolean(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+
+    var displayValue: String {
+        switch self {
+        case .string(let value): return value
+        case .number(let value): return value.formatted()
+        case .boolean(let value): return value ? "Yes" : "No"
+        case .array(let values): return values.map(\.displayValue).joined(separator: ", ")
+        case .object(let values): return values.keys.sorted().compactMap { values[$0]?.displayValue }.filter { !$0.isEmpty }.joined(separator: ", ")
+        case .null: return "—"
+        }
+    }
+}
+
+struct AdminFormResponse: Identifiable, Codable, Hashable {
+    let id: UUID
+    let form_id: UUID
+    let answers: [String: AdminFormAnswer]
+    let respondent_name: String?
+    let respondent_email: String?
+    let respondent_phone: String?
+    let status: String
+    let completed_at: Date
+    let time_taken_seconds: Int
+    let created_at: Date
+
+    var displayName: String { respondent_name?.nilIfEmpty ?? respondent_email?.nilIfEmpty ?? "Anonymous response" }
+}

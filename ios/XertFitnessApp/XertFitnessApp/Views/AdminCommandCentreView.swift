@@ -2903,6 +2903,8 @@ struct AdminCommandCentreView: View {
             AdminCampaignAttributionView(admin: admin, session: session)
         case .siteContent:
             AdminSiteContentView(admin: admin, session: session)
+        case .forms:
+            AdminFormsView(session: session)
         case .notices:
             AdminCommunicationsView(admin: admin, session: session)
         case .events:

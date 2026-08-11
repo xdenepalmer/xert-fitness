@@ -341,6 +341,7 @@ workflows:
               "booking_decision_notifications",
               "staff_assisted_booking",
               "owner_stripe_price_provisioning",
+              "forms_surveys_builder",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

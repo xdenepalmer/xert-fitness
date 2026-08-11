@@ -2731,6 +2731,87 @@ final class XertAPI {
         }
     }
 
+    func adminForms(session auth: AuthSession) async throws -> [AdminForm] {
+        try await restRequest(
+            path: "/rest/v1/xert_forms",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,title,description,form_type,slug,questions,is_active,show_progress_bar,thank_you_message,redirect_url,header_media_type,header_media_url,header_media_caption,collect_name,collect_name_required,collect_email,collect_email_required,collect_phone,collect_phone_required,one_response_per_email,notify_admin,tags,response_count,created_at,updated_at"),
+                URLQueryItem(name: "archived_at", value: "is.null"),
+                URLQueryItem(name: "order", value: "updated_at.desc"),
+                URLQueryItem(name: "limit", value: "200")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminFormResponses(session auth: AuthSession, formID: UUID) async throws -> [AdminFormResponse] {
+        try await restRequest(
+            path: "/rest/v1/xert_form_responses",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,form_id,answers,respondent_name,respondent_email,respondent_phone,status,completed_at,time_taken_seconds,created_at"),
+                URLQueryItem(name: "form_id", value: "eq.\(formID.uuidString.lowercased())"),
+                URLQueryItem(name: "archived_at", value: "is.null"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: "2000")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminSaveForm(session auth: AuthSession, form: AdminForm?, draft: AdminFormDraft) async throws -> AdminForm {
+        if let validation = draft.validationMessage { throw APIError(message: validation) }
+        let payload = AdminFormPayload(draft: draft)
+        var queryItems: [URLQueryItem] = []
+        if let form {
+            queryItems = [
+                URLQueryItem(name: "id", value: "eq.\(form.id.uuidString.lowercased())"),
+                URLQueryItem(name: "updated_at", value: "eq.\(form.updated_at)")
+            ]
+        }
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/xert_forms", queryItems: queryItems)
+        request.httpMethod = form == nil ? "POST" : "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let forms: [AdminForm] = try await decode(request)
+        guard let saved = forms.first else {
+            throw APIError(message: "This form changed elsewhere. Refresh and review the latest version.")
+        }
+        return saved
+    }
+
+    func adminArchiveForm(session auth: AuthSession, form: AdminForm) async throws {
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/xert_forms", queryItems: [
+            URLQueryItem(name: "id", value: "eq.\(form.id.uuidString.lowercased())"),
+            URLQueryItem(name: "updated_at", value: "eq.\(form.updated_at)")
+        ])
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(AdminFormArchivePayload(is_active: false, archived_at: ISO8601DateFormatter.standard.string(from: Date())))
+        try await perform(request)
+    }
+
+    func adminUpdateFormResponseStatus(session auth: AuthSession, responseID: UUID, status: String) async throws {
+        guard ["new", "reviewed", "followed_up", "closed"].contains(status) else {
+            throw APIError(message: "Choose a valid response status.")
+        }
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/xert_form_responses", queryItems: [
+            URLQueryItem(name: "id", value: "eq.\(responseID.uuidString.lowercased())")
+        ])
+        request.httpMethod = "PATCH"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(AdminFormResponseStatusPayload(status: status))
+        try await perform(request)
+    }
+
     private func authRequest<T: Decodable, Body: Encodable>(
         path: String,
         queryItems: [URLQueryItem] = [],
@@ -2884,6 +2965,55 @@ private struct EmptyBody: Encodable {}
 private struct EmptyObject: Decodable {}
 private struct AdminLimitRequest: Encodable { let p_limit: Int }
 private struct AdminCohortDaysRequest: Encodable { let p_cohort_days: Int }
+private struct AdminFormPayload: Encodable {
+    let title: String
+    let description: String
+    let form_type: String
+    let slug: String
+    let questions: [AdminFormQuestion]
+    let is_active: Bool
+    let show_progress_bar: Bool
+    let thank_you_message: String
+    let redirect_url: String?
+    let header_media_type: String?
+    let header_media_url: String?
+    let header_media_caption: String?
+    let collect_name: Bool
+    let collect_name_required: Bool
+    let collect_email: Bool
+    let collect_email_required: Bool
+    let collect_phone: Bool
+    let collect_phone_required: Bool
+    let one_response_per_email: Bool
+    let notify_admin: Bool
+    let tags: [String]
+
+    init(draft: AdminFormDraft) {
+        title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        description = draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        form_type = draft.formType
+        slug = draft.slug.lowercased()
+        questions = draft.questions
+        is_active = draft.isActive
+        show_progress_bar = draft.showProgressBar
+        thank_you_message = draft.thankYouMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        redirect_url = draft.redirectURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        header_media_type = draft.headerMediaType.nilIfEmpty
+        header_media_url = draft.headerMediaURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        header_media_caption = draft.headerMediaCaption.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        collect_name = draft.collectName
+        collect_name_required = draft.collectNameRequired
+        collect_email = draft.collectEmail
+        collect_email_required = draft.collectEmailRequired
+        collect_phone = draft.collectPhone
+        collect_phone_required = draft.collectPhoneRequired
+        one_response_per_email = draft.oneResponsePerEmail
+        notify_admin = draft.notifyAdmin
+        tags = draft.tags
+    }
+}
+private struct AdminFormArchivePayload: Encodable { let is_active: Bool; let archived_at: String }
+private struct AdminFormResponseStatusPayload: Encodable { let status: String }
 private struct AdminSessionRequest: Encodable { let p_session_id: UUID }
 private struct AdminWaitlistPromotionRequest: Encodable {
     let p_session_id: UUID
