@@ -77,7 +77,8 @@ create table if not exists public.xert_form_responses (
   archived_at timestamptz,
   archived_by uuid,
   constraint xert_form_responses_answers_check check (
-    jsonb_typeof(answers) = 'object' and jsonb_object_length(answers) <= 100
+    jsonb_typeof(answers) = 'object'
+    and jsonb_array_length(jsonb_path_query_array(answers, '$.*')) <= 100
   ),
   constraint xert_form_responses_status_check check (status in ('new', 'reviewed', 'followed_up', 'closed')),
   constraint xert_form_responses_time_check check (time_taken_seconds between 0 and 43200),
@@ -206,7 +207,7 @@ begin
 
   if not found then raise exception 'This form is not available.' using errcode = 'P0002'; end if;
   if jsonb_typeof(p_answers) is distinct from 'object'
-    or jsonb_object_length(p_answers) > 100
+    or jsonb_array_length(jsonb_path_query_array(p_answers, '$.*')) > 100
     or octet_length(p_answers::text) > 524288 then
     raise exception 'The submitted answers are invalid.' using errcode = '22023';
   end if;
