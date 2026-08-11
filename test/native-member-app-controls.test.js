@@ -16,7 +16,7 @@ test('owner booking controls govern the native member experience and fail closed
   ]);
 
   assert.match(models, /struct PublicPlatformSettings:[\s\S]*let bookings_enabled: Bool[\s\S]*let payments_enabled: Bool/);
-  assert.match(api, /select", value: "bookings_enabled,payments_enabled"/);
+  assert.match(api, /select", value: "bookings_enabled,payments_enabled,prices_coming_soon"/);
   assert.match(store, /@Published private\(set\) var memberBookingsEnabled = false/);
   assert.match(store, /@Published private\(set\) var creditBalanceLoaded = false/);
   assert.ok((store.match(/creditBalanceLoaded = true/g) || []).length >= 3);

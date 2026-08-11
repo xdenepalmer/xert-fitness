@@ -26,6 +26,34 @@ enum XertDataSource: String, CaseIterable, Hashable {
 struct PublicPlatformSettings: Codable, Hashable {
     let bookings_enabled: Bool
     let payments_enabled: Bool
+    let prices_coming_soon: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case bookings_enabled, payments_enabled, prices_coming_soon
+    }
+
+    init(
+        bookings_enabled: Bool,
+        payments_enabled: Bool,
+        prices_coming_soon: Bool = true
+    ) {
+        self.bookings_enabled = bookings_enabled
+        self.payments_enabled = payments_enabled
+        self.prices_coming_soon = prices_coming_soon
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bookings_enabled = try container.decode(Bool.self, forKey: .bookings_enabled)
+        payments_enabled = try container.decode(Bool.self, forKey: .payments_enabled)
+        // Older schemas, nulls and malformed visibility values must never
+        // reveal prices or unlock checkout by accident.
+        prices_coming_soon = (try? container.decode(Bool.self, forKey: .prices_coming_soon)) ?? true
+    }
+
+    var sessionPackCheckoutEnabled: Bool {
+        bookings_enabled && payments_enabled && !prices_coming_soon
+    }
 }
 
 struct MemberAnnouncement: Identifiable, Codable, Hashable {
@@ -95,6 +123,10 @@ struct Product: Identifiable, Codable, Hashable {
     var displayPrice: String {
         let dollars = Double(price_cents) / 100
         return dollars.formatted(.currency(code: "AUD"))
+    }
+
+    func memberPriceLabel(pricesComingSoon: Bool) -> String {
+        pricesComingSoon ? "Coming soon" : displayPrice
     }
 }
 

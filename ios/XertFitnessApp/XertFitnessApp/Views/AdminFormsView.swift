@@ -1,8 +1,10 @@
+import Foundation
 import SwiftUI
 import UIKit
 
 struct AdminFormsView: View {
     let session: AuthSession
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var forms: [AdminForm] = []
     @State private var query = ""
     @State private var isLoading = false
@@ -48,7 +50,8 @@ struct AdminFormsView: View {
         .navigationDestination(for: AdminForm.self) { form in
             AdminFormDetailView(session: session, form: form) { updated in
                 if let index = forms.firstIndex(where: { $0.id == updated.id }) { forms[index] = updated }
-            } onArchived: { forms.removeAll { $0.id == form.id } }
+                else { forms.insert(updated, at: 0) }
+            } onArchived: { archivedID in forms.removeAll { $0.id == archivedID } }
         }
         .sheet(item: $editor) { context in
             NavigationStack {
@@ -74,10 +77,13 @@ struct AdminFormsView: View {
                 .textCase(.uppercase).foregroundStyle(Color.xertOffWhite)
             Text("Create, publish, share and review XERT forms from iPhone, iPad or desktop.")
                 .font(.subheadline).foregroundStyle(Color.xertPale.opacity(0.68))
-            HStack(spacing: 10) {
-                metric("Forms", forms.count)
-                metric("Live", forms.filter(\.is_active).count)
-                metric("Responses", forms.reduce(0) { $0 + $1.response_count })
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) { summaryMetrics }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { summaryMetrics }
+                    VStack(spacing: 10) { summaryMetrics }
+                }
             }
         }
         .padding(18)
@@ -85,11 +91,19 @@ struct AdminFormsView: View {
         .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.22)))
     }
 
+    @ViewBuilder
+    private var summaryMetrics: some View {
+        metric("Forms", forms.count)
+        metric("Live", forms.filter(\.is_active).count)
+        metric("Responses", forms.reduce(0) { $0 + $1.response_count })
+    }
+
     private func metric(_ label: String, _ value: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value.formatted()).font(.title2.bold()).foregroundStyle(Color.xertOffWhite)
             Text(label.uppercased()).font(.caption2.weight(.bold)).tracking(0.8).foregroundStyle(Color.xertPale.opacity(0.48))
-        }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 88, maxWidth: .infinity, alignment: .leading)
     }
 
     private func formRow(_ form: AdminForm) -> some View {
@@ -127,21 +141,52 @@ struct AdminFormsView: View {
 private struct AdminFormEditorContext: Identifiable {
     let id = UUID()
     let form: AdminForm?
+    let initialDraft: AdminFormDraft
+    let startsDirty: Bool
+
+    init(form: AdminForm?, initialDraft: AdminFormDraft? = nil, startsDirty: Bool = false) {
+        self.form = form
+        self.initialDraft = initialDraft ?? AdminFormDraft(form: form)
+        self.startsDirty = startsDirty
+    }
+
+    static func duplicate(_ form: AdminForm) -> Self {
+        var draft = AdminFormDraft(form: form)
+        let titleSuffix = " (Copy)"
+        draft.title = "\(String(form.title.prefix(160 - titleSuffix.count)))\(titleSuffix)"
+        let suffix = UUID().uuidString.lowercased().prefix(6)
+        let base = String(form.slug.prefix(84)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        draft.slug = "\(base)-copy-\(suffix)"
+        draft.isActive = false
+        draft.questions = draft.questions.map { question in
+            var copy = question
+            copy.id = UUID().uuidString.lowercased()
+            return copy
+        }
+        return Self(form: nil, initialDraft: draft, startsDirty: true)
+    }
 }
 
 private struct AdminFormEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     let session: AuthSession
     let context: AdminFormEditorContext
     let onSaved: (AdminForm) -> Void
+    private let baseline: AdminFormDraft
     @State private var draft: AdminFormDraft
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var confirmingDiscard = false
+    @State private var exitStateID = UUID()
     private let api = XertAPI()
+
+    private var isDirty: Bool { context.startsDirty || draft != baseline }
 
     init(session: AuthSession, context: AdminFormEditorContext, onSaved: @escaping (AdminForm) -> Void) {
         self.session = session; self.context = context; self.onSaved = onSaved
-        _draft = State(initialValue: AdminFormDraft(form: context.form))
+        baseline = context.initialDraft
+        _draft = State(initialValue: context.initialDraft)
     }
 
     var body: some View {
@@ -191,12 +236,23 @@ private struct AdminFormEditorView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(context.form == nil ? "New Form" : "Edit Form")
+        .navigationTitle(context.startsDirty ? "Duplicate Form" : (context.form == nil ? "New Form" : "Edit Form"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Saving…" : "Save") { Task { await save() } }.disabled(isSaving) }
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { requestDismiss() }.disabled(isSaving) }
+            ToolbarItem(placement: .confirmationAction) { Button(isSaving ? "Saving…" : "Save") { Task { await save() } }.disabled(isSaving || !isDirty) }
             ToolbarItem(placement: .keyboard) { Spacer(); Button("Done") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) } }
+        }
+        .interactiveDismissDisabled(isDirty || isSaving)
+        .adminOwnerExitState(id: exitStateID, title: "form edits", isDirty: isDirty, isBusy: isSaving)
+        .confirmationDialog("Discard unsaved form edits?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard edits", role: .destructive) {
+                editorExitCoordinator?.clear(id: exitStateID)
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Changes to this form have not been saved.")
         }
         .alert("Could not save form", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
     }
@@ -204,6 +260,11 @@ private struct AdminFormEditorView: View {
     @ViewBuilder private func collectionToggle(_ title: String, value: Binding<Bool>, required: Binding<Bool>) -> some View {
         Toggle(title, isOn: value)
         if value.wrappedValue { Toggle("Require \(title.replacingOccurrences(of: "Collect ", with: "").lowercased())", isOn: required) }
+    }
+
+    private func requestDismiss() {
+        if isDirty { confirmingDiscard = true }
+        else { dismiss() }
     }
 
     @MainActor private func save() async {
@@ -220,6 +281,16 @@ private struct AdminFormQuestionEditor: View {
 
     private var choiceOptions: [String] { question.type == "yes_no" ? ["Yes", "No"] : question.options ?? [] }
     private var optionsText: Binding<String> { Binding(get: { (question.options ?? []).joined(separator: "\n") }, set: { question.options = $0.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) }) }
+    private var currentIndex: Int { questions.firstIndex(where: { $0.id == question.id }) ?? 0 }
+    private var forwardDestinations: [(offset: Int, element: AdminFormQuestion)] {
+        Array(questions.enumerated()).filter { $0.offset >= currentIndex + 2 }
+    }
+    private var validSkipTargets: Set<Int> {
+        Set(forwardDestinations.map { $0.offset + 1 } + (currentIndex < questions.count - 1 ? [questions.count + 1] : []))
+    }
+    private var hasInvalidSkipRules: Bool {
+        (question.skip_rules ?? []).contains { !validSkipTargets.contains($0.skip_to) }
+    }
 
     var body: some View {
         Form {
@@ -240,16 +311,31 @@ private struct AdminFormQuestionEditor: View {
             if ["linear_scale", "star_rating"].contains(question.type) {
                 Section("Scale") { Stepper("Minimum: \(question.scale_min ?? 1)", value: Binding(get: { question.scale_min ?? 1 }, set: { question.scale_min = $0 }), in: 0...10); Stepper("Maximum: \(question.scale_max ?? 10)", value: Binding(get: { question.scale_max ?? 10 }, set: { question.scale_max = $0 }), in: 1...20); TextField("Minimum label", text: optional($question.scale_min_label)); TextField("Maximum label", text: optional($question.scale_max_label)) }
             }
-            if ["single_choice", "multiple_choice", "dropdown", "yes_no"].contains(question.type), !choiceOptions.isEmpty {
+            if ["single_choice", "multiple_choice", "dropdown", "yes_no"].contains(question.type),
+               !choiceOptions.isEmpty,
+               currentIndex < questions.count - 1 || hasInvalidSkipRules {
                 Section("Skip logic") {
                     ForEach(choiceOptions, id: \.self) { option in
                         Picker("If \(option)", selection: skipTarget(option)) {
                             Text("Next question").tag(0)
-                            ForEach(Array(questions.enumerated()), id: \.element.id) { index, destination in
+                            ForEach(forwardDestinations, id: \.element.id) { index, destination in
                                 Text("Q\(index + 1) · \(destination.displayTitle)").tag(index + 1)
+                            }
+                            if currentIndex < questions.count - 1 {
+                                Text("End form").tag(questions.count + 1)
                             }
                         }
                     }
+                    if hasInvalidSkipRules {
+                        Button("Clear obsolete skip rules", role: .destructive) {
+                            question.skip_rules = (question.skip_rules ?? []).filter {
+                                validSkipTargets.contains($0.skip_to)
+                            }
+                        }
+                    }
+                    Text("Only forward jumps are available, preventing loops and silently ignored rules.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             Section("Media") {
@@ -262,20 +348,47 @@ private struct AdminFormQuestionEditor: View {
     }
 
     private func optional(_ binding: Binding<String?>) -> Binding<String> { Binding(get: { binding.wrappedValue ?? "" }, set: { binding.wrappedValue = $0.nilIfEmpty }) }
-    private func skipTarget(_ option: String) -> Binding<Int> { Binding(get: { question.skip_rules?.first(where: { $0.option == option })?.skip_to ?? 0 }, set: { target in var rules = (question.skip_rules ?? []).filter { $0.option != option }; if target > 0 { rules.append(AdminFormSkipRule(option: option, skip_to: target)) }; question.skip_rules = rules }) }
+    private func skipTarget(_ option: String) -> Binding<Int> {
+        Binding(
+            get: {
+                let target = question.skip_rules?.first(where: { $0.option == option })?.skip_to ?? 0
+                return validSkipTargets.contains(target) ? target : 0
+            },
+            set: { target in
+                var rules = (question.skip_rules ?? []).filter { $0.option != option }
+                if validSkipTargets.contains(target) {
+                    rules.append(AdminFormSkipRule(option: option, skip_to: target))
+                }
+                question.skip_rules = rules
+            }
+        )
+    }
 }
 
 private struct AdminFormDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let session: AuthSession
     @State var form: AdminForm
     let onUpdated: (AdminForm) -> Void
-    let onArchived: () -> Void
+    let onArchived: (UUID) -> Void
     @State private var responses: [AdminFormResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var editor: AdminFormEditorContext?
     @State private var showingArchive = false
+    @State private var exportURL: URL?
+    @State private var exportErrorMessage: String?
     private let api = XertAPI()
+
+    private var averageCompletionSeconds: Int? {
+        guard !responses.isEmpty else { return nil }
+        let total = responses.reduce(Int64.zero) { $0 + Int64(max($1.time_taken_seconds, 0)) }
+        return Int((Double(total) / Double(responses.count)).rounded())
+    }
+
+    private var analyticsColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 180 : 118), spacing: 8)]
+    }
 
     var body: some View {
         List {
@@ -290,6 +403,43 @@ private struct AdminFormDetailView: View {
                 ShareLink(item: form.publicURL, subject: Text(form.title), message: Text("Complete this XERT form")) { Label("Share public link", systemImage: "square.and.arrow.up") }
                 Link(destination: form.publicURL) { Label("Preview public form", systemImage: "safari") }
             }
+            Section("Analytics") {
+                LazyVGrid(columns: analyticsColumns, spacing: 8) {
+                    analyticsMetric("Total", value: responses.count.formatted(), icon: "tray.full")
+                    analyticsMetric("Average time", value: completionTimeLabel(averageCompletionSeconds), icon: "timer")
+                    analyticsMetric("New", value: statusCount("new").formatted(), icon: "sparkles")
+                    analyticsMetric("Reviewed", value: statusCount("reviewed").formatted(), icon: "checkmark.circle")
+                    analyticsMetric("Followed up", value: statusCount("followed_up").formatted(), icon: "arrowshape.turn.up.right")
+                    analyticsMetric("Closed", value: statusCount("closed").formatted(), icon: "archivebox")
+                }
+                .padding(.vertical, 4)
+
+                if responses.isEmpty {
+                    Label("CSV export becomes available after the first response.", systemImage: "tablecells")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let exportURL {
+                    ShareLink(item: exportURL, subject: Text("\(form.title) responses")) {
+                        Label("Export responses CSV", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityHint("Shares every response and visible form field as a CSV file")
+                } else {
+                    Button {
+                        prepareCSVExport()
+                    } label: {
+                        Label("Prepare responses CSV", systemImage: "tablecells")
+                    }
+                }
+
+                if let exportErrorMessage {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(exportErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.orange)
+                        Button("Try CSV export again") { prepareCSVExport() }
+                    }
+                }
+            }
             Section("Responses") {
                 if isLoading { ProgressView("Loading responses…") }
                 else if responses.isEmpty { Text("No responses yet").foregroundStyle(.secondary) }
@@ -302,6 +452,10 @@ private struct AdminFormDetailView: View {
             Section("Controls") {
                 Button(form.is_active ? "Pause responses" : "Publish form") { Task { await toggleLive() } }
                 Button("Edit form") { editor = AdminFormEditorContext(form: form) }
+                Button("Duplicate and edit") {
+                    XertHaptics.play(.lightImpact)
+                    editor = .duplicate(form)
+                }
                 Button("Archive form", role: .destructive) { showingArchive = true }
             }
         }
@@ -309,14 +463,156 @@ private struct AdminFormDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await loadResponses() }
         .task { await loadResponses() }
-        .sheet(item: $editor) { context in NavigationStack { AdminFormEditorView(session: session, context: context) { saved in form = saved; onUpdated(saved); editor = nil } } }
+        .onChange(of: responses) { _ in discardCSVExport() }
+        .onChange(of: form) { _ in discardCSVExport() }
+        .onDisappear { discardCSVExport() }
+        .sheet(item: $editor) { context in NavigationStack { AdminFormEditorView(session: session, context: context) { saved in handleSavedForm(saved) } } }
         .confirmationDialog("Archive this form?", isPresented: $showingArchive, titleVisibility: .visible) { Button("Archive form", role: .destructive) { Task { await archive() } } } message: { Text("The public link will stop accepting responses. Existing response history is preserved.") }
         .alert("Forms & Surveys", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
     }
 
+    private func analyticsMetric(_ label: String, value: String, icon: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.xertSteel)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(Color.xertOffWhite)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(label.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.xertPale.opacity(0.52))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.horizontal, 10)
+        .background(Color.xertSteel.opacity(0.08))
+        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16)))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label), \(value)")
+    }
+
+    private func statusCount(_ status: String) -> Int {
+        responses.lazy.filter { $0.status == status }.count
+    }
+
+    private func completionTimeLabel(_ seconds: Int?) -> String {
+        guard let seconds else { return "—" }
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m \(seconds % 60)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private func handleSavedForm(_ saved: AdminForm) {
+        let changedForm = saved.id != form.id
+        if changedForm {
+            responses = []
+            discardCSVExport()
+        }
+        form = saved
+        onUpdated(saved)
+        editor = nil
+        if changedForm {
+            Task { await loadResponses() }
+        }
+    }
+
+    private func prepareCSVExport() {
+        discardCSVExport()
+        exportErrorMessage = nil
+        guard !responses.isEmpty else { return }
+        do {
+            exportURL = try AdminFormResponseCSVExport.write(form: form, responses: responses)
+        } catch {
+            exportErrorMessage = "The responses CSV could not be prepared."
+        }
+    }
+
+    private func discardCSVExport() {
+        AdminFormResponseCSVExport.removeExport(at: exportURL)
+        exportURL = nil
+    }
+
     @MainActor private func loadResponses() async { guard !isLoading else { return }; isLoading = true; defer { isLoading = false }; do { responses = try await api.adminFormResponses(session: session, formID: form.id) } catch { errorMessage = error.localizedDescription } }
     @MainActor private func toggleLive() async { var draft = AdminFormDraft(form: form); draft.isActive.toggle(); do { form = try await api.adminSaveForm(session: session, form: form, draft: draft); onUpdated(form); XertHaptics.play(.success) } catch { errorMessage = error.localizedDescription } }
-    @MainActor private func archive() async { do { try await api.adminArchiveForm(session: session, form: form); XertHaptics.play(.success); onArchived() } catch { errorMessage = error.localizedDescription } }
+    @MainActor private func archive() async { do { try await api.adminArchiveForm(session: session, form: form); XertHaptics.play(.success); onArchived(form.id) } catch { errorMessage = error.localizedDescription } }
+}
+
+private enum AdminFormResponseCSVExport {
+    private static var rootDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("xert-form-response-exports", isDirectory: true)
+    }
+
+    static func write(form: AdminForm, responses: [AdminFormResponse]) throws -> URL {
+        let fileManager = FileManager.default
+        let directory = rootDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileURL = directory.appendingPathComponent("\(form.slug)-responses.csv")
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let contents = "\u{FEFF}\(csv(form: form, responses: responses))"
+            try Data(contents.utf8).write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            try? fileManager.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    static func removeExport(at fileURL: URL?) {
+        guard let fileURL else { return }
+        let directory = fileURL.deletingLastPathComponent().standardizedFileURL
+        guard directory.deletingLastPathComponent().standardizedFileURL == rootDirectory.standardizedFileURL else {
+            return
+        }
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private static func csv(form: AdminForm, responses: [AdminFormResponse]) -> String {
+        let questions = form.questions.filter {
+            !($0.hidden ?? false) && !["section_break", "statement"].contains($0.type)
+        }
+        let header = ["Submitted", "Name", "Email", "Phone", "Status", "Time (seconds)"]
+            + questions.map(\.displayTitle)
+        let rows = [header] + responses.map { response in
+            [
+                timestampFormatter.string(from: response.completed_at),
+                response.respondent_name ?? "",
+                response.respondent_email ?? "",
+                response.respondent_phone ?? "",
+                response.status,
+                String(max(response.time_taken_seconds, 0))
+            ] + questions.map { csvAnswer(response.answers[$0.id]) }
+        }
+        return rows
+            .map { $0.map(escaped).joined(separator: ",") }
+            .joined(separator: "\r\n")
+    }
+
+    private static func csvAnswer(_ answer: AdminFormAnswer?) -> String {
+        guard let answer else { return "" }
+        if case .null = answer { return "" }
+        return answer.displayValue
+    }
+
+    private static func escaped(_ value: String) -> String {
+        let couldBeFormula = value.first(where: { !$0.isWhitespace }).map { "=+-@".contains($0) } ?? false
+        let safeValue = couldBeFormula ? "'\(value)" : value
+        return "\"\(safeValue.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private static let timestampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
 }
 
 private struct AdminFormResponseView: View {

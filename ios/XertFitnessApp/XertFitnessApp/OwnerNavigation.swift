@@ -56,6 +56,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     case members
     case access
     case classDesk
+    case workouts
     case bookingRequests
     case timetable
     case availability
@@ -83,6 +84,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members: return "Members"
         case .access: return "Access Control"
         case .classDesk: return "Class Desk"
+        case .workouts: return "Workout of the Day"
         case .bookingRequests: return "Booking Requests"
         case .timetable: return "Full Timetable"
         case .availability: return "Availability"
@@ -110,6 +112,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members: return "Search accounts and review member value"
         case .access: return "Review administrators and govern owner access"
         case .classDesk: return "Run today's schedule and waitlists"
+        case .workouts: return "Program the in-club TV display"
         case .bookingRequests: return "Resolve member and public requests"
         case .timetable: return "Create, publish and cancel classes"
         case .availability: return "Control bookable windows and blackouts"
@@ -137,6 +140,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members: return "person.2"
         case .access: return "person.badge.key"
         case .classDesk: return "calendar.badge.clock"
+        case .workouts: return "tv"
         case .bookingRequests: return "tray.full"
         case .timetable: return "calendar"
         case .availability: return "calendar.badge.exclamationmark"
@@ -161,7 +165,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     var section: XertOwnerWorkspaceSection? {
         switch self {
         case .overview: return nil
-        case .members, .classDesk, .bookingRequests, .timetable, .availability, .ptRequests:
+        case .members, .classDesk, .workouts, .bookingRequests, .timetable, .availability, .ptRequests:
             return .operate
         case .retention, .leads, .campaigns: return .grow
         case .siteContent, .forms, .notices, .events, .team: return .publish
@@ -176,6 +180,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members: return ["member", "account", "credit", "notes", "contact"]
         case .access: return ["admin", "administrator", "owner", "staff", "role", "permission", "security"]
         case .classDesk: return ["today", "class", "attendance", "roll call", "waitlist"]
+        case .workouts: return ["workout", "wod", "program", "tv", "display", "training"]
         case .bookingRequests: return ["booking", "request", "approve", "decline"]
         case .timetable: return ["schedule", "class", "publish", "cancel"]
         case .availability: return ["availability", "blackout", "booking window"]

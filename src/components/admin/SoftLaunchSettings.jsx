@@ -8,6 +8,12 @@ import { countdownVisibility, launchSettingsChanged, normalizeLaunchSettings } f
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
 
+const normalizeLoadedSettings = loadedSettings => ({
+  ...loadedSettings,
+  // Missing pricing visibility must fail safe to hiding prices.
+  prices_coming_soon: loadedSettings?.prices_coming_soon !== false,
+});
+
 export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const defaults = getDefaultSettings();
   const [settings, setSettings] = useState(defaults);
@@ -24,10 +30,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     try {
       const loadedSettings = await getSoftLaunchSettings();
       if (loadedSettings) {
-        // Coerce the flag to a real boolean so the toggle shows its true default
-        // (hidden) before the row/column has ever been written, and so the dirty
-        // check does not compare a boolean against undefined.
-        const normalized = { ...loadedSettings, prices_coming_soon: loadedSettings.prices_coming_soon !== false };
+        const normalized = normalizeLoadedSettings(loadedSettings);
         setSettings(normalized);
         setSavedSettings(normalized);
       }
@@ -59,12 +62,49 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     });
   };
 
+  const reconcilePaymentActivation = async activationError => {
+    let liveSettings;
+    try {
+      liveSettings = normalizeLoadedSettings(await getSoftLaunchSettings());
+    } catch {
+      const message = 'Payment activation could not be verified. Refresh Platform Controls before trying again.';
+      setLoadError(message);
+      throw new Error(message);
+    }
+
+    // The guarded endpoint can commit immediately before its response is lost.
+    // Always replace both snapshots with the live row before allowing a retry.
+    setSettings(liveSettings);
+    setSavedSettings(liveSettings);
+    if (liveSettings.payments_enabled) return liveSettings;
+
+    const detail = activationError?.message || 'Payment activation failed. Payments remain paused.';
+    throw new Error(`${detail} Your other platform changes were saved.`);
+  };
+
   const persistSettings = async (normalized, activatePayments = false) => {
     setSaving(true);
     try {
-      const updated = activatePayments
-        ? await activateSessionPackPayments(normalized, savedSettings)
-        : await updateSoftLaunchSettings(normalized, savedSettings);
+      let updated;
+      if (activatePayments) {
+        // Save every ordinary platform change through the normal CAS path while
+        // checkout remains paused. The guarded RPC does not own every setting
+        // (notably prices_coming_soon), so it must only perform the final cutover.
+        const stagedDraft = { ...normalized, payments_enabled: false };
+        const staged = await updateSoftLaunchSettings(stagedDraft, savedSettings);
+        setSettings(staged);
+        setSavedSettings(staged);
+
+        const activationDraft = { ...staged, payments_enabled: true };
+        try {
+          const activated = await activateSessionPackPayments(activationDraft, staged);
+          updated = { ...staged, ...activated };
+        } catch (activationError) {
+          updated = await reconcilePaymentActivation(activationError);
+        }
+      } else {
+        updated = await updateSoftLaunchSettings(normalized, savedSettings);
+      }
       setSettings(updated);
       setSavedSettings(updated);
       setSaved(true);

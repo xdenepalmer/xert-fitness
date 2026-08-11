@@ -465,6 +465,12 @@ export async function activateSessionPackPayments(settings, baseline) {
   if (!baseline?.id || !baseline?.updated_at) {
     throw new Error('Save the platform settings once before enabling payments.');
   }
+  if (baseline.payments_enabled !== false) {
+    throw new Error('Pause payments and save the latest platform settings before activating checkout.');
+  }
+  if (settings?.payments_enabled !== true) {
+    throw new Error('Payment activation requires an explicit enabled setting.');
+  }
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
   const response = await fetch('/api/admin-commerce-health', {
@@ -483,7 +489,7 @@ export async function activateSessionPackPayments(settings, baseline) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(apiErrorMessage(body, 'Payment activation failed. Payments remain paused.'));
-  if (body?.payments_enabled !== true || body?.id !== baseline.id) {
+  if (body?.payments_enabled !== true || body?.id !== baseline.id || !body?.updated_at) {
     throw new Error('Payment activation could not be confirmed. Payments remain paused.');
   }
   return body;

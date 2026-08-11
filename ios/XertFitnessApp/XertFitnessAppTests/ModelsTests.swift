@@ -9,6 +9,73 @@ private struct LegacyPendingCheckout: Encodable {
 }
 
 final class ModelsTests: XCTestCase {
+    func testPublicPricingVisibilityFailsClosedWhenMissingNullOrMalformed() throws {
+        let defaulted = PublicPlatformSettings(
+            bookings_enabled: true,
+            payments_enabled: true
+        )
+        XCTAssertTrue(defaulted.prices_coming_soon)
+        XCTAssertFalse(defaulted.sessionPackCheckoutEnabled)
+
+        for json in [
+            #"{"bookings_enabled":true,"payments_enabled":true}"#,
+            #"{"bookings_enabled":true,"payments_enabled":true,"prices_coming_soon":null}"#,
+            #"{"bookings_enabled":true,"payments_enabled":true,"prices_coming_soon":"false"}"#,
+        ] {
+            let settings = try JSONDecoder().decode(
+                PublicPlatformSettings.self,
+                from: Data(json.utf8)
+            )
+            XCTAssertTrue(settings.prices_coming_soon)
+            XCTAssertFalse(settings.sessionPackCheckoutEnabled)
+        }
+
+        let published = try JSONDecoder().decode(
+            PublicPlatformSettings.self,
+            from: Data(#"{"bookings_enabled":true,"payments_enabled":true,"prices_coming_soon":false}"#.utf8)
+        )
+        XCTAssertFalse(published.prices_coming_soon)
+        XCTAssertTrue(published.sessionPackCheckoutEnabled)
+    }
+
+    func testPublicPricingVisibilityControlsLabelsAndCheckoutTogether() {
+        let product = Product(
+            slug: "starter-pack",
+            name: "Starter Pack",
+            description: nil,
+            sessionsCount: 5,
+            price_cents: 12_500,
+            active: true,
+            sort_order: 0
+        )
+        let hidden = PublicPlatformSettings(
+            bookings_enabled: true,
+            payments_enabled: true,
+            prices_coming_soon: true
+        )
+        let live = PublicPlatformSettings(
+            bookings_enabled: true,
+            payments_enabled: true,
+            prices_coming_soon: false
+        )
+
+        XCTAssertEqual(product.memberPriceLabel(pricesComingSoon: hidden.prices_coming_soon), "Coming soon")
+        XCTAssertFalse(hidden.sessionPackCheckoutEnabled)
+        XCTAssertEqual(product.memberPriceLabel(pricesComingSoon: live.prices_coming_soon), product.displayPrice)
+        XCTAssertTrue(live.sessionPackCheckoutEnabled)
+
+        XCTAssertFalse(PublicPlatformSettings(
+            bookings_enabled: false,
+            payments_enabled: true,
+            prices_coming_soon: false
+        ).sessionPackCheckoutEnabled)
+        XCTAssertFalse(PublicPlatformSettings(
+            bookings_enabled: true,
+            payments_enabled: false,
+            prices_coming_soon: false
+        ).sessionPackCheckoutEnabled)
+    }
+
     func testPrimaryNavigationDeepLinksUseTheTypedRouteContract() throws {
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://booking"))), .booking)
         XCTAssertEqual(XertPrimaryDestination.destination(for: try XCTUnwrap(URL(string: "xertfitness://events"))), .events)
@@ -43,8 +110,8 @@ final class ModelsTests: XCTestCase {
     }
 
     func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
-        // 22 since the forms and surveys builder added `case forms`.
-        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 22)
+        // 23 since the forms builder and workout workspace are both owner-routable.
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 23)
         for workspace in XertOwnerWorkspace.allCases {
             let route = XertOwnerRoute(workspace: workspace)
             XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
@@ -99,6 +166,68 @@ final class ModelsTests: XCTestCase {
             isProfileLoaded: true,
             isAdmin: false
         ), .deny)
+    }
+
+    func testAdminWorkoutDraftUsesBrisbaneDateKeysAndDatabaseBounds() throws {
+        let workoutDate = try XCTUnwrap(AdminWorkoutOfDay.date(from: "2026-08-11"))
+        var draft = AdminWorkoutOfDayDraft(date: workoutDate)
+        XCTAssertEqual(draft.dateKey, "2026-08-11")
+        XCTAssertEqual(draft.validationMessage, "Add the workout before saving.")
+
+        draft.title = "  Strength + Metcon  "
+        draft.body = "  A. Back squat 5 x 5\r\nB. 12 min AMRAP  "
+        XCTAssertNil(draft.validationMessage)
+        XCTAssertEqual(draft.normalizedTitle, "Strength + Metcon")
+        XCTAssertEqual(draft.normalizedBody, "A. Back squat 5 x 5\nB. 12 min AMRAP")
+
+        draft.title = String(repeating: "T", count: AdminWorkoutOfDay.titleLimit + 1)
+        XCTAssertEqual(draft.validationMessage, "Title must be 120 characters or fewer.")
+        draft.title = ""
+        draft.body = String(repeating: "W", count: AdminWorkoutOfDay.bodyLimit + 1)
+        XCTAssertEqual(draft.validationMessage, "Workout must be 4000 characters or fewer.")
+        XCTAssertNil(AdminWorkoutOfDay.date(from: "2026-02-30"))
+    }
+
+    func testAdminWorkoutDraftPreservesPublishedAndConcurrencyState() throws {
+        let publishedAt = Date(timeIntervalSince1970: 1_786_387_200)
+        let workout = AdminWorkoutOfDay(
+            workout_date: "2026-08-11",
+            title: "Strength",
+            body: "Back squat 5 x 5",
+            published_at: publishedAt,
+            created_by: nil,
+            updated_at: "2026-08-11T03:00:00.000Z"
+        )
+        let draft = AdminWorkoutOfDayDraft(workout: workout)
+        XCTAssertTrue(draft.isPublished)
+        XCTAssertEqual(draft.originalPublishedAt, publishedAt)
+        XCTAssertEqual(draft.sourceUpdatedAt, workout.updated_at)
+        XCTAssertEqual(workout.displayTitle, "Strength")
+    }
+
+    func testAdminFormSkipRulesOnlyAllowMeaningfulForwardDestinations() {
+        var draft = AdminFormDraft()
+        draft.questions = [
+            .blank(type: "single_choice"),
+            .blank(type: "short_text"),
+            .blank(type: "short_text")
+        ]
+        for index in draft.questions.indices {
+            draft.questions[index].question = "Question \(index + 1)"
+        }
+
+        draft.questions[0].skip_rules = [AdminFormSkipRule(option: "Option 1", skip_to: 1)]
+        XCTAssertEqual(
+            draft.validationMessage,
+            "Skip logic can only jump forward to a later question or the end of the form."
+        )
+
+        draft.questions[0].skip_rules = [AdminFormSkipRule(option: "Option 1", skip_to: 3)]
+        XCTAssertNil(draft.validationMessage)
+        draft.questions[0].skip_rules = [AdminFormSkipRule(option: "Option 1", skip_to: 4)]
+        XCTAssertNil(draft.validationMessage)
+        draft.questions[0].skip_rules = [AdminFormSkipRule(option: "Option 1", skip_to: 5)]
+        XCTAssertNotNil(draft.validationMessage)
     }
 
     func testOwnerRecordRoutesRoundTripAndRemainWorkspaceBound() throws {
@@ -1638,6 +1767,7 @@ final class ModelsTests: XCTestCase {
             countdown_enabled: true,
             bookings_enabled: true,
             payments_enabled: true,
+            prices_coming_soon: false,
             announcement_banner_text: "Training as scheduled",
             announcement_banner_enabled: true,
             updated_at: "2026-07-27T08:00:00Z"
@@ -1651,6 +1781,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(live.pausedSettings?.id, id)
         XCTAssertEqual(live.pausedSettings?.bookings_enabled, false)
         XCTAssertEqual(live.pausedSettings?.payments_enabled, false)
+        XCTAssertEqual(live.pausedSettings?.prices_coming_soon, false)
         XCTAssertEqual(live.pausedSettings?.announcement_banner_text, "Training as scheduled")
         XCTAssertEqual(live.pausedSettings?.updated_at, settings.updated_at)
 
@@ -5766,6 +5897,7 @@ final class ModelsTests: XCTestCase {
             countdown_enabled: true,
             bookings_enabled: false,
             payments_enabled: false,
+            prices_coming_soon: true,
             announcement_banner_text: "Launch training starts soon.",
             announcement_banner_enabled: true,
             updated_at: "2026-07-27T01:00:00Z"

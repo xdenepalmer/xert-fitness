@@ -71,7 +71,9 @@ test('owner activation requires a fresh server preflight and an explicit confirm
   assert.match(webData, /confirmation: 'ENABLE PAYMENTS'/);
   assert.match(webAdmin, /await getCommerceConfigurationHealth\(\)/);
   assert.match(webAdmin, /if \(!health\.ready\)/);
-  assert.match(webAdmin, /activateSessionPackPayments\(normalized, savedSettings\)/);
+  assert.match(webAdmin, /const stagedDraft = \{ \.\.\.normalized, payments_enabled: false \}[\s\S]*updateSoftLaunchSettings\(stagedDraft, savedSettings\)/);
+  assert.match(webAdmin, /const activationDraft = \{ \.\.\.staged, payments_enabled: true \}[\s\S]*activateSessionPackPayments\(activationDraft, staged\)/);
+  assert.match(webData, /baseline\.payments_enabled !== false/);
   assert.match(webAdmin, /disabled=\{!settings\.bookings_enabled && !settings\.payments_enabled\}/);
   assert.match(webAdmin, /title="Open session pack checkout\?"/);
   assert.match(nativeAPI, /func adminActivatePlatformPayments/);

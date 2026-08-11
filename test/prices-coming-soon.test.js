@@ -58,3 +58,32 @@ test('the admin command centre exposes a prices toggle', () => {
   assert.match(settings, /field="prices_coming_soon"/);
   assert.match(settings, /Prices coming soon/i);
 });
+
+test('desktop payment activation stages every pricing change before guarded cutover', () => {
+  const settings = read('../src/components/admin/SoftLaunchSettings.jsx');
+
+  assert.match(settings, /const stagedDraft = \{ \.\.\.normalized, payments_enabled: false \}/);
+  assert.match(settings, /updateSoftLaunchSettings\(stagedDraft, savedSettings\)[\s\S]*setSavedSettings\(staged\)/);
+  assert.match(settings, /const activationDraft = \{ \.\.\.staged, payments_enabled: true \}/);
+  assert.match(settings, /activateSessionPackPayments\(activationDraft, staged\)/);
+  assert.match(settings, /catch \(activationError\)[\s\S]*reconcilePaymentActivation\(activationError\)/);
+  assert.match(settings, /getSoftLaunchSettings\(\)[\s\S]*setSettings\(liveSettings\)[\s\S]*setSavedSettings\(liveSettings\)/);
+  assert.match(settings, /if \(liveSettings\.payments_enabled\) return liveSettings/);
+  assert.match(settings, /Refresh Platform Controls before trying again/);
+});
+
+test('the native owner controls preserve pricing visibility across every save path', () => {
+  const models = read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift');
+  const api = read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift');
+  const store = read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift');
+  const view = read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+
+  assert.match(models, /struct AdminPlatformSettings:[\s\S]*var prices_coming_soon: Bool/);
+  assert.match(api, /select[^\n]*prices_coming_soon/);
+  assert.match(api, /AdminSettingsUpdate\([\s\S]*prices_coming_soon: settings\.prices_coming_soon/);
+  assert.match(api, /private struct AdminSettingsUpdate:[\s\S]*let prices_coming_soon: Bool/);
+  assert.match(store, /var stagedDraft = draft[\s\S]*stagedDraft\.payments_enabled = false[\s\S]*adminUpdatePlatformSettings[\s\S]*settings = staged[\s\S]*activationDraft\.payments_enabled = true[\s\S]*adminActivatePlatformPayments/);
+  assert.match(store, /catch let activationError[\s\S]*adminPlatformSettings\(session: session\)[\s\S]*settings = reconciled[\s\S]*guard reconciled\.payments_enabled/);
+  assert.match(store, /Payment activation could not be verified\. Do not try again until Platform Controls refreshes/);
+  assert.match(view, /Toggle\("Show 'Coming soon' instead of prices", isOn: settingBinding\(\\\.prices_coming_soon\)\)/);
+});

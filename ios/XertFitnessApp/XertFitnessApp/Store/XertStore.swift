@@ -21,6 +21,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var creditBalanceLoaded = false
     @Published private(set) var memberBookingsEnabled = false
     @Published private(set) var bookingAvailabilityLoaded = false
+    @Published private(set) var sessionPackPricesComingSoon = true
     @Published private(set) var sessionPackPaymentsEnabled = false
     @Published private(set) var paymentAvailabilityLoaded = false
     @Published var isLoading = false
@@ -247,13 +248,14 @@ final class XertStore: ObservableObject {
             guard canApplyRefresh(refreshVersion) else { return }
             memberBookingsEnabled = loadedSettings?.bookings_enabled == true
             bookingAvailabilityLoaded = true
-            sessionPackPaymentsEnabled = loadedSettings?.bookings_enabled == true
-                && loadedSettings?.payments_enabled == true
+            sessionPackPricesComingSoon = loadedSettings?.prices_coming_soon ?? true
+            sessionPackPaymentsEnabled = loadedSettings?.sessionPackCheckoutEnabled == true
             paymentAvailabilityLoaded = true
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }
             memberBookingsEnabled = false
             bookingAvailabilityLoaded = true
+            sessionPackPricesComingSoon = true
             sessionPackPaymentsEnabled = false
             paymentAvailabilityLoaded = true
             unavailableDataSources.insert(.platformSettings)
@@ -1071,6 +1073,11 @@ final class XertStore: ObservableObject {
         activationSessionID: UUID? = nil
     ) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
+        guard !sessionPackPricesComingSoon else {
+            errorMessage = "Session pack pricing is coming soon. Checkout stays closed until XERT publishes the final prices."
+            XertHaptics.play(.warning)
+            return nil
+        }
         guard sessionPackPaymentsEnabled else {
             errorMessage = "Session pack purchases are paused while XERT completes its payment launch checks."
             XertHaptics.play(.warning)

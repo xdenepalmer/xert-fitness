@@ -31,6 +31,10 @@ test('desktop command centre exposes the full responsive builder and analytics w
   for (const feature of ['Skip logic', 'Copy embed', 'Export CSV', 'Duplicate and edit', 'Archive form']) {
     assert.match(manager, new RegExp(feature));
   }
+  assert.match(manager, /forwardDestinations[\s\S]*Jump to Q[\s\S]*End form/);
+  assert.match(manager, /hasInvalidSkipRules[\s\S]*Clear obsolete skip rules/);
+  assert.doesNotMatch(manager, /aria-label=\{`Skip destination[^\n]*type="number"/);
+  assert.match(data, /invalidSkipRule[\s\S]*target <= index \+ 2[\s\S]*target > questions\.length \+ 1/);
   for (const type of ['short_text', 'multiple_choice', 'star_rating', 'nps', 'signature', 'address', 'file_upload']) {
     assert.match(data, new RegExp(`['"]${type}['"]`));
   }

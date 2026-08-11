@@ -792,7 +792,7 @@ struct HomeView: View {
                             .foregroundStyle(Color.xertMuted)
                     }
                     Spacer()
-                    Text(product.displayPrice)
+                    Text(product.memberPriceLabel(pricesComingSoon: store.sessionPackPricesComingSoon))
                         .font(XertTheme.displayFont(size: 20, relativeTo: .title3))
                         .tracking(1.0)
                         .foregroundStyle(.xertSteel)

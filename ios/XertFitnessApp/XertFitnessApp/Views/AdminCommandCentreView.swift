@@ -4,18 +4,18 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 
-private struct AdminEditorExitCoordinatorKey: EnvironmentKey {
+struct AdminEditorExitCoordinatorKey: EnvironmentKey {
     static let defaultValue: XertOwnerEditorExitCoordinator? = nil
 }
 
-private extension EnvironmentValues {
+extension EnvironmentValues {
     var adminEditorExitCoordinator: XertOwnerEditorExitCoordinator? {
         get { self[AdminEditorExitCoordinatorKey.self] }
         set { self[AdminEditorExitCoordinatorKey.self] = newValue }
     }
 }
 
-private struct AdminOwnerExitReportingModifier: ViewModifier {
+struct AdminOwnerExitReportingModifier: ViewModifier {
     @Environment(\.adminEditorExitCoordinator) private var coordinator
     let state: XertOwnerEditorExitState
 
@@ -27,7 +27,7 @@ private struct AdminOwnerExitReportingModifier: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func adminOwnerExitState(
         id: UUID,
         title: String,
@@ -743,7 +743,7 @@ struct AdminCommandCentreView: View {
     private func ownerCompactWorkspace(session: AuthSession) -> some View {
         NavigationStack(path: compactNavigationPath) {
             dashboard(session: session)
-                .navigationTitle("Command Centre")
+                .navigationTitle("Today")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ownerWorkspaceToolbar }
                 .navigationDestination(for: XertOwnerWorkspace.self) { workspace in
@@ -819,7 +819,7 @@ struct AdminCommandCentreView: View {
 
     private func dashboard(session: AuthSession) -> some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 18) {
                 ownerHeader
                 if !admin.refreshUnavailableSources.isEmpty {
                     AdminRefreshDataWarning(
@@ -832,14 +832,9 @@ struct AdminCommandCentreView: View {
                 }
                 priorityQueue
                 nextClassFocus
-                shiftBriefing
-                stripeLaunchRunway
-                incidentControl(session: session)
-                quickTools
                 attentionGrid
+                quickTools
                 businessPulse
-                activationPulse
-                todayDesk
                 pinnedDirectory
                 managementDirectory
             }
@@ -851,11 +846,6 @@ struct AdminCommandCentreView: View {
         }
         .xertScreenBackground()
         .refreshable { await admin.refresh(session: session) }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if horizontalSizeClass == .compact {
-                ownerRunNextDock
-            }
-        }
     }
 
     @ViewBuilder
@@ -995,10 +985,12 @@ struct AdminCommandCentreView: View {
 
         ToolbarItem(placement: .primaryAction) {
             Button { showingWorkspaceSwitcher = true } label: {
-                Image(systemName: "magnifyingglass")
+                Label("Manage", systemImage: "square.grid.2x2")
+                    .labelStyle(.titleAndIcon)
             }
             .keyboardShortcut("k", modifiers: .command)
-            .accessibilityLabel("Switch owner workspace")
+            .accessibilityLabel("Manage owner workspaces")
+            .accessibilityHint("Searches and opens every Command Centre workspace")
         }
     }
 
@@ -1009,48 +1001,36 @@ struct AdminCommandCentreView: View {
     }
 
     private var ownerHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ownerHeaderIdentity
-                        AdminOwnerFreshnessBadge(
-                            isLoading: admin.isLoading,
-                            unavailableCount: admin.refreshUnavailableSources.count,
-                            updatedAt: admin.lastUpdatedAt
-                        )
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 14) {
-                        ownerHeaderIdentity
-                        Spacer(minLength: 8)
-                        AdminOwnerFreshnessBadge(
-                            isLoading: admin.isLoading,
-                            unavailableCount: admin.refreshUnavailableSources.count,
-                            updatedAt: admin.lastUpdatedAt
-                        )
-                    }
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 14) {
+                ownerHeaderIdentity
+                Spacer(minLength: 8)
+                AdminOwnerFreshnessBadge(
+                    isLoading: admin.isLoading,
+                    unavailableCount: admin.refreshUnavailableSources.count,
+                    updatedAt: admin.lastUpdatedAt
+                )
             }
-            Text("Members, classes, sales and live operations — protected and ready from your phone.")
-                .font(.subheadline)
-                .foregroundStyle(Color.xertPale.opacity(0.72))
+            VStack(alignment: .leading, spacing: 10) {
+                ownerHeaderIdentity
+                AdminOwnerFreshnessBadge(
+                    isLoading: admin.isLoading,
+                    unavailableCount: admin.refreshUnavailableSources.count,
+                    updatedAt: admin.lastUpdatedAt
+                )
+            }
         }
-        .padding(18)
-        .xertCardStyle()
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Color.xertSteel).frame(width: 3)
-        }
+        .padding(.vertical, 4)
     }
 
     private var ownerHeaderIdentity: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("OWNER WORKSPACE")
+            Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                 .font(.caption.weight(.bold))
-                .tracking(2)
+                .tracking(1.4)
                 .foregroundStyle(Color.xertSteel)
-            Text("Run XERT from one place.")
-                .xertDisplay(32)
+            Text("Today at XERT")
+                .xertDisplay(30)
                 .foregroundStyle(Color.xertOffWhite)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1661,49 +1641,26 @@ struct AdminCommandCentreView: View {
                     presentNoticeQuickAction()
                 }
                 AdminQuickToolButton(
+                    title: "Set today's workout",
+                    detail: "Update the in-club TV",
+                    icon: "tv"
+                ) {
+                    openWorkspaceWithFeedback(.workouts)
+                }
+                AdminQuickToolButton(
+                    title: "Create a form",
+                    detail: "Survey, waiver or feedback",
+                    icon: "list.clipboard"
+                ) {
+                    openWorkspaceWithFeedback(.forms)
+                }
+                AdminQuickToolButton(
                     title: "Create a session pack",
                     detail: quickToolDetail(source: "session packs", ready: "Start as a private draft"),
                     icon: "ticket.fill",
                     isEnabled: quickMutationIsAvailable(source: "session packs")
                 ) {
                     presentQuickAction(.newSessionPack)
-                }
-                AdminQuickToolButton(
-                    title: "Add a coach",
-                    detail: quickToolDetail(source: "team directory", ready: "Publish a team profile"),
-                    icon: "person.crop.rectangle.badge.plus",
-                    isEnabled: quickMutationIsAvailable(source: "team directory")
-                ) {
-                    presentQuickAction(.newCoach)
-                }
-                AdminQuickToolButton(
-                    title: "Add an event",
-                    detail: quickToolDetail(source: "event calendar", ready: "Grow the annual training calendar"),
-                    icon: "trophy.fill",
-                    isEnabled: quickMutationIsAvailable(source: "event calendar")
-                ) {
-                    presentQuickAction(.newEvent)
-                }
-                AdminQuickToolButton(
-                    title: "Edit site content",
-                    detail: "Hero, contact details and FAQs",
-                    icon: "text.badge.star"
-                ) {
-                    openWorkspaceWithFeedback(.siteContent)
-                }
-                AdminQuickToolButton(
-                    title: "Access control",
-                    detail: "Review admins and recovery cover",
-                    icon: "person.badge.key"
-                ) {
-                    openWorkspaceWithFeedback(.access)
-                }
-                AdminQuickToolButton(
-                    title: "Launch health",
-                    detail: admin.healthIssues == 0 ? "Review release evidence" : "\(admin.healthIssues) issue\(admin.healthIssues == 1 ? "" : "s") need attention",
-                    icon: "checkmark.shield"
-                ) {
-                    openWorkspaceWithFeedback(.health)
                 }
             }
         }
@@ -2849,16 +2806,6 @@ struct AdminCommandCentreView: View {
     @ViewBuilder
     private func ownerWorkspaceSurface(_ workspace: XertOwnerWorkspace, session: AuthSession) -> some View {
         workspaceDestination(workspace, session: session)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if workspace != .overview, !admin.refreshUnavailableSources.isEmpty {
-                    AdminOwnerDataHealthBar(
-                        unavailableCount: admin.refreshUnavailableSources.count,
-                        retainedSnapshotCount: admin.refreshUnavailableSources.filter(admin.loadedSources.contains).count,
-                        isRetrying: admin.isLoading,
-                        onRetry: { refreshOwnerData(session: session) }
-                    )
-                }
-            }
     }
 
     @ViewBuilder
@@ -2881,6 +2828,8 @@ struct AdminCommandCentreView: View {
             )
         case .classDesk:
             AdminClassesView(admin: admin, session: session)
+        case .workouts:
+            AdminWorkoutOfDayView(session: session)
         case .bookingRequests:
             AdminBookingRequestsView(admin: admin, session: session)
         case .timetable:
@@ -6828,6 +6777,7 @@ private struct AdminScheduleView: View {
     @State private var scope = AdminScheduleScope.upcoming
     @State private var showingCreate = false
     @State private var pendingCancellation: AdminClassSession?
+    @State private var repeatingClass: AdminClassSession?
 
     private var timetableIsCurrent: Bool {
         admin.loadedSources.contains("full timetable")
@@ -6962,6 +6912,14 @@ private struct AdminScheduleView: View {
                 )
             }
         }
+        .sheet(item: $repeatingClass) { classSession in
+            AdminClassRepeatView(
+                admin: admin,
+                session: session,
+                classSession: classSession,
+                mutationAllowed: timetableIsCurrent
+            )
+        }
         .refreshable { await admin.refresh(session: session) }
         .sheet(
             item: Binding(
@@ -7043,6 +7001,13 @@ private struct AdminScheduleView: View {
                 } label: {
                     Label("Duplicate as draft", systemImage: "plus.square.on.square")
                 }
+                Button {
+                    XertHaptics.play(.lightImpact)
+                    repeatingClass = item
+                } label: {
+                    Label("Repeat class...", systemImage: "calendar.badge.plus")
+                }
+                .disabled(item.start_time == nil)
                 if !["cancelled", "completed"].contains(item.status) {
                     Button(role: .destructive) { pendingCancellation = item } label: {
                         Label("Cancel class", systemImage: "calendar.badge.minus")
@@ -12397,6 +12362,11 @@ private struct AdminPlatformView: View {
                         .disabled(admin.isLoading || admin.isSavingSettings || isExitSaving)
                     }
                     Section("Pack sales") {
+                        Toggle("Show 'Coming soon' instead of prices", isOn: settingBinding(\.prices_coming_soon))
+                            .disabled(!platformMutationAvailable)
+                        Text("Turn this off when Byron is ready for members to see the live pack prices on web and iOS.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
                         LabeledContent(
                             "Active session packs",
                             value: pricingDataUnavailable ? "Unavailable" : "\(admin.products.filter(\.active).count)"
@@ -12566,7 +12536,7 @@ private struct AdminPlatformView: View {
         .background(canSavePlatformSettings ? Color.xertSteel : Color.xertSteel.opacity(0.45))
         .disabled(!canSavePlatformSettings)
         .accessibilityIdentifier("owner.platform.save")
-        .accessibilityHint("Saves booking, payment, countdown and public announcement settings")
+        .accessibilityHint("Saves booking, pricing visibility, payment, countdown and public announcement settings")
     }
 
     private var canSavePlatformSettings: Bool {

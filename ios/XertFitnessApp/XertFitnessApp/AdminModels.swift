@@ -1546,6 +1546,7 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     var countdown_enabled: Bool
     var bookings_enabled: Bool
     var payments_enabled: Bool
+    var prices_coming_soon: Bool
     var announcement_banner_text: String?
     var announcement_banner_enabled: Bool
     let updated_at: String
@@ -3287,6 +3288,104 @@ struct AdminCoachDraft: Codable, Hashable {
     }
 }
 
+struct AdminWorkoutOfDay: Identifiable, Codable, Hashable {
+    static let titleLimit = 120
+    static let bodyLimit = 4_000
+
+    let workout_date: String
+    let title: String?
+    let body: String
+    let published_at: Date?
+    let created_by: UUID?
+    let updated_at: String
+
+    var id: String { workout_date }
+    var isPublished: Bool { published_at != nil }
+
+    var displayTitle: String {
+        title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? body.split(whereSeparator: { $0.isNewline }).first.map(String.init)
+            ?? "Workout"
+    }
+
+    static let brisbaneCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
+        return calendar
+    }()
+
+    static var brisbaneToday: Date {
+        brisbaneCalendar.startOfDay(for: Date())
+    }
+
+    static func dateKey(for date: Date) -> String {
+        dateFormatter.string(from: date)
+    }
+
+    static func date(from dateKey: String) -> Date? {
+        guard dateKey.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil,
+              let parsed = dateFormatter.date(from: dateKey),
+              dateFormatter.string(from: parsed) == dateKey else {
+            return nil
+        }
+        return parsed
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = brisbaneCalendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = brisbaneCalendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter
+    }()
+}
+
+struct AdminWorkoutOfDayDraft: Equatable {
+    var workoutDate: Date
+    var title: String
+    var body: String
+    var isPublished: Bool
+    var sourceUpdatedAt: String?
+    var originalPublishedAt: Date?
+
+    init(workout: AdminWorkoutOfDay? = nil, date: Date = AdminWorkoutOfDay.brisbaneToday) {
+        workoutDate = workout.flatMap { AdminWorkoutOfDay.date(from: $0.workout_date) }
+            ?? AdminWorkoutOfDay.brisbaneCalendar.startOfDay(for: date)
+        title = workout?.title ?? ""
+        body = workout?.body ?? ""
+        isPublished = workout?.isPublished ?? false
+        sourceUpdatedAt = workout?.updated_at
+        originalPublishedAt = workout?.published_at
+    }
+
+    var dateKey: String { AdminWorkoutOfDay.dateKey(for: workoutDate) }
+    var normalizedTitle: String? {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+    var normalizedBody: String {
+        body
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var validationMessage: String? {
+        guard AdminWorkoutOfDay.date(from: dateKey) != nil else {
+            return "Pick the day this workout runs."
+        }
+        if let normalizedTitle, normalizedTitle.count > AdminWorkoutOfDay.titleLimit {
+            return "Title must be \(AdminWorkoutOfDay.titleLimit) characters or fewer."
+        }
+        guard !normalizedBody.isEmpty else { return "Add the workout before saving." }
+        guard normalizedBody.count <= AdminWorkoutOfDay.bodyLimit else {
+            return "Workout must be \(AdminWorkoutOfDay.bodyLimit) characters or fewer."
+        }
+        return nil
+    }
+}
+
 struct AdminFormSkipRule: Codable, Hashable {
     var option: String
     var skip_to: Int
@@ -3427,6 +3526,13 @@ struct AdminFormDraft: Equatable {
         if questions.isEmpty { return "Add at least one field." }
         if questions.contains(where: { !["section_break", "statement"].contains($0.type) && $0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
             return "Every response field needs a question or label."
+        }
+        for (index, question) in questions.enumerated() {
+            if (question.skip_rules ?? []).contains(where: {
+                $0.skip_to <= index + 2 || $0.skip_to > questions.count + 1
+            }) {
+                return "Skip logic can only jump forward to a later question or the end of the form."
+            }
         }
         if oneResponsePerEmail && !collectEmail { return "Collect email before limiting responses by email." }
         return nil

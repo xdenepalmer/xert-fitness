@@ -53,30 +53,23 @@ test('native navigation adapts from a compact dock to an iPad workspace rail', a
   assert.ok((root.match(/accessibilityIdentifier\("xert-navigation-/g) || []).length >= 7);
 });
 
-test('compact dock visibly exposes exact task context, back, and quick switching', async () => {
+test('compact dock keeps one clean five-tab bar with contextual access to owner and quick tools', async () => {
   const root = await readFile(rootURL, 'utf8');
   const dock = root.slice(
     root.indexOf('private struct XertNavigationDock'),
     root.indexOf('private struct XertOwnerNavigationPulseBadge'),
   );
-  assert.match(root, /XertNavigationDock\([\s\S]*currentRoute: navigation\.route/);
-  assert.match(root, /let currentRoute: XertMemberRoute/);
-  assert.match(root, /private var taskStrip: some View/);
-  assert.match(root, /ViewThatFits\(in: \.horizontal\)[\s\S]*taskStripLayout\(compact: false\)[\s\S]*taskStripLayout\(compact: true\)/);
-  assert.match(root, /private var compactUtilitiesMenu: some View/);
-  assert.match(root, /accessibilityIdentifier\("xert-navigation-utilities"\)/);
-  assert.match(root, /Text\(currentRoute\.navigationTitle\)/);
-  assert.match(root, /lineLimit\(2\)[\s\S]*minimumScaleFactor\(0\.72\)/);
-  assert.match(root, /frame\(height: dynamicTypeSize\.isAccessibilitySize \? 58 : 46\)/);
-  assert.match(root, /Button\(action: onReturnPrevious\)[\s\S]*arrow\.uturn\.backward/);
-  assert.match(root, /Returns to the exact previous XERT task/);
-  assert.match(root, /Button\(action: onOpenCommands\)[\s\S]*magnifyingglass/);
-  assert.match(root, /Searches workspaces, recent tasks and available actions/);
+  assert.match(root, /XertNavigationDock\([\s\S]*items: memberWorkspaceOrder/);
+  assert.match(dock, /HStack\(spacing: 0\)[\s\S]*ForEach\(items\)/);
+  assert.match(dock, /frame\(height: dynamicTypeSize\.isAccessibilitySize \? 80 : 66\)/);
+  assert.match(dock, /accessibilityAction\(named: "Open XERT quick switcher"\)/);
+  assert.match(dock, /Label\("Quick switcher", systemImage: "magnifyingglass"\)/);
+  assert.match(dock, /if selected[\s\S]*Button\("Return to \\\(previousRoute\.navigationTitle\)"/);
+  assert.doesNotMatch(dock, /taskStrip|ownerPriorityControl|xert-navigation-owner-priority/);
+  assert.doesNotMatch(dock, /let currentRoute:/);
   assert.doesNotMatch(dock, /Text\("Owner Command Centre"\)/);
-  assert.match(dock, /private var ownerPriorityControl: some View/);
-  assert.match(dock, /onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/);
-  assert.match(dock, /accessibilityIdentifier\("xert-navigation-owner-priority"\)/);
-  assert.match(dock, /if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
+  assert.match(dock, /if item == \.account, isAdmin[\s\S]*XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/);
+  assert.match(dock, /if item == \.account, isAdmin[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
 });
 
 test('member routing is typed, task-restorable, and owns native deep-link mapping', async () => {
@@ -517,7 +510,8 @@ test('navigation carries operational state and native interaction feedback', asy
   assert.ok((root.match(/let statusSnapshot: XertNavigationStatusSnapshot/g) || []).length === 2);
   assert.match(root, /XertNavigationStatusBadge\(status: status\)/);
   assert.match(root, /private struct XertNavigationStatusControl: View/);
-  assert.ok((root.match(/status: statusSnapshot\.priorityStatus/g) || []).length === 2);
+  assert.equal((root.match(/status: statusSnapshot\.priorityStatus/g) || []).length, 1);
+  assert.match(root, /if let status \{[\s\S]*Button\(status\.actionTitle\) \{ onOpenStatus\(status\) \}/);
   assert.match(root, /onOpenStatus: executeNavigationStatus/);
   assert.match(root, /executeNavigationStatus[\s\S]*executeNavigationActivity\(status\.activity\)/);
   assert.match(root, /xert-navigation-priority-status/);
@@ -551,7 +545,7 @@ test('quick switcher persists bounded account-scoped pinned workspaces without t
   assert.match(root, /Label\("Unpin", systemImage: "pin\.slash"\)/);
   assert.ok((root.match(/pinnedRoutes: pinnedMemberRoutes/g) || []).length >= 3);
   assert.match(root, /private struct XertPinnedWorkspaceBadge: View/);
-  assert.ok((root.match(/contextMenu \{ pinnedWorkspaceMenu \}/g) || []).length === 2);
+  assert.equal((root.match(/contextMenu \{ pinnedWorkspaceMenu \}/g) || []).length, 1);
   assert.match(root, /Button\(action: \{ onOpenPinned\(route\) \}\)/);
   assert.match(modelsTests, /testPinnedWorkspacesAreBoundedNormalizedAndAccountScoped/);
   assert.match(modelsTests, /testPinnedWorkspaceCommandsAreDirectAndAuthorizationAware/);
@@ -690,7 +684,7 @@ test('native route portability shares public context without private member task
   assert.match(navigation, /case \.upcomingBookings\(_\):[\s\S]*route: \.booking, isExactTask: false/);
   assert.match(navigation, /case \.account:[\s\S]*return nil/);
   assert.match(root, /XertNavigationShareControl\(route: currentRoute, layout: \.rail\)/);
-  assert.match(root, /XertNavigationShareControl\(route: currentRoute, layout: \.compact\)/);
+  assert.doesNotMatch(root, /XertNavigationShareControl\(route: currentRoute, layout: \.compact\)/);
   assert.match(root, /ShareLink\(item: destination\.route\.webURL/);
   assert.match(root, /xert-navigation-share-private/);
   assert.match(root, /Private account tasks cannot be shared/);

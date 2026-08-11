@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DollarSign, Users, Ticket, CalendarDays, Rocket, ClipboardList,
-  PenSquare, UserSquare2, Trophy, Plus, Receipt, UserPlus, ArrowRight, Inbox,
+  UserSquare2, Plus, Receipt, UserPlus, ArrowRight, Inbox,
   AlertTriangle, CheckCircle2, Circle, Gauge, RefreshCw, Clock3, MapPin,
   ClipboardCheck, UsersRound,
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import { getAvailableSessions } from '@/lib/bookingData';
 import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { activityFromSettled, readinessFromSettled } from '@/lib/adminOverview';
 import { buildAdminActionQueue } from '@/lib/adminActionQueue';
+import { ADMIN_QUICK_ACTIONS } from '@/lib/adminWorkspaces';
 
 function getCountdown(targetDate) {
   if (!targetDate) return null;
@@ -33,12 +34,19 @@ function timeAgo(iso) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-const QUICK_ACTIONS = [
-  { key: 'calendar', label: 'New Class', icon: CalendarDays, hint: 'Schedule & publish' },
-  { key: 'coaches', label: 'Add Coach', icon: UserSquare2, hint: 'Team profiles' },
-  { key: 'events', label: 'Add Event', icon: Trophy, hint: 'SE QLD calendar' },
-  { key: 'content', label: 'Edit Site Copy', icon: PenSquare, hint: 'Hero, contact, FAQ' },
-];
+const QUICK_ACTION_HINTS = {
+  calendar: 'Schedule and publish',
+  workouts: 'Update the club TV',
+  forms: 'Build and publish',
+  announcements: 'Notify members',
+  products: 'Set price and credits',
+  coaches: 'Add a team profile',
+};
+
+const QUICK_ACTIONS = ADMIN_QUICK_ACTIONS.map(action => ({
+  ...action,
+  hint: QUICK_ACTION_HINTS[action.key],
+}));
 
 const ACTION_ICONS = {
   'pending-bookings': Inbox,
@@ -250,7 +258,7 @@ export default function AdminOverview({ onNavigate }) {
   const actionQueue = buildAdminActionQueue(stats);
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="mx-auto max-w-[1600px] space-y-7 p-4 sm:p-6 xl:p-8">
       {error && (
         <div className="p-4" style={{ backgroundColor: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)' }}>
           <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Supabase error: {error}</p>
@@ -269,23 +277,15 @@ export default function AdminOverview({ onNavigate }) {
       )}
 
       {/* ── Header strip ── */}
-      <div className="relative p-6 overflow-hidden"
-        style={{
-          background: 'linear-gradient(120deg, rgba(50,72,90,0.4) 0%, rgba(16,24,32,0.7) 60%)',
-          border: '1px solid rgba(123,167,188,0.2)',
-        }}>
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: 'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }} />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-xert-steel/15 pb-5">
           <div>
-            <p className="font-body text-[11px] uppercase tracking-[0.25em] mb-2" style={{ color: '#7BA7BC' }}>
+            <p className="mb-2 font-body text-[11px] font-semibold uppercase tracking-[0.22em] text-xert-steel">
               {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
-            <h2 className="font-display text-3xl uppercase leading-none" style={{ color: '#F1F3F4' }}>
-              Beat Your Best.
+            <h2 className="font-display text-3xl uppercase leading-none text-white sm:text-4xl">
+              Today at XERT
             </h2>
+            <p className="mt-2 font-body text-sm text-xert-pale/60">Priorities, classes and the numbers Byron needs to run the gym.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex items-center gap-2">
@@ -311,7 +311,6 @@ export default function AdminOverview({ onNavigate }) {
             </div>
             )}
           </div>
-        </div>
       </div>
 
       {/* ── Daily action queue ── */}
@@ -377,7 +376,12 @@ export default function AdminOverview({ onNavigate }) {
 
       {/* Business milestones + class fill rate. Operational go/no-go lives in Operations Health. */}
       {launch && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <details className="group border border-xert-steel/15 bg-xert-ink/40">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 font-body text-xs font-semibold uppercase tracking-[0.16em] text-xert-pale/65 marker:content-none">
+            <span>Launch and planning</span>
+            <span className="text-xert-steel transition-transform group-open:rotate-90">›</span>
+          </summary>
+          <div className="grid grid-cols-1 gap-6 border-t border-xert-steel/10 p-4 lg:grid-cols-2">
           {/* Checklist */}
           {(() => {
             const items = [
@@ -470,15 +474,18 @@ export default function AdminOverview({ onNavigate }) {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       {/* ── Quick actions ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div>
+        <h2 className="mb-4 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/70">Create & publish</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         {QUICK_ACTIONS.map(a => {
           const Icon = a.icon;
           return (
-            <button key={a.key} onClick={() => onNavigate?.(a.key)}
+            <button key={a.key} onClick={() => onNavigate?.(a.key, a.params)}
               className="flex items-center gap-3 p-4 text-left transition-all group"
               style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
@@ -497,6 +504,7 @@ export default function AdminOverview({ onNavigate }) {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* ── Business ── */}
@@ -511,7 +519,13 @@ export default function AdminOverview({ onNavigate }) {
       </div>
 
       {/* ── Activity + insights ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <details className="group border border-xert-steel/15 bg-xert-ink/35">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 font-body text-xs font-semibold uppercase tracking-[0.16em] text-xert-pale/65 marker:content-none">
+          <span>Insights and recent activity</span>
+          <span className="text-xert-steel transition-transform group-open:rotate-90">›</span>
+        </summary>
+        <div className="space-y-6 border-t border-xert-steel/10 p-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent activity */}
         <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
           <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>Recent Activity</h3>
@@ -603,6 +617,8 @@ export default function AdminOverview({ onNavigate }) {
           </div>
         ))}
       </div>
+        </div>
+      </details>
     </div>
   );
 }

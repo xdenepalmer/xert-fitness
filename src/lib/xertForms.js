@@ -90,9 +90,15 @@ export function answerIsPresent(value) {
 export function validateFormDraft(form) {
   if (!form.title?.trim()) return 'Add a form title.';
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug || '')) return 'Use lowercase letters, numbers and hyphens in the link slug.';
-  if (!(form.questions || []).length) return 'Add at least one field.';
+  const questions = form.questions || [];
+  if (!questions.length) return 'Add at least one field.';
+  const invalidSkipRule = questions.some((question, index) => (question.skip_rules || []).some(rule => {
+    const target = Number(rule?.skip_to);
+    return !Number.isInteger(target) || target <= index + 2 || target > questions.length + 1;
+  }));
+  if (invalidSkipRule) return 'Skip logic can only jump forward to a later field or the end of the form.';
   if (form.one_response_per_email && !form.collect_email) return 'Collect email before limiting responses by email.';
-  const incomplete = form.questions.find(question => question.type !== 'statement' && question.type !== 'section_break' && !question.question?.trim());
+  const incomplete = questions.find(question => question.type !== 'statement' && question.type !== 'section_break' && !question.question?.trim());
   if (incomplete) return 'Every response field needs a question or label.';
   return null;
 }

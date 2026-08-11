@@ -6,6 +6,7 @@ struct AccountView: View {
     let routeSequence: UInt
     let pendingNavigationTitle: String?
     let onCancelPendingNavigation: () -> Void
+    let onOpenOwner: () -> Void
 
     @EnvironmentObject private var store: XertStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -88,6 +89,15 @@ struct AccountView: View {
                 .toolbar(.hidden, for: .tabBar)
                 .scrollDismissesKeyboard(.interactively)
                 .toolbar {
+                    if store.profile?.isAdmin == true {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: onOpenOwner) {
+                                Label("Owner", systemImage: "waveform.path.ecg.rectangle")
+                            }
+                            .accessibilityHint("Opens the protected Owner Command Centre")
+                            .accessibilityIdentifier("account-owner-command-centre")
+                        }
+                    }
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
                         Button(keyboardToolbarTitle, action: performKeyboardToolbarAction)
@@ -217,6 +227,10 @@ struct AccountView: View {
             .listRowBackground(Color.xertInk)
         }
 
+        if store.profile?.isAdmin == true {
+            ownerCommandCentreSection
+        }
+
         memberReadinessSection
         membershipSection
         trainingProgressSection
@@ -230,6 +244,42 @@ struct AccountView: View {
         legalSection
         signOutSection
         accountControlSection
+    }
+
+    private var ownerCommandCentreSection: some View {
+        Section {
+            Button {
+                XertHaptics.play(.lightImpact)
+                onOpenOwner()
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "waveform.path.ecg.rectangle")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.xertSteel)
+                        .frame(width: 36, height: 36)
+                        .background(Color.xertSteel.opacity(0.12))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Owner Command Centre")
+                            .font(.headline)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Run members, classes, pricing and publishing")
+                            .font(.footnote)
+                            .foregroundStyle(Color.xertPale)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("account-owner-command-centre-card")
+        } header: {
+            Text("Owner Tools").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
     }
 
     private var memberReadinessSection: some View {

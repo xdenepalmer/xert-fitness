@@ -1,69 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
-  CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
-  Handshake, Settings, BarChart3, LogOut, ExternalLink, Menu, X, Search,
-  BellRing, CircleAlert, ShieldCheck, ScrollText, Tv, ListChecks,
+  LogOut, ExternalLink, Menu, X, Search, CircleAlert,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
 import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { useAdminDialogLayer } from '@/lib/adminDialogLayer';
 import CommandPalette from '@/components/admin/CommandPalette';
+import { ADMIN_WORKSPACE_GROUPS, ADMIN_WORKSPACES } from '@/lib/adminWorkspaces';
 
 const LOGO = '/assets/xert-logo-horizontal-light.png';
-
-const NAV_GROUPS = [
-  {
-    heading: null,
-    items: [
-      { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-      { key: 'health', label: 'Operations Health', icon: ShieldCheck },
-      { key: 'audit', label: 'Admin Audit', icon: ScrollText },
-    ],
-  },
-  {
-    heading: 'Members & Money',
-    items: [
-      { key: 'gym-members', label: 'Members', icon: Users },
-      { key: 'orders', label: 'Orders & Revenue', icon: DollarSign },
-      { key: 'products', label: 'Session Packs & Pricing', icon: Ticket },
-    ],
-  },
-  {
-    heading: 'Classes',
-    items: [
-      { key: 'calendar', label: 'Class Calendar', icon: CalendarDays },
-      { key: 'workouts', label: 'Workout Of The Day', icon: Tv },
-      { key: 'bookings', label: 'Booking Requests', icon: Inbox },
-      { key: 'pt-requests', label: 'PT Requests', icon: Dumbbell },
-      { key: 'availability', label: 'Availability / Blackouts', icon: CalendarRange },
-    ],
-  },
-  {
-    heading: 'Site Content',
-    items: [
-      { key: 'forms', label: 'Forms & Surveys', icon: ListChecks },
-      { key: 'announcements', label: 'Member Notices', icon: BellRing },
-      { key: 'content', label: 'Site Content (CMS)', icon: PenSquare },
-      { key: 'coaches', label: 'Coaches & Team', icon: UserSquare2 },
-      { key: 'events', label: 'Event Calendar', icon: Trophy },
-    ],
-  },
-  {
-    heading: 'Launch & Leads',
-    items: [
-      { key: 'members', label: 'Member Leads', icon: ClipboardList },
-      { key: 'trainers', label: 'Trainer Applicants', icon: UserCog },
-      { key: 'partners', label: 'Partner Enquiries', icon: Handshake },
-      { key: 'settings', label: 'Soft Launch Settings', icon: Settings },
-      { key: 'campaigns', label: 'Campaign Stats', icon: BarChart3 },
-    ],
-  },
-];
-
-const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 
 const GRID_BG = {
   backgroundImage:
@@ -201,29 +148,30 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     };
   }, [activeSection]);
 
-  const activeLabel = ALL_ITEMS.find(n => n.key === activeSection)?.label || 'Command Centre';
+  const activeItem = ADMIN_WORKSPACES.find(item => item.key === activeSection);
+  const activeLabel = activeItem?.label || 'Command Centre';
   const initials = (profile?.full_name || user?.email || 'A')
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#0b1218' }}>
+    <div className="flex h-[100dvh] min-h-0 overflow-hidden" style={{ backgroundColor: '#0b1218' }}>
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         ref={sidebarRef}
         id="admin-navigation"
         aria-label="Admin navigation"
         aria-hidden={!desktopNavigation && !sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col transform transition-transform lg:translate-x-0 lg:static ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 flex h-full min-h-0 w-72 flex-col transform transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{
           background: 'linear-gradient(180deg, #101820 0%, #0b1218 100%)',
           borderRight: '1px solid rgba(123,167,188,0.14)',
         }}
       >
         {/* Brand */}
-        <div className="relative p-5 overflow-hidden" style={{ borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
+        <div className="relative px-5 py-4 overflow-hidden" style={{ borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
           <div className="absolute inset-0 pointer-events-none" style={GRID_BG} />
           <div className="relative">
-            <img src={LOGO} alt="XERT" className="h-7 w-auto mb-2" />
+            <img src={LOGO} alt="XERT" className="h-6 w-auto mb-2" />
             <div className="flex items-center gap-2">
               {badgesUnavailable ? (
                 <CircleAlert className="w-3.5 h-3.5" style={{ color: '#e0b36a' }} />
@@ -243,11 +191,11 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
 
         {/* Nav */}
         <nav aria-label="Command centre sections" className="flex-1 overflow-y-auto py-3">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={gi} className="mb-1">
-              {group.heading && (
-                <p className="px-5 pt-4 pb-1.5 font-body text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(123,167,188,0.38)' }}>
-                  {group.heading}
+          {ADMIN_WORKSPACE_GROUPS.map(group => (
+            <div key={group.key} className="mb-1">
+              {group.label && (
+                <p className="px-5 pt-4 pb-1.5 font-body text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'rgba(123,167,188,0.55)' }}>
+                  {group.label}
                 </p>
               )}
               {group.items.map(item => {
@@ -262,6 +210,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                       if (navigated !== false) setSidebarOpen(false);
                     }}
                     aria-current={active ? 'page' : undefined}
+                    title={item.detail}
                     className="relative flex min-h-11 w-full items-center gap-3 px-5 py-2.5 text-left transition-all group"
                     style={{
                       backgroundColor: active ? 'rgba(123,167,188,0.1)' : 'transparent',
@@ -275,7 +224,10 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                       style={{ height: active ? '60%' : '0%', backgroundColor: '#7BA7BC' }} />
                     <Icon className="w-4 h-4 shrink-0 transition-colors"
                       style={{ color: active ? '#7BA7BC' : 'rgba(123,167,188,0.45)' }} />
-                    <span className="font-body text-[13px] flex-1">{item.label}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-body text-[13px]">{item.label}</span>
+                      {active && <span className="mt-0.5 block truncate font-body text-[10px] text-xert-pale/40">{item.detail}</span>}
+                    </span>
                     {badges[item.key] > 0 && (
                       <span className="shrink-0 min-w-[1.25rem] px-1 py-0.5 text-center font-body text-[10px] tabular-nums"
                         style={{ backgroundColor: 'rgba(123,167,188,0.2)', color: '#7BA7BC', border: '1px solid rgba(123,167,188,0.35)' }}>
@@ -326,7 +278,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       )}
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
-      <div ref={workspaceRef} data-admin-workspace className="flex-1 flex flex-col min-w-0">
+      <div ref={workspaceRef} data-admin-workspace className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between"
           style={{
@@ -334,17 +286,15 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             borderBottom: '1px solid rgba(123,167,188,0.14)',
             backdropFilter: 'blur(10px)',
           }}>
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation" title="Open navigation"
               aria-expanded={sidebarOpen} aria-controls="admin-navigation"
               className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: 'rgba(209,221,230,0.5)' }}>
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-3">
-              <div className="h-4 w-0.5" style={{ backgroundColor: '#7BA7BC' }} />
-              <h1 className="font-display text-base uppercase tracking-wide" style={{ color: '#F1F3F4' }}>
-                {activeLabel}
-              </h1>
+            <div className="min-w-0">
+              <p className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-xert-steel/55 sm:block">Command Centre</p>
+              <h1 className="truncate font-display text-lg uppercase tracking-wide" style={{ color: '#F1F3F4' }}>{activeLabel}</h1>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -372,12 +322,12 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto relative">
+        <main className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="absolute inset-0 pointer-events-none" style={{ ...GRID_BG, maskImage: 'linear-gradient(180deg, black, transparent 320px)', WebkitMaskImage: 'linear-gradient(180deg, black, transparent 320px)' }} />
           <div className="relative">
             {children}
           </div>
-        </div>
+        </main>
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} />

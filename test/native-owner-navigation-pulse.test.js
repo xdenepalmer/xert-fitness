@@ -5,6 +5,7 @@ import test from 'node:test';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const pulse = read('../ios/XertFitnessApp/XertFitnessApp/Services/OwnerNavigationPulse.swift');
 const root = read('../ios/XertFitnessApp/XertFitnessApp/Views/RootView.swift');
+const account = read('../ios/XertFitnessApp/XertFitnessApp/Views/AccountView.swift');
 const swiftTests = read('../ios/XertFitnessApp/XertFitnessAppTests/ModelsTests.swift');
 
 test('owner navigation pulse loads only bounded operational and health summaries concurrently', () => {
@@ -52,19 +53,25 @@ test('owner pulse retains a deterministic exact workspace for the next best acti
   assert.match(swiftTests, /testOwnerNavigationPriorityRoutesTheMostUrgentWorkExactly/);
 });
 
-test('iPad and iPhone expose a visible owner pulse with exact priority routing', () => {
+test('iPad and iPhone expose owner priority routing without stacking an admin strip above member navigation', () => {
+  const phoneDock = root.slice(
+    root.indexOf('private struct XertNavigationDock: View'),
+    root.indexOf('private struct XertOwnerNavigationPulseBadge'),
+  );
+
   assert.match(root, /@StateObject private var ownerNavigationPulse = XertOwnerNavigationPulseStore\(\)/);
   assert.equal((root.match(/ownerPulse: ownerNavigationPulse\.snapshot/g) || []).length, 2);
-  assert.equal((root.match(/XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/g) || []).length, 2);
-  assert.equal((root.match(/\.accessibilityValue\(ownerPulse\.accessibilityLabel\)/g) || []).length, 2);
-  assert.equal((root.match(/onOpenAdmin\(ownerPulse\.priority\?\.workspace\)/g) || []).length, 2);
-  assert.equal((root.match(/onOpenAdmin\(priority\.workspace\)/g) || []).length, 3);
-  assert.equal((root.match(/\.contextMenu \{ ownerWorkspaceMenu \}/g) || []).length, 2);
-  assert.match(root, /accessibilityIdentifier\("xert-navigation-owner-priority"\)/);
-  assert.match(root, /private struct XertNavigationDock:[\s\S]*if isAdmin \{[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
+  assert.ok((root.match(/XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/g) || []).length >= 2);
+  assert.ok((root.match(/onOpenAdmin\(priority\.workspace\)/g) || []).length >= 2);
+  assert.match(phoneDock, /HStack\(spacing: 0\)[\s\S]*ForEach\(items\)/);
+  assert.match(phoneDock, /frame\(height: dynamicTypeSize\.isAccessibilitySize \? 80 : 66\)/);
+  assert.doesNotMatch(phoneDock, /taskStrip|ownerPriorityControl|safeAreaInset/);
+  assert.match(root, /if item == \.account, isAdmin[\s\S]*XertOwnerNavigationPulseBadge\(pulse: ownerPulse\)/);
+  assert.match(root, /if item == \.account, isAdmin[\s\S]*Label\("Owner Command Centre", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
+  assert.match(account, /store\.profile\?\.isAdmin == true[\s\S]*Label\("Owner", systemImage: "waveform\.path\.ecg\.rectangle"\)/);
+  assert.match(account, /Button \{[\s\S]*onOpenOwner\(\)[\s\S]*Text\("Owner Command Centre"\)/);
   assert.match(root, /private func openOwnerCommandCentre\(_ workspace: XertOwnerWorkspace\? = nil\)/);
   assert.match(root, /authorizeAndOpenOwnerRoute\(XertOwnerRoute\(workspace: workspace \?\? \.overview\)\)/);
-  assert.match(root, /Label\("Open owner overview", systemImage: XertOwnerWorkspace\.overview\.icon\)/);
   assert.match(root, /refreshOwnerNavigationPulse\(force: true\)/);
   assert.match(root, /ownerNavigationPulse\.reset\(\)/);
   assert.match(swiftTests, /testOwnerNavigationPulseBoundsCountsAndExplainsAttention/);

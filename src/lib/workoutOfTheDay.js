@@ -37,7 +37,7 @@ export function brisbaneDisplayDate(value = new Date()) {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(date);
+  }).format(date).replace(',', '');
 }
 
 /** Wall clock for the display header, e.g. "5:42 am". */
@@ -66,8 +66,11 @@ export function brisbaneClock(value = new Date()) {
  * workout from a previous day must NEVER survive midnight onto the screen — a
  * TV left running overnight would otherwise show yesterday's session to the
  * 5:15am class.
- *
- * @param {{ workout?: WorkoutOfTheDay | null, todayKey?: string, loadFailed?: boolean }} [options]
+ * @param {{
+ *   workout?: WorkoutOfTheDay | null,
+ *   todayKey?: string | null,
+ *   loadFailed?: boolean,
+ * }} [options]
  * @returns {{ status: 'ready' | 'unavailable' | 'empty', workout: WorkoutOfTheDay | null, dateKey: string, stale: boolean }}
  */
 export function workoutDisplayState({ workout, todayKey, loadFailed = false } = {}) {

@@ -309,6 +309,21 @@ struct BookingView: View {
                         .foregroundStyle(Color.orange)
                 }
                 .accessibilityElement(children: .combine)
+            } else if store.sessionPackPricesComingSoon {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Pack pricing is coming soon")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.xertOffWhite)
+                        Text("Explore the session packs now. Checkout stays closed until XERT publishes the final prices.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertMuted)
+                    }
+                } icon: {
+                    Image(systemName: "clock")
+                        .foregroundStyle(Color.xertSteel)
+                }
+                .accessibilityElement(children: .combine)
             } else if !store.sessionPackPaymentsEnabled {
                 Label {
                     VStack(alignment: .leading, spacing: 4) {
@@ -383,9 +398,9 @@ struct BookingView: View {
                         .contentShape(Rectangle())
                     }
                     .disabled(!store.sessionPackPaymentsEnabled || checkoutProductID != nil || checkoutBrowser.isPresenting)
-                    .accessibilityLabel("\(product.name), \(product.sessionsCount) sessions, \(product.displayPrice)")
+                    .accessibilityLabel("\(product.name), \(product.sessionsCount) sessions, \(memberPriceLabel(for: product))")
                     .accessibilityValue(checkoutProductID == product.id ? "Opening secure checkout" : "")
-                    .accessibilityHint(store.isSignedIn ? "Opens secure checkout" : "Opens member sign in")
+                    .accessibilityHint(sessionPackAccessibilityHint)
                 }
             }
         } header: {
@@ -593,7 +608,7 @@ struct BookingView: View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 8) {
                 productDetails(product)
-                Text(product.displayPrice)
+                Text(memberPriceLabel(for: product))
                     .fontWeight(.semibold)
                     .foregroundStyle(.xertSteel)
             }
@@ -601,11 +616,21 @@ struct BookingView: View {
             HStack {
                 productDetails(product)
                 Spacer()
-                Text(product.displayPrice)
+                Text(memberPriceLabel(for: product))
                     .fontWeight(.semibold)
                     .foregroundStyle(.xertSteel)
             }
         }
+    }
+
+    private func memberPriceLabel(for product: Product) -> String {
+        product.memberPriceLabel(pricesComingSoon: store.sessionPackPricesComingSoon)
+    }
+
+    private var sessionPackAccessibilityHint: String {
+        if store.sessionPackPricesComingSoon { return "Pricing and checkout are coming soon" }
+        if !store.sessionPackPaymentsEnabled { return "Session pack checkout is paused" }
+        return store.isSignedIn ? "Opens secure checkout" : "Opens member sign in"
     }
 
     private func productDetails(_ product: Product) -> some View {

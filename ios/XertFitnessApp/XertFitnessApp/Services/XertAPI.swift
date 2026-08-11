@@ -150,7 +150,7 @@ final class XertAPI {
         let settings: [PublicPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "bookings_enabled,payments_enabled"),
+                URLQueryItem(name: "select", value: "bookings_enabled,payments_enabled,prices_coming_soon"),
                 URLQueryItem(name: "limit", value: "2")
             ]
         )
@@ -418,6 +418,35 @@ final class XertAPI {
             throw APIError(message: "XERT could not confirm the created class.")
         }
         return created.id
+    }
+
+    @discardableResult
+    func adminCreateClasses(
+        session auth: AuthSession,
+        drafts: [AdminClassDraft]
+    ) async throws -> [UUID] {
+        guard (AdminClassRepeatPlan.minimumCopies...AdminClassRepeatPlan.maximumCopies).contains(drafts.count) else {
+            throw APIError(
+                message: "Create between \(AdminClassRepeatPlan.minimumCopies) and \(AdminClassRepeatPlan.maximumCopies) class copies."
+            )
+        }
+        let payloads = try drafts.map(adminClassPayload)
+        var request = try request(baseURL: AppConfig.supabaseURL, path: "/rest/v1/class_sessions")
+        request.httpMethod = "POST"
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payloads)
+
+        let rows: [AdminMutationID] = try await decode(request)
+        let ids = rows.map(\.id)
+        guard ids.count == drafts.count, Set(ids).count == drafts.count else {
+            throw APIError(
+                message: "XERT could not confirm the complete repeat block. Refresh the timetable before trying again."
+            )
+        }
+        return ids
     }
 
     @discardableResult
@@ -1039,7 +1068,7 @@ final class XertAPI {
         let settings: [AdminPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,announcement_banner_text,announcement_banner_enabled,updated_at"),
+                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,prices_coming_soon,announcement_banner_text,announcement_banner_enabled,updated_at"),
                 URLQueryItem(name: "limit", value: "2")
             ],
             auth: auth
@@ -2378,6 +2407,7 @@ final class XertAPI {
             countdown_enabled: settings.countdown_enabled,
             bookings_enabled: settings.bookings_enabled,
             payments_enabled: settings.payments_enabled,
+            prices_coming_soon: settings.prices_coming_soon,
             announcement_banner_text: banner.isEmpty ? nil : banner,
             announcement_banner_enabled: settings.announcement_banner_enabled,
             updated_at: ISO8601DateFormatter.standard.string(from: Date())
@@ -2729,6 +2759,113 @@ final class XertAPI {
         guard response.registered == enabled else {
             throw APIError(message: "XERT could not confirm your notification preference.")
         }
+    }
+
+    func adminWorkouts(session auth: AuthSession, limit: Int = 21) async throws -> [AdminWorkoutOfDay] {
+        try await restRequest(
+            path: "/rest/v1/workouts_of_the_day",
+            queryItems: [
+                URLQueryItem(name: "select", value: "workout_date,title,body,published_at,created_by,updated_at"),
+                URLQueryItem(name: "order", value: "workout_date.desc"),
+                URLQueryItem(name: "limit", value: String(min(max(limit, 1), 100)))
+            ],
+            auth: auth
+        )
+    }
+
+    func adminWorkout(session auth: AuthSession, dateKey: String) async throws -> AdminWorkoutOfDay? {
+        guard AdminWorkoutOfDay.date(from: dateKey) != nil else {
+            throw APIError(message: "Pick a valid workout date.")
+        }
+        let rows: [AdminWorkoutOfDay] = try await restRequest(
+            path: "/rest/v1/workouts_of_the_day",
+            queryItems: [
+                URLQueryItem(name: "select", value: "workout_date,title,body,published_at,created_by,updated_at"),
+                URLQueryItem(name: "workout_date", value: "eq.\(dateKey)"),
+                URLQueryItem(name: "limit", value: "2")
+            ],
+            auth: auth
+        )
+        guard rows.count <= 1 else {
+            throw APIError(message: "Workout data integrity check failed for \(dateKey).")
+        }
+        return rows.first
+    }
+
+    func adminSaveWorkout(
+        session auth: AuthSession,
+        draft: AdminWorkoutOfDayDraft
+    ) async throws -> AdminWorkoutOfDay {
+        try await adminUpsertWorkout(session: auth, draft: draft)
+    }
+
+    func adminUpsertWorkout(
+        session auth: AuthSession,
+        draft: AdminWorkoutOfDayDraft
+    ) async throws -> AdminWorkoutOfDay {
+        if let validation = draft.validationMessage { throw APIError(message: validation) }
+
+        let existing = try await adminWorkout(session: auth, dateKey: draft.dateKey)
+        guard existing?.updated_at == draft.sourceUpdatedAt else {
+            throw APIError(message: "This workout changed elsewhere. Refresh the day and review the latest version before saving.")
+        }
+
+        let publishedAt: String?
+        if draft.isPublished {
+            publishedAt = existing?.published_at.map { ISO8601DateFormatter.standard.string(from: $0) }
+                ?? ISO8601DateFormatter.standard.string(from: Date())
+        } else {
+            publishedAt = nil
+        }
+
+        let payload = AdminWorkoutUpsertPayload(
+            workout_date: draft.dateKey,
+            title: draft.normalizedTitle,
+            body: draft.normalizedBody,
+            published_at: publishedAt,
+            created_by: existing?.created_by ?? auth.user?.id,
+            last_changed_by: auth.user?.id
+        )
+        var request: URLRequest
+        if let existing {
+            request = try self.request(
+                baseURL: AppConfig.supabaseURL,
+                path: "/rest/v1/workouts_of_the_day",
+                queryItems: [
+                    URLQueryItem(name: "workout_date", value: "eq.\(draft.dateKey)"),
+                    URLQueryItem(name: "updated_at", value: "eq.\(existing.updated_at)")
+                ]
+            )
+            request.httpMethod = "PATCH"
+        } else {
+            // A plain insert intentionally fails on the unique workout_date
+            // constraint if another owner creates this day concurrently.
+            request = try self.request(
+                baseURL: AppConfig.supabaseURL,
+                path: "/rest/v1/workouts_of_the_day"
+            )
+            request.httpMethod = "POST"
+        }
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let rows: [AdminWorkoutOfDay]
+        do {
+            rows = try await decode(request)
+        } catch {
+            throw APIError(
+                message: "The workout save could not be confirmed. Refresh this day before trying again."
+            )
+        }
+        guard rows.count == 1, let saved = rows.first else {
+            throw APIError(
+                message: "This workout changed elsewhere. Refresh the day and review the latest version before saving."
+            )
+        }
+        return saved
     }
 
     func adminForms(session auth: AuthSession) async throws -> [AdminForm] {
@@ -3094,6 +3231,30 @@ private struct AdminBlackoutPayload: Encodable {
     let reason: String
     let notes: String?
 }
+private struct AdminWorkoutUpsertPayload: Encodable {
+    let workout_date: String
+    let title: String?
+    let body: String
+    let published_at: String?
+    let created_by: UUID?
+    let last_changed_by: UUID?
+
+    private enum CodingKeys: String, CodingKey {
+        case workout_date, title, body, published_at, created_by, last_changed_by
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(workout_date, forKey: .workout_date)
+        try container.encode(body, forKey: .body)
+        if let title { try container.encode(title, forKey: .title) }
+        else { try container.encodeNil(forKey: .title) }
+        if let published_at { try container.encode(published_at, forKey: .published_at) }
+        else { try container.encodeNil(forKey: .published_at) }
+        try container.encodeIfPresent(created_by, forKey: .created_by)
+        try container.encodeIfPresent(last_changed_by, forKey: .last_changed_by)
+    }
+}
 private struct AdminSiteContentInsertPayload: Encodable {
     let key: String
     let data: AdminSiteContentData
@@ -3152,6 +3313,7 @@ private struct AdminSettingsUpdate: Encodable {
     let countdown_enabled: Bool
     let bookings_enabled: Bool
     let payments_enabled: Bool
+    let prices_coming_soon: Bool
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
     let updated_at: String

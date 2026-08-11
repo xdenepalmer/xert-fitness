@@ -2402,7 +2402,46 @@ final class AdminStore: ObservableObject {
         do {
             let activatingPayments = draft.payments_enabled && settings?.payments_enabled != true
             if activatingPayments {
-                settings = try await api.adminActivatePlatformPayments(session: session, settings: draft)
+                // Stage every non-payment setting first while checkout is still
+                // paused. If staging fails, the guarded activation never runs.
+                // A lost activation response is reconciled below before retry.
+                var stagedDraft = draft
+                stagedDraft.payments_enabled = false
+                let staged = try await api.adminUpdatePlatformSettings(
+                    session: session,
+                    settings: stagedDraft
+                )
+                settings = staged
+                var activationDraft = staged
+                activationDraft.payments_enabled = true
+                do {
+                    settings = try await api.adminActivatePlatformPayments(
+                        session: session,
+                        settings: activationDraft
+                    )
+                } catch let activationError {
+                    // The server can commit immediately before the response is
+                    // lost. Reconcile before allowing a retry so checkout can
+                    // never be live while the owner app claims it is paused.
+                    do {
+                        guard let reconciled = try await api.adminPlatformSettings(session: session) else {
+                            throw APIError(message: "Platform settings are unavailable after payment activation.")
+                        }
+                        settings = reconciled
+                        loadedSources.insert("platform controls")
+                        refreshUnavailableSources.removeAll { $0 == "platform controls" }
+                        guard reconciled.payments_enabled else {
+                            errorMessage = activationError.localizedDescription
+                            return false
+                        }
+                    } catch {
+                        if !refreshUnavailableSources.contains("platform controls") {
+                            refreshUnavailableSources.append("platform controls")
+                        }
+                        errorMessage = "Payment activation could not be verified. Do not try again until Platform Controls refreshes and shows the live payment state."
+                        return false
+                    }
+                }
                 do {
                     commerceHealth = try await api.adminCommerceHealth(session: session)
                     loadedSources.insert("Stripe health")
@@ -3406,6 +3445,87 @@ final class AdminStore: ObservableObject {
         draft.status = "draft"
         draft.publicVisible = false
         return await saveClass(session: session, classSession: nil, draft: draft)
+    }
+
+    func repeatClass(
+        session: AuthSession,
+        classSession: AdminClassSession,
+        plan: AdminClassRepeatPlan
+    ) async -> Bool {
+        guard savingClassID == nil, cancellingClassID == nil else {
+            errorMessage = "Another timetable change is still running. Wait for it to finish before repeating this class."
+            return false
+        }
+        guard loadedSources.contains("full timetable"),
+              !refreshUnavailableSources.contains("full timetable") else {
+            errorMessage = "Refresh the full timetable before creating repeated classes."
+            return false
+        }
+        guard let currentClass = classSessions.first(where: { $0.id == classSession.id }) else {
+            errorMessage = "This class is no longer in the current timetable. Refresh before repeating it."
+            return false
+        }
+        guard currentClass == classSession else {
+            errorMessage = "This class changed after the repeat screen opened. Close it, review the latest class, and try again."
+            return false
+        }
+
+        let drafts: [AdminClassDraft]
+        do {
+            drafts = try plan.makeDrafts(from: currentClass)
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+
+        healthRefreshGeneration &+= 1
+        launchGateUpdatedAt = nil
+        classMutationStatusMessage = nil
+        classMutationStatusIsWarning = false
+        savingClassID = currentClass.id
+        defer { savingClassID = nil }
+
+        let mutationIDs: [UUID]
+        do {
+            mutationIDs = try await api.adminCreateClasses(session: session, drafts: drafts)
+        } catch {
+            // A connection can disappear after PostgREST commits the atomic
+            // insert. Force a timetable refresh before another attempt so an
+            // owner cannot accidentally create the same repeat block twice.
+            markScheduleSourceUnavailable("full timetable")
+            classMutationStatusIsWarning = true
+            classMutationStatusMessage = "The repeat block was not confirmed. Refresh Full Timetable before trying again."
+            errorMessage = "XERT could not confirm the repeat block. Refresh the timetable before trying again. \(error.localizedDescription)"
+            return false
+        }
+
+        var unavailableReadbacks: [String] = []
+        do {
+            classSessions = try await api.adminClassSessions(session: session)
+            markScheduleSourceCurrent("full timetable")
+        } catch {
+            markScheduleSourceUnavailable("full timetable")
+            unavailableReadbacks.append("full timetable")
+        }
+        do {
+            dailyOperations = try await api.adminDailyOperations(session: session)
+            markScheduleSourceCurrent("today's classes")
+        } catch {
+            markScheduleSourceUnavailable("today's classes")
+            unavailableReadbacks.append("today's classes")
+        }
+
+        let statusLabel = plan.mode == .published ? "published" : "draft"
+        let receipt = mutationIDs.first?.uuidString.lowercased() ?? "unavailable"
+        let outcome = "\(mutationIDs.count) \(statusLabel) class cop\(mutationIDs.count == 1 ? "y" : "ies") created"
+        if unavailableReadbacks.isEmpty {
+            classMutationStatusMessage = "\(outcome). First receipt \(receipt)."
+        } else {
+            classMutationStatusIsWarning = true
+            classMutationStatusMessage = "\(outcome), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. First receipt \(receipt). Do not repeat this block again; refresh Full Timetable."
+        }
+        lastUpdatedAt = Date()
+        return true
     }
 
     func cancelClass(

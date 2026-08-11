@@ -120,8 +120,8 @@ test('the workout editor is registered in the command centre', async () => {
 
   const centre = readFileSync(new URL('../src/pages/AdminCommandCentre.jsx', import.meta.url), 'utf8');
   assert.match(centre, /case 'workouts': return <WorkoutManager/);
-  const layout = readFileSync(new URL('../src/components/admin/AdminLayout.jsx', import.meta.url), 'utf8');
-  assert.match(layout, /key: 'workouts'/);
+  const workspaces = readFileSync(new URL('../src/lib/adminWorkspaces.js', import.meta.url), 'utf8');
+  assert.match(workspaces, /key: 'workouts'/);
 });
 
 test('the kiosk survives an unattended gym: polling, rollover and offline handling', () => {

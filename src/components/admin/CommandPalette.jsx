@@ -1,46 +1,13 @@
 // @ts-nocheck -- cmdk's polymorphic JavaScript wrappers are isolated here.
 import React, { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, Users, DollarSign, Ticket, CalendarDays, Inbox, Dumbbell,
-  CalendarRange, PenSquare, UserSquare2, Trophy, ClipboardList, UserCog,
-  BellRing, Handshake, Settings, BarChart3, ExternalLink, Plus, User, ShieldCheck, ScrollText, ListChecks,
+  ExternalLink, User,
 } from 'lucide-react';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from '@/components/ui/command';
 import { adminSearchMembers } from '@/lib/adminData';
-
-const NAV_COMMANDS = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'health', label: 'Operations Health', icon: ShieldCheck },
-  { key: 'audit', label: 'Admin Audit', icon: ScrollText },
-  { key: 'gym-members', label: 'Members', icon: Users },
-  { key: 'orders', label: 'Orders & Revenue', icon: DollarSign },
-  { key: 'products', label: 'Session Packs & Pricing', icon: Ticket },
-  { key: 'calendar', label: 'Class Calendar', icon: CalendarDays },
-  { key: 'bookings', label: 'Booking Requests', icon: Inbox },
-  { key: 'pt-requests', label: 'PT Requests', icon: Dumbbell },
-  { key: 'availability', label: 'Availability / Blackouts', icon: CalendarRange },
-  { key: 'forms', label: 'Forms & Surveys', icon: ListChecks },
-  { key: 'announcements', label: 'Member Notices', icon: BellRing },
-  { key: 'content', label: 'Site Content (CMS)', icon: PenSquare },
-  { key: 'coaches', label: 'Coaches & Team', icon: UserSquare2 },
-  { key: 'events', label: 'Event Calendar', icon: Trophy },
-  { key: 'members', label: 'Member Leads', icon: ClipboardList },
-  { key: 'trainers', label: 'Trainer Applicants', icon: UserCog },
-  { key: 'partners', label: 'Partner Enquiries', icon: Handshake },
-  { key: 'settings', label: 'Soft Launch Settings', icon: Settings },
-  { key: 'campaigns', label: 'Campaign Stats', icon: BarChart3 },
-];
-
-const QUICK_COMMANDS = [
-  { key: 'calendar', label: 'Create a new class', icon: Plus },
-  { key: 'products', label: 'Create a session pack', icon: Plus },
-  { key: 'coaches', label: 'Add a coach or practitioner', icon: Plus },
-  { key: 'events', label: 'Add an event', icon: Plus },
-  { key: 'announcements', label: 'Create a member notice', icon: BellRing },
-  { key: 'forms', label: 'Create a form or survey', icon: ListChecks },
-];
+import { ADMIN_QUICK_ACTIONS, ADMIN_WORKSPACES } from '@/lib/adminWorkspaces';
 
 /**
  * Global ⌘K / Ctrl+K palette: jump to any admin section, run quick actions,
@@ -106,10 +73,10 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
         </CommandEmpty>
 
         <CommandGroup heading="Quick actions">
-          {QUICK_COMMANDS.map(c => {
+          {ADMIN_QUICK_ACTIONS.map(c => {
             const Icon = c.icon;
             return (
-              <CommandItem key={`q-${c.label}`} onSelect={() => run(c.key, { action: 'create' })}>
+              <CommandItem key={`q-${c.label}`} onSelect={() => run(c.key, c.params)}>
                 <Icon className="text-xert-steel" />
                 <span>{c.label}</span>
               </CommandItem>
@@ -122,12 +89,15 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
         </CommandGroup>
 
         <CommandGroup heading="Go to">
-          {NAV_COMMANDS.map(c => {
+          {ADMIN_WORKSPACES.map(c => {
             const Icon = c.icon;
             return (
-              <CommandItem key={c.key} value={`go ${c.label}`} onSelect={() => run(c.key)}>
+              <CommandItem key={c.key} value={`go ${c.label} ${c.detail}`} onSelect={() => run(c.key)}>
                 <Icon className="text-xert-steel" />
-                <span>{c.label}</span>
+                <span className="min-w-0">
+                  <span className="block">{c.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{c.detail}</span>
+                </span>
               </CommandItem>
             );
           })}

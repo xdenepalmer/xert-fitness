@@ -4,36 +4,28 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('compact owner overview keeps one freshness-gated run-next action above phone chrome', async () => {
+test('compact owner overview keeps priority work in the page instead of stacking controls above phone chrome', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   const dashboard = view.slice(
     view.indexOf('private func dashboard('),
-    view.indexOf('private var accessDenied'),
-  );
-  const runNext = view.slice(
-    view.indexOf('private struct AdminOwnerRunNextBar'),
-    view.indexOf('private struct AdminPriorityRow'),
+    view.indexOf('private var ownerRunNextDock'),
   );
 
-  assert.match(dashboard, /\.safeAreaInset\(edge: \.bottom, spacing: 0\)/);
-  assert.match(dashboard, /horizontalSizeClass == \.compact[\s\S]*ownerRunNextDock/);
-  assert.match(dashboard, /freshness == \.current/);
-  assert.match(dashboard, /admin\.operationalQueueState == \.ready/);
-  assert.match(dashboard, /operationalPriorities\.first/);
-  assert.match(dashboard, /AdminOwnerQueuesClearBar\(/);
-  assert.match(runNext, /ALL QUEUES CLEAR/);
-  assert.match(runNext, /Complete snapshot updated/);
-  assert.match(runNext, /owner\.runNextDock\.clear/);
-  assert.match(runNext, /RUN CRITICAL NEXT/);
-  assert.match(runNext, /dynamicTypeSize\.isAccessibilitySize[\s\S]*refreshButton\(showsLabel: true\)/);
-  assert.match(runNext, /frame\(width: showsLabel \? nil : 44\)/);
-  assert.match(runNext, /owner\.runNextDock/);
-  assert.match(runNext, /Actions unlock only from a current complete snapshot/);
-  assert.match(runNext, /AdminOwnerRunNextRefreshBar[\s\S]*dynamicTypeSize\.isAccessibilitySize/);
+  assert.match(
+    dashboard,
+    /ownerHeader[\s\S]*AdminRefreshDataWarning[\s\S]*priorityQueue[\s\S]*nextClassFocus[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*businessPulse[\s\S]*pinnedDirectory[\s\S]*managementDirectory/,
+  );
+  assert.doesNotMatch(dashboard, /safeAreaInset|ownerRunNextDock|stripeLaunchRunway|incidentControl/);
+  assert.match(dashboard, /frame\(maxWidth: 880\)/);
+  assert.match(dashboard, /refreshable \{ await admin\.refresh\(session: session\) \}/);
 });
 
-test('every native owner workspace keeps partial-data health visible and retryable', async () => {
+test('partial-data health stays actionable on Today without polluting every owner workspace', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const dashboard = view.slice(
+    view.indexOf('private func dashboard('),
+    view.indexOf('private var ownerRunNextDock'),
+  );
   const surface = view.slice(
     view.indexOf('private func ownerWorkspaceSurface('),
     view.indexOf('private func workspaceDestination('),
@@ -42,23 +34,17 @@ test('every native owner workspace keeps partial-data health visible and retryab
     view.indexOf('private var workspaceSwitcherToolbar'),
     view.indexOf('private var ownerWorkspaceToolbar'),
   );
-  const healthBar = view.slice(
-    view.indexOf('private struct AdminOwnerDataHealthBar'),
-    view.indexOf('private struct AdminRefreshDataWarning'),
-  );
 
   assert.match(view, /ownerWorkspaceSurface\(workspace, session: session\)/);
   assert.match(view, /ownerWorkspaceSurface\(currentWorkspace, session: session\)/);
-  assert.match(surface, /\.safeAreaInset\(edge: \.top, spacing: 0\)/);
-  assert.match(surface, /workspace != \.overview/);
-  assert.match(surface, /!admin\.refreshUnavailableSources\.isEmpty/);
-  assert.match(surface, /admin\.refreshUnavailableSources\.filter\(admin\.loadedSources\.contains\)\.count/);
-  assert.match(surface, /onRetry: \{ refreshOwnerData\(session: session\) \}/);
+  assert.match(surface, /workspaceDestination\(workspace, session: session\)/);
+  assert.doesNotMatch(surface, /safeAreaInset|AdminOwnerDataHealthBar|refreshUnavailableSources/);
+  assert.match(dashboard, /!admin\.refreshUnavailableSources\.isEmpty[\s\S]*AdminRefreshDataWarning\(/);
+  assert.match(dashboard, /refreshOwnerData\(session: session\)/);
   assert.match(toolbar, /exclamationmark\.triangle\.fill/);
   assert.match(toolbar, /ownerActionsAccessibilityLabel/);
-  assert.match(healthBar, /showing last snapshot/);
-  assert.match(healthBar, /frame\(width: 44, height: 44\)/);
-  assert.match(healthBar, /Retry unavailable owner data/);
+  assert.match(toolbar, /Refresh owner data/);
+  assert.match(toolbar, /Label\("Manage", systemImage: "square\.grid\.2x2"\)/);
 });
 
 test('native member directory has complete server-backed operator controls', async () => {
@@ -352,8 +338,11 @@ test('native owner dashboard consolidates live priorities into actionable worksp
 
   assert.match(view, /private var priorityQueue: some View/);
   const dashboard = view.slice(view.indexOf('private func dashboard(session:'), view.indexOf('private var accessDenied:'));
-  assert.ok(dashboard.indexOf('priorityQueue') < dashboard.indexOf('stripeLaunchRunway'));
-  assert.ok(dashboard.indexOf('priorityQueue') < dashboard.indexOf('quickTools'));
+  assert.match(
+    dashboard,
+    /priorityQueue[\s\S]*nextClassFocus[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*businessPulse[\s\S]*pinnedDirectory[\s\S]*managementDirectory/,
+  );
+  assert.doesNotMatch(dashboard, /shiftBriefing|stripeLaunchRunway|incidentControl|activationPulse|todayDesk/);
   assert.match(view, /private var operationalPriorities: \[AdminPriorityAction\]/);
   assert.match(view, /private struct AdminPriorityRow: View/);
   assert.match(view, /ForEach\(priorities\) \{ priority in/);
@@ -449,16 +438,15 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /@Environment\(\\\.scenePhase\) private var scenePhase/);
   assert.match(view, /Date\(\)\.timeIntervalSince\(updatedAt\) >= 120/);
   assert.match(view, /onChange\(of: scenePhase\)[\s\S]*ownerDataNeedsForegroundRefresh[\s\S]*admin\.refresh/);
-  assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack[\s\S]*case newCoach[\s\S]*case newEvent/);
+  assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack/);
   assert.match(view, /private var quickTools: some View/);
   for (const label of [
     'Find a member',
     'Create a class',
     'Publish a notice',
+    "Set today's workout",
+    'Create a form',
     'Create a session pack',
-    'Add a coach',
-    'Add an event',
-    'Edit site content',
   ]) {
     assert.match(view, new RegExp(label));
   }
@@ -471,12 +459,15 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /AdminProductEditor\([\s\S]*product: nil/);
   assert.match(view, /case \.newCoach:[\s\S]*AdminCoachEditor\([\s\S]*coach: nil/);
   assert.match(view, /case \.newEvent:[\s\S]*AdminEventEditor\([\s\S]*event: nil/);
-  // `.siteContent` is the XertOwnerWorkspace case. This previously asserted
-  // `.content`, which is not a case on that enum and never compiled — the
-  // assertion matched the source text of code the Swift build rejected.
-  assert.match(view, /title: "Edit site content"[\s\S]*openWorkspaceWithFeedback\(\.siteContent\)/);
-  assert.match(view, /quickToolDetail\(source: "team directory"/);
-  assert.match(view, /quickToolDetail\(source: "event calendar"/);
+  // Keep the compact dashboard focused: the complete owner catalogue remains
+  // discoverable through Manage, with compile-time-valid workspace routing.
+  assert.match(view, /Label\("Manage", systemImage: "square\.grid\.2x2"\)/);
+  assert.match(view, /private var managementDirectory:[\s\S]*ForEach\(XertOwnerWorkspace\.workspaces\(in: section\)\)[\s\S]*AdminDestinationRow/);
+  assert.match(view, /case \.siteContent:[\s\S]*AdminSiteContentView/);
+  assert.match(view, /case \.events:[\s\S]*AdminEventsView/);
+  assert.match(view, /case \.team:[\s\S]*AdminCoachesView/);
+  assert.match(view, /title: "Set today's workout"[\s\S]*openWorkspaceWithFeedback\(\.workouts\)/);
+  assert.match(view, /title: "Create a form"[\s\S]*openWorkspaceWithFeedback\(\.forms\)/);
 
   assert.match(store, /@Published private\(set\) var loadedSources: Set<String> = \[\]/);
   assert.match(store, /@Published private\(set\) var hasCompletedRefresh = false/);
@@ -792,7 +783,11 @@ test('native owner incident control performs a minimal verified emergency pause'
   assert.match(plan, /paused\.bookings_enabled = false/);
   assert.match(plan, /paused\.payments_enabled = false/);
 
-  assert.match(view, /stripeLaunchRunway\s+incidentControl\(session: session\)\s+quickTools/);
+  const dashboard = view.slice(
+    view.indexOf('private func dashboard(session:'),
+    view.indexOf('private var accessDenied:'),
+  );
+  assert.doesNotMatch(dashboard, /stripeLaunchRunway|incidentControl\(session: session\)/);
   assert.match(incident, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(incident, /Pause bookings & checkout/);
   assert.match(incident, /Pause new member activity\?/);
@@ -1188,8 +1183,7 @@ test('native owner access control governs launch-day administrator coverage', as
   assert.match(navigation, /case \.access: return "person\.badge\.key"/);
   assert.match(navigation, /case \.access, \.controls, \.health, \.audit: return \.platform/);
   assert.match(view, /case \.access:\s+AdminAccessControlView\(/);
-  assert.match(view, /title: "Access control"[\s\S]*openWorkspaceWithFeedback\(\.access\)/);
-  assert.match(view, /title: "Launch health"[\s\S]*openWorkspaceWithFeedback\(\.health\)/);
+  assert.match(view, /ForEach\(XertOwnerWorkspaceSection\.allCases\)[\s\S]*XertOwnerWorkspace\.workspaces\(in: section\)/);
 
   assert.match(snapshot, /static let recommendedAdministratorCount = 2/);
   assert.match(snapshot, /var hasOperationalBackup: Bool/);
@@ -2013,7 +2007,7 @@ test('native schedule editors protect dirty work across local and command-centre
   assert.match(ownerNavigation, /order\.reversed\(\)\.compactMap \{ states\[\$0\] \}\.first/);
   assert.match(swiftTests, /testOwnerEditorExitCoordinatorRestoresTheUnderlyingDirtyDraft/);
   assert.match(swiftTests, /coordinator\.clear\(id: classID\)[\s\S]*XCTAssertEqual\(coordinator\.active\?\.id, blackoutID\)/);
-  assert.match(ownerShell, /private struct AdminOwnerExitReportingModifier: ViewModifier/);
+  assert.match(ownerShell, /struct AdminOwnerExitReportingModifier: ViewModifier/);
   assert.match(ownerShell, /\.onChange\(of: state\) \{ coordinator\?\.report\(\$0\) \}/);
   assert.match(ownerShell, /\.environment\(\\\.adminEditorExitCoordinator, editorExitCoordinator\)/);
   assert.match(ownerShell, /editorExitCoordinator\.active\?\.isDirty == true/);
