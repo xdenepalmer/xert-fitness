@@ -43,7 +43,8 @@ final class ModelsTests: XCTestCase {
     }
 
     func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
-        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 21)
+        // 22 since the forms and surveys builder added `case forms`.
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 22)
         for workspace in XertOwnerWorkspace.allCases {
             let route = XertOwnerRoute(workspace: workspace)
             XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
