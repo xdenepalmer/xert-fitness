@@ -4,6 +4,7 @@ const SECTION_FIELDS = {
   about: ['paragraphs'],
   contact: ['email', 'phone', 'address', 'instagram_handle', 'instagram_url', 'intro'],
   faq: ['items'],
+  terms: ['intro', 'updated', 'sections'],
 };
 
 const TEXT_LIMITS = {
@@ -15,6 +16,7 @@ const TEXT_LIMITS = {
   phone: [80, 'Phone'],
   address: [500, 'Address'],
   instagram_handle: [100, 'Instagram handle'],
+  updated: [80, 'Last updated date'],
 };
 
 function optionalText(value) {
@@ -57,6 +59,9 @@ export function normalizeSiteContent(sectionKey, data) {
   if (sectionKey === 'faq' && Array.isArray(data.items) && data.items.length > 20) {
     throw new Error('The homepage is limited to 20 FAQ items.');
   }
+  if (sectionKey === 'terms' && Array.isArray(data.sections) && data.sections.length > 30) {
+    throw new Error('Terms & conditions are limited to 30 clauses.');
+  }
   const clean = {};
 
   for (const field of fields) {
@@ -71,6 +76,17 @@ export function normalizeSiteContent(sectionKey, data) {
       const paragraphs = (Array.isArray(data.paragraphs) ? data.paragraphs : [])
         .map(value => boundedText(value, 4000, 'About paragraph')).filter(Boolean);
       if (paragraphs.length) clean.paragraphs = paragraphs;
+      continue;
+    }
+    if (field === 'sections') {
+      const sections = (Array.isArray(data.sections) ? data.sections : []).map(section => ({
+        title: boundedText(section?.title, 200, 'Clause heading'),
+        content: (Array.isArray(section?.content) ? section.content : [])
+          .map(value => boundedText(value, 6000, 'Clause paragraph')).filter(Boolean),
+      })).filter(section => section.title || section.content.length);
+      const incomplete = sections.find(section => !section.title || !section.content.length);
+      if (incomplete) throw new Error('Every clause needs a heading and at least one paragraph.');
+      if (sections.length) clean.sections = sections;
       continue;
     }
     if (field === 'items') {

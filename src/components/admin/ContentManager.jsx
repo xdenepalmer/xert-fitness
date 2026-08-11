@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
+import { Home, Phone, HelpCircle, FileText, ScrollText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
 import { getAllSiteContent, saveSiteContent } from '@/lib/adminData';
 import { clearSiteContentCache } from '@/lib/siteContent';
 import { CONTENT_DEFAULTS } from '@/lib/contentDefaults';
@@ -12,7 +12,7 @@ import { clearSiteContentDraft, readSiteContentDraft, writeSiteContentDraft } fr
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
-// Field types: text · textarea · qa_list · text_list · image_list
+// Field types: text · textarea · qa_list · text_list · clause_list · image_list
 const SECTIONS = [
   {
     key: 'hero',
@@ -70,6 +70,18 @@ const SECTIONS = [
     description: 'Questions shown on the homepage. Leave empty to use the built-in defaults.',
     fields: [
       { key: 'items', label: 'Questions & answers', type: 'qa_list' },
+    ],
+  },
+  {
+    key: 'terms',
+    title: 'Terms & Conditions',
+    icon: ScrollText,
+    viewPath: '/terms',
+    description: 'The public terms page — health and safety, medical conditions, free trial day, privacy and photography consent.',
+    fields: [
+      { key: 'intro', label: 'Intro paragraph', type: 'textarea', placeholder: 'These terms set clear expectations…' },
+      { key: 'updated', label: 'Last updated date', type: 'text', placeholder: '11 August 2026' },
+      { key: 'sections', label: 'Clauses', type: 'clause_list' },
     ],
   },
 ];
@@ -150,6 +162,61 @@ function TextListEditor({ value, onChange, itemLabel = 'Item', idPrefix }) {
       <button type="button" onClick={() => onChange([...items, ''])}
         className="px-4 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
         + Add {itemLabel.toLowerCase()}
+      </button>
+    </div>
+  );
+}
+
+/** Heading + paragraphs, one entry per clause of a legal page. */
+function ClauseListEditor({ value, onChange, idPrefix }) {
+  const items = Array.isArray(value) ? value : [];
+  const update = (i, patch) => onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      {items.map((item, i) => {
+        const paragraphs = Array.isArray(item.content) ? item.content : [];
+        return (
+          <div key={i} className="border border-xert-steel/20 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-body text-xs text-xert-concrete/40 uppercase">
+                <GripVertical className="w-3 h-3" /> Clause {i + 1}
+              </span>
+              <div className="flex gap-1">
+                <button type="button" aria-label={`Move clause ${i + 1} up`} onClick={() => move(i, -1)} disabled={i === 0} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8593;</button>
+                <button type="button" aria-label={`Move clause ${i + 1} down`} onClick={() => move(i, 1)} disabled={i === items.length - 1} className="min-w-11 min-h-11 border border-xert-steel/30 text-xert-concrete/50 text-xs hover:border-xert-steel disabled:opacity-30">&#8595;</button>
+                <button type="button" aria-label={`Remove clause ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                  className="min-w-11 min-h-11 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">&#10005;</button>
+              </div>
+            </div>
+            <label htmlFor={`${idPrefix}-${i}-title`} className="sr-only">Clause {i + 1} heading</label>
+            <input id={`${idPrefix}-${i}-title`} value={item.title || ''} onChange={e => update(i, { title: e.target.value })} placeholder="Clause heading" className={inputCls} />
+            {paragraphs.map((text, p) => (
+              <div key={p} className="flex gap-2">
+                <label htmlFor={`${idPrefix}-${i}-p${p}`} className="sr-only">Clause {i + 1} paragraph {p + 1}</label>
+                <textarea id={`${idPrefix}-${i}-p${p}`} value={text} rows={3} placeholder={`Paragraph ${p + 1}`} className={`${inputCls} resize-none`}
+                  onChange={e => update(i, { content: paragraphs.map((t, idx) => (idx === p ? e.target.value : t)) })} />
+                <button type="button" aria-label={`Remove clause ${i + 1} paragraph ${p + 1}`} onClick={() => update(i, { content: paragraphs.filter((_, idx) => idx !== p) })}
+                  className="min-w-11 min-h-11 shrink-0 border border-xert-red/30 text-xert-red/60 text-xs hover:border-xert-red/60">&#10005;</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => update(i, { content: [...paragraphs, ''] })}
+              className="px-3 py-2 border border-xert-steel/30 font-body text-[10px] text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
+              + Add paragraph
+            </button>
+          </div>
+        );
+      })}
+      <button type="button" onClick={() => onChange([...items, { title: '', content: [''] }])}
+        className="px-4 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase hover:border-xert-steel transition-colors">
+        + Add clause
       </button>
     </div>
   );
@@ -273,6 +340,8 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
                 placeholder={f.placeholder} rows={2} className={`${inputCls} resize-none`} />
             ) : f.type === 'qa_list' ? (
               <QaListEditor value={data[f.key]} onChange={v => set(f.key, v)} idPrefix={`${section.key}-${f.key}`} />
+            ) : f.type === 'clause_list' ? (
+              <ClauseListEditor value={data[f.key]} onChange={v => set(f.key, v)} idPrefix={`${section.key}-${f.key}`} />
             ) : f.type === 'text_list' ? (
               <TextListEditor value={data[f.key]} onChange={v => set(f.key, v)} itemLabel={f.itemLabel} idPrefix={`${section.key}-${f.key}`} />
             ) : f.type === 'image_list' ? (

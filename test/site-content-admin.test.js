@@ -48,3 +48,44 @@ test('bounds launch-facing copy, collections, and media URLs', () => {
     /2,048 characters or fewer/,
   );
 });
+
+test('the terms page is editable and its clauses are validated', () => {
+  const clean = normalizeSiteContent('terms', {
+    intro: '  Read these before training.  ',
+    updated: '11 August 2026',
+    sections: [
+      { title: 'Health And Safety', content: ['Train within your capability.', '  '] },
+      { title: '', content: [] },
+    ],
+    smuggled: 'not a terms field',
+  });
+  assert.deepEqual(clean, {
+    intro: 'Read these before training.',
+    updated: '11 August 2026',
+    sections: [{ title: 'Health And Safety', content: ['Train within your capability.'] }],
+  });
+
+  assert.throws(
+    () => normalizeSiteContent('terms', { sections: [{ title: 'Privacy', content: [] }] }),
+    /heading and at least one paragraph/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('terms', { sections: [{ content: ['Body copy.'] }] }),
+    /heading and at least one paragraph/,
+  );
+  assert.throws(
+    () => normalizeSiteContent('terms', {
+      sections: Array(31).fill({ title: 'Clause', content: ['Body.'] }),
+    }),
+    /limited to 30 clauses/,
+  );
+});
+
+test('the shipped terms defaults survive the admin validator unchanged', async () => {
+  const { TERMS_DEFAULTS } = await import('../src/lib/contentDefaults.js');
+  const clean = normalizeSiteContent('terms', TERMS_DEFAULTS);
+  assert.deepEqual(clean.sections, TERMS_DEFAULTS.sections);
+  for (const heading of ['Health And Safety', 'Medical Conditions', 'Free Trial Day', 'Privacy', 'Marketing Permission And Photography']) {
+    assert.ok(clean.sections.some(section => section.title === heading), `${heading} must be published`);
+  }
+});

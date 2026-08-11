@@ -70,9 +70,11 @@ test('member readiness is advisory, accessible, source-linked and server acknowl
 });
 
 test('privacy and account deletion copy enumerate the new member-owned data boundary', async () => {
+  // Terms copy lives in contentDefaults.js so the admin CMS can edit it; the
+  // page itself only renders whatever that (or a saved override) supplies.
   const [privacy, terms, account] = await Promise.all([
     read('../src/pages/Privacy.jsx'),
-    read('../src/pages/Terms.jsx'),
+    read('../src/lib/contentDefaults.js'),
     read('../src/pages/Account.jsx'),
   ]);
 
