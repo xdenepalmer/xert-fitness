@@ -168,15 +168,15 @@ export default function AvailabilityManager() {
           ) : (
             <div className="space-y-2">
               {blocks.map(b => (
-                <div key={b.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex items-center justify-between gap-4">
-                  <div>
+                <div key={b.id} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-ink p-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-4">
+                  <div className="min-w-0">
                     <p className="font-display text-sm text-xert-offwhite uppercase">{b.type}</p>
                     <p className="font-body text-xs text-xert-concrete/50">{b.start_time ? new Date(b.start_time).toLocaleString('en-AU') : ''} — {b.end_time ? new Date(b.end_time).toLocaleString('en-AU') : ''}</p>
                     {b.coach_name && <p className="font-body text-xs text-xert-concrete/40">{b.coach_name}</p>}
                     {b.notes && <p className="font-body text-xs text-xert-concrete/40 mt-1">{b.notes}</p>}
                     {b.is_bookable && <span className="inline-block mt-1 font-body text-[10px] uppercase tracking-wider text-green-400">Bookable</span>}
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="grid shrink-0 grid-cols-2 gap-2 min-[420px]:flex">
                     <button type="button" onClick={() => {
                       setEditingBlock(b);
                       setBlockForm(availabilityBlockEditorForm(b));
@@ -194,8 +194,8 @@ export default function AvailabilityManager() {
           )}
 
           {showBlockForm && (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-              <div role="dialog" aria-modal="true" aria-labelledby="availability-dialog-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-md w-full space-y-4">
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 sm:items-center sm:p-4">
+              <div role="dialog" aria-modal="true" aria-labelledby="availability-dialog-title" className="max-h-[100dvh] w-full max-w-md space-y-4 overflow-y-auto overscroll-contain border border-xert-steel/20 bg-xert-ink p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:max-h-[calc(100dvh-2rem)] sm:p-6">
                 <h3 id="availability-dialog-title" className="font-display text-xl text-xert-offwhite uppercase">{editingBlock ? 'Edit' : 'New'} availability block</h3>
                 <div>
                   <label htmlFor="availability-type" className="block font-body text-xs text-xert-concrete/40 uppercase mb-1">Type</label>
@@ -204,7 +204,7 @@ export default function AvailabilityManager() {
                     {BLOCK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
                   <div>
                     <label htmlFor="availability-start" className="block font-body text-xs text-xert-concrete/40 uppercase mb-1">Start</label>
                     <input id="availability-start" type="datetime-local" value={blockForm.start_time} onChange={e => setBlockForm(p => ({ ...p, start_time: e.target.value }))}
@@ -231,7 +231,7 @@ export default function AvailabilityManager() {
                   <textarea id="availability-notes" value={blockForm.notes} onChange={e => setBlockForm(p => ({ ...p, notes: e.target.value }))} rows={2}
                     className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
                 </div>
-                <div className="flex gap-3">
+                <div className="sticky bottom-0 -mx-4 flex gap-3 border-t border-xert-steel/15 bg-xert-ink px-4 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:border-0 sm:p-0">
                   <button onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlock} disabled={saving}
@@ -262,8 +262,8 @@ export default function AvailabilityManager() {
           ) : (
             <div className="space-y-2">
               {blackouts.map(b => (
-                <div key={b.id} className="bg-xert-ink border border-xert-red/20 p-4 flex items-center justify-between gap-4">
-                  <div>
+                <div key={b.id} className="flex flex-col gap-3 border border-xert-red/20 bg-xert-ink p-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-4">
+                  <div className="min-w-0">
                     <p className="font-display text-sm text-xert-red uppercase">{b.reason}</p>
                     <p className="font-body text-xs text-xert-concrete/50">
                       {b.start_time ? new Date(b.start_time).toLocaleString('en-AU') : ''} — {b.end_time ? new Date(b.end_time).toLocaleString('en-AU') : ''}
@@ -271,7 +271,7 @@ export default function AvailabilityManager() {
                     <p className="font-body text-xs text-xert-concrete/40">Affects: {b.affects}</p>
                     {b.notes && <p className="font-body text-xs text-xert-concrete/40 mt-1">{b.notes}</p>}
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="grid shrink-0 grid-cols-2 gap-2 min-[420px]:flex">
                     <button type="button" onClick={() => {
                       setEditingBlackout(b);
                       setBlackoutForm(blackoutPeriodEditorForm(b));
@@ -289,8 +289,8 @@ export default function AvailabilityManager() {
           )}
 
           {showBlackoutForm && (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-              <div role="dialog" aria-modal="true" aria-labelledby="blackout-dialog-title" className="bg-xert-ink border border-xert-steel/20 p-6 max-w-md w-full space-y-4">
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 sm:items-center sm:p-4">
+              <div role="dialog" aria-modal="true" aria-labelledby="blackout-dialog-title" className="max-h-[100dvh] w-full max-w-md space-y-4 overflow-y-auto overscroll-contain border border-xert-steel/20 bg-xert-ink p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:max-h-[calc(100dvh-2rem)] sm:p-6">
                 <h3 id="blackout-dialog-title" className="font-display text-xl text-xert-offwhite uppercase">{editingBlackout ? 'Edit' : 'New'} blackout period</h3>
                 <div>
                   <label htmlFor="blackout-reason" className="block font-body text-xs text-xert-concrete/40 uppercase mb-1">Reason</label>
@@ -306,7 +306,7 @@ export default function AvailabilityManager() {
                     {AFFECTS.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
                   <div>
                     <label htmlFor="blackout-start" className="block font-body text-xs text-xert-concrete/40 uppercase mb-1">Start</label>
                     <input id="blackout-start" type="datetime-local" value={blackoutForm.start_time} onChange={e => setBlackoutForm(p => ({ ...p, start_time: e.target.value }))}
@@ -323,7 +323,7 @@ export default function AvailabilityManager() {
                   <textarea id="blackout-notes" value={blackoutForm.notes} onChange={e => setBlackoutForm(p => ({ ...p, notes: e.target.value }))} rows={2}
                     className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
                 </div>
-                <div className="flex gap-3">
+                <div className="sticky bottom-0 -mx-4 flex gap-3 border-t border-xert-steel/15 bg-xert-ink px-4 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:border-0 sm:p-0">
                   <button onClick={() => { setShowBlackoutForm(false); setEditingBlackout(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlackout} disabled={saving}

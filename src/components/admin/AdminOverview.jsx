@@ -65,7 +65,7 @@ const ACTION_TONES = {
 function TodayOperationsDesk({ rows, available, error, onOpen }) {
   return (
     <section aria-labelledby="today-operations-heading">
-      <div className="mb-4 flex items-end justify-between gap-4">
+      <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4 sm:gap-4">
         <div>
           <h2 id="today-operations-heading" className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
             Today&apos;s Classes
@@ -101,7 +101,7 @@ function TodayOperationsDesk({ rows, available, error, onOpen }) {
             const attendanceCount = Number(session.attended_count || 0) + Number(session.no_show_count || 0);
             const action = session.attendance_due ? 'attendance' : 'roster';
             return (
-              <article key={session.session_id} className="border border-xert-steel/15 bg-xert-ink/60 p-4">
+              <article key={session.session_id} className="border border-xert-steel/15 bg-xert-ink/60 p-3 min-[380px]:p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -118,7 +118,7 @@ function TodayOperationsDesk({ rows, available, error, onOpen }) {
                     </p>
                   </div>
                   <button type="button" onClick={() => onOpen(session.session_id, action)}
-                    className="inline-flex min-h-11 shrink-0 items-center gap-2 bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy transition-colors hover:bg-xert-pale">
+                    className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy transition-colors hover:bg-xert-pale min-[380px]:w-auto">
                     {session.attendance_due ? <ClipboardCheck className="h-4 w-4" /> : <UsersRound className="h-4 w-4" />}
                     {session.attendance_due ? 'Roll call' : 'Roster'}
                   </button>
@@ -154,9 +154,23 @@ export default function AdminOverview({ onNavigate }) {
   const [dailyOperations, setDailyOperations] = useState([]);
   const [dailyOperationsAvailable, setDailyOperationsAvailable] = useState(true);
   const [dailyOperationsError, setDailyOperationsError] = useState('');
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityError, setActivityError] = useState('');
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessLoaded, setReadinessLoaded] = useState(false);
+  const [readinessError, setReadinessError] = useState('');
   const requestIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Number.NaN);
+  const activityRequestRef = useRef(0);
+  const activityInFlightRef = useRef(false);
+  const activityLoadedRef = useRef(false);
+  const activityLoadedAtRef = useRef(Number.NaN);
+  const readinessRequestRef = useRef(0);
+  const readinessInFlightRef = useRef(false);
+  const readinessLoadedRef = useRef(false);
+  const readinessLoadedAtRef = useRef(Number.NaN);
 
   const load = useCallback(async ({ initial = false } = {}) => {
     if (requestInFlightRef.current) return;
@@ -169,12 +183,8 @@ export default function AdminOverview({ onNavigate }) {
     setPartialWarning('');
     setDailyOperationsError('');
 
-    const readinessRequest = Promise.allSettled([
-      getAllCoaches(), getAllEvents(), getAllSiteContent(), getAvailableSessions()
-    ]);
-
     try {
-      const [s, settingsResult, businessResult, feed, dailyResult] = await Promise.all([
+      const [s, settingsResult, businessResult, dailyResult] = await Promise.all([
         getDashboardStats(),
         getSoftLaunchSettings()
           .then(data => ({ data, error: null }))
@@ -182,7 +192,6 @@ export default function AdminOverview({ onNavigate }) {
         getBusinessStats()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error })),
-        Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]).then(activityFromSettled),
         getAdminDailyOperations()
           .then(data => ({ data, error: null }))
           .catch(error => ({ data: null, error }))
@@ -201,8 +210,6 @@ export default function AdminOverview({ onNavigate }) {
       }
       setBiz(businessResult.data);
       setBusinessWarning(businessResult.error ? `Business metrics unavailable: ${businessResult.error.message || 'check Supabase permissions.'}` : '');
-      setActivity(feed.feed);
-      if (feed.errors.length) setPartialWarning(current => [current, `Recent activity incomplete: ${feed.errors.join(' | ')}`].filter(Boolean).join(' '));
       if (dailyResult.data) {
         setDailyOperations(dailyResult.data.rows);
         setDailyOperationsAvailable(dailyResult.data.available);
@@ -211,20 +218,65 @@ export default function AdminOverview({ onNavigate }) {
       setLastUpdated(new Date());
     } catch (loadError) {
       if (requestId === requestIdRef.current) setError(loadError.message);
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        lastRefreshAtRef.current = Date.now();
+      }
+      requestInFlightRef.current = false;
     }
+  }, []);
 
-    const readiness = readinessFromSettled(await readinessRequest);
-    if (requestId === requestIdRef.current) {
+  const loadActivity = useCallback(async ({ force = false } = {}) => {
+    const hasFreshActivity = activityLoadedRef.current
+      && Date.now() - activityLoadedAtRef.current < ADMIN_OVERVIEW_REFRESH_INTERVAL_MS;
+    if (activityInFlightRef.current || (hasFreshActivity && !force)) return;
+    activityInFlightRef.current = true;
+    const requestId = ++activityRequestRef.current;
+    setActivityLoading(true);
+    setActivityError('');
+    try {
+      const feed = activityFromSettled(await Promise.allSettled([getRecentOrders(6), adminRecentMembers(6)]));
+      if (requestId !== activityRequestRef.current) return;
+      setActivity(feed.feed);
+      setActivityError(feed.errors.length ? `Recent activity incomplete: ${feed.errors.join(' | ')}` : '');
+      activityLoadedRef.current = true;
+      activityLoadedAtRef.current = Date.now();
+      setActivityLoaded(true);
+    } catch (loadError) {
+      if (requestId === activityRequestRef.current) setActivityError(loadError.message || 'Recent activity is unavailable.');
+    } finally {
+      if (requestId === activityRequestRef.current) setActivityLoading(false);
+      activityInFlightRef.current = false;
+    }
+  }, []);
+
+  const loadReadiness = useCallback(async ({ force = false } = {}) => {
+    const hasFreshReadiness = readinessLoadedRef.current
+      && Date.now() - readinessLoadedAtRef.current < ADMIN_OVERVIEW_REFRESH_INTERVAL_MS;
+    if (readinessInFlightRef.current || (hasFreshReadiness && !force)) return;
+    readinessInFlightRef.current = true;
+    const requestId = ++readinessRequestRef.current;
+    setReadinessLoading(true);
+    setReadinessError('');
+    try {
+      const readiness = readinessFromSettled(await Promise.allSettled([
+        getAllCoaches(), getAllEvents(), getAllSiteContent(), getAvailableSessions(),
+      ]));
+      if (requestId !== readinessRequestRef.current) return;
       setFillRates(readiness.data.classes);
       setLaunch(readiness.launch);
-      if (readiness.errors.length) {
-        setPartialWarning(current => [current, `Readiness incomplete: ${readiness.errors.join(' | ')}`].filter(Boolean).join(' '));
-      }
-      setLoading(false);
-      setRefreshing(false);
-      lastRefreshAtRef.current = Date.now();
+      setReadinessError(readiness.errors.length ? `Readiness incomplete: ${readiness.errors.join(' | ')}` : '');
+      readinessLoadedRef.current = true;
+      readinessLoadedAtRef.current = Date.now();
+      setReadinessLoaded(true);
+    } catch (loadError) {
+      if (requestId === readinessRequestRef.current) setReadinessError(loadError.message || 'Launch planning is unavailable.');
+    } finally {
+      if (requestId === readinessRequestRef.current) setReadinessLoading(false);
+      readinessInFlightRef.current = false;
     }
-    requestInFlightRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -232,6 +284,10 @@ export default function AdminOverview({ onNavigate }) {
     return () => {
       requestIdRef.current += 1;
       requestInFlightRef.current = false;
+      activityRequestRef.current += 1;
+      activityInFlightRef.current = false;
+      readinessRequestRef.current += 1;
+      readinessInFlightRef.current = false;
     };
   }, [load]);
 
@@ -256,55 +312,64 @@ export default function AdminOverview({ onNavigate }) {
 
   const countdown = getCountdown(settings.target_launch_date);
   const actionQueue = buildAdminActionQueue(stats);
+  const dashboardWarnings = [
+    error ? `Dashboard refresh failed: ${error}` : '',
+    businessWarning,
+    partialWarning,
+  ].filter(Boolean);
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-7 p-4 sm:p-6 xl:p-8">
-      {error && (
-        <div className="p-4" style={{ backgroundColor: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)' }}>
-          <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Supabase error: {error}</p>
-        </div>
-      )}
-      {businessWarning && (
-        <div className="p-4" style={{ backgroundColor: 'rgba(224,179,106,0.1)', border: '1px solid rgba(224,179,106,0.28)' }}>
-          <p className="font-body text-sm" style={{ color: '#e0b36a' }}>{businessWarning}</p>
-        </div>
-      )}
-      {partialWarning && (
-        <div role="status" className="p-4 flex items-start gap-3" style={{ backgroundColor: 'rgba(224,179,106,0.1)', border: '1px solid rgba(224,179,106,0.28)' }}>
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#e0b36a' }} />
-          <p className="font-body text-sm" style={{ color: '#e0b36a' }}>{partialWarning}</p>
-        </div>
+    <div className="mx-auto max-w-[1600px] space-y-5 p-3 min-[360px]:p-4 sm:space-y-7 sm:p-6 xl:p-8">
+      {dashboardWarnings.length > 0 && (
+        <details className="group border border-amber-400/25 bg-amber-400/[0.07]">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3 font-body text-xs font-semibold text-amber-200 marker:content-none sm:px-4">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-300" />
+            <span className="min-w-0 flex-1">Some dashboard data needs attention</span>
+            <span className="rounded-full border border-amber-300/25 px-2 py-0.5 text-[10px] tabular-nums text-amber-200/75">{dashboardWarnings.length}</span>
+            <span aria-hidden="true" className="text-amber-300 transition-transform group-open:rotate-90">›</span>
+          </summary>
+          <div className="space-y-3 border-t border-amber-300/15 px-4 py-3">
+            {dashboardWarnings.map(message => (
+              <p key={message} className="font-body text-xs leading-relaxed text-amber-100/70">{message}</p>
+            ))}
+            <button type="button" onClick={() => void load()} disabled={loading || refreshing}
+              className="inline-flex min-h-11 items-center gap-2 border border-amber-300/25 px-3 font-body text-[11px] font-semibold uppercase tracking-wider text-amber-200 disabled:opacity-40">
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Try refresh
+            </button>
+          </div>
+        </details>
       )}
 
       {/* ── Header strip ── */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-xert-steel/15 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-xert-steel/15 pb-4 sm:items-end sm:gap-4 sm:pb-5">
           <div>
-            <p className="mb-2 font-body text-[11px] font-semibold uppercase tracking-[0.22em] text-xert-steel">
+            <p className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-xert-steel sm:mb-2 sm:text-[11px] sm:tracking-[0.22em]">
               {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
-            <h2 className="font-display text-3xl uppercase leading-none text-white sm:text-4xl">
+            <h2 className="hidden font-display text-3xl uppercase leading-none text-white sm:block sm:text-4xl">
               Today at XERT
             </h2>
-            <p className="mt-2 font-body text-sm text-xert-pale/60">Priorities, classes and the numbers Byron needs to run the gym.</p>
+            <p className="mt-2 hidden font-body text-sm text-xert-pale/60 sm:block">Priorities, classes and the numbers Byron needs to run the gym.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               {lastUpdated && (
                 <span className="font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }} aria-live="polite">
                   Updated {lastUpdated.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
                 </span>
               )}
-              <button type="button" onClick={() => void load()} disabled={loading || refreshing} aria-label="Refresh dashboard" title="Refresh dashboard" className="p-2 border border-xert-steel/25 text-xert-steel hover:border-xert-steel transition-colors disabled:opacity-40">
+              <button type="button" onClick={() => void load()} disabled={loading || refreshing} aria-label="Refresh dashboard" title="Refresh dashboard" className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/25 text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
             </div>
             {countdown && (
-            <div className="flex items-center gap-3 px-4 py-3"
+            <div className="flex min-h-11 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3"
               style={{ backgroundColor: 'rgba(123,167,188,0.12)', border: '1px solid rgba(123,167,188,0.35)' }}>
               <Rocket className="w-5 h-5" style={{ color: '#7BA7BC' }} />
               <div>
-                <p className="font-display text-xl leading-none tabular-nums" style={{ color: '#F1F3F4' }}>{countdown}</p>
-                <p className="font-body text-[10px] uppercase tracking-wider mt-0.5" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                <p className="font-display text-lg leading-none tabular-nums sm:text-xl" style={{ color: '#F1F3F4' }}>{countdown}</p>
+                <p className="mt-0.5 hidden font-body text-[10px] uppercase tracking-wider min-[380px]:block" style={{ color: 'rgba(209,221,230,0.5)' }}>
                   to launch · {settings.target_launch_date}
                 </p>
               </div>
@@ -342,11 +407,11 @@ export default function AdminOverview({ onNavigate }) {
                     type="button"
                     key={action.key}
                     onClick={() => onNavigate?.(action.target)}
-                    className="min-h-28 p-4 text-left flex items-start gap-4 transition-colors group"
+                    className="group flex min-h-[5.25rem] items-start gap-3 p-3 text-left transition-colors sm:min-h-28 sm:gap-4 sm:p-4"
                     style={{ backgroundColor: tone.background, border: `1px solid ${tone.border}` }}
                     aria-label={`${action.title}: ${action.detail}`}
                   >
-                    <div className="w-10 h-10 shrink-0 flex items-center justify-center" style={{ backgroundColor: 'rgba(11,18,24,0.52)' }}>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center sm:h-10 sm:w-10" style={{ backgroundColor: 'rgba(11,18,24,0.52)' }}>
                       <Icon className="w-5 h-5" style={{ color: tone.color }} />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -375,12 +440,39 @@ export default function AdminOverview({ onNavigate }) {
       )}
 
       {/* Business milestones + class fill rate. Operational go/no-go lives in Operations Health. */}
-      {launch && (
-        <details className="group border border-xert-steel/15 bg-xert-ink/40">
+        <details className="group border border-xert-steel/15 bg-xert-ink/40"
+          onToggle={event => { if (event.currentTarget.open) void loadReadiness(); }}>
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 font-body text-xs font-semibold uppercase tracking-[0.16em] text-xert-pale/65 marker:content-none">
             <span>Launch and planning</span>
             <span className="text-xert-steel transition-transform group-open:rotate-90">›</span>
           </summary>
+          {!readinessLoaded && !readinessError && (
+            <div className="flex min-h-24 items-center gap-3 border-t border-xert-steel/10 p-4 font-body text-sm text-xert-pale/55" role="status">
+              <RefreshCw className={`h-4 w-4 text-xert-steel ${readinessLoading ? 'animate-spin' : ''}`} />
+              Loading launch milestones and class fill…
+            </div>
+          )}
+          {readinessError && (
+            <div className="flex flex-col gap-3 border-t border-amber-400/20 bg-amber-400/5 p-4 min-[420px]:flex-row min-[420px]:items-center">
+              <p className="min-w-0 flex-1 font-body text-xs leading-relaxed text-amber-200/75">{readinessError}</p>
+              <button type="button" onClick={() => void loadReadiness({ force: true })} disabled={readinessLoading}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border border-amber-300/25 px-3 font-body text-[11px] font-semibold uppercase tracking-wider text-amber-200 disabled:opacity-40">
+                <RefreshCw className={`h-3.5 w-3.5 ${readinessLoading ? 'animate-spin' : ''}`} />
+                Retry launch data
+              </button>
+            </div>
+          )}
+          {readinessLoaded && !readinessError && (
+            <div className="flex justify-end border-t border-xert-steel/10 px-4 py-2">
+              <button type="button" onClick={() => void loadReadiness({ force: true })} disabled={readinessLoading}
+                className="inline-flex min-h-11 items-center gap-2 px-2 font-body text-[10px] font-semibold uppercase tracking-wider text-xert-steel disabled:opacity-40"
+                aria-label="Refresh launch planning" title="Refresh launch planning">
+                <RefreshCw className={`h-3.5 w-3.5 ${readinessLoading ? 'animate-spin' : ''}`} />
+                Refresh planning
+              </button>
+            </div>
+          )}
+          {launch && (
           <div className="grid grid-cols-1 gap-6 border-t border-xert-steel/10 p-4 lg:grid-cols-2">
           {/* Checklist */}
           {(() => {
@@ -442,7 +534,7 @@ export default function AdminOverview({ onNavigate }) {
               <Gauge className="w-3.5 h-3.5" /> Upcoming Class Fill
             </h3>
             {fillRates === null ? (
-              <p className="font-body text-sm" style={{ color: '#e0b36a' }}>Class fill data is unavailable. Refresh the dashboard to retry.</p>
+              <p className="font-body text-sm" style={{ color: '#e0b36a' }}>Class fill data is unavailable. Retry launch data above.</p>
             ) : fillRates.length === 0 ? (
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
                 No published upcoming classes yet — publish classes and live booking numbers appear here.
@@ -475,18 +567,18 @@ export default function AdminOverview({ onNavigate }) {
             )}
           </div>
           </div>
+          )}
         </details>
-      )}
 
       {/* ── Quick actions ── */}
       <div>
         <h2 className="mb-4 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/70">Create & publish</h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:gap-3 lg:grid-cols-3">
         {QUICK_ACTIONS.map(a => {
           const Icon = a.icon;
           return (
             <button key={a.key} onClick={() => onNavigate?.(a.key, a.params)}
-              className="flex items-center gap-3 p-4 text-left transition-all group"
+              className="group flex min-h-16 items-center gap-3 p-3 text-left transition-all sm:p-4"
               style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.16)'}>
@@ -519,18 +611,38 @@ export default function AdminOverview({ onNavigate }) {
       </div>
 
       {/* ── Activity + insights ── */}
-      <details className="group border border-xert-steel/15 bg-xert-ink/35">
+      <details className="group border border-xert-steel/15 bg-xert-ink/35"
+        onToggle={event => { if (event.currentTarget.open) void loadActivity(); }}>
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 font-body text-xs font-semibold uppercase tracking-[0.16em] text-xert-pale/65 marker:content-none">
           <span>Insights and recent activity</span>
           <span className="text-xert-steel transition-transform group-open:rotate-90">›</span>
         </summary>
         <div className="space-y-6 border-t border-xert-steel/10 p-4">
+      {activityError && (
+        <div className="flex flex-col gap-3 border border-amber-400/20 bg-amber-400/5 p-3 min-[420px]:flex-row min-[420px]:items-center">
+          <p className="min-w-0 flex-1 font-body text-xs leading-relaxed text-amber-200/75">{activityError}</p>
+          <button type="button" onClick={() => void loadActivity({ force: true })} disabled={activityLoading}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border border-amber-300/25 px-3 font-body text-[11px] font-semibold uppercase tracking-wider text-amber-200 disabled:opacity-40">
+            <RefreshCw className={`h-3.5 w-3.5 ${activityLoading ? 'animate-spin' : ''}`} />
+            Retry activity
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent activity */}
         <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
-          <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>Recent Activity</h3>
-          {loading ? (
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>Recent Activity</h3>
+            <button type="button" onClick={() => void loadActivity({ force: true })} disabled={activityLoading}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-steel disabled:opacity-40"
+              aria-label="Refresh recent activity" title="Refresh recent activity">
+              <RefreshCw className={`h-3.5 w-3.5 ${activityLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          {activityLoading && !activityLoaded ? (
             <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.4)' }} />)}</div>
+          ) : !activityLoaded ? (
+            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>Recent activity needs a retry.</p>
           ) : !activity || activity.length === 0 ? (
             <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
               Nothing yet — purchases and new members will appear here.

@@ -15,6 +15,7 @@ const WEB_FILES = new Set([
   'package-lock.json',
   'package.json',
   'postcss.config.js',
+  'scripts/inject-pwa-precache.mjs',
   'scripts/vercel-ignore-build.mjs',
   'tailwind.config.js',
   'vercel.json',

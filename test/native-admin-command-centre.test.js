@@ -436,8 +436,9 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   ]);
 
   assert.match(view, /@Environment\(\\\.scenePhase\) private var scenePhase/);
-  assert.match(view, /Date\(\)\.timeIntervalSince\(updatedAt\) >= 120/);
-  assert.match(view, /onChange\(of: scenePhase\)[\s\S]*ownerDataNeedsForegroundRefresh[\s\S]*admin\.refresh/);
+  assert.match(store, /enum AdminPresentationRefreshPolicy/);
+  assert.match(store, /static let fullRefreshAfter: TimeInterval = 10 \* 60/);
+  assert.match(view, /onChange\(of: scenePhase\)[\s\S]*admin\.refreshForPresentation/);
   assert.match(view, /private enum AdminOwnerQuickAction[\s\S]*case newClass[\s\S]*case newNotice[\s\S]*case newSessionPack/);
   assert.match(view, /private var quickTools: some View/);
   for (const label of [
@@ -467,7 +468,7 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /case \.events:[\s\S]*AdminEventsView/);
   assert.match(view, /case \.team:[\s\S]*AdminCoachesView/);
   assert.match(view, /title: "Set today's workout"[\s\S]*openWorkspaceWithFeedback\(\.workouts\)/);
-  assert.match(view, /title: "Create a form"[\s\S]*openWorkspaceWithFeedback\(\.forms\)/);
+  assert.match(view, /title: "Create a form"[\s\S]*requestCreateForm\(\)/);
 
   assert.match(store, /@Published private\(set\) var loadedSources: Set<String> = \[\]/);
   assert.match(store, /@Published private\(set\) var hasCompletedRefresh = false/);

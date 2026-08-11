@@ -16,7 +16,7 @@
     "stripe:catalog:live": "node scripts/run-with-local-env.mjs scripts/link-stripe-catalog.mjs --mode=live",
     "stripe:catalog:live:apply": "node scripts/run-with-local-env.mjs scripts/link-stripe-catalog.mjs --mode=live --apply",
     "stripe:catalog:live:replace": "node scripts/run-with-local-env.mjs scripts/link-stripe-catalog.mjs --mode=live --apply --replace-existing",
-    "build": "vite build",
+    "build": "vite build && node scripts/inject-pwa-precache.mjs",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",

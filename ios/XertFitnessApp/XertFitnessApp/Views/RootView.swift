@@ -27,6 +27,8 @@ struct RootView: View {
     @State private var privacyLockError: String?
     @State private var showingAdminCommandCentre = false
     @State private var requestedAdminRoute: XertOwnerRoute?
+    @State private var ownerAdminStore: AdminStore?
+    @State private var ownerAdminStoreUserID: UUID?
     @State private var showingNavigationCommands = false
     @State private var opensAdminAfterCommandDismissal = false
     @State private var pendingProtectedNavigation: XertNavigationIntent?
@@ -58,6 +60,9 @@ struct RootView: View {
         .onChange(of: store.isSignedIn) { isSignedIn in
             guard isSignedIn else {
                 ownerNavigationPulse.reset()
+                showingAdminCommandCentre = false
+                ownerAdminStore = nil
+                ownerAdminStoreUserID = nil
                 pinnedMemberRoutes = []
                 memberWorkspaceOrder = XertPrimaryDestination.dockOrder
                 isPrivacyUnlocked = true
@@ -87,6 +92,12 @@ struct RootView: View {
             resumeFirstClassAfterCheckout()
         }
         .onChange(of: store.profile?.role) { _ in
+            if store.profile?.isAdmin != true {
+                showingAdminCommandCentre = false
+                requestedAdminRoute = nil
+                ownerAdminStore = nil
+                ownerAdminStoreUserID = nil
+            }
             resumePendingOwnerNavigation()
             refreshOwnerNavigationPulse()
         }
@@ -141,6 +152,12 @@ struct RootView: View {
             restoredMemberWorkspace = navigation.workspaceRestorationValue
         }
         .onChange(of: store.authSession?.user?.id) { _ in
+            if ownerAdminStoreUserID != store.authSession?.user?.id {
+                showingAdminCommandCentre = false
+                requestedAdminRoute = nil
+                ownerAdminStore = nil
+                ownerAdminStoreUserID = nil
+            }
             reloadPinnedMemberRoutes()
             reloadMemberWorkspaceOrder()
         }
@@ -246,9 +263,10 @@ struct RootView: View {
             }
         }
         .fullScreenCover(isPresented: $showingAdminCommandCentre) {
-            if store.profile?.isAdmin == true {
+            if store.profile?.isAdmin == true, let ownerAdminStore {
                 ZStack {
                     AdminCommandCentreView(
+                        admin: ownerAdminStore,
                         requestedRoute: requestedAdminRoute,
                         onClose: {
                             showingAdminCommandCentre = false
@@ -935,7 +953,8 @@ struct RootView: View {
     }
 
     private func authorizeAndOpenOwnerRoute(_ route: XertOwnerRoute) {
-        guard store.profile?.isAdmin == true else { return }
+        guard store.profile?.isAdmin == true,
+              let ownerID = store.authSession?.user?.id else { return }
         if AppPrivacyLock.requiresOwnerProtection(
             isAdmin: true,
             isEnabled: privacyLockEnabled
@@ -956,6 +975,10 @@ struct RootView: View {
             return
         }
         pendingOwnerNavigation = nil
+        if ownerAdminStoreUserID != ownerID || ownerAdminStore == nil {
+            ownerAdminStore = AdminStore()
+            ownerAdminStoreUserID = ownerID
+        }
         requestedAdminRoute = route.workspace == .overview ? nil : route
         showingAdminCommandCentre = true
     }

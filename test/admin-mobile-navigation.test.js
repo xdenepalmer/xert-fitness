@@ -28,7 +28,7 @@ test('mobile admin navigation traps focus, locks scroll and restores the trigger
 
 test('admin navigation stays open when unsaved changes cancel a section change', () => {
   assert.match(adminLayout, /const navigated = onSectionChange\(item\.key\)/);
-  assert.match(adminLayout, /if \(navigated !== false\) setSidebarOpen\(false\)/);
+  assert.match(adminLayout, /if \(navigated !== false\) \{[\s\S]*?setSidebarOpen\(false\)/);
   assert.match(commandPalette, /const navigated = onNavigate\(sectionKey, params\)/);
   assert.match(commandPalette, /if \(navigated !== false\) onOpenChange\(false\)/);
   assert.match(adminLayout, /setSidebarOpen\(false\);[\s\S]*setPaletteOpen\(false\);[\s\S]*\}, \[activeSection\]\)/);

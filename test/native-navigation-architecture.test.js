@@ -237,7 +237,7 @@ test('owner command access is role-aware, full-screen, and available through nat
   assert.match(root, /isAdmin: store\.profile\?\.isAdmin == true/);
   assert.match(navigation, /title: workspace == \.overview \? "Owner Command Centre" : workspace\.title/);
   assert.match(root, /\.fullScreenCover\(isPresented: \$showingAdminCommandCentre\)/);
-  assert.match(root, /if store\.profile\?\.isAdmin == true \{[\s\S]*requestedRoute: requestedAdminRoute/);
+  assert.match(root, /if store\.profile\?\.isAdmin == true, let ownerAdminStore \{[\s\S]*admin: ownerAdminStore,[\s\S]*requestedRoute: requestedAdminRoute/);
   assert.match(ownerNavigation, /struct XertOwnerRoute: Equatable, Hashable/);
   assert.match(ownerNavigation, /enum XertOwnerNavigationDisposition: Equatable/);
   assert.match(ownerNavigation, /guard isSignedIn else \{ return \.requireAuthentication \}/);

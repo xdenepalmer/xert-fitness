@@ -33,6 +33,7 @@ test('Vercel skips native-only launch work without hiding web changes', () => {
     'package-lock.json',
     'vite.config.js',
     'vercel.json',
+    'scripts/inject-pwa-precache.mjs',
     'scripts/vercel-ignore-build.mjs',
     'vercel.ts',
   ]) {

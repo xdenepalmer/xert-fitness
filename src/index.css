@@ -263,3 +263,13 @@ summary:focus-visible {
 /* Horizontal scroll utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* iOS Safari zooms the viewport when a focused form control renders below
+   16px. Admin editors intentionally use compact typography on desktop, but
+   mobile controls must stay at 16px so the keyboard never destroys context. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  [data-admin-workspace] :where(input, select, textarea),
+  [cmdk-input] {
+    font-size: 16px !important;
+  }
+}

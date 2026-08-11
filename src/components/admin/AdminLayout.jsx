@@ -8,7 +8,9 @@ import { getAdminBadgeCounts } from '@/lib/adminData';
 import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { useAdminDialogLayer } from '@/lib/adminDialogLayer';
 import CommandPalette from '@/components/admin/CommandPalette';
-import { ADMIN_WORKSPACE_GROUPS, ADMIN_WORKSPACES } from '@/lib/adminWorkspaces';
+import {
+  ADMIN_MOBILE_WORKSPACES, ADMIN_WORKSPACE_GROUPS, ADMIN_WORKSPACES,
+} from '@/lib/adminWorkspaces';
 
 const LOGO = '/assets/xert-logo-horizontal-light.png';
 
@@ -30,6 +32,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   const sidebarRef = useRef(null);
   const menuButtonRef = useRef(null);
   const workspaceRef = useRef(null);
+  const mainRef = useRef(null);
 
   useAdminDialogLayer(workspaceRef);
 
@@ -47,6 +50,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   useEffect(() => {
     setSidebarOpen(false);
     setPaletteOpen(false);
+    if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [activeSection]);
 
   useEffect(() => {
@@ -146,29 +150,37 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [activeSection]);
+  }, []);
 
   const activeItem = ADMIN_WORKSPACES.find(item => item.key === activeSection);
   const activeLabel = activeItem?.label || 'Command Centre';
+  const mobileWorkspaceKeys = new Set(ADMIN_MOBILE_WORKSPACES.map(item => item.key));
+  const mobileOtherBadgeCount = Object.entries(badges).reduce(
+    (total, [key, count]) => mobileWorkspaceKeys.has(key) ? total : total + Number(count || 0),
+    0,
+  );
   const initials = (profile?.full_name || user?.email || 'A')
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
 
   return (
-    <div className="flex h-[100dvh] min-h-0 overflow-hidden" style={{ backgroundColor: '#0b1218' }}>
+    <div className="flex h-[100dvh] min-h-0 overflow-hidden overscroll-none" style={{ backgroundColor: '#0b1218' }}>
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         ref={sidebarRef}
         id="admin-navigation"
         aria-label="Admin navigation"
         aria-hidden={!desktopNavigation && !sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-y-0 left-0 z-50 flex h-full min-h-0 w-72 flex-col transform transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        role={!desktopNavigation ? 'dialog' : undefined}
+        aria-modal={!desktopNavigation && sidebarOpen ? 'true' : undefined}
+        className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[min(88dvh,48rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl shadow-2xl transform transition-transform duration-200 lg:static lg:h-full lg:max-h-none lg:w-72 lg:translate-y-0 lg:rounded-none lg:shadow-none ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'}`}
         style={{
           background: 'linear-gradient(180deg, #101820 0%, #0b1218 100%)',
           borderRight: '1px solid rgba(123,167,188,0.14)',
         }}
       >
+        <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-xert-steel/30 lg:hidden" />
         {/* Brand */}
-        <div className="relative px-5 py-4 overflow-hidden" style={{ borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
+        <div className="relative overflow-hidden px-5 pb-3 pt-2 lg:py-4" style={{ borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
           <div className="absolute inset-0 pointer-events-none" style={GRID_BG} />
           <div className="relative">
             <img src={LOGO} alt="XERT" className="h-6 w-auto mb-2" />
@@ -190,7 +202,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         </div>
 
         {/* Nav */}
-        <nav aria-label="Command centre sections" className="flex-1 overflow-y-auto py-3">
+        <nav aria-label="Command centre sections" className="flex-1 overflow-y-auto overscroll-contain py-2 lg:py-3">
           {ADMIN_WORKSPACE_GROUPS.map(group => (
             <div key={group.key} className="mb-1">
               {group.label && (
@@ -207,7 +219,10 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                     key={item.key}
                     onClick={() => {
                       const navigated = onSectionChange(item.key);
-                      if (navigated !== false) setSidebarOpen(false);
+                      if (navigated !== false) {
+                        setSidebarOpen(false);
+                        if (!desktopNavigation) window.requestAnimationFrame(() => menuButtonRef.current?.focus());
+                      }
                     }}
                     aria-current={active ? 'page' : undefined}
                     title={item.detail}
@@ -242,7 +257,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         </nav>
 
         {/* Footer: account */}
-        <div className="p-4 space-y-3" style={{ borderTop: '1px solid rgba(123,167,188,0.14)' }}>
+        <div className="space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:pb-4" style={{ borderTop: '1px solid rgba(123,167,188,0.14)' }}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 shrink-0 flex items-center justify-center font-display text-sm"
               style={{ backgroundColor: 'rgba(123,167,188,0.16)', color: '#7BA7BC', border: '1px solid rgba(123,167,188,0.3)' }}>
@@ -280,21 +295,24 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       {/* ── Main ────────────────────────────────────────────────────────── */}
       <div ref={workspaceRef} data-admin-workspace className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between"
+        <header className="relative z-30 flex shrink-0 items-center justify-between gap-3 px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-6 sm:py-3.5"
           style={{
             backgroundColor: 'rgba(11,18,24,0.92)',
             borderBottom: '1px solid rgba(123,167,188,0.14)',
             backdropFilter: 'blur(10px)',
           }}>
           <div className="flex min-w-0 items-center gap-4">
-            <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation" title="Open navigation"
-              aria-expanded={sidebarOpen} aria-controls="admin-navigation"
-              className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: 'rgba(209,221,230,0.5)' }}>
-              <Menu className="w-5 h-5" />
-            </button>
             <div className="min-w-0">
               <p className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-xert-steel/55 sm:block">Command Centre</p>
-              <h1 className="truncate font-display text-lg uppercase tracking-wide" style={{ color: '#F1F3F4' }}>{activeLabel}</h1>
+              <div className="flex min-w-0 items-center gap-2">
+                <h1 className="truncate font-display text-base uppercase tracking-wide sm:text-lg" style={{ color: '#F1F3F4' }}>{activeLabel}</h1>
+                {hasUnsavedChanges && (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 font-body text-[9px] font-semibold uppercase tracking-wider text-amber-300 sm:hidden" role="status">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                    Unsaved
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -304,7 +322,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
               </span>
             )}
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search admin tools" title="Search admin tools"
-              className="flex min-h-11 items-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
+              className="flex min-h-11 min-w-11 items-center justify-center gap-2 px-3 py-1.5 font-body text-[11px] transition-colors"
               style={{ border: '1px solid rgba(123,167,188,0.25)', color: 'rgba(209,221,230,0.5)' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#7BA7BC'; e.currentTarget.style.color = '#F1F3F4'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(123,167,188,0.25)'; e.currentTarget.style.color = 'rgba(209,221,230,0.5)'; }}>
@@ -322,12 +340,65 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         </header>
 
         {/* Content */}
-        <main className="relative min-h-0 flex-1 overflow-y-auto">
+        <main ref={mainRef} data-admin-scroll-region className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain lg:[scrollbar-gutter:stable]">
           <div className="absolute inset-0 pointer-events-none" style={{ ...GRID_BG, maskImage: 'linear-gradient(180deg, black, transparent 320px)', WebkitMaskImage: 'linear-gradient(180deg, black, transparent 320px)' }} />
           <div className="relative">
             {children}
           </div>
         </main>
+
+        {/* Thumb-reachable owner jobs. The full catalogue remains in More. */}
+        <nav aria-label="Owner shortcuts" data-admin-mobile-dock
+          className="relative z-30 shrink-0 border-t border-xert-steel/15 bg-[#0b1218]/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden">
+          <div className="grid grid-cols-4">
+            {ADMIN_MOBILE_WORKSPACES.map(item => {
+              const active = activeSection === item.key;
+              const Icon = item.icon;
+              return (
+                <button type="button" key={item.key}
+                  onClick={() => {
+                    if (active) {
+                      if (mainRef.current) mainRef.current.scrollTop = 0;
+                    } else {
+                      onSectionChange(item.key);
+                    }
+                  }}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={`Open ${item.label}`}
+                  className="relative flex min-h-14 flex-col items-center justify-center gap-1 px-1 font-body text-[10px] font-semibold transition-colors"
+                  style={{ color: active ? '#D1DDE6' : 'rgba(209,221,230,0.46)' }}>
+                  <span className={`absolute inset-x-4 top-0 h-0.5 rounded-full ${active ? 'bg-xert-steel' : 'bg-transparent'}`} />
+                  <span className="relative">
+                    <Icon className="h-5 w-5" style={{ color: active ? '#7BA7BC' : 'currentColor' }} />
+                    {badges[item.key] > 0 && (
+                      <span className="absolute -right-2.5 -top-2 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-xert-steel px-1 text-[9px] tabular-nums text-xert-navy">
+                        {Math.min(99, Number(badges[item.key]))}
+                      </span>
+                    )}
+                  </span>
+                  <span>{item.mobileLabel}</span>
+                </button>
+              );
+            })}
+            <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)}
+              aria-label="Open all admin tools" title="All admin tools"
+              aria-expanded={sidebarOpen} aria-controls="admin-navigation"
+              aria-current={!mobileWorkspaceKeys.has(activeSection) ? 'page' : undefined}
+              className="relative flex min-h-14 flex-col items-center justify-center gap-1 px-1 font-body text-[10px] font-semibold transition-colors"
+              style={{ color: !mobileWorkspaceKeys.has(activeSection) ? '#D1DDE6' : 'rgba(209,221,230,0.46)' }}>
+              <span className={`absolute inset-x-4 top-0 h-0.5 rounded-full ${!mobileWorkspaceKeys.has(activeSection) ? 'bg-xert-steel' : 'bg-transparent'}`} />
+              <span className="relative">
+                <Menu className="h-5 w-5" style={{ color: !mobileWorkspaceKeys.has(activeSection) ? '#7BA7BC' : 'currentColor' }} />
+                {mobileOtherBadgeCount > 0 && (
+                  <span className="absolute -right-2.5 -top-2 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-xert-steel px-1 text-[9px] tabular-nums text-xert-navy">
+                    {Math.min(99, mobileOtherBadgeCount)}
+                  </span>
+                )}
+              </span>
+              <span>More</span>
+            </button>
+          </div>
+        </nav>
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} />

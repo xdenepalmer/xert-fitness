@@ -54,7 +54,10 @@ test('native command centre has a first-class forms workspace and editor', async
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
   ]);
   assert.match(navigation, /case forms/);
-  assert.match(commandCentre, /case \.forms:[\s\S]*AdminFormsView\(session: session\)/);
+  assert.match(
+    commandCentre,
+    /case \.forms:[\s\S]*AdminFormsView\([\s\S]*session: session,[\s\S]*createIntentID: \$createFormIntentID/,
+  );
   assert.match(view, /struct AdminFormsView: View/);
   assert.match(view, /struct AdminFormEditorView: View/);
   assert.match(view, /Section\("Skip logic"\)/);

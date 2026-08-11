@@ -46,6 +46,48 @@ enum AdminOperationalRefreshPolicy {
     }
 }
 
+enum AdminPresentationRefreshPlan: Equatable {
+    case full
+    case operations
+    case retryUnavailable(after: TimeInterval)
+    case reuse
+}
+
+/// Keeps a warm owner session responsive without allowing operational queues
+/// to quietly age. Full catalogue and platform reads are deliberately bounded;
+/// the fast operational pulse covers the data that changes during a shift.
+enum AdminPresentationRefreshPolicy {
+    static let fullRefreshAfter: TimeInterval = 10 * 60
+    static let unavailableRetryAfter: TimeInterval = 30
+
+    static func plan(
+        hasCompletedRefresh: Bool,
+        fullRefreshAttemptedAt: Date?,
+        operationalUpdatedAt: Date?,
+        hasUnavailableSources: Bool,
+        now: Date = Date()
+    ) -> AdminPresentationRefreshPlan {
+        guard hasCompletedRefresh, let fullRefreshAttemptedAt else { return .full }
+        let elapsedSinceFullRefresh = max(0, now.timeIntervalSince(fullRefreshAttemptedAt))
+        if elapsedSinceFullRefresh >= fullRefreshAfter { return .full }
+        if hasUnavailableSources {
+            let remainingDelay = unavailableRetryAfter - elapsedSinceFullRefresh
+            return remainingDelay > 0
+                ? .retryUnavailable(after: remainingDelay)
+                : .full
+        }
+
+        let operationalFreshness = AdminOperationalRefreshPolicy.freshness(
+            hasCompletedRefresh: hasCompletedRefresh,
+            updatedAt: operationalUpdatedAt,
+            isRefreshing: false,
+            hasUnavailableSources: false,
+            now: now
+        )
+        return operationalFreshness == .current ? .reuse : .operations
+    }
+}
+
 @MainActor
 final class AdminStore: ObservableObject {
     @Published private(set) var dailyOperations: [AdminDailyOperation] = []
@@ -209,6 +251,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var ptRequestStatusIsWarning = false
     @Published var errorMessage: String?
     @Published private(set) var lastUpdatedAt: Date?
+    @Published private(set) var fullRefreshAttemptedAt: Date?
     @Published private(set) var operationalUpdatedAt: Date?
     @Published private(set) var hasCompletedRefresh = false
     @Published private(set) var operationalQueueState: AdminOperationalQueueState = .idle
@@ -313,6 +356,44 @@ final class AdminStore: ObservableObject {
 
     private func healthSourceIsCurrent(_ source: String) -> Bool {
         loadedSources.contains(source) && !refreshUnavailableSources.contains(source)
+    }
+
+    func presentationRefreshPlan(now: Date = Date()) -> AdminPresentationRefreshPlan {
+        AdminPresentationRefreshPolicy.plan(
+            hasCompletedRefresh: hasCompletedRefresh,
+            fullRefreshAttemptedAt: fullRefreshAttemptedAt,
+            operationalUpdatedAt: operationalUpdatedAt,
+            hasUnavailableSources: !refreshUnavailableSources.isEmpty,
+            now: now
+        )
+    }
+
+    /// Refreshes only what the owner needs when reopening Command Centre.
+    /// A retained store can render immediately; rapidly changing queues are
+    /// refreshed independently until the bounded full-refresh window expires.
+    @discardableResult
+    func refreshForPresentation(session: AuthSession) async -> AdminPresentationRefreshPlan {
+        let plan = presentationRefreshPlan()
+        switch plan {
+        case .full:
+            await refresh(session: session)
+        case .operations:
+            _ = await refreshOperationalPulse(session: session)
+        case .retryUnavailable(let delay):
+            do {
+                try await Task.sleep(
+                    nanoseconds: UInt64((delay * 1_000_000_000).rounded(.up))
+                )
+            } catch {
+                return plan
+            }
+            guard !Task.isCancelled else { return plan }
+            guard presentationRefreshPlan() == .full else { return plan }
+            await refresh(session: session)
+        case .reuse:
+            break
+        }
+        return plan
     }
 
     func refresh(session: AuthSession) async {
@@ -510,6 +591,11 @@ final class AdminStore: ObservableObject {
             loadedSource = true
         } catch { failures.append("lead actions"); queueFailures.append("lead actions") }
 
+        // Dismissing Command Centre cancels its presentation task. Never turn
+        // that expected cancellation into a durable partial-data snapshot;
+        // the retained store must perform a full refresh when it next opens.
+        guard !Task.isCancelled else { return }
+
         if loadedSource {
             lastUpdatedAt = Date()
         }
@@ -536,6 +622,7 @@ final class AdminStore: ObservableObject {
             classMutationStatusIsWarning = false
         }
         hasCompletedRefresh = true
+        fullRefreshAttemptedAt = Date()
         operationalQueueState = queueFailures.isEmpty
             ? .ready
             : .partial(unavailableSources: queueFailures)
@@ -1172,6 +1259,34 @@ final class AdminStore: ObservableObject {
         emergencyContactRevealGeneration &+= 1
         revealingEmergencyContactMemberID = nil
         revealedMemberEmergencyContact = nil
+    }
+
+    /// Keeps the retained catalogue warm while ensuring drill-down PII and
+    /// exportable rosters never survive a Command Centre presentation.
+    func clearVolatileDrillDownData() {
+        if let loadedMemberDetailID {
+            clearMemberDetail(memberID: loadedMemberDetailID)
+        }
+        resetOwnerMemberSearch()
+        resetOwnerTaskResolution()
+
+        eventRosterGeneration &+= 1
+        eventRoster = []
+        eventRosterLoadedEventID = nil
+        eventRosterUnavailableEventID = nil
+        loadingEventRosterID = nil
+
+        rosterLoadGeneration &+= 1
+        requestedRosterSessionID = nil
+        classRoster = []
+        classRosterReadiness = [:]
+        loadedRosterSessionID = nil
+        loadedRosterAt = nil
+        loadingRosterSessionID = nil
+        rosterLoadErrorSessionID = nil
+        rosterLoadErrorMessage = nil
+        rosterReadinessStatusMessage = nil
+        staffBookingFeedback = nil
     }
 
     func revealMemberEmergencyContact(session: AuthSession, memberID: UUID) async {

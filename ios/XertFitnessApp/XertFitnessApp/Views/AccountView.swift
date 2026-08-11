@@ -90,7 +90,7 @@ struct AccountView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .toolbar {
                     if store.profile?.isAdmin == true {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             Button(action: onOpenOwner) {
                                 Label("Owner", systemImage: "waveform.path.ecg.rectangle")
                             }

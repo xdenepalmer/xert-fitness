@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import PWAInstallPrompt from '@/components/public/PWAInstallPrompt';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
 import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 
@@ -166,6 +167,7 @@ export default function AdminCommandCentre() {
         confirmLabel="Discard changes"
         onConfirm={discardAndContinue}
       />
+      <PWAInstallPrompt context="owner" />
     </>
   );
 }

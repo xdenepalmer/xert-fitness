@@ -4,6 +4,40 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
+test('native Create form commands consume one safe editor intent in or outside Forms', async () => {
+  const [forms, commandCentre] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminFormsView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(commandCentre, /@State private var createFormIntentID: UUID\?/);
+  assert.match(commandCentre, /@State private var pendingCreateFormNavigation = false/);
+  assert.match(
+    commandCentre,
+    /private func requestCreateForm\(\)[\s\S]*currentWorkspace == \.forms[\s\S]*pendingCreateFormNavigation = true[\s\S]*openWorkspace\(\.forms\)/,
+  );
+  assert.match(
+    commandCentre,
+    /workspace == \.forms, pendingCreateFormNavigation[\s\S]*pendingCreateFormNavigation = false[\s\S]*createFormIntentID = UUID\(\)/,
+  );
+  assert.match(commandCentre, /title: "Create a form"[\s\S]*requestCreateForm\(\)/);
+  assert.match(commandCentre, /if action == \.newForm \{[\s\S]*requestCreateForm\(\)[\s\S]*return/);
+  assert.match(
+    commandCentre,
+    /case \.forms:[\s\S]*AdminFormsView\([\s\S]*createIntentID: \$createFormIntentID/,
+  );
+  assert.match(commandCentre, /onDismiss: runPendingLauncherAction/);
+
+  assert.match(forms, /@Binding private var createIntentID: UUID\?/);
+  assert.match(forms, /createIntentID: Binding<UUID\?> = \.constant\(nil\)/);
+  assert.match(forms, /\.onAppear\(perform: consumeCreateIntent\)/);
+  assert.match(forms, /\.onChange\(of: createIntentID\) \{ _ in consumeCreateIntent\(\) \}/);
+  assert.match(
+    forms,
+    /private func consumeCreateIntent\(\)[\s\S]*createIntentID = nil[\s\S]*guard editor == nil[\s\S]*editor = AdminFormEditorContext\(form: nil\)/,
+  );
+});
+
 test('native form skip logic only offers effective forward destinations', async () => {
   const [view, models] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminFormsView.swift'),

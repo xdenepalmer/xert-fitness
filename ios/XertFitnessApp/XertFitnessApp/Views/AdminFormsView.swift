@@ -4,6 +4,7 @@ import UIKit
 
 struct AdminFormsView: View {
     let session: AuthSession
+    @Binding private var createIntentID: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var forms: [AdminForm] = []
     @State private var query = ""
@@ -11,6 +12,14 @@ struct AdminFormsView: View {
     @State private var errorMessage: String?
     @State private var editor: AdminFormEditorContext?
     private let api = XertAPI()
+
+    init(
+        session: AuthSession,
+        createIntentID: Binding<UUID?> = .constant(nil)
+    ) {
+        self.session = session
+        _createIntentID = createIntentID
+    }
 
     private var filteredForms: [AdminForm] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -64,9 +73,19 @@ struct AdminFormsView: View {
         }
         .refreshable { await load() }
         .task { if forms.isEmpty { await load() } }
+        .onAppear(perform: consumeCreateIntent)
+        .onChange(of: createIntentID) { _ in consumeCreateIntent() }
         .alert("Forms & Surveys", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    private func consumeCreateIntent() {
+        guard createIntentID != nil else { return }
+        createIntentID = nil
+        guard editor == nil else { return }
+        XertHaptics.play(.lightImpact)
+        editor = AdminFormEditorContext(form: nil)
     }
 
     private var summary: some View {

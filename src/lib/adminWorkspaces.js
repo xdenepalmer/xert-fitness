@@ -12,15 +12,15 @@ export const ADMIN_WORKSPACE_GROUPS = Object.freeze([
     key: 'today',
     label: null,
     items: [
-      { key: 'overview', label: 'Today', detail: 'Priorities, classes and business pulse', icon: LayoutDashboard },
+      { key: 'overview', label: 'Today', mobileLabel: 'Today', detail: 'Priorities, classes and business pulse', icon: LayoutDashboard },
     ],
   },
   {
     key: 'operate',
     label: 'Operate',
     items: [
-      { key: 'gym-members', label: 'Members', detail: 'Accounts, credits and member records', icon: Users },
-      { key: 'calendar', label: 'Class Calendar', detail: 'Schedule, rosters and attendance', icon: CalendarDays },
+      { key: 'gym-members', label: 'Members', mobileLabel: 'Members', detail: 'Accounts, credits and member records', icon: Users },
+      { key: 'calendar', label: 'Class Calendar', mobileLabel: 'Classes', detail: 'Schedule, rosters and attendance', icon: CalendarDays },
       { key: 'workouts', label: 'Workout of the Day', detail: 'Program the in-club display', icon: Tv },
       { key: 'bookings', label: 'Booking Requests', detail: 'Resolve public and member requests', icon: Inbox },
       { key: 'pt-requests', label: 'PT Requests', detail: 'Approve and complete private training', icon: Dumbbell },
@@ -68,6 +68,11 @@ export const ADMIN_WORKSPACE_GROUPS = Object.freeze([
 ]);
 
 export const ADMIN_WORKSPACES = Object.freeze(ADMIN_WORKSPACE_GROUPS.flatMap(group => group.items));
+
+// The three owner jobs used throughout a normal shift stay one tap away on
+// small screens. They are selected from the same catalogue as the desktop
+// sidebar so routes, labels and icons cannot drift between layouts.
+export const ADMIN_MOBILE_WORKSPACES = Object.freeze(ADMIN_WORKSPACES.filter(item => item.mobileLabel));
 
 export const ADMIN_QUICK_ACTIONS = Object.freeze([
   { key: 'calendar', label: 'Create a class', icon: CalendarDays, params: { action: 'create' } },

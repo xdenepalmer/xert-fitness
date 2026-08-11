@@ -53,7 +53,7 @@ struct AdminCommandCentreView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @StateObject private var admin = AdminStore()
+    @ObservedObject private var admin: AdminStore
     @StateObject private var editorExitCoordinator = XertOwnerEditorExitCoordinator()
     @SceneStorage("xert.adminWorkspace") private var restoredWorkspace = XertOwnerWorkspace.overview.rawValue
     @SceneStorage("xert.adminRecentWorkspaces") private var restoredRecentWorkspaces = ""
@@ -62,6 +62,10 @@ struct AdminCommandCentreView: View {
     @State private var compactPath: [XertOwnerWorkspace] = []
     @State private var pendingCompactPathWorkspace: XertOwnerWorkspace?
     @State private var showingWorkspaceSwitcher = false
+    @State private var pendingLauncherAction: AdminOwnerLauncherAction?
+    @State private var createFormIntentID: UUID?
+    @State private var pendingCreateFormNavigation = false
+    @State private var foregroundPresentationRefreshTask: Task<Void, Never>?
     @State private var showingAllWorkspaces = false
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
@@ -104,9 +108,11 @@ struct AdminCommandCentreView: View {
     }
 
     init(
+        admin: AdminStore,
         requestedRoute: XertOwnerRoute? = nil,
         onClose: (() -> Void)? = nil
     ) {
+        self.admin = admin
         self.requestedRoute = requestedRoute
         self.onClose = onClose
     }
@@ -138,7 +144,8 @@ struct AdminCommandCentreView: View {
             prepareOwnerNavigation(for: userID)
             reloadPinnedWorkspaces()
             applyRequestedRoute(requestedRoute, resolvesTask: false)
-            await admin.refresh(session: session)
+            await admin.refreshForPresentation(session: session)
+            guard !Task.isCancelled else { return }
             if let task = presentedOwnerTask {
                 await admin.resolveOwnerTask(session: session, task: task)
             }
@@ -171,7 +178,10 @@ struct AdminCommandCentreView: View {
         .onChange(of: requestedRoute) { route in
             applyRequestedRoute(route)
         }
-        .sheet(isPresented: $showingWorkspaceSwitcher) {
+        .sheet(
+            isPresented: $showingWorkspaceSwitcher,
+            onDismiss: runPendingLauncherAction
+        ) {
             if let session = authorizedOwnerSession {
                 AdminWorkspaceSwitcher(
                     admin: admin,
@@ -190,6 +200,9 @@ struct AdminCommandCentreView: View {
                     openOwnerRoute(route)
                 } onTogglePin: { workspace in
                     togglePinnedWorkspace(workspace)
+                } onRunAction: { action in
+                    pendingLauncherAction = action
+                    showingWorkspaceSwitcher = false
                 }
             }
         }
@@ -226,6 +239,7 @@ struct AdminCommandCentreView: View {
 
             Button("Keep editing", role: .cancel) {
                 pendingOwnerExitRequest = nil
+                pendingCreateFormNavigation = false
             }
         } message: { request in
             Text(platformExitMessage(for: request))
@@ -242,6 +256,7 @@ struct AdminCommandCentreView: View {
             }
             Button("Keep editing", role: .cancel) {
                 pendingEditorExitRequest = nil
+                pendingCreateFormNavigation = false
             }
         } message: { request in
             Text(
@@ -258,24 +273,33 @@ struct AdminCommandCentreView: View {
             Text(admin.errorMessage ?? "")
         }
         .onChange(of: scenePhase) { phase in
+            foregroundPresentationRefreshTask?.cancel()
+            foregroundPresentationRefreshTask = nil
             guard phase == .active else {
                 admin.clearRevealedMemberEmergencyContact()
                 return
             }
-            guard
-                  let session = authorizedOwnerSession,
-                  ownerDataNeedsForegroundRefresh else { return }
-            Task { await admin.refresh(session: session) }
+            guard let session = authorizedOwnerSession else { return }
+            foregroundPresentationRefreshTask = Task {
+                await admin.refreshForPresentation(session: session)
+            }
         }
         .onChange(of: showingPlatformExitConfirmation) { isPresented in
             if !isPresented && !isSavingPlatformExit {
                 pendingOwnerExitRequest = nil
+                if currentWorkspace != .forms { pendingCreateFormNavigation = false }
             }
         }
         .onChange(of: showingEditorExitConfirmation) { isPresented in
             if !isPresented {
                 pendingEditorExitRequest = nil
+                if currentWorkspace != .forms { pendingCreateFormNavigation = false }
             }
+        }
+        .onDisappear {
+            foregroundPresentationRefreshTask?.cancel()
+            foregroundPresentationRefreshTask = nil
+            admin.clearVolatileDrillDownData()
         }
     }
 
@@ -293,12 +317,6 @@ struct AdminCommandCentreView: View {
     private var operationalPulseTaskID: String {
         let accountID = store.authSession?.user?.id.uuidString.lowercased() ?? "guest"
         return "\(accountID):\(scenePhase == .active ? "active" : "inactive")"
-    }
-
-    private var ownerDataNeedsForegroundRefresh: Bool {
-        guard !admin.isLoading, !admin.isSavingSettings, !isSavingPlatformExit else { return false }
-        guard let updatedAt = admin.lastUpdatedAt else { return true }
-        return Date().timeIntervalSince(updatedAt) >= 120
     }
 
     private var hasUnsavedPlatformDraft: Bool {
@@ -452,6 +470,7 @@ struct AdminCommandCentreView: View {
         guard let session = authorizedOwnerSession, let draft = platformDraftSnapshot else {
             isSavingPlatformExit = false
             pendingOwnerExitRequest = nil
+            pendingCreateFormNavigation = false
             admin.errorMessage = "Member App Controls could not be saved. Keep editing and try again."
             XertHaptics.play(.error)
             return
@@ -467,6 +486,7 @@ struct AdminCommandCentreView: View {
                 performOwnerExit(request)
             } else {
                 pendingOwnerExitRequest = nil
+                pendingCreateFormNavigation = false
                 XertHaptics.play(.error)
             }
         }
@@ -517,6 +537,9 @@ struct AdminCommandCentreView: View {
         pendingCompactPathWorkspace = nil
         presentedOwnerTask = nil
         presentedQuickAction = nil
+        pendingLauncherAction = nil
+        createFormIntentID = nil
+        pendingCreateFormNavigation = false
         showingAllWorkspaces = false
         editorExitCoordinator.clearAll()
         platformDraftSnapshot = nil
@@ -542,6 +565,10 @@ struct AdminCommandCentreView: View {
         if compactPath != targetPath {
             pendingCompactPathWorkspace = workspace
             compactPath = targetPath
+        }
+        if workspace == .forms, pendingCreateFormNavigation {
+            pendingCreateFormNavigation = false
+            createFormIntentID = UUID()
         }
     }
 
@@ -637,6 +664,34 @@ struct AdminCommandCentreView: View {
     private func presentNoticeQuickAction(draft: AdminAnnouncementDraft? = nil) {
         quickNoticeDraft = draft
         presentQuickAction(.newNotice)
+    }
+
+    private func runPendingLauncherAction() {
+        guard let action = pendingLauncherAction else { return }
+        pendingLauncherAction = nil
+        if action == .newForm {
+            requestCreateForm()
+            return
+        }
+        if let workspace = action.workspace {
+            openWorkspaceWithFeedback(workspace)
+        } else if let quickAction = action.quickAction {
+            presentQuickAction(quickAction)
+        }
+    }
+
+    private func requestCreateForm() {
+        if currentWorkspace == .forms {
+            createFormIntentID = UUID()
+            return
+        }
+        pendingCreateFormNavigation = true
+        openWorkspace(.forms)
+        if currentWorkspace != .forms,
+           pendingOwnerExitRequest == nil,
+           pendingEditorExitRequest == nil {
+            pendingCreateFormNavigation = false
+        }
     }
 
     private func refreshOwnerData(session: AuthSession, announcesResult: Bool = true) {
@@ -1652,7 +1707,7 @@ struct AdminCommandCentreView: View {
                     detail: "Survey, waiver or feedback",
                     icon: "list.clipboard"
                 ) {
-                    openWorkspaceWithFeedback(.forms)
+                    requestCreateForm()
                 }
                 AdminQuickToolButton(
                     title: "Create a session pack",
@@ -2855,7 +2910,10 @@ struct AdminCommandCentreView: View {
         case .siteContent:
             AdminSiteContentView(admin: admin, session: session)
         case .forms:
-            AdminFormsView(session: session)
+            AdminFormsView(
+                session: session,
+                createIntentID: $createFormIntentID
+            )
         case .notices:
             AdminCommunicationsView(admin: admin, session: session)
         case .events:
@@ -2914,6 +2972,7 @@ struct AdminCommandCentreView: View {
 
 private struct AdminWorkspaceSwitcher: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     @State private var query = ""
@@ -2925,6 +2984,7 @@ private struct AdminWorkspaceSwitcher: View {
     let onSelect: (XertOwnerWorkspace) -> Void
     let onOpenRoute: (XertOwnerRoute) -> Void
     let onTogglePin: (XertOwnerWorkspace) -> Void
+    let onRunAction: (AdminOwnerLauncherAction) -> Void
 
     private var normalizedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2932,6 +2992,10 @@ private struct AdminWorkspaceSwitcher: View {
 
     private var matchingWorkspaces: [XertOwnerWorkspace] {
         XertOwnerWorkspace.allCases.filter { $0.matches(query) }
+    }
+
+    private var matchingActions: [AdminOwnerLauncherAction] {
+        AdminOwnerLauncherAction.allCases.filter { $0.matches(query) }
     }
 
     private var attentionWorkspaces: [XertOwnerWorkspace] {
@@ -2979,6 +3043,7 @@ private struct AdminWorkspaceSwitcher: View {
     private var hasNoResults: Bool {
         !normalizedQuery.isEmpty
             && matchingWorkspaces.isEmpty
+            && matchingActions.isEmpty
             && matchingRecords.isEmpty
             && !launchRunwayMatches
             && !admin.isSearchingOwnerMembers
@@ -2991,6 +3056,7 @@ private struct AdminWorkspaceSwitcher: View {
                     if launchRunwayMatches {
                         Section("Launch") { launchRunwayRow }
                     }
+                    actionSection("Quick actions", actions: matchingActions)
                     workspaceSection("Results", workspaces: matchingWorkspaces)
                     ForEach(XertOwnerRecordKind.allCases) { kind in
                         recordSection(
@@ -3013,6 +3079,7 @@ private struct AdminWorkspaceSwitcher: View {
                             .listRowBackground(Color.xertInk)
                     }
                 } else {
+                    actionSection("Quick actions", actions: AdminOwnerLauncherAction.allCases)
                     workspaceSection("Needs attention", workspaces: attentionWorkspaces)
                     workspaceSection("Pinned", workspaces: matchingPinned)
                     workspaceSection("Recent", workspaces: matchingRecent)
@@ -3044,7 +3111,7 @@ private struct AdminWorkspaceSwitcher: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.xertNavy)
-            .navigationTitle("Owner commands")
+            .navigationTitle("Manage XERT")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Workspace, Stripe launch, class, member or record")
             .toolbar {
@@ -3056,7 +3123,7 @@ private struct AdminWorkspaceSwitcher: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .task(id: normalizedQuery) {
             guard normalizedQuery.count >= 2 else {
@@ -3072,6 +3139,83 @@ private struct AdminWorkspaceSwitcher: View {
             await admin.searchOwnerMembers(session: session, query: normalizedQuery)
         }
         .onDisappear { admin.resetOwnerMemberSearch() }
+    }
+
+    @ViewBuilder
+    private func actionSection(
+        _ title: String,
+        actions: [AdminOwnerLauncherAction]
+    ) -> some View {
+        if !actions.isEmpty {
+            Section(title) {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 10),
+                        count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+                    ),
+                    spacing: 10
+                ) {
+                    ForEach(actions) { action in
+                        launcherActionButton(action)
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowBackground(Color.xertInk)
+            }
+        }
+    }
+
+    private func launcherActionButton(_ action: AdminOwnerLauncherAction) -> some View {
+        let enabled = actionIsEnabled(action)
+        return Button { onRunAction(action) } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(systemName: action.icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(enabled ? Color.xertSteel : Color.orange)
+                Text(action.title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.xertOffWhite)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(actionDetail(action, enabled: enabled))
+                    .font(.caption2)
+                    .foregroundStyle(enabled ? Color.xertPale.opacity(0.62) : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+            .padding(12)
+            .background(Color.xertNavy.opacity(0.72))
+            .overlay {
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(
+                        enabled ? Color.xertSteel.opacity(0.16) : Color.orange.opacity(0.34),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(action.title)
+        .accessibilityHint(
+            enabled
+                ? action.detail
+                : "Refresh \(action.requiredSource ?? "owner data") before using this action"
+        )
+    }
+
+    private func actionIsEnabled(_ action: AdminOwnerLauncherAction) -> Bool {
+        guard let source = action.requiredSource else { return true }
+        return !admin.isLoading
+            && admin.loadedSources.contains(source)
+            && !admin.refreshUnavailableSources.contains(source)
+    }
+
+    private func actionDetail(_ action: AdminOwnerLauncherAction, enabled: Bool) -> String {
+        guard !enabled, let source = action.requiredSource else { return action.detail }
+        return admin.isLoading && !admin.loadedSources.contains(source)
+            ? "Checking access…"
+            : "Refresh \(source) to unlock"
     }
 
     @ViewBuilder
@@ -16531,6 +16675,96 @@ private enum AdminOwnerQuickAction: String, Identifiable {
     case newEvent
 
     var id: String { rawValue }
+}
+
+private enum AdminOwnerLauncherAction: String, CaseIterable, Identifiable, Equatable {
+    case newClass
+    case newNotice
+    case workout
+    case newForm
+    case newSessionPack
+    case newCoach
+    case newEvent
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newClass: return "Create class"
+        case .newNotice: return "Publish notice"
+        case .workout: return "Set today's workout"
+        case .newForm: return "Create form"
+        case .newSessionPack: return "Create session pack"
+        case .newCoach: return "Add coach"
+        case .newEvent: return "Create event"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .newClass: return "Add a private timetable draft"
+        case .newNotice: return "Reach web and iOS members"
+        case .workout: return "Update the in-club TV"
+        case .newForm: return "Build a survey or waiver"
+        case .newSessionPack: return "Start private pricing"
+        case .newCoach: return "Add a team profile"
+        case .newEvent: return "Add to the training calendar"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .newClass: return "calendar.badge.plus"
+        case .newNotice: return "bell.badge.fill"
+        case .workout: return "tv"
+        case .newForm: return "list.clipboard"
+        case .newSessionPack: return "ticket.fill"
+        case .newCoach: return "person.crop.rectangle.badge.plus"
+        case .newEvent: return "trophy"
+        }
+    }
+
+    var requiredSource: String? {
+        switch self {
+        case .newClass: return "full timetable"
+        case .newNotice: return "member notices"
+        case .newSessionPack: return "session packs"
+        case .newCoach: return "team directory"
+        case .newEvent: return "event calendar"
+        case .workout, .newForm: return nil
+        }
+    }
+
+    var workspace: XertOwnerWorkspace? {
+        switch self {
+        case .workout: return .workouts
+        case .newForm: return nil
+        default: return nil
+        }
+    }
+
+    var quickAction: AdminOwnerQuickAction? {
+        switch self {
+        case .newClass: return .newClass
+        case .newNotice: return .newNotice
+        case .newSessionPack: return .newSessionPack
+        case .newCoach: return .newCoach
+        case .newEvent: return .newEvent
+        case .workout, .newForm: return nil
+        }
+    }
+
+    func matches(_ query: String) -> Bool {
+        let terms = query
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !terms.isEmpty else { return true }
+        let searchableText = [title, detail, rawValue]
+            .joined(separator: " ")
+            .lowercased()
+        return terms.allSatisfy(searchableText.contains)
+    }
 }
 
 private enum AdminDashboardDataState: Equatable {

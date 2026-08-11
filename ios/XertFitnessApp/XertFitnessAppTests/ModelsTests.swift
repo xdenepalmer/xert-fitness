@@ -2026,6 +2026,77 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(AdminOperationalRefreshPolicy.intervalNanoseconds, 60_000_000_000)
     }
 
+    func testOwnerPresentationRefreshPolicyReusesWarmDataWithoutLeavingQueuesStale() {
+        let now = Date(timeIntervalSince1970: 20_000)
+
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: false,
+                fullRefreshAttemptedAt: nil,
+                operationalUpdatedAt: nil,
+                hasUnavailableSources: false,
+                now: now
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: true,
+                fullRefreshAttemptedAt: now.addingTimeInterval(-60),
+                operationalUpdatedAt: now.addingTimeInterval(-30),
+                hasUnavailableSources: false,
+                now: now
+            ),
+            .reuse
+        )
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: true,
+                fullRefreshAttemptedAt: now.addingTimeInterval(-10),
+                operationalUpdatedAt: now.addingTimeInterval(-30),
+                hasUnavailableSources: true,
+                now: now
+            ),
+            .retryUnavailable(after: AdminPresentationRefreshPolicy.unavailableRetryAfter - 10)
+        )
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: true,
+                fullRefreshAttemptedAt: now.addingTimeInterval(
+                    -AdminPresentationRefreshPolicy.unavailableRetryAfter
+                ),
+                operationalUpdatedAt: now,
+                hasUnavailableSources: true,
+                now: now
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: true,
+                fullRefreshAttemptedAt: now.addingTimeInterval(-60),
+                operationalUpdatedAt: now.addingTimeInterval(
+                    -AdminOperationalRefreshPolicy.staleAfter - 1
+                ),
+                hasUnavailableSources: false,
+                now: now
+            ),
+            .operations
+        )
+        XCTAssertEqual(
+            AdminPresentationRefreshPolicy.plan(
+                hasCompletedRefresh: true,
+                fullRefreshAttemptedAt: now.addingTimeInterval(
+                    -AdminPresentationRefreshPolicy.fullRefreshAfter
+                ),
+                operationalUpdatedAt: now,
+                hasUnavailableSources: false,
+                now: now
+            ),
+            .full
+        )
+    }
+
     func testWorkspaceOrderIsCompleteAccountScopedAndDrivesNavigation() throws {
         let suiteName = "XertWorkspaceOrderStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

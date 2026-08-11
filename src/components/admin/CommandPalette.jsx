@@ -28,8 +28,9 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
       return undefined;
     }
 
+    const isMemberSearch = /^member\s+/i.test(query);
     const memberQuery = query.replace(/^member\s+/i, '').trim();
-    if (memberQuery.length < 2) {
+    if (!isMemberSearch || memberQuery.length < 2) {
       setMembers([]);
       setMemberSearchLoading(false);
       setMemberSearchError('');
@@ -61,15 +62,21 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
     const navigated = onNavigate(sectionKey, params);
     if (navigated !== false) onOpenChange(false);
   };
+  const memberSearchRequested = /^member\s+/i.test(query);
+  const memberSearchTerm = query.replace(/^member\s+/i, '').trim();
+  const emptyMessage = memberSearchLoading
+    ? 'Searching members...'
+    : memberSearchError
+      || (memberSearchRequested
+        ? memberSearchTerm.length < 2 ? 'Type at least two letters after member.' : 'No matching member.'
+        : query.trim() ? 'No matching admin task.' : 'Nothing found.');
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput value={query} onValueChange={setQuery} placeholder="Jump to a section, action or member…" />
-      <CommandList>
+    <CommandDialog open={open} onOpenChange={onOpenChange} title="Find an owner task">
+      <CommandInput value={query} onValueChange={setQuery} placeholder="Find a task, or type member + name…" inputMode="search" enterKeyHint="search" />
+      <CommandList className="max-h-[min(68dvh,34rem)] overscroll-contain sm:max-h-[420px]">
         <CommandEmpty>
-          {memberSearchLoading
-            ? 'Searching members...'
-            : memberSearchError || (query.trim().length >= 2 ? 'No matching command or member.' : 'Nothing found.')}
+          {emptyMessage}
         </CommandEmpty>
 
         <CommandGroup heading="Quick actions">
