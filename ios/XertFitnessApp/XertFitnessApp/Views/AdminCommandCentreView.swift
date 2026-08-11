@@ -5903,10 +5903,16 @@ private struct AdminClassRosterView: View {
         if operation.start_time <= Date(), !eligible.isEmpty {
             Section("Roll call") {
                 VStack(alignment: .leading, spacing: 12) {
-                    if let recoveredDraftAt {
+                    // Bound to a differently named constant on purpose. `if let
+                    // recoveredDraftAt` shadows the @State property with a
+                    // non-optional `let Date`, so the `= nil` in the button below
+                    // resolved to that constant, not the state, and failed with
+                    // "cannot assign to value" and "'nil' cannot be assigned to
+                    // type 'Date'".
+                    if let recoveredAt = recoveredDraftAt {
                         VStack(alignment: .leading, spacing: 8) {
                             Label(
-                                "Recovered unsaved marks from \(recoveredDraftAt.formatted(date: .omitted, time: .shortened)).",
+                                "Recovered unsaved marks from \(recoveredAt.formatted(date: .omitted, time: .shortened)).",
                                 systemImage: "arrow.counterclockwise.circle.fill"
                             )
                             .font(.caption.weight(.bold))
