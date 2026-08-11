@@ -4611,15 +4611,24 @@ final class ModelsTests: XCTestCase {
     func testAdminAuditExportIsBoundedAndEscapesCSVFields() {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let operatorID = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
-        let entries = (0..<305).map { index in
-            AdminAuditEntry(
+        // Each ternary is a named local with an explicit type. Inline, the
+        // solver had to infer the closure result and seven argument types
+        // together — including two `nil` branches — and timed out.
+        let entries: [AdminAuditEntry] = (0..<305).map { index -> AdminAuditEntry in
+            let isFirst = index == 0
+            let category: String = isFirst ? "Content, CMS" : "Bookings"
+            let title: String = isFirst ? "Changed \"hero\"" : "Booking updated"
+            let detail: String = isFirst ? "Line one\nLine two" : "Member \(index)"
+            let entryOperatorID: UUID? = isFirst ? operatorID : nil
+            let entrySubjectID: String? = isFirst ? "hero" : nil
+            return AdminAuditEntry(
                 id: "audit-\(index)",
-                category: index == 0 ? "Content, CMS" : "Bookings",
-                title: index == 0 ? "Changed \"hero\"" : "Booking updated",
-                detail: index == 0 ? "Line one\nLine two" : "Member \(index)",
+                category: category,
+                title: title,
+                detail: detail,
                 createdAt: now.addingTimeInterval(TimeInterval(-index)),
-                operatorID: index == 0 ? operatorID : nil,
-                subjectID: index == 0 ? "hero" : nil
+                operatorID: entryOperatorID,
+                subjectID: entrySubjectID
             )
         }
 
