@@ -41,6 +41,8 @@ test('desktop command centre exposes the full responsive builder and analytics w
   assert.match(publicPage, /role="radiogroup"/);
   assert.match(publicPage, /autoComplete="street-address"/);
   assert.match(publicPage, /SignatureInput/);
+  assert.match(publicPage, /strokeStyle = '#000000'/);
+  assert.match(publicPage, /aria-label="Signature pad"[^>]*bg-white/);
   assert.match(publicPage, /submitPublicForm/);
   assert.doesNotMatch(manager, /Copy embed|<iframe/);
   assert.doesNotMatch(manager, /CompetitionDrawWheel|SendFormToClient|client_profile/i);

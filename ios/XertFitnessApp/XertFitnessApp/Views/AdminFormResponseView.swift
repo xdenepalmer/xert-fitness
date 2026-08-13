@@ -282,7 +282,6 @@ struct AdminFormResponseView: View {
                     mediaReference(headerMedia, label: "Header media")
                         .padding(.top, 4)
                 }
-                provenanceNotice
                 responseMetadata
             }
             .padding(20)
@@ -297,6 +296,8 @@ struct AdminFormResponseView: View {
             } else {
                 ForEach(record.items) { item in submissionItem(item) }
             }
+
+            recordDetailsNote
         }
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -309,18 +310,18 @@ struct AdminFormResponseView: View {
         .accessibilityLabel("Completed form for \(activeResponse.displayName)")
     }
 
-    private var provenanceNotice: some View {
-        Label {
-            Text(record.provenanceLabel).font(.caption.weight(.semibold))
-        } icon: {
-            Image(
-                systemName: record.usesSubmissionSnapshot
-                    ? "checkmark.shield.fill"
-                    : "exclamationmark.triangle.fill"
-            )
-        }
-        .foregroundStyle(record.usesSubmissionSnapshot ? Color.green : Color.orange)
-        .padding(.vertical, 3)
+    private var recordDetailsNote: some View {
+        Text(
+            record.usesSubmissionSnapshot
+                ? "Record details: Form definition preserved at submission."
+                : "Record details: Submitted answers are original; labels and layout were reconstructed and may not be exact."
+        )
+        .font(.caption2)
+        .foregroundStyle(Color.xertNavy.opacity(0.48))
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var responseMetadata: some View {

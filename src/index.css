@@ -276,6 +276,10 @@ summary:focus-visible {
 
 /* A response detail becomes a clean paper/PDF record. The body marker scopes
    this aggressively so ordinary site and command-centre printing is unchanged. */
+.xert-response-signature-image {
+  filter: brightness(0) saturate(100%);
+}
+
 @media print {
   @page {
     size: A4 portrait;

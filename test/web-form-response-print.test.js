@@ -143,7 +143,10 @@ test('web response detail is selectable, navigable, and print/PDF scoped', async
   assert.match(detail, /external URL may change/);
   assert.match(detail, /timeZone: 'Australia\/Brisbane'[\s\S]*timeZoneName: 'short'/);
   assert.match(detail, /Unmatched archived answers/);
-  assert.match(detail, /Legacy reconstructed record/);
+  assert.match(detail, /Record details:[\s\S]*Submitted answers are original; labels and layout were reconstructed/);
+  assert.doesNotMatch(detail, /definition\.isReconstructed && <aside/);
+  assert.match(detail, /xert-response-signature-image/);
+  assert.match(css, /\.xert-response-signature-image[\s\S]*filter: brightness\(0\) saturate\(100%\)/);
   assert.match(css, /@media print[\s\S]*body\.xert-response-detail-open[\s\S]*\.xert-response-print-record/);
   assert.match(css, /\.xert-print-controls[\s\S]*display: none !important/);
   assert.match(css, /break-inside: avoid/);

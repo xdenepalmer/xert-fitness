@@ -50,6 +50,8 @@ test('native individual response is a full form-like record with explicit archiv
   assert.match(view, /\.task \{ await loadRecord\(\) \}/);
   assert.match(view, /Full response unavailable/);
   assert.match(view, /AdminFormResponseValueFormatter\.signatureImage/);
+  assert.match(view, /recordDetailsNote/);
+  assert.doesNotMatch(view, /provenanceNotice/);
   assert.match(view, /Label\("ARCHIVED ANSWER"/);
   assert.match(view, /\.textSelection\(\.enabled\)/);
   assert.match(forms, /set: \{ draft\.setOneResponsePerEmail\(\$0\) \}/);
@@ -83,6 +85,8 @@ test('native printable records preserve textual media references and layout desc
   assert.match(document, /drawMediaReference\(media, label: "Statement media"\)/);
   assert.match(document, /drawMediaReference\(media, label: "Question media"\)/);
   assert.match(document, /AdminFormMediaReference\.preservationNote/);
+  assert.match(document, /image\.withTintColor\(\.black, renderingMode: \.alwaysOriginal\)/);
+  assert.match(document, /canvas\.drawItems\(record\.items\)[\s\S]*canvas\.drawRecordDetails\(record: record\)/);
   assert.doesNotMatch(`${view}\n${document}`, /URLSession|AsyncImage|Data\(contentsOf:.*https?:/);
 });
 

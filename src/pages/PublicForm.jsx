@@ -110,7 +110,7 @@ function SignatureInput({ value, onChange }) {
   const move = event => {
     if (!drawing.current) return;
     const ctx = canvasRef.current.getContext('2d'); const p = point(event);
-    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#d1dde6'; ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; ctx.lineTo(p.x, p.y); ctx.stroke();
   };
   const end = () => {
     if (!drawing.current) return;
@@ -121,7 +121,7 @@ function SignatureInput({ value, onChange }) {
   };
   return (
     <div>
-      <canvas ref={canvasRef} width="720" height="220" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} aria-label="Signature pad" className="h-44 w-full touch-none rounded-sm border border-xert-steel/30 bg-white/5" />
+      <canvas ref={canvasRef} width="720" height="220" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} aria-label="Signature pad" className="h-44 w-full touch-none rounded-sm border border-xert-steel/30 bg-white" />
       <div className="mt-2 flex items-center justify-between text-xs text-xert-pale/55"><span>Sign with your finger, mouse or Apple Pencil</span><button type="button" onClick={clear} className="min-h-11 px-3 text-xert-steel">Clear</button></div>
       {value && <p className="text-xs text-emerald-300">Signature captured</p>}
     </div>

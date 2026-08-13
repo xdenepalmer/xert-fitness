@@ -49,6 +49,11 @@ enum AdminFormResponseValueFormatter {
               height > 0,
               width <= maximumSignaturePixels / height,
               let image = UIImage(data: data, scale: 1) else { return nil }
+        // XERT's signature pad produces transparent PNG ink. Tint that ink
+        // true black so older pale-grey captures remain legible on white PDF.
+        if prefix == "data:image/png;base64" {
+            return image.withTintColor(.black, renderingMode: .alwaysOriginal)
+        }
         return image
     }
 
@@ -193,6 +198,7 @@ enum AdminFormResponsePDFExport {
             canvas.drawDocumentHeader(record: record)
             canvas.drawMetadata(record: record, response: response, status: status)
             canvas.drawItems(record.items)
+            canvas.drawRecordDetails(record: record)
         }
     }
 
@@ -282,12 +288,7 @@ private final class PDFCanvas {
         if let headerMedia = record.headerMedia {
             drawMediaReference(headerMedia, label: "Header media")
         }
-        drawText(
-            record.provenanceLabel.uppercased(),
-            font: .systemFont(ofSize: 8.5, weight: .bold),
-            color: record.usesSubmissionSnapshot ? .xertPDFSteel : .systemOrange,
-            spacingAfter: 16
-        )
+        cursorY += 8
     }
 
     func drawMetadata(record: AdminFormSubmissionRecord, response: AdminFormResponse, status: String) {
@@ -343,6 +344,18 @@ private final class PDFCanvas {
         }
         cursorY += 12
         drawOperationalStatus(status)
+    }
+
+    func drawRecordDetails(record: AdminFormSubmissionRecord) {
+        ensureSpace(38)
+        cursorY += 10
+        UIColor(white: 0.82, alpha: 1).setFill()
+        UIBezierPath(rect: CGRect(x: horizontalMargin, y: cursorY, width: contentWidth, height: 0.7)).fill()
+        cursorY += 8
+        let detail = record.usesSubmissionSnapshot
+            ? "Record details: Form definition preserved at submission."
+            : "Record details: Submitted answers are original; labels and layout were reconstructed and may not be exact."
+        drawText(detail, font: .systemFont(ofSize: 7.5), color: .gray, spacingAfter: 4)
     }
 
     private func drawOperationalStatus(_ status: String) {
