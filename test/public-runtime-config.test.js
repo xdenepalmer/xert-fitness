@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  describePublicConfigFailure,
   validateCanonicalServiceURL,
   validatePublicRuntimeConfig,
   validateSupabasePublicKey,
@@ -57,4 +58,34 @@ test('combined release validation returns no secret material', () => {
     vercelOrigin: `https://${XERT_VERCEL_HOST}`,
     keyFormat: 'legacy-anon',
   });
+});
+
+test('a misconfigured deployment explains itself without leaking key material', () => {
+  const missing = describePublicConfigFailure({ supabaseUrl: '', supabaseAnonKey: '' });
+  assert.match(missing, /VITE_SUPABASE_URL is not set in this build\./);
+  assert.match(missing, /VITE_SUPABASE_ANON_KEY is not set in this build\./);
+  assert.match(missing, /Production environment in Vercel, then redeploy/);
+
+  const secret = describePublicConfigFailure({
+    supabaseUrl: `https://${XERT_SUPABASE_HOST}`,
+    supabaseAnonKey: 'sb_secret_abcdefghijklmnopqrstuvwxyz',
+  });
+  assert.match(secret, /secret key and must never be embedded/);
+  assert.doesNotMatch(secret, /abcdefghijklmnopqrstuvwxyz/, 'key material must never be echoed');
+  assert.doesNotMatch(secret, /VITE_SUPABASE_URL is not set/, 'a valid URL must not be reported as missing');
+
+  const wrongHost = describePublicConfigFailure({
+    supabaseUrl: 'https://someone-elses-project.supabase.co',
+    supabaseAnonKey: 'sb_publishable_abcdefghijklmnopqrstuv',
+  });
+  assert.match(wrongHost, /canonical XERT service origin/);
+
+  assert.equal(
+    describePublicConfigFailure({
+      supabaseUrl: `https://${XERT_SUPABASE_HOST}`,
+      supabaseAnonKey: 'sb_publishable_abcdefghijklmnopqrstuv',
+    }),
+    '',
+    'a healthy configuration reports no problem',
+  );
 });

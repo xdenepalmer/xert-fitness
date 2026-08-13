@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   PUBLIC_SERVICE_UNAVAILABLE_MESSAGE,
+  describePublicConfigFailure,
   resolvePublicSupabaseConfig,
 } from '@/lib/publicRuntimeConfig';
 
@@ -10,7 +11,13 @@ const publicConfiguration = resolvePublicSupabaseConfig({
 });
 
 if (!publicConfiguration.ready) {
-  console.error('XERT public service configuration failed validation.');
+  console.error(
+    'XERT public service configuration failed validation.',
+    describePublicConfigFailure({
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    }),
+  );
 }
 
 export const supabase = createClient(

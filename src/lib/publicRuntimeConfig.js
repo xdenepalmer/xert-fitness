@@ -94,6 +94,42 @@ export function validatePublicRuntimeConfig({
   };
 }
 
+/**
+ * Explains why the public Supabase configuration was rejected, so a
+ * misconfigured deployment is diagnosable from the browser console instead of
+ * presenting only the generic unavailable notice. Never reports key material —
+ * only whether a value was absent and, if present, why it failed validation.
+ */
+export function describePublicConfigFailure({
+  supabaseUrl,
+  supabaseAnonKey,
+  expectedSupabaseHost = XERT_SUPABASE_HOST,
+}) {
+  const problems = [];
+  if (!String(supabaseUrl || '')) {
+    problems.push('VITE_SUPABASE_URL is not set in this build.');
+  } else {
+    try {
+      validateCanonicalServiceURL(supabaseUrl, 'SUPABASE_URL', expectedSupabaseHost);
+    } catch (error) {
+      problems.push(error.message);
+    }
+  }
+
+  if (!String(supabaseAnonKey || '')) {
+    problems.push('VITE_SUPABASE_ANON_KEY is not set in this build.');
+  } else {
+    try {
+      validateSupabasePublicKey(supabaseAnonKey);
+    } catch (error) {
+      problems.push(error.message);
+    }
+  }
+
+  if (!problems.length) return '';
+  return `${problems.join(' ')} Set both variables for the Production environment in Vercel, then redeploy — they are embedded at build time.`;
+}
+
 export function resolvePublicSupabaseConfig({
   supabaseUrl,
   supabaseAnonKey,
