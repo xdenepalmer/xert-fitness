@@ -237,7 +237,18 @@ private struct AdminFormEditorView: View {
                 collectionToggle("Collect name", value: $draft.collectName, required: $draft.collectNameRequired)
                 collectionToggle("Collect email", value: $draft.collectEmail, required: $draft.collectEmailRequired)
                 collectionToggle("Collect phone", value: $draft.collectPhone, required: $draft.collectPhoneRequired)
-                Toggle("One response per email", isOn: $draft.oneResponsePerEmail)
+                Toggle(
+                    "One response per email",
+                    isOn: Binding(
+                        get: { draft.oneResponsePerEmail },
+                        set: { draft.setOneResponsePerEmail($0) }
+                    )
+                )
+                if draft.oneResponsePerEmail && (!draft.collectEmail || !draft.collectEmailRequired) {
+                    Label("Collect and require email so every duplicate check has an identifier.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                }
             }
             Section("Publishing") {
                 Toggle("Form is live", isOn: $draft.isActive)
@@ -397,6 +408,10 @@ private struct AdminFormDetailView: View {
     @State private var showingArchive = false
     @State private var exportURL: URL?
     @State private var exportErrorMessage: String?
+    @State private var qrCodeURL: URL?
+    @State private var qrCodeImage: UIImage?
+    @State private var isPreparingQRCode = false
+    @State private var showingQRCode = false
     private let api = XertAPI()
 
     private var averageCompletionSeconds: Int? {
@@ -421,6 +436,59 @@ private struct AdminFormDetailView: View {
             Section("Share") {
                 ShareLink(item: form.publicURL, subject: Text(form.title), message: Text("Complete this XERT form")) { Label("Share public link", systemImage: "square.and.arrow.up") }
                 Link(destination: form.publicURL) { Label("Preview public form", systemImage: "safari") }
+            }
+            Section("Branded QR code") {
+                if let qrCodeURL, let qrCodeImage {
+                    HStack(spacing: 14) {
+                        Image(uiImage: qrCodeImage)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 76, height: 76)
+                            .background(Color.white)
+                            .accessibilityLabel("QR code for \(form.title)")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Ready to scan").font(.headline)
+                            Text("High-correction QR with the XERT mark centred.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button { showingQRCode = true } label: {
+                        Label("Preview QR code", systemImage: "qrcode.viewfinder")
+                    }
+                    ShareLink(
+                        item: qrCodeURL,
+                        subject: Text("\(form.title) QR code"),
+                        message: Text("Scan to open \(form.publicURL.absoluteString)"),
+                        preview: SharePreview("\(form.title) QR code", image: Image(uiImage: qrCodeImage))
+                    ) {
+                        Label("Share or save QR image", systemImage: "square.and.arrow.up")
+                    }
+                    Button { printQRCode() } label: {
+                        Label("Print QR code", systemImage: "printer")
+                    }
+                    Button { prepareQRCode() } label: {
+                        Label("Regenerate QR code", systemImage: "arrow.clockwise")
+                    }
+                } else {
+                    Button { prepareQRCode(showPreview: true) } label: {
+                        Label(
+                            isPreparingQRCode ? "Generating QR code…" : "Generate branded QR code",
+                            systemImage: "qrcode"
+                        )
+                    }
+                    .disabled(isPreparingQRCode)
+                }
+                Text(form.is_active
+                    ? "This QR opens the live public form."
+                    : "This QR is valid, but publish the form before asking people to scan it.")
+                    .font(.caption)
+                    .foregroundStyle(form.is_active ? Color.xertPale.opacity(0.65) : Color.orange)
+                Text(form.publicURL.absoluteString)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
             Section("Analytics") {
                 LazyVGrid(columns: analyticsColumns, spacing: 8) {
@@ -463,7 +531,7 @@ private struct AdminFormDetailView: View {
                 if isLoading { ProgressView("Loading responses…") }
                 else if responses.isEmpty { Text("No responses yet").foregroundStyle(.secondary) }
                 ForEach(responses) { response in
-                    NavigationLink { AdminFormResponseView(session: session, form: form, response: response) { status in if let index = responses.firstIndex(where: { $0.id == response.id }) { responses[index] = AdminFormResponse(id: response.id, form_id: response.form_id, answers: response.answers, respondent_name: response.respondent_name, respondent_email: response.respondent_email, respondent_phone: response.respondent_phone, status: status, completed_at: response.completed_at, time_taken_seconds: response.time_taken_seconds, created_at: response.created_at) } } } label: {
+                    NavigationLink { AdminFormResponseView(session: session, form: form, response: response) { status in if let index = responses.firstIndex(where: { $0.id == response.id }) { responses[index] = AdminFormResponse(id: response.id, form_id: response.form_id, answers: response.answers, form_snapshot: response.form_snapshot, respondent_name: response.respondent_name, respondent_email: response.respondent_email, respondent_phone: response.respondent_phone, status: status, completed_at: response.completed_at, time_taken_seconds: response.time_taken_seconds, source_url: response.source_url, created_at: response.created_at) } } } label: {
                         VStack(alignment: .leading, spacing: 3) { HStack { Text(response.displayName); Spacer(); Text(response.status.replacingOccurrences(of: "_", with: " ").uppercased()).font(.caption2.bold()).foregroundStyle(response.status == "new" ? Color.xertSteel : .secondary) }; Text(response.completed_at.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary) }
                     }
                 }
@@ -482,10 +550,15 @@ private struct AdminFormDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await loadResponses() }
         .task { await loadResponses() }
+        .task(id: form.publicURL) { prepareQRCode() }
         .onChange(of: responses) { _ in discardCSVExport() }
         .onChange(of: form) { _ in discardCSVExport() }
-        .onDisappear { discardCSVExport() }
+        .onDisappear {
+            discardCSVExport()
+            discardQRCode()
+        }
         .sheet(item: $editor) { context in NavigationStack { AdminFormEditorView(session: session, context: context) { saved in handleSavedForm(saved) } } }
+        .sheet(isPresented: $showingQRCode) { qrCodePreview }
         .confirmationDialog("Archive this form?", isPresented: $showingArchive, titleVisibility: .visible) { Button("Archive form", role: .destructive) { Task { await archive() } } } message: { Text("The public link will stop accepting responses. Existing response history is preserved.") }
         .alert("Forms & Surveys", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
     }
@@ -558,6 +631,94 @@ private struct AdminFormDetailView: View {
         exportURL = nil
     }
 
+    @ViewBuilder
+    private var qrCodePreview: some View {
+        if let qrCodeURL, let qrCodeImage {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 18) {
+                        Image(uiImage: qrCodeImage)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(maxWidth: 520)
+                            .padding(18)
+                            .background(Color.white)
+                            .accessibilityLabel("QR code for \(form.title)")
+                        Text(form.title)
+                            .font(.title2.bold())
+                            .foregroundStyle(Color.xertOffWhite)
+                            .multilineTextAlignment(.center)
+                        Text(form.publicURL.absoluteString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .textSelection(.enabled)
+                    }
+                    .padding(20)
+                }
+                .background(Color.xertNavy)
+                .navigationTitle("Form QR code")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showingQRCode = false }
+                    }
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        ShareLink(
+                            item: qrCodeURL,
+                            preview: SharePreview("\(form.title) QR code", image: Image(uiImage: qrCodeImage))
+                        ) {
+                            Label("Share QR code", systemImage: "square.and.arrow.up")
+                        }
+                        Button { printQRCode() } label: {
+                            Label("Print QR code", systemImage: "printer")
+                        }
+                    }
+                }
+            }
+        } else {
+            ProgressView("Generating QR code…")
+        }
+    }
+
+    @MainActor
+    private func prepareQRCode(showPreview: Bool = false) {
+        guard !isPreparingQRCode else { return }
+        isPreparingQRCode = true
+        defer { isPreparingQRCode = false }
+        discardQRCode()
+        do {
+            let url = try AdminFormQRCode.write(form: form)
+            guard let image = UIImage(contentsOfFile: url.path) else {
+                AdminFormQRCode.remove(at: url)
+                throw APIError(message: "The branded QR image could not be opened.")
+            }
+            qrCodeURL = url
+            qrCodeImage = image
+            if showPreview { showingQRCode = true }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func printQRCode() {
+        if qrCodeURL == nil { prepareQRCode() }
+        guard let qrCodeURL else { return }
+        do {
+            try AdminFormQRCodePrinter.present(fileURL: qrCodeURL, formTitle: form.title)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func discardQRCode() {
+        AdminFormQRCode.remove(at: qrCodeURL)
+        qrCodeURL = nil
+        qrCodeImage = nil
+    }
+
     @MainActor private func loadResponses() async { guard !isLoading else { return }; isLoading = true; defer { isLoading = false }; do { responses = try await api.adminFormResponses(session: session, formID: form.id) } catch { errorMessage = error.localizedDescription } }
     @MainActor private func toggleLive() async { var draft = AdminFormDraft(form: form); draft.isActive.toggle(); do { form = try await api.adminSaveForm(session: session, form: form, draft: draft); onUpdated(form); XertHaptics.play(.success) } catch { errorMessage = error.localizedDescription } }
     @MainActor private func archive() async { do { try await api.adminArchiveForm(session: session, form: form); XertHaptics.play(.success); onArchived(form.id) } catch { errorMessage = error.localizedDescription } }
@@ -576,7 +737,7 @@ private enum AdminFormResponseCSVExport {
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
             let contents = "\u{FEFF}\(csv(form: form, responses: responses))"
-            try Data(contents.utf8).write(to: fileURL, options: .atomic)
+            try Data(contents.utf8).write(to: fileURL, options: [.atomic, .completeFileProtection])
             return fileURL
         } catch {
             try? fileManager.removeItem(at: directory)
@@ -632,49 +793,6 @@ private enum AdminFormResponseCSVExport {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
     }()
-}
-
-private struct AdminFormResponseView: View {
-    let session: AuthSession
-    let form: AdminForm
-    let response: AdminFormResponse
-    let onStatusChanged: (String) -> Void
-    @State private var status: String
-    @State private var errorMessage: String?
-    private let api = XertAPI()
-
-    init(session: AuthSession, form: AdminForm, response: AdminFormResponse, onStatusChanged: @escaping (String) -> Void) {
-        self.session = session; self.form = form; self.response = response; self.onStatusChanged = onStatusChanged; _status = State(initialValue: response.status)
-    }
-
-    var body: some View {
-        List {
-            Section("Respondent") {
-                LabeledContent("Name", value: response.respondent_name ?? "Not supplied")
-                if let email = response.respondent_email,
-                   let url = URL(string: "mailto:\(email)") {
-                    Link(email, destination: url)
-                }
-                if let phone = response.respondent_phone,
-                   let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                    Link(phone, destination: url)
-                }
-                LabeledContent("Completed", value: response.completed_at.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Time", value: "\(response.time_taken_seconds)s")
-            }
-            Section("Status") { Picker("Status", selection: $status) { Text("New").tag("new"); Text("Reviewed").tag("reviewed"); Text("Followed up").tag("followed_up"); Text("Closed").tag("closed") }.onChange(of: status) { value in Task { await updateStatus(value) } } }
-            Section("Answers") {
-                ForEach(form.questions.filter { !["section_break", "statement"].contains($0.type) }) { question in
-                    VStack(alignment: .leading, spacing: 5) { Text(question.question).font(.caption).foregroundStyle(.secondary); Text(response.answers[question.id]?.displayValue ?? "—").textSelection(.enabled) }.padding(.vertical, 3)
-                }
-            }
-        }
-        .navigationTitle(response.displayName)
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Could not update response", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) { Button("OK") { errorMessage = nil } } message: { Text(errorMessage ?? "") }
-    }
-
-    @MainActor private func updateStatus(_ value: String) async { do { try await api.adminUpdateFormResponseStatus(session: session, responseID: response.id, status: value); onStatusChanged(value); XertHaptics.play(.selection) } catch { status = response.status; errorMessage = error.localizedDescription } }
 }
 
 private func formTypeLabel(_ value: String) -> String { ["contact":"Contact Form","registration":"Registration","application":"Application","feedback":"Feedback","booking":"Booking Request","survey":"Survey","quiz":"Quiz / Assessment","waiver":"Waiver / Consent","order":"Order / Request","custom":"Custom Form"][value] ?? value.replacingOccurrences(of: "_", with: " ").capitalized }

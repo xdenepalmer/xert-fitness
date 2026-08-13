@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart3, Check, ChevronRight, Clipboard,
+  Archive, ArrowDown, ArrowLeft, ArrowUp, BarChart3, Check, ChevronRight,
   ClipboardList, Copy, Download, ExternalLink, Eye, GitBranch, Link2,
   LoaderCircle, Pause, Pencil, Play, Plus, Search, Settings2, Trash2, X,
 } from 'lucide-react';
 import {
   CHARTABLE_TYPES, CHOICE_TYPES, FIELD_TYPES, FORM_TYPES, activeQuestions, archiveFormResponse,
-  archiveOwnerForm, createField, createFormDraft, listFormResponses, listOwnerForms,
+  archiveOwnerForm, createField, createFormDraft, getFormResponse, listFormResponses, listOwnerForms,
   publicFormURL, responseCSV, saveOwnerForm, slugifyFormTitle, updateFormResponseStatus,
   validateFormDraft,
 } from '@/lib/xertForms';
 import AdminConfirmDialog from './AdminConfirmDialog';
+import FormQRCode from './FormQRCode';
+import FormResponseRecord from './FormResponseRecord';
 
 const panel = 'border border-xert-steel/20 bg-xert-ink';
 // text-base keeps every control at 16px: anything smaller makes iOS Safari zoom
@@ -63,7 +65,7 @@ function FormEditor({ draft, setDraft, onSave, onCancel, saving, error }) {
     {error && <p role="alert" className="border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
     <div className="flex overflow-x-auto border-b border-xert-steel/20"><button type="button" onClick={() => setTab('fields')} className={`min-h-12 shrink-0 px-5 text-sm font-semibold ${tab === 'fields' ? 'border-b-2 border-xert-steel text-white' : 'text-xert-pale/55'}`}><ClipboardList className="mr-2 inline h-4 w-4" />Fields</button><button type="button" onClick={() => setTab('settings')} className={`min-h-12 shrink-0 px-5 text-sm font-semibold ${tab === 'settings' ? 'border-b-2 border-xert-steel text-white' : 'text-xert-pale/55'}`}><Settings2 className="mr-2 inline h-4 w-4" />Settings</button></div>
     {tab === 'fields' ? <div className="space-y-3">{draft.questions.map((field, index) => <FieldEditor key={field.id} field={field} fields={draft.questions} index={index} count={draft.questions.length} onUpdate={(key, value) => updateField(index, key, value)} onMove={offset => moveField(index, offset)} onDuplicate={() => update('questions', [...draft.questions.slice(0, index + 1), { ...field, id: crypto.randomUUID(), question: `${field.question || field.content} (copy)` }, ...draft.questions.slice(index + 1)])} onRemove={() => update('questions', draft.questions.filter((_, i) => i !== index))} />)}<div className="grid gap-2 sm:grid-cols-3"><button type="button" className={`${button} border-dashed`} onClick={() => update('questions', [...draft.questions, createField()])}><Plus className="h-4 w-4" /> Add field</button><button type="button" className={`${button} border-dashed`} onClick={() => update('questions', [...draft.questions, createField('section_break')])}>Add section</button><button type="button" className={`${button} border-dashed`} onClick={() => update('questions', [...draft.questions, createField('statement')])}>Add statement</button></div></div> : <div className="grid gap-4 lg:grid-cols-2">
-      <section className={`${panel} space-y-4 p-5`}><h2 className="font-display text-2xl uppercase text-white">Respondent details</h2>{[['collect_name','collect_name_required','Name'],['collect_email','collect_email_required','Email'],['collect_phone','collect_phone_required','Phone']].map(([visible, required, label]) => <div key={visible} className="border-b border-xert-steel/10 pb-3"><Toggle checked={Boolean(draft[visible])} onChange={value => update(visible, value)} label={`Collect ${label.toLowerCase()}`} />{draft[visible] && <Toggle checked={Boolean(draft[required])} onChange={value => update(required, value)} label={`Require ${label.toLowerCase()}`} />}</div>)}<Toggle checked={draft.one_response_per_email} onChange={value => update('one_response_per_email', value)} label="One response per email" description="Requires an email to identify duplicate submissions" /></section>
+      <section className={`${panel} space-y-4 p-5`}><h2 className="font-display text-2xl uppercase text-white">Respondent details</h2>{[['collect_name','collect_name_required','Name'],['collect_email','collect_email_required','Email'],['collect_phone','collect_phone_required','Phone']].map(([visible, required, label]) => <div key={visible} className="border-b border-xert-steel/10 pb-3"><Toggle checked={Boolean(draft[visible])} onChange={value => update(visible, value)} label={`Collect ${label.toLowerCase()}`} />{draft[visible] && <Toggle checked={Boolean(draft[required])} onChange={value => update(required, value)} label={`Require ${label.toLowerCase()}`} />}</div>)}<Toggle checked={draft.one_response_per_email} onChange={value => { update('one_response_per_email', value); if (value) { update('collect_email', true); update('collect_email_required', true); } }} label="One response per email" description="Email collection becomes required to prevent duplicate submissions" /></section>
       <section className={`${panel} space-y-4 p-5`}><h2 className="font-display text-2xl uppercase text-white">Publishing</h2><Toggle checked={draft.is_active} onChange={value => update('is_active', value)} label="Form is live" description="Public link accepts responses" /><Toggle checked={draft.show_progress_bar} onChange={value => update('show_progress_bar', value)} label="Show progress bar" /><Toggle checked={draft.notify_admin} onChange={value => update('notify_admin', value)} label="Flag new responses for owner review" /><label className="block text-xs text-xert-pale/55">Public link slug<input className={`${control} mt-1`} value={draft.slug} onChange={event => update('slug', event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} /></label></section>
       <section className={`${panel} space-y-4 p-5 lg:col-span-2`}><h2 className="font-display text-2xl uppercase text-white">Introduction and completion</h2><label className="block text-xs text-xert-pale/55">Description<textarea rows={4} className={`${control} mt-1 py-3`} value={draft.description || ''} onChange={event => update('description', event.target.value)} /></label><div className="grid gap-3 sm:grid-cols-3"><label className="text-xs text-xert-pale/55">Header media<select className={`${control} mt-1`} value={draft.header_media_type || ''} onChange={event => update('header_media_type', event.target.value || null)}><option value="">None</option><option value="image">Image</option><option value="video">Video</option><option value="link">Link</option></select></label><label className="text-xs text-xert-pale/55 sm:col-span-2">Media URL<input className={`${control} mt-1`} type="url" value={draft.header_media_url || ''} onChange={event => update('header_media_url', event.target.value)} /></label></div><label className="block text-xs text-xert-pale/55">Thank-you message<textarea rows={3} className={`${control} mt-1 py-3`} value={draft.thank_you_message || ''} onChange={event => update('thank_you_message', event.target.value)} /></label><label className="block text-xs text-xert-pale/55">Optional redirect URL<input className={`${control} mt-1`} type="url" value={draft.redirect_url || ''} onChange={event => update('redirect_url', event.target.value)} placeholder="https://" /></label></section>
     </div>}
@@ -72,21 +74,129 @@ function FormEditor({ draft, setDraft, onSave, onCancel, saving, error }) {
 function MiniBar({ label, count, maximum }) { return <div className="grid grid-cols-[minmax(6rem,1fr)_3fr_auto] items-center gap-3 text-sm"><span className="truncate text-xert-pale">{label}</span><span className="h-2 bg-xert-deep"><span className="block h-full bg-xert-steel" style={{ width: `${maximum ? count / maximum * 100 : 0}%` }} /></span><span className="w-8 text-right tabular-nums text-white">{count}</span></div>; }
 
 function Analytics({ form, onBack }) {
-  const [responses, setResponses] = useState([]); const [loading, setLoading] = useState(true); const [tab, setTab] = useState('overview'); const [error, setError] = useState('');
-  const load = () => { setLoading(true); listFormResponses(form.id).then(setResponses).catch(err => setError(err.message)).finally(() => setLoading(false)); };
-  useEffect(load, [form.id]);
+  const [responses, setResponses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('overview');
+  const [error, setError] = useState('');
+  const [selectedResponseID, setSelectedResponseID] = useState(null);
+  const [selectedResponse, setSelectedResponse] = useState(null);
+  const [loadingSelectedResponse, setLoadingSelectedResponse] = useState(false);
+  const [updatingResponseID, setUpdatingResponseID] = useState(null);
+  const [responseToArchive, setResponseToArchive] = useState(null);
+  const [responseQuery, setResponseQuery] = useState('');
+  const [responseStatus, setResponseStatus] = useState('all');
+
+  useEffect(() => {
+    let current = true;
+    setResponses([]);
+    setSelectedResponseID(null);
+    setLoading(true);
+    setError('');
+    listFormResponses(form.id)
+      .then(items => { if (current) setResponses(items); })
+      .catch(err => { if (current) setError(err.message); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [form.id]);
+
+  useEffect(() => {
+    let current = true;
+    setSelectedResponse(null);
+    if (!selectedResponseID) {
+      setLoadingSelectedResponse(false);
+      return () => { current = false; };
+    }
+    setLoadingSelectedResponse(true);
+    setError('');
+    getFormResponse(selectedResponseID)
+      .then(item => { if (current) setSelectedResponse(item); })
+      .catch(err => { if (current) setError(err.message); })
+      .finally(() => { if (current) setLoadingSelectedResponse(false); });
+    return () => { current = false; };
+  }, [selectedResponseID]);
+
   const questions = activeQuestions(form);
-  const download = () => { const blob = new Blob([responseCSV(form, responses)], { type: 'text/csv;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${form.slug}-responses.csv`; link.click(); URL.revokeObjectURL(link.href); };
-  const archive = async response => { await archiveFormResponse(response.id); setResponses(current => current.filter(item => item.id !== response.id)); };
-  const days = useMemo(() => Array.from({ length: 14 }, (_, offset) => { const date = new Date(); date.setHours(0,0,0,0); date.setDate(date.getDate() - 13 + offset); const key = date.toISOString().slice(0,10); return { key, label: date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }), count: responses.filter(item => item.completed_at?.slice(0,10) === key).length }; }), [responses]);
-  return <div className={`${shell} max-w-6xl space-y-5`}><div className="flex flex-wrap items-center gap-3"><button className={button} onClick={onBack}><ArrowLeft className="h-4 w-4" /> Forms</button><div className="min-w-0 flex-1 basis-full sm:basis-0"><p className="text-xs font-bold uppercase tracking-widest text-xert-steel">Analytics</p><h1 className="truncate font-display text-3xl uppercase text-white sm:text-4xl">{form.title}</h1></div><button className={button} onClick={download} disabled={!responses.length}><Download className="h-4 w-4" /> Export CSV</button></div>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Responses',responses.length],['New',responses.filter(item=>item.status==='new').length],['Avg. time',responses.length ? `${Math.round(responses.reduce((sum,item)=>sum+(item.time_taken_seconds||0),0)/responses.length)}s` : '—'],['Fields',questions.length]].map(([label,value]) => <div key={label} className={`${panel} p-4`}><p className="font-display text-3xl text-white">{value}</p><p className="text-xs uppercase tracking-wider text-xert-pale/45">{label}</p></div>)}</div>
-    <div className="flex overflow-x-auto border-b border-xert-steel/20">{[['overview','Overview'],['responses','Responses'],['trends','Trends']].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={`min-h-12 shrink-0 px-5 text-sm font-semibold ${tab===value?'border-b-2 border-xert-steel text-white':'text-xert-pale/50'}`}>{label}</button>)}</div>
-    {error && <p role="alert" className="text-amber-200">{error}</p>}{loading ? <p role="status" className="py-20 text-center text-xert-pale"><LoaderCircle className="mr-2 inline animate-spin" />Loading responses…</p> : tab === 'overview' ? <div className="grid gap-4 lg:grid-cols-2">{questions.map(question => { const values = responses.map(item => item.answers?.[question.id]).filter(value => value !== undefined && value !== null && value !== ''); if (CHARTABLE_TYPES.has(question.type)) { const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String); const labels = question.type === 'yes_no' ? ['Yes','No'] : question.type === 'star_rating' ? ['1','2','3','4','5'] : question.type === 'nps' ? Array.from({length:11},(_,i)=>String(i)) : question.options || [...new Set(flattened)]; const rows = labels.map(label => ({ label, count: flattened.filter(value => value === String(label)).length })); const maximum = Math.max(1,...rows.map(row=>row.count)); return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-4 text-xs text-xert-pale/40">{values.length} answers</p><div className="space-y-3">{rows.map(row => <MiniBar key={row.label} {...row} maximum={maximum} />)}</div></section>; } return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-3 text-xs text-xert-pale/40">{values.length} answers</p><div className="max-h-56 space-y-2 overflow-y-auto">{values.slice(0,20).map((value,index) => <p key={index} className="border-l-2 border-xert-steel/35 pl-3 text-sm text-xert-pale">{typeof value === 'object' ? Object.values(value).filter(Boolean).join(', ') : String(value)}</p>)}</div></section>; })}</div> : tab === 'responses' ? <div className="space-y-3">{responses.map(response => <article key={response.id} className={`${panel} p-5`}><div className="flex flex-wrap items-start gap-3"><div className="flex-1"><h2 className="font-semibold text-white">{response.respondent_name || response.respondent_email || 'Anonymous response'}</h2><p className="text-xs text-xert-pale/45">{new Date(response.completed_at).toLocaleString('en-AU')} · {response.time_taken_seconds || 0}s</p>{response.respondent_email && <a className="text-sm text-xert-steel" href={`mailto:${response.respondent_email}`}>{response.respondent_email}</a>}</div><select aria-label="Response status" className={`${control} w-auto`} value={response.status} onChange={async event => { const status=event.target.value; await updateFormResponseStatus(response.id,status); setResponses(current=>current.map(item=>item.id===response.id?{...item,status}:item)); }}><option value="new">New</option><option value="reviewed">Reviewed</option><option value="followed_up">Followed up</option><option value="closed">Closed</option></select><button className={`${button} px-3 text-red-300`} onClick={() => archive(response)} aria-label="Archive response"><Archive className="h-4 w-4" /></button></div><dl className="mt-4 grid gap-3 sm:grid-cols-2">{questions.map(question => <div key={question.id}><dt className="text-xs uppercase tracking-wider text-xert-pale/40">{question.question}</dt><dd className="mt-1 whitespace-pre-wrap text-sm text-xert-offwhite">{formatAnswer(response.answers?.[question.id]) || '—'}</dd></div>)}</dl></article>)}{!responses.length && <Empty title="No responses yet" detail="Share the live link to start collecting responses." />}</div> : <section className={`${panel} p-5`}><h2 className="mb-5 font-display text-2xl uppercase text-white">Last 14 days</h2><div className="flex h-56 items-end gap-2">{days.map(day => { const max=Math.max(1,...days.map(item=>item.count)); return <div className="flex h-full flex-1 flex-col justify-end text-center" key={day.key}><span className="mb-1 text-xs text-white">{day.count || ''}</span><span className="min-h-1 bg-xert-steel" style={{height:`${Math.max(2,day.count/max*85)}%`}} /><span className="mt-2 hidden text-[10px] text-xert-pale/40 sm:block">{day.label}</span></div>; })}</div></section>}
+  const filteredResponses = useMemo(() => {
+    const needle = responseQuery.trim().toLocaleLowerCase('en-AU');
+    return responses.filter(response => {
+      if (responseStatus !== 'all' && response.status !== responseStatus) return false;
+      if (!needle) return true;
+      return [response.respondent_name, response.respondent_email, response.respondent_phone]
+        .some(value => String(value || '').toLocaleLowerCase('en-AU').includes(needle));
+    });
+  }, [responseQuery, responseStatus, responses]);
+  const days = useMemo(() => Array.from({ length: 14 }, (_, offset) => {
+    const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - 13 + offset);
+    const key = date.toISOString().slice(0, 10);
+    return { key, label: date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }), count: responses.filter(item => item.completed_at?.slice(0, 10) === key).length };
+  }), [responses]);
+
+  const download = () => {
+    const blob = new Blob([responseCSV(form, responses)], { type: 'text/csv;charset=utf-8' });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${form.slug}-responses.csv`; link.click(); URL.revokeObjectURL(link.href);
+  };
+  const updateStatus = async (response, status) => {
+    if (status === response.status) return;
+    setUpdatingResponseID(response.id); setError('');
+    try {
+      await updateFormResponseStatus(response.id, status);
+      setResponses(current => current.map(item => item.id === response.id ? { ...item, status } : item));
+      setSelectedResponse(current => current?.id === response.id ? { ...current, status } : current);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdatingResponseID(null);
+    }
+  };
+  const archive = async () => {
+    if (!responseToArchive) return;
+    setUpdatingResponseID(responseToArchive.id); setError('');
+    try {
+      await archiveFormResponse(responseToArchive.id);
+      setResponses(current => current.filter(item => item.id !== responseToArchive.id));
+      setResponseToArchive(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdatingResponseID(null);
+    }
+  };
+
+  const selectedResponseMatches = selectedResponseID && selectedResponse?.id === selectedResponseID;
+
+  if (selectedResponseID && !selectedResponseMatches) {
+    return <div className={`${shell} max-w-6xl space-y-4`}><button type="button" className={button} onClick={() => setSelectedResponseID(null)}><ArrowLeft className="h-4 w-4" /> All responses</button>{loadingSelectedResponse ? <p role="status" className="py-20 text-center text-xert-pale"><LoaderCircle className="mr-2 inline animate-spin" />Loading full response...</p> : <p role="alert" className="border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error || 'This response could not be loaded.'}</p>}</div>;
+  }
+
+  if (selectedResponseMatches) {
+    return <div className={`${shell} max-w-6xl`}><FormResponseRecord form={form} response={selectedResponse} responses={responses} onSelect={setSelectedResponseID} onBack={() => setSelectedResponseID(null)} onStatusChange={updateStatus} updating={updatingResponseID === selectedResponse.id} error={error} /></div>;
+  }
+
+  return <div className={`${shell} max-w-6xl space-y-5`}>
+    <div className="flex flex-wrap items-center gap-3"><button className={button} onClick={onBack}><ArrowLeft className="h-4 w-4" /> Forms</button><div className="min-w-0 flex-1 basis-full sm:basis-0"><p className="text-xs font-bold uppercase tracking-widest text-xert-steel">Analytics</p><h1 className="truncate font-display text-3xl uppercase text-white sm:text-4xl">{form.title}</h1></div><button className={button} onClick={download} disabled={!responses.length}><Download className="h-4 w-4" /> Export CSV</button></div>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Responses',responses.length],['New',responses.filter(item => item.status === 'new').length],['Avg. time',responses.length ? `${Math.round(responses.reduce((sum,item) => sum + (item.time_taken_seconds || 0), 0) / responses.length)}s` : '—'],['Fields',questions.length]].map(([label,value]) => <div key={label} className={`${panel} p-4`}><p className="font-display text-3xl text-white">{value}</p><p className="text-xs uppercase tracking-wider text-xert-pale/45">{label}</p></div>)}</div>
+    <div className="flex overflow-x-auto border-b border-xert-steel/20">{[['overview','Overview'],['responses','Responses'],['trends','Trends']].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={`min-h-12 shrink-0 px-5 text-sm font-semibold ${tab === value ? 'border-b-2 border-xert-steel text-white' : 'text-xert-pale/50'}`}>{label}</button>)}</div>
+    {error && <p role="alert" className="border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
+    {loading ? <p role="status" className="py-20 text-center text-xert-pale"><LoaderCircle className="mr-2 inline animate-spin" />Loading responses…</p> : tab === 'overview' ? <div className="grid gap-4 lg:grid-cols-2">{questions.map(question => {
+      const values = responses.map(item => item.answers?.[question.id]).filter(value => value !== undefined && value !== null && value !== '');
+      if (CHARTABLE_TYPES.has(question.type)) {
+        const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String);
+        const labels = question.type === 'yes_no' ? ['Yes','No'] : question.type === 'star_rating' ? ['1','2','3','4','5'] : question.type === 'nps' ? Array.from({length:11},(_,i) => String(i)) : question.options || [...new Set(flattened)];
+        const rows = labels.map(label => ({ label, count: flattened.filter(value => value === String(label)).length })); const maximum = Math.max(1, ...rows.map(row => row.count));
+        return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-4 text-xs text-xert-pale/40">{values.length} answers</p><div className="space-y-3">{rows.map(row => <MiniBar key={row.label} {...row} maximum={maximum} />)}</div></section>;
+      }
+      return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-3 text-xs text-xert-pale/40">{values.length} answers</p><div className="max-h-56 space-y-2 overflow-y-auto">{values.slice(0,20).map((value,index) => <p key={index} className="border-l-2 border-xert-steel/35 pl-3 text-sm text-xert-pale">{typeof value === 'object' ? Object.values(value).filter(Boolean).join(', ') : String(value)}</p>)}</div></section>;
+    })}</div> : tab === 'responses' ? <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]"><label className="relative"><span className="sr-only">Search respondents</span><Search className="absolute left-3 top-3.5 h-4 w-4 text-xert-pale/35" /><input className={`${control} pl-10`} value={responseQuery} onChange={event => setResponseQuery(event.target.value)} placeholder="Search name, email or phone" /></label><select aria-label="Filter responses by status" className={control} value={responseStatus} onChange={event => setResponseStatus(event.target.value)}><option value="all">All statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="followed_up">Followed up</option><option value="closed">Closed</option></select></div>
+      <div className="space-y-3">{filteredResponses.map(response => <article key={response.id} className={`${panel} p-4 sm:p-5`}><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold text-white">{response.respondent_name || response.respondent_email || 'Anonymous response'}</h2><span className="border border-xert-steel/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-xert-pale/55">{String(response.status || 'new').replace('_', ' ')}</span></div><p className="mt-1 text-xs text-xert-pale/45">{new Date(response.completed_at).toLocaleString('en-AU')} · {response.time_taken_seconds || 0}s</p>{response.respondent_email && <a className="mt-1 block truncate text-sm text-xert-steel" href={`mailto:${response.respondent_email}`}>{response.respondent_email}</a>}{response.respondent_phone && <a className="mt-1 block text-sm text-xert-pale/60" href={`tel:${response.respondent_phone}`}>{response.respondent_phone}</a>}</div><div className="grid grid-cols-[1fr_auto] gap-2 sm:flex"><button type="button" className={primary} onClick={() => setSelectedResponseID(response.id)}><Eye className="h-4 w-4" /> View full form</button><button type="button" className={`${button} px-3 text-red-300`} onClick={() => setResponseToArchive(response)} aria-label={`Archive response from ${response.respondent_name || response.respondent_email || 'anonymous respondent'}`}><Archive className="h-4 w-4" /></button></div></div></article>)}
+        {!responses.length && <Empty title="No responses yet" detail="Share the live link to start collecting responses." />}
+        {responses.length > 0 && !filteredResponses.length && <Empty title="No matching responses" detail="Clear the search or status filter to see other submissions." />}
+      </div>
+    </div> : <section className={`${panel} p-5`}><h2 className="mb-5 font-display text-2xl uppercase text-white">Last 14 days</h2><div className="flex h-56 items-end gap-2">{days.map(day => { const max = Math.max(1,...days.map(item => item.count)); return <div className="flex h-full flex-1 flex-col justify-end text-center" key={day.key}><span className="mb-1 text-xs text-white">{day.count || ''}</span><span className="min-h-1 bg-xert-steel" style={{height:`${Math.max(2,day.count/max*85)}%`}} /><span className="mt-2 hidden text-[10px] text-xert-pale/40 sm:block">{day.label}</span></div>; })}</div></section>}
+    <AdminConfirmDialog open={Boolean(responseToArchive)} onOpenChange={open => !open && setResponseToArchive(null)} title="Archive this response?" description="It will be removed from analytics and the response list. The underlying record remains recoverable in the database." warning={undefined} cancelLabel="Keep response" confirmLabel="Archive response" busy={updatingResponseID === responseToArchive?.id} onConfirm={archive} />
   </div>;
 }
 function Empty({ title, detail }) { return <div className={`${panel} py-20 text-center`}><ClipboardList className="mx-auto h-12 w-12 text-xert-steel/30" /><h2 className="mt-4 font-display text-2xl uppercase text-white">{title}</h2><p className="mt-2 text-sm text-xert-pale/50">{detail}</p></div>; }
-function formatAnswer(value) { if (Array.isArray(value)) return value.join(', '); if (value && typeof value === 'object') return Object.values(value).filter(Boolean).join(', '); return value == null ? '' : String(value); }
 
 export default function FormsSurveysManager({ initialAction = null, onIntentHandled = () => {}, onDirtyChange = (_dirty) => {} }) {
   const [forms, setForms] = useState([]); const [loading, setLoading] = useState(true); const [view, setView] = useState('list');
@@ -120,8 +230,9 @@ export default function FormsSurveysManager({ initialAction = null, onIntentHand
   if (view === 'manage' && active) {
     const url=publicFormURL(active); return <div className={`${shell} max-w-5xl space-y-5`}><div className="flex flex-wrap items-start gap-3"><button className={button} onClick={() => setView('list')}><ArrowLeft className="h-4 w-4" /> Forms</button><div className="min-w-0 flex-1 basis-full sm:basis-0"><span className={`text-xs font-bold uppercase tracking-widest ${active.is_active?'text-emerald-300':'text-xert-pale/40'}`}>{active.is_active?'Live':'Paused'}</span><h1 className="break-words font-display text-3xl uppercase text-white sm:text-5xl">{active.title}</h1></div><button className={button} onClick={() => edit(active)}><Pencil className="h-4 w-4" /> Edit</button><button className={primary} onClick={() => { setView('analytics'); }}><BarChart3 className="h-4 w-4" /> Analytics</button></div>
       {notice && <p role="status" className="border border-emerald-300/25 bg-emerald-300/10 p-3 text-sm text-emerald-100">{notice}</p>}{error && <p role="alert" className="text-amber-200">{error}</p>}
-      <div className="grid gap-4 lg:grid-cols-2"><section className={`${panel} p-5`}><h2 className="font-display text-2xl uppercase text-white">Share and embed</h2><p className="mt-1 text-sm text-xert-pale/50">Public links work on mobile and desktop without an account.</p><div className="mt-4 flex"><input readOnly value={url} className={`${control} min-w-0 flex-1`} /><button className={`${button} px-3`} onClick={async()=>{await navigator.clipboard.writeText(url);setNotice('Link copied.');}} aria-label="Copy public link"><Link2 className="h-4 w-4" /></button></div><div className="mt-3 flex flex-wrap gap-2"><a href={url} target="_blank" rel="noopener noreferrer" className={button}><Eye className="h-4 w-4" /> Preview</a><button className={button} onClick={async()=>{await navigator.clipboard.writeText(`<iframe src="${url}" title="${active.title.replace(/"/g,'&quot;')}" width="100%" height="760" style="border:0"></iframe>`);setNotice('Embed code copied.');}}><Clipboard className="h-4 w-4" /> Copy embed</button>{navigator.share && <button className={button} onClick={()=>navigator.share({title:active.title,url})}><ExternalLink className="h-4 w-4" /> Share</button>}</div></section>
-      <section className={`${panel} p-5`}><h2 className="font-display text-2xl uppercase text-white">Form controls</h2><div className="mt-4 grid gap-2"><button className={button} onClick={()=>toggleLive(active)}>{active.is_active?<><Pause className="h-4 w-4" /> Pause responses</>:<><Play className="h-4 w-4" /> Publish form</>}</button><button className={button} onClick={()=>duplicate(active)}><Copy className="h-4 w-4" /> Duplicate and edit</button><button className={`${button} text-red-300`} onClick={()=>setConfirmArchive(active)}><Archive className="h-4 w-4" /> Archive form</button></div></section></div>
+      <div className="grid gap-4 lg:grid-cols-2"><section className={`${panel} p-5`}><h2 className="font-display text-2xl uppercase text-white">Share form</h2><p className="mt-1 text-sm text-xert-pale/50">Public links work on mobile and desktop without an account.</p><div className="mt-4 flex"><input readOnly value={url} className={`${control} min-w-0 flex-1`} /><button className={`${button} px-3`} onClick={async()=>{await navigator.clipboard.writeText(url);setNotice('Link copied.');}} aria-label="Copy public link"><Link2 className="h-4 w-4" /></button></div><div className="mt-3 flex flex-wrap gap-2"><a href={url} target="_blank" rel="noopener noreferrer" className={button}><Eye className="h-4 w-4" /> Preview</a>{navigator.share && <button className={button} onClick={()=>navigator.share({title:active.title,url})}><ExternalLink className="h-4 w-4" /> Share</button>}</div></section>
+      <section className={`${panel} p-5`}><h2 className="font-display text-2xl uppercase text-white">Form controls</h2><div className="mt-4 grid gap-2"><button className={button} onClick={()=>toggleLive(active)}>{active.is_active?<><Pause className="h-4 w-4" /> Pause responses</>:<><Play className="h-4 w-4" /> Publish form</>}</button><button className={button} onClick={()=>duplicate(active)}><Copy className="h-4 w-4" /> Duplicate and edit</button><button className={`${button} text-red-300`} onClick={()=>setConfirmArchive(active)}><Archive className="h-4 w-4" /> Archive form</button></div></section>
+      <FormQRCode form={active} publicURL={url} onNotice={setNotice} /></div>
       <div className="grid grid-cols-3 gap-3">{[['Responses',active.response_count||0],['Fields',activeQuestions(active).length],['Type',FORM_TYPES.find(type=>type.value===active.form_type)?.label||'Custom']].map(([label,value])=><div className={`${panel} p-4 text-center`} key={label}><p className="font-display text-2xl text-white">{value}</p><p className="text-xs uppercase tracking-wider text-xert-pale/40">{label}</p></div>)}</div>
       <AdminConfirmDialog open={Boolean(confirmArchive)} onOpenChange={open => !open && setConfirmArchive(null)} title="Archive this form?" description="The public link will stop accepting responses. Existing response history is preserved." warning={undefined} cancelLabel="Keep form" confirmLabel="Archive form" busy={saving} onConfirm={async()=>{setSaving(true);try{await archiveOwnerForm(confirmArchive);setConfirmArchive(null);setActive(null);setView('list');await load();}finally{setSaving(false);}}} />
     </div>;

@@ -342,6 +342,7 @@ workflows:
               "staff_assisted_booking",
               "owner_stripe_price_provisioning",
               "forms_surveys_builder",
+              "form_response_snapshots",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

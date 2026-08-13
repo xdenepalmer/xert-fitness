@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase';
+import { protectCSVFormula } from '@/lib/csvSafety';
+export { computeSkippedQuestionIDs } from '@/lib/formBranching';
 
 export const FORM_TYPES = Object.freeze([
   ['contact', 'Contact Form'], ['registration', 'Registration'], ['application', 'Application'],
@@ -65,22 +67,6 @@ export function activeQuestions(form) {
   return (form?.questions || []).filter(question => !question.hidden && INPUT_TYPES.has(question.type));
 }
 
-export function computeSkippedQuestionIDs(questions, answers) {
-  const skipped = new Set();
-  questions.forEach((question, index) => {
-    if (!CHOICE_TYPES.has(question.type)) return;
-    const answer = answers[question.id];
-    const rule = (question.skip_rules || []).find(candidate => {
-      if (question.type === 'multiple_choice') return Array.isArray(answer) && answer.length === 1 && answer[0] === candidate.option;
-      return answer === candidate.option;
-    });
-    const target = Number(rule?.skip_to);
-    if (!Number.isInteger(target) || target <= index + 2) return;
-    for (let step = index + 2; step < Math.min(target, questions.length + 1); step += 1) skipped.add(questions[step - 1]?.id);
-  });
-  return skipped;
-}
-
 export function answerIsPresent(value) {
   if (Array.isArray(value)) return value.length > 0;
   if (value && typeof value === 'object') return Object.values(value).some(answerIsPresent);
@@ -97,7 +83,7 @@ export function validateFormDraft(form) {
     return !Number.isInteger(target) || target <= index + 2 || target > questions.length + 1;
   }));
   if (invalidSkipRule) return 'Skip logic can only jump forward to a later field or the end of the form.';
-  if (form.one_response_per_email && !form.collect_email) return 'Collect email before limiting responses by email.';
+  if (form.one_response_per_email && !form.collect_email_required) return 'Require email before limiting responses by email.';
   const incomplete = questions.find(question => question.type !== 'statement' && question.type !== 'section_break' && !question.question?.trim());
   if (incomplete) return 'Every response field needs a question or label.';
   return null;
@@ -139,10 +125,34 @@ export async function archiveOwnerForm(form) {
   throwIfError(error);
 }
 
+const FORM_RESPONSE_PAGE_SIZE = 500;
+const FORM_RESPONSE_LIST_FIELDS = [
+  'id', 'form_id', 'answers', 'respondent_name', 'respondent_email', 'respondent_phone',
+  'status', 'completed_at', 'time_taken_seconds', 'created_at', 'archived_at',
+].join(',');
+
 export async function listFormResponses(formID) {
-  const { data, error } = await supabase.from('xert_form_responses').select('*').eq('form_id', formID).is('archived_at', null).order('created_at', { ascending: false }).limit(2000);
+  const responses = [];
+  for (let from = 0; ; from += FORM_RESPONSE_PAGE_SIZE) {
+    const { data, error } = await supabase.from('xert_form_responses')
+      .select(FORM_RESPONSE_LIST_FIELDS)
+      .eq('form_id', formID)
+      .is('archived_at', null)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + FORM_RESPONSE_PAGE_SIZE - 1);
+    throwIfError(error);
+    const page = data || [];
+    responses.push(...page);
+    if (page.length < FORM_RESPONSE_PAGE_SIZE) break;
+  }
+  return responses;
+}
+
+export async function getFormResponse(responseID) {
+  const { data, error } = await supabase.from('xert_form_responses').select('*').eq('id', responseID).single();
   throwIfError(error);
-  return data || [];
+  return data;
 }
 
 export async function updateFormResponseStatus(responseID, status) {
@@ -161,9 +171,10 @@ export async function loadPublicForm(slug) {
   return data?.[0] || null;
 }
 
-export async function submitPublicForm({ slug, answers, name, email, phone, elapsedSeconds, sourceURL }) {
-  const { data, error } = await supabase.rpc('submit_xert_form_response', {
-    p_slug: slug, p_answers: answers, p_respondent_name: name || null,
+export async function submitPublicForm({ slug, formUpdatedAt, answers, name, email, phone, elapsedSeconds, sourceURL }) {
+  const { data, error } = await supabase.rpc('submit_xert_form_response_v2', {
+    p_slug: slug, p_answers: answers, p_form_updated_at: formUpdatedAt,
+    p_respondent_name: name || null,
     p_respondent_email: email || null, p_respondent_phone: phone || null,
     p_time_taken_seconds: elapsedSeconds, p_source_url: sourceURL,
   });
@@ -173,7 +184,7 @@ export async function submitPublicForm({ slug, answers, name, email, phone, elap
 
 export function responseCSV(form, responses) {
   const questions = activeQuestions(form);
-  const escape = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const escape = value => `"${protectCSVFormula(value).replace(/"/g, '""')}"`;
   const display = value => {
     if (Array.isArray(value)) return value.join('; ');
     if (value && typeof value === 'object') return Object.values(value).filter(Boolean).join(', ');

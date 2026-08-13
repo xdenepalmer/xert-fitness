@@ -273,3 +273,79 @@ summary:focus-visible {
     font-size: 16px !important;
   }
 }
+
+/* A response detail becomes a clean paper/PDF record. The body marker scopes
+   this aggressively so ordinary site and command-centre printing is unchanged. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html:has(body.xert-response-detail-open),
+  body.xert-response-detail-open,
+  body.xert-response-detail-open #root {
+    background: #fff !important;
+  }
+
+  body.xert-response-detail-open {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body.xert-response-detail-open #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.xert-response-detail-open > :not(#root) {
+    display: none !important;
+  }
+
+  /* Remove every non-record branch from layout, preventing a tall hidden
+     command centre from producing trailing blank PDF pages. Ancestors in the
+     record's chain become layout-transparent while its own styles remain. */
+  body.xert-response-detail-open #root *:not(:has(.xert-response-print-record)):not(.xert-response-print-record):not(.xert-response-print-record *) {
+    display: none !important;
+  }
+
+  body.xert-response-detail-open #root *:has(.xert-response-print-record) {
+    display: contents !important;
+  }
+
+  body.xert-response-detail-open .xert-response-print-record {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.xert-response-detail-open .xert-print-controls {
+    display: none !important;
+  }
+
+  body.xert-response-detail-open :where(
+    .xert-response-metadata,
+    .xert-response-field,
+    .xert-response-statement,
+    .xert-response-unmatched,
+    .xert-response-administrative,
+    .xert-response-signature
+  ) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.xert-response-detail-open .xert-response-section {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  body.xert-response-detail-open .xert-response-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

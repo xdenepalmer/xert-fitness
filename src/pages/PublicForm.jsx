@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star } from 'lucide-react';
-import { activeQuestions, answerIsPresent, computeSkippedQuestionIDs, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
+import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
+import { buildPublicFormSteps } from '@/lib/formBranching';
 
 const inputClass = 'w-full min-h-12 bg-xert-deep border border-xert-steel/25 px-4 text-xert-offwhite placeholder:text-xert-pale/35 outline-none focus:border-xert-steel focus:ring-2 focus:ring-xert-steel/20 rounded-sm';
 
@@ -12,26 +13,85 @@ function safeURL(value) {
   } catch { return null; }
 }
 
+function formVideoEmbedURL(value) {
+  const url = safeURL(value);
+  if (!url) return null;
+
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+  const segments = url.pathname.split('/').filter(Boolean);
+  let youtubeID = null;
+
+  if (hostname === 'youtu.be' && segments.length === 1) {
+    [youtubeID] = segments;
+  } else if (['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(hostname)) {
+    if (url.pathname.replace(/\/+$/, '') === '/watch') youtubeID = url.searchParams.get('v');
+    else if (segments.length === 2 && ['embed', 'shorts', 'live'].includes(segments[0])) [, youtubeID] = segments;
+  } else if (hostname === 'www.youtube-nocookie.com'
+    && segments.length === 2 && segments[0] === 'embed') {
+    [, youtubeID] = segments;
+  }
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(youtubeID || '')) {
+    return `https://www.youtube-nocookie.com/embed/${youtubeID}`;
+  }
+
+  let vimeoID = null;
+  if (['vimeo.com', 'www.vimeo.com'].includes(hostname) && segments.length >= 1) {
+    [vimeoID] = segments;
+  } else if (hostname === 'player.vimeo.com'
+    && segments.length === 2 && segments[0] === 'video') {
+    [, vimeoID] = segments;
+  }
+
+  return /^\d{1,12}$/.test(vimeoID || '')
+    ? `https://player.vimeo.com/video/${vimeoID}`
+    : null;
+}
+
 function Media({ type, url, caption }) {
   const safe = safeURL(url);
   if (!type || !safe) return null;
-  const youtube = safe.hostname.includes('youtu') ? safe.pathname.split('/').filter(Boolean).pop() || safe.searchParams.get('v') : null;
-  const vimeo = safe.hostname.includes('vimeo.com') ? safe.pathname.split('/').filter(Boolean).pop() : null;
+  const embedURL = type === 'video' ? formVideoEmbedURL(safe) : null;
   return (
     <figure className="mb-6 overflow-hidden border border-xert-steel/20 bg-xert-deep">
       {type === 'image' && <img src={safe.toString()} alt={caption || ''} loading="lazy" decoding="async" className="max-h-[26rem] w-full object-contain" />}
-      {type === 'video' && (youtube || vimeo) && (
+      {embedURL && (
         <div className="aspect-video">
-          <iframe title={caption || 'Form video'} src={youtube ? `https://www.youtube-nocookie.com/embed/${youtube}` : `https://player.vimeo.com/video/${vimeo}`} className="h-full w-full" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" />
+          <iframe title={caption || 'Form video'} src={embedURL} className="h-full w-full" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" />
         </div>
       )}
-      {(type === 'link' || (type === 'video' && !youtube && !vimeo)) && (
+      {(type === 'link' || (type === 'video' && !embedURL)) && (
         <a href={safe.toString()} target="_blank" rel="noopener noreferrer" className="flex min-h-14 items-center gap-3 p-4 text-xert-steel hover:bg-xert-steel/10">
           <ExternalLink className="h-5 w-5" /> <span>{caption || 'Open attached link'}</span>
         </a>
       )}
-      {caption && type !== 'link' && <figcaption className="px-4 py-3 text-center text-sm text-xert-pale/60">{caption}</figcaption>}
+      {caption && type !== 'link' && (type !== 'video' || embedURL) && <figcaption className="px-4 py-3 text-center text-sm text-xert-pale/60">{caption}</figcaption>}
     </figure>
+  );
+}
+
+function InformationalBlocks({ items }) {
+  if (!items.length) return null;
+  return (
+    <div className="mb-8 space-y-4" aria-label="Form information">
+      {items.map(item => {
+        const title = String(item.content || item.question || '').trim();
+        if (item.type === 'section_break') {
+          return (
+            <section key={item.id} className="border-b border-xert-steel/25 pb-3">
+              <h2 className="font-display text-2xl uppercase tracking-wide text-white">{title || 'Section'}</h2>
+              {item.description && <p className="mt-2 whitespace-pre-wrap text-sm text-xert-pale/65">{item.description}</p>}
+            </section>
+          );
+        }
+        return (
+          <section key={item.id} className="border border-xert-steel/25 bg-xert-deep/60 p-4">
+            {title && <p className="whitespace-pre-wrap text-sm leading-relaxed text-xert-offwhite">{title}</p>}
+            {item.description && <p className="mt-2 whitespace-pre-wrap text-sm text-xert-pale/60">{item.description}</p>}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -110,20 +170,28 @@ export default function PublicForm() {
   const [submitting, setSubmitting] = useState(false); const [submitted, setSubmitted] = useState(false);
   const startedAt = useRef(Date.now());
   useEffect(() => { let active = true; setLoading(true); loadPublicForm(slug).then(data => { if (active) { setForm(data); document.title = data ? `${data.title} | XERT` : 'Form unavailable | XERT'; } }).catch(err => active && setError(err.message)).finally(() => active && setLoading(false)); return () => { active = false; }; }, [slug]);
-  const questions = useMemo(() => activeQuestions(form), [form]);
-  const skipped = useMemo(() => computeSkippedQuestionIDs(questions, answers), [answers, questions]);
-  const visible = useMemo(() => questions.filter(question => !skipped.has(question.id)), [questions, skipped]);
-  const question = step > 0 ? visible[step - 1] : null;
+  // Skip destinations are indexed against the complete builder sequence, so
+  // layout blocks must stay in this calculation even though they do not hold
+  // answers. Each statement/section is then displayed with the next question.
+  const formItems = useMemo(() => form?.questions || [], [form]);
+  const formFlow = useMemo(() => buildPublicFormSteps(formItems, answers), [answers, formItems]);
+  const { skipped, steps } = formFlow;
+  const currentStep = step > 0 ? steps[step - 1] : null;
+  const question = currentStep?.question || null;
+  const questionCount = steps.filter(item => item.question).length;
+  const questionNumber = step > 0
+    ? steps.slice(0, step).filter(item => item.question).length
+    : 0;
   const introValid = (!form?.collect_name_required || name.trim()) && (!form?.collect_email_required || /^\S+@\S+\.\S+$/.test(email)) && (!form?.collect_phone_required || phone.trim());
   const currentValid = !question?.required || answerIsPresent(answers[question.id]);
   const next = async () => {
     setError('');
     if (step === 0 && !introValid) { setError('Complete the required contact details to continue.'); return; }
     if (question && !currentValid) { setError('This question is required.'); return; }
-    if (step < visible.length) { setStep(value => value + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (step < steps.length) { setStep(value => value + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setSubmitting(true);
     try {
-      await submitPublicForm({ slug, answers: Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id))), name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
+      await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id))), name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
       setSubmitted(true);
       if (safeURL(form.redirect_url)) window.setTimeout(() => window.location.assign(form.redirect_url), 1400);
     } catch (err) { setError(err.message); } finally { setSubmitting(false); }
@@ -131,7 +199,7 @@ export default function PublicForm() {
   if (loading) return <main className="min-h-screen bg-xert-navy grid place-items-center text-xert-pale" role="status"><LoaderCircle className="mr-3 inline h-6 w-6 animate-spin text-xert-steel" /> Loading form…</main>;
   if (!form) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6 text-center"><div><img src="/assets/xert-logo-horizontal-light.png" alt="XERT" className="mx-auto mb-8 h-10" /><h1 className="font-display text-4xl text-white">Form unavailable</h1><p className="mt-3 text-xert-pale/60">This link may be paused, archived or incorrect.</p></div></main>;
   if (submitted) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6"><section className="w-full max-w-xl border border-xert-steel/25 bg-xert-ink p-8 text-center shadow-2xl"><span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-emerald-400/10 text-emerald-300"><Check /></span><h1 className="font-display text-4xl uppercase tracking-wide text-white">Response received</h1><p className="mt-4 text-xert-pale/70">{form.thank_you_message}</p></section></main>;
-  const progress = visible.length ? Math.min(100, Math.max(0, step / visible.length * 100)) : 100;
+  const progress = steps.length ? Math.min(100, Math.max(0, step / steps.length * 100)) : 100;
   return (
     <main className="min-h-screen bg-xert-navy px-4 py-6 text-xert-offwhite sm:px-6 sm:py-12">
       <section className="mx-auto w-full max-w-2xl overflow-hidden border border-xert-steel/25 bg-xert-ink shadow-2xl">
@@ -148,17 +216,20 @@ export default function PublicForm() {
               {form.collect_email && <label><span className="mb-1.5 block text-sm text-xert-pale">Email {form.collect_email_required && '*'}</span><input id="form-email" type="email" className={inputClass} autoComplete="email" autoCapitalize="none" autoCorrect="off" value={email} onChange={event => setEmail(event.target.value)} /></label>}
               {form.collect_phone && <label><span className="mb-1.5 block text-sm text-xert-pale">Phone {form.collect_phone_required && '*'}</span><input id="form-phone" type="tel" className={inputClass} autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} /></label>}
             </div>}
-          </> : question ? <>
-            <p className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-xert-steel">Question {step} of {visible.length}</p>
-            <Media type={question.media_type} url={question.media_url} caption={question.media_caption} />
-            <h1 id={`question-${question.id}`} className="font-display text-3xl uppercase leading-tight tracking-wide text-white sm:text-4xl">{question.question}{question.required && <span className="ml-2 text-xert-steel">*</span>}</h1>
-            {question.description && <p className="mt-3 text-xert-pale/60">{question.description}</p>}
-            <div className="mt-7"><AnswerInput question={question} value={answers[question.id]} onChange={value => setAnswers(current => ({ ...current, [question.id]: value }))} /></div>
+          </> : currentStep ? <>
+            <InformationalBlocks items={currentStep.information} />
+            {question ? <>
+              <p className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-xert-steel">Question {questionNumber} of {questionCount}</p>
+              <Media type={question.media_type} url={question.media_url} caption={question.media_caption} />
+              <h1 id={`question-${question.id}`} className="font-display text-3xl uppercase leading-tight tracking-wide text-white sm:text-4xl">{question.question}{question.required && <span className="ml-2 text-xert-steel">*</span>}</h1>
+              {question.description && <p className="mt-3 text-xert-pale/60">{question.description}</p>}
+              <div className="mt-7"><AnswerInput question={question} value={answers[question.id]} onChange={value => setAnswers(current => ({ ...current, [question.id]: value }))} /></div>
+            </> : <><h1 className="font-display text-4xl uppercase text-white">Review and submit</h1><p className="mt-3 text-xert-pale/65">Confirm the information above, or go back before sending your response.</p></>}
           </> : <><h1 className="font-display text-4xl uppercase text-white">Ready to submit?</h1><p className="mt-3 text-xert-pale/65">Review your answers with Back, or send your response now.</p></>}
           {error && <p role="alert" className="mt-5 border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
           <div className="mt-8 flex gap-3">
             {step > 0 && <button type="button" onClick={() => { setError(''); setStep(value => Math.max(0, value - 1)); }} className="inline-flex min-h-12 items-center gap-2 border border-xert-steel/30 px-5 text-xert-pale"><ArrowLeft className="h-4 w-4" /> Back</button>}
-            <button type="button" disabled={submitting} onClick={next} className="ml-auto inline-flex min-h-12 items-center justify-center gap-2 bg-xert-steel px-6 font-bold uppercase tracking-wider text-xert-navy disabled:opacity-60">{submitting ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Sending</> : step >= visible.length ? <>Submit <Check className="h-4 w-4" /></> : <>Continue <ArrowRight className="h-4 w-4" /></>}</button>
+            <button type="button" disabled={submitting} onClick={next} className="ml-auto inline-flex min-h-12 items-center justify-center gap-2 bg-xert-steel px-6 font-bold uppercase tracking-wider text-xert-navy disabled:opacity-60">{submitting ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Sending</> : step >= steps.length ? <>Submit <Check className="h-4 w-4" /></> : <>Continue <ArrowRight className="h-4 w-4" /></>}</button>
           </div>
         </div>
       </section>

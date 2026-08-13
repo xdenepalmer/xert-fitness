@@ -25,7 +25,7 @@ test('native response CSV is a real ShareLink file with robust escaping', async 
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminFormsView.swift');
   const exporter = view.slice(
     view.indexOf('private enum AdminFormResponseCSVExport'),
-    view.indexOf('private struct AdminFormResponseView'),
+    view.indexOf('private func formTypeLabel'),
   );
 
   assert.match(view, /ShareLink\(item: exportURL/);
@@ -36,20 +36,20 @@ test('native response CSV is a real ShareLink file with robust escaping', async 
   assert.match(exporter, /"=\+-@"\.contains/);
   assert.match(exporter, /joined\(separator: "\\r\\n"\)/);
   assert.match(exporter, /"\\u\{FEFF\}/);
-  assert.match(exporter, /write\(to: fileURL, options: \.atomic\)/);
+  assert.match(exporter, /write\(to: fileURL, options: \[\.atomic, \.completeFileProtection\]\)/);
 });
 
 test('native response export owns and cleans its temporary file lifecycle', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminFormsView.swift');
   const detail = view.slice(
     view.indexOf('private struct AdminFormDetailView'),
-    view.indexOf('private struct AdminFormResponseView'),
+    view.indexOf('private func formTypeLabel'),
   );
 
   assert.match(detail, /FileManager\.default\.temporaryDirectory/);
   assert.match(detail, /UUID\(\)\.uuidString/);
   assert.match(detail, /directory\.deletingLastPathComponent\(\)\.standardizedFileURL == rootDirectory\.standardizedFileURL/);
-  assert.match(detail, /\.onDisappear \{ discardCSVExport\(\) \}/);
+  assert.match(detail, /\.onDisappear \{[\s\S]*discardCSVExport\(\)[\s\S]*discardQRCode\(\)[\s\S]*\}/);
   assert.match(detail, /Button[\s\S]*Label\("Prepare responses CSV"/);
   assert.match(detail, /\.onChange\(of: responses\) \{ _ in discardCSVExport\(\) \}/);
   assert.match(detail, /Button\("Try CSV export again"\)/);

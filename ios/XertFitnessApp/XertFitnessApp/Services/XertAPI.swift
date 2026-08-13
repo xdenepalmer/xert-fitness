@@ -2882,10 +2882,11 @@ final class XertAPI {
     }
 
     func adminFormResponses(session auth: AuthSession, formID: UUID) async throws -> [AdminFormResponse] {
-        try await restRequest(
+        let legacySelect = "id,form_id,answers,respondent_name,respondent_email,respondent_phone,status,completed_at,time_taken_seconds,source_url,created_at"
+        return try await restRequest(
             path: "/rest/v1/xert_form_responses",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,form_id,answers,respondent_name,respondent_email,respondent_phone,status,completed_at,time_taken_seconds,created_at"),
+                URLQueryItem(name: "select", value: legacySelect),
                 URLQueryItem(name: "form_id", value: "eq.\(formID.uuidString.lowercased())"),
                 URLQueryItem(name: "archived_at", value: "is.null"),
                 URLQueryItem(name: "order", value: "created_at.desc"),
@@ -2893,6 +2894,38 @@ final class XertAPI {
             ],
             auth: auth
         )
+    }
+
+    func adminFormResponse(session auth: AuthSession, responseID: UUID) async throws -> AdminFormResponse {
+        let legacySelect = "id,form_id,answers,respondent_name,respondent_email,respondent_phone,status,completed_at,time_taken_seconds,source_url,created_at"
+        let baseItems = [
+            URLQueryItem(name: "id", value: "eq.\(responseID.uuidString.lowercased())"),
+            URLQueryItem(name: "archived_at", value: "is.null"),
+            URLQueryItem(name: "limit", value: "1")
+        ]
+
+        let rows: [AdminFormResponse]
+        do {
+            rows = try await restRequest(
+                path: "/rest/v1/xert_form_responses",
+                queryItems: [URLQueryItem(name: "select", value: "\(legacySelect),form_snapshot")] + baseItems,
+                auth: auth
+            )
+        } catch let error as APIError where
+            error.statusCode == 400 && error.message.localizedCaseInsensitiveContains("form_snapshot") {
+            // Keep the owner operational while the additive snapshot migration
+            // reaches every environment. This fallback can be removed after the
+            // deployment is confirmed everywhere.
+            rows = try await restRequest(
+                path: "/rest/v1/xert_form_responses",
+                queryItems: [URLQueryItem(name: "select", value: legacySelect)] + baseItems,
+                auth: auth
+            )
+        }
+        guard rows.count == 1, let response = rows.first else {
+            throw APIError(message: "This form response is no longer available. Return to the response list and refresh.")
+        }
+        return response
     }
 
     func adminSaveForm(session auth: AuthSession, form: AdminForm?, draft: AdminFormDraft) async throws -> AdminForm {

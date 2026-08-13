@@ -28,7 +28,7 @@ test('desktop command centre exposes the full responsive builder and analytics w
   ]);
   assert.match(app, /path="\/forms\/:slug"/);
   assert.match(navigation, /'forms'/);
-  for (const feature of ['Skip logic', 'Copy embed', 'Export CSV', 'Duplicate and edit', 'Archive form']) {
+  for (const feature of ['Skip logic', 'Share form', 'Export CSV', 'Duplicate and edit', 'Archive form']) {
     assert.match(manager, new RegExp(feature));
   }
   assert.match(manager, /forwardDestinations[\s\S]*Jump to Q[\s\S]*End form/);
@@ -42,7 +42,11 @@ test('desktop command centre exposes the full responsive builder and analytics w
   assert.match(publicPage, /autoComplete="street-address"/);
   assert.match(publicPage, /SignatureInput/);
   assert.match(publicPage, /submitPublicForm/);
+  assert.doesNotMatch(manager, /Copy embed|<iframe/);
   assert.doesNotMatch(manager, /CompetitionDrawWheel|SendFormToClient|client_profile/i);
+  assert.match(data, /FORM_RESPONSE_LIST_FIELDS[\s\S]*\.range\(from, from \+ FORM_RESPONSE_PAGE_SIZE - 1\)/);
+  assert.match(data, /export async function getFormResponse[\s\S]*\.select\('\*'\)/);
+  assert.match(manager, /getFormResponse\(selectedResponseID\)/);
 });
 
 test('native command centre has a first-class forms workspace and editor', async () => {

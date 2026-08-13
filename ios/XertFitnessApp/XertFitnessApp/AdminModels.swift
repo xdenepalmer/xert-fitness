@@ -2900,7 +2900,8 @@ enum AdminSchemaReadiness {
         "waitlist_promotion_notifications",
         "booking_decision_notifications",
         "staff_assisted_booking",
-        "member_onboarding_foundation", "member_activation_cockpit"
+        "member_onboarding_foundation", "member_activation_cockpit",
+        "forms_surveys_builder", "form_response_snapshots"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {
@@ -3460,6 +3461,30 @@ struct AdminForm: Identifiable, Codable, Hashable {
     var publicURL: URL { AppConfig.webURL(path: "forms/\(slug)") }
 }
 
+/// The immutable form definition captured when a response was submitted.
+///
+/// Every field is optional so an administrator can still
+/// open records captured by an older or newer snapshot schema. Rendering code
+/// falls back to the current form only when a snapshot value is unavailable.
+struct AdminFormSnapshot: Codable, Hashable {
+    let version: Int?
+    let snapshot_source: String?
+    let title: String?
+    let description: String?
+    let form_type: String?
+    let slug: String?
+    let header_media_type: String?
+    let header_media_url: String?
+    let header_media_caption: String?
+    let questions: [AdminFormQuestion]?
+    let collect_name: Bool?
+    let collect_name_required: Bool?
+    let collect_email: Bool?
+    let collect_email_required: Bool?
+    let collect_phone: Bool?
+    let collect_phone_required: Bool?
+}
+
 struct AdminFormDraft: Equatable {
     static let types = [
         "contact", "registration", "application", "feedback", "booking",
@@ -3518,6 +3543,14 @@ struct AdminFormDraft: Equatable {
         tags = form?.tags ?? []
     }
 
+    mutating func setOneResponsePerEmail(_ enabled: Bool) {
+        oneResponsePerEmail = enabled
+        if enabled {
+            collectEmail = true
+            collectEmailRequired = true
+        }
+    }
+
     var validationMessage: String? {
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Add a form title." }
         if slug.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) == nil {
@@ -3535,6 +3568,7 @@ struct AdminFormDraft: Equatable {
             }
         }
         if oneResponsePerEmail && !collectEmail { return "Collect email before limiting responses by email." }
+        if oneResponsePerEmail && !collectEmailRequired { return "Require email before limiting responses by email." }
         return nil
     }
 }
@@ -3585,13 +3619,279 @@ struct AdminFormResponse: Identifiable, Codable, Hashable {
     let id: UUID
     let form_id: UUID
     let answers: [String: AdminFormAnswer]
+    let form_snapshot: AdminFormSnapshot?
     let respondent_name: String?
     let respondent_email: String?
     let respondent_phone: String?
     let status: String
     let completed_at: Date
     let time_taken_seconds: Int
+    let source_url: String?
     let created_at: Date
 
     var displayName: String { respondent_name?.nilIfEmpty ?? respondent_email?.nilIfEmpty ?? "Anonymous response" }
+}
+
+/// A textual reference to media that formed part of the submitted form.
+///
+/// Response records deliberately never download this URL: an external asset
+/// can change or disappear after submission. The immutable URL, type and
+/// caption remain useful evidence without pretending the current asset bytes
+/// are what the respondent saw.
+struct AdminFormMediaReference: Hashable {
+    static let preservationNote = "External media is referenced only; it is not embedded or downloaded into this record. Legal or consent wording should be captured in the form content itself."
+
+    let type: String?
+    let url: String?
+    let caption: String?
+
+    init?(type: String?, url: String?, caption: String?) {
+        let normalizedType = type?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let normalizedURL = url?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let normalizedCaption = caption?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        guard normalizedType != nil || normalizedURL != nil || normalizedCaption != nil else { return nil }
+        self.type = normalizedType
+        self.url = normalizedURL
+        self.caption = normalizedCaption
+    }
+
+    var typeLabel: String {
+        type?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Not recorded"
+    }
+}
+
+struct AdminFormSubmissionAnswerRow: Identifiable, Hashable {
+    let questionID: String
+    let title: String
+    let description: String?
+    let type: String
+    let answer: AdminFormAnswer?
+    let isArchivedAnswer: Bool
+    let media: AdminFormMediaReference?
+
+    var id: String { questionID }
+}
+
+struct AdminFormSubmissionContentRow: Identifiable, Hashable {
+    let id: String
+    let text: String
+    let description: String?
+    let media: AdminFormMediaReference?
+}
+
+enum AdminFormSubmissionItem: Identifiable, Hashable {
+    case section(AdminFormSubmissionContentRow)
+    case statement(AdminFormSubmissionContentRow)
+    case answer(AdminFormSubmissionAnswerRow)
+
+    var id: String {
+        switch self {
+        case .section(let row), .statement(let row): return row.id
+        case .answer(let row): return row.id
+        }
+    }
+}
+
+/// A stable, printable representation of one response.
+///
+/// Snapshot questions are authoritative. Any answer key that no longer has a
+/// matching question is appended as an archived answer so historical data is
+/// never silently omitted.
+struct AdminFormSubmissionRecord: Hashable {
+    let title: String
+    let description: String
+    let formType: String
+    let collectsName: Bool
+    let collectsEmail: Bool
+    let collectsPhone: Bool
+    let headerMedia: AdminFormMediaReference?
+    let items: [AdminFormSubmissionItem]
+    let snapshotSource: String?
+    let usesSubmissionSnapshot: Bool
+
+    var provenanceLabel: String {
+        if usesSubmissionSnapshot { return "Form as submitted" }
+        if snapshotSource == "legacy_backfill" {
+            return "Legacy record - labels and layout reconstructed; not guaranteed exact"
+        }
+        return "Legacy record - current labels and layout used; not guaranteed exact"
+    }
+
+    init(form: AdminForm, response: AdminFormResponse) {
+        let snapshot = response.form_snapshot
+        title = snapshot?.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? form.title
+        description = snapshot?.description ?? form.description
+        formType = snapshot?.form_type?.nilIfEmpty ?? form.form_type
+        collectsName = snapshot?.collect_name ?? form.collect_name
+        collectsEmail = snapshot?.collect_email ?? form.collect_email
+        collectsPhone = snapshot?.collect_phone ?? form.collect_phone
+        // Once a snapshot exists, a nil media value means the submitted form
+        // had no media. Never substitute a newly added current-form asset.
+        headerMedia = AdminFormMediaReference(
+            type: snapshot == nil ? form.header_media_type : snapshot?.header_media_type,
+            url: snapshot == nil ? form.header_media_url : snapshot?.header_media_url,
+            caption: snapshot == nil ? form.header_media_caption : snapshot?.header_media_caption
+        )
+        snapshotSource = snapshot?.snapshot_source
+        usesSubmissionSnapshot = snapshot?.version == 1
+            && snapshot?.snapshot_source == "captured_at_submission"
+            && snapshot?.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
+            && snapshot?.description != nil
+            && snapshot?.form_type?.nilIfEmpty != nil
+            && snapshot?.questions != nil
+            && snapshot?.collect_name != nil
+            && snapshot?.collect_name_required != nil
+            && snapshot?.collect_email != nil
+            && snapshot?.collect_email_required != nil
+            && snapshot?.collect_phone != nil
+            && snapshot?.collect_phone_required != nil
+
+        let questions = snapshot?.questions ?? form.questions
+        let skippedQuestionIDs = Self.skippedQuestionIDs(questions: questions, answers: response.answers)
+        var representedAnswerIDs = Set<String>()
+        var recordItems: [AdminFormSubmissionItem] = []
+
+        for question in questions where
+            !(question.hidden ?? false) && !skippedQuestionIDs.contains(question.id) {
+            let media = AdminFormMediaReference(
+                type: question.media_type,
+                url: question.media_url,
+                caption: question.media_caption
+            )
+            switch question.type {
+            case "section_break":
+                if usesSubmissionSnapshot {
+                    recordItems.append(.section(AdminFormSubmissionContentRow(
+                        id: question.id,
+                        text: question.displayTitle,
+                        description: question.description,
+                        media: media
+                    )))
+                }
+            case "statement":
+                if usesSubmissionSnapshot {
+                    recordItems.append(.statement(AdminFormSubmissionContentRow(
+                        id: question.id,
+                        text: question.displayTitle,
+                        description: question.description,
+                        media: media
+                    )))
+                }
+            default:
+                representedAnswerIDs.insert(question.id)
+                recordItems.append(.answer(AdminFormSubmissionAnswerRow(
+                    questionID: question.id,
+                    title: question.displayTitle,
+                    description: question.description,
+                    type: question.type,
+                    answer: response.answers[question.id],
+                    isArchivedAnswer: false,
+                    media: media
+                )))
+            }
+        }
+
+        // Hidden fields can still hold intentionally captured system data.
+        // Preserve them in the archived block without pretending respondents
+        // saw their current label.
+        let hiddenQuestionIDs = Set(questions.filter { $0.hidden ?? false }.map(\.id))
+        for questionID in response.answers.keys.sorted()
+            where !representedAnswerIDs.contains(questionID) {
+            // Malformed legacy data may contain an answer for a field that the
+            // canonical branch says was not presented. Preserve it, but do not
+            // silently make it look like a normal visible question.
+            let wasSkipped = skippedQuestionIDs.contains(questionID)
+            let isHidden = hiddenQuestionIDs.contains(questionID)
+            recordItems.append(.answer(AdminFormSubmissionAnswerRow(
+                questionID: questionID,
+                title: wasSkipped ? "Answer stored for a branched field" : (isHidden ? "Hidden captured field" : "Archived answer"),
+                description: wasSkipped
+                    ? "This field was not presented under the recorded branching path. Original field reference: \(questionID)"
+                    : "Original field reference: \(questionID)",
+                type: Self.archivedFieldType(for: response.answers[questionID]),
+                answer: response.answers[questionID],
+                isArchivedAnswer: true,
+                media: nil
+            )))
+        }
+
+        // Older submissions predate the public renderer that displayed layout
+        // blocks. Retain recovered sections/terms for operator reference only,
+        // in an explicitly caveated appendix that cannot read as evidence that
+        // the respondent actually saw them.
+        if !usesSubmissionSnapshot {
+            let reconstructedLayout = questions.filter {
+                !(($0.hidden ?? false) || skippedQuestionIDs.contains($0.id))
+                    && ["section_break", "statement"].contains($0.type)
+            }
+            if !reconstructedLayout.isEmpty {
+                recordItems.append(.section(AdminFormSubmissionContentRow(
+                    id: "xert-reconstructed-layout",
+                    text: "Reconstructed form layout - not verified as presented",
+                    description: "These labels, descriptions and media references were reconstructed and are not proof of what the respondent saw.",
+                    media: nil
+                )))
+                for (index, question) in reconstructedLayout.enumerated() {
+                    let kind = question.type == "section_break" ? "Reconstructed section" : "Reconstructed statement"
+                    recordItems.append(.statement(AdminFormSubmissionContentRow(
+                        id: "xert-reconstructed-layout-\(index)-\(question.id)",
+                        text: "\(kind): \(question.displayTitle)",
+                        description: question.description,
+                        media: AdminFormMediaReference(
+                            type: question.media_type,
+                            url: question.media_url,
+                            caption: question.media_caption
+                        )
+                    )))
+                }
+            }
+        }
+        items = recordItems
+    }
+
+    private static func archivedFieldType(for answer: AdminFormAnswer?) -> String {
+        guard let answer else { return "archived" }
+        if case .string(let value) = answer, value.lowercased().hasPrefix("data:image/") {
+            return "signature"
+        }
+        if case .object(let values) = answer {
+            let keys = Set(values.keys)
+            if keys.contains("name") && (keys.contains("size") || keys.contains("type")) {
+                return "file_upload"
+            }
+        }
+        return "archived"
+    }
+
+    private static func skippedQuestionIDs(
+        questions: [AdminFormQuestion],
+        answers: [String: AdminFormAnswer]
+    ) -> Set<String> {
+        var skipped = Set<String>()
+        for (index, question) in questions.enumerated()
+            where ["single_choice", "multiple_choice", "dropdown", "yes_no"].contains(question.type) {
+            // A stale answer can survive for a field that an earlier rule hid.
+            // Hidden controls were never presented, so their rules must not
+            // influence the canonical path shown in the immutable record.
+            guard !skipped.contains(question.id) else { continue }
+            guard let answer = answers[question.id] else { continue }
+            let matchingRule = (question.skip_rules ?? []).first { rule in
+                switch (question.type, answer) {
+                case ("multiple_choice", .array(let selected)):
+                    return selected.count == 1 && selected.first == .string(rule.option)
+                case (_, .string(let selected)):
+                    return selected == rule.option
+                default:
+                    return false
+                }
+            }
+            guard let target = matchingRule?.skip_to,
+                  target > index + 2,
+                  target <= questions.count + 1 else { continue }
+            for oneBasedIndex in (index + 2)..<target {
+                skipped.insert(questions[oneBasedIndex - 1].id)
+            }
+        }
+        return skipped
+    }
 }
