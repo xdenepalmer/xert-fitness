@@ -17315,6 +17315,10 @@ private struct AdminRefreshDataWarning: View {
                     Text(isRetrying ? "Retrying…" : "Retry unavailable data")
                 }
                 .font(.subheadline.weight(.bold))
+                // The banner paints its whole VStack orange; without an explicit
+                // label colour the prominent orange fill renders the title
+                // invisible (orange on orange).
+                .foregroundStyle(Color.xertNavy)
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
