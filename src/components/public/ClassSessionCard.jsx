@@ -18,7 +18,7 @@ export const CLASS_DOT_COLORS = {
   'XERT Team': 'bg-yellow-400',
 };
 
-export default function ClassSessionCard({ session, bookingsEnabled, onBook }) {
+export default function ClassSessionCard({ session, bookingsEnabled, onBook, fitbox = null }) {
   const colorClass = CLASS_COLORS[session.class_type] || 'border-xert-steel/40 text-xert-concrete/60';
   const isFull = session.status === 'full';
 
@@ -78,23 +78,32 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook }) {
         </p>
       )}
 
-      {bookingsEnabled && !isFull && (
-        <button onClick={() => onBook(session)}
-          className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
-          Request spot
-        </button>
-      )}
-      {bookingsEnabled && isFull && (
-        <button type="button" disabled aria-disabled="true"
-          className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
-          Class full
-        </button>
-      )}
-      {!bookingsEnabled && (
-        <a href="/#eoi"
-          className="xert-btn-ghost block text-center w-full py-3 font-display text-sm uppercase">
-          Register interest
+      {fitbox?.active ? (
+        <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
+          className="xert-btn-primary block text-center w-full py-3 font-display text-sm uppercase">
+          Book on the XERT member portal
         </a>
+      ) : (
+        <>
+          {bookingsEnabled && !isFull && (
+            <button onClick={() => onBook(session)}
+              className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
+              Request spot
+            </button>
+          )}
+          {bookingsEnabled && isFull && (
+            <button type="button" disabled aria-disabled="true"
+              className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
+              Class full
+            </button>
+          )}
+          {!bookingsEnabled && (
+            <a href="/#eoi"
+              className="xert-btn-ghost block text-center w-full py-3 font-display text-sm uppercase">
+              Register interest
+            </a>
+          )}
+        </>
       )}
     </div>
   );

@@ -29,10 +29,44 @@ export function pricesComingSoon(settings) {
   return settings?.prices_coming_soon !== false;
 }
 
+function normalizeFitboxUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Enter a valid Fitbox member portal link, starting with https://.');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('Enter a valid Fitbox member portal link, starting with https://.');
+  }
+  return url.toString();
+}
+
+// Bookings and payments hand off to the external Fitbox member portal only
+// when the switch is on AND a usable https link is saved. A broken or missing
+// link fails safe to the internal behaviour instead of dead public buttons.
+export function fitboxHandoff(settings = {}) {
+  if (settings?.fitbox_enabled !== true) return { active: false, url: null };
+  let url = null;
+  try {
+    url = normalizeFitboxUrl(settings.fitbox_booking_url);
+  } catch {
+    return { active: false, url: null };
+  }
+  if (!url) return { active: false, url: null };
+  return { active: true, url };
+}
+
 export function normalizeLaunchSettings(settings = {}) {
   const announcement = String(settings.announcement_banner_text || '').trim();
   if (settings.announcement_banner_enabled && !announcement) {
     throw new Error('Add announcement text before enabling the banner.');
+  }
+  const fitboxUrl = normalizeFitboxUrl(settings.fitbox_booking_url);
+  if (settings.fitbox_enabled && !fitboxUrl) {
+    throw new Error('Add the Fitbox member portal link before enabling Fitbox bookings.');
   }
 
   return {
@@ -43,6 +77,8 @@ export function normalizeLaunchSettings(settings = {}) {
     announcement_banner_enabled: Boolean(settings.announcement_banner_enabled),
     target_launch_date: normalizeDate(settings.target_launch_date),
     announcement_banner_text: announcement || null,
+    fitbox_enabled: Boolean(settings.fitbox_enabled),
+    fitbox_booking_url: fitboxUrl,
   };
 }
 
@@ -55,6 +91,8 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'announcement_banner_enabled',
     'target_launch_date',
     'announcement_banner_text',
+    'fitbox_enabled',
+    'fitbox_booking_url',
   ];
   return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
 }

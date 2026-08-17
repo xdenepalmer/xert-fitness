@@ -3,7 +3,7 @@ import { CalendarDays, List } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import Countdown from '@/components/public/Countdown';
-import { DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
+import { DEFAULT_TARGET_LAUNCH_DATE, fitboxHandoff } from '@/lib/launchSettings';
 import BookingRequestForm from '@/components/public/BookingRequestForm';
 import PTRequestForm from '@/components/public/PTRequestForm';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
@@ -21,6 +21,7 @@ export default function SoftLaunchTimetable() {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [ptSuccess, setPTSuccess] = useState(false);
   const [view, setView] = useState('calendar');
+  const fitbox = fitboxHandoff(settings);
 
   useEffect(() => {
     Promise.all([
@@ -70,7 +71,12 @@ export default function SoftLaunchTimetable() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
               <h2 className="font-display text-2xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
               <div className="flex flex-wrap items-center gap-3">
-                {!settings.bookings_enabled && (
+                {fitbox.active ? (
+                  <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
+                    className="font-body text-xs text-xert-steel border border-xert-steel/40 px-3 py-1 uppercase hover:border-xert-steel transition-colors">
+                    Book via the XERT member portal
+                  </a>
+                ) : !settings.bookings_enabled && (
                   <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">
                     Bookings not yet open
                   </span>
@@ -111,11 +117,12 @@ export default function SoftLaunchTimetable() {
                 sessions={sessions}
                 bookingsEnabled={settings.bookings_enabled}
                 onBook={setSelectedSession}
+                fitbox={fitbox}
               />
             ) : (
               <div className="space-y-3">
                 {sessions.map(s => (
-                  <ClassSessionCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} />
+                  <ClassSessionCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} fitbox={fitbox} />
                 ))}
               </div>
             )}
