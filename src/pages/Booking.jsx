@@ -12,7 +12,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
 import { getSoftLaunchSettings } from '@/lib/adminData';
-import { pricesComingSoon } from '@/lib/launchSettings';
+import { fitboxHandoff, pricesComingSoon } from '@/lib/launchSettings';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta, PRICES_COMING_SOON_LABEL } from '@/lib/products';
 import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
@@ -49,6 +49,8 @@ export default function Booking() {
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   // Default to hidden: prices stay "Coming soon" until settings confirm otherwise.
   const [comingSoon, setComingSoon] = useState(true);
+  // Fails safe to the internal flow until settings confirm the Fitbox handoff.
+  const [fitbox, setFitbox] = useState({ active: false, url: null });
   const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
@@ -85,7 +87,10 @@ export default function Booking() {
     apply(results[1], 'Timetable', setSessions, []);
     apply(results[2], 'Pack checkout', setPaymentsEnabled, false);
     // On failure the fallback keeps pricing hidden rather than leaking amounts.
-    apply(results[3], 'Launch settings', s => setComingSoon(pricesComingSoon(s)), { prices_coming_soon: true });
+    apply(results[3], 'Launch settings', s => {
+      setComingSoon(pricesComingSoon(s));
+      setFitbox(fitboxHandoff(s));
+    }, { prices_coming_soon: true });
     setPaymentAvailabilityLoaded(true);
     if (session) {
       apply(results[4], 'Credits', setCredits, null);
@@ -240,6 +245,21 @@ export default function Booking() {
               </div>
             ))}
           </div>
+
+          {/* Fitbox handoff: memberships, billing and bookings live in the member portal */}
+          {fitbox.active && (
+            <div className="flex flex-wrap items-center gap-3 border p-4 mt-8"
+              style={{ borderColor: '#7BA7BC', backgroundColor: 'rgba(123,167,188,0.08)' }}>
+              <ArrowRight className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
+              <p className="min-w-[14rem] flex-1 font-body text-sm" style={{ color: '#D1DDE6' }}>
+                Memberships, payments and class bookings now run through the XERT member portal.
+              </p>
+              <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
+                className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-sm uppercase tracking-wide shrink-0">
+                Open member portal
+              </a>
+            </div>
+          )}
 
           {/* Credits banner for signed-in members */}
           {session && credits && (

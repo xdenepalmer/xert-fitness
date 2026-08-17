@@ -9,6 +9,7 @@ import {
 import { summarizeSchemaCapabilities } from './schemaCapabilities';
 import { DEFAULT_TARGET_LAUNCH_DATE } from './launchSettings';
 import { blackoutPeriodMutationError, classSessionUpdateGuardError, classSessionUpdateRpcError, normalizeClassSession } from './scheduling';
+import { normalizeClassTemplate } from './classCalendar';
 import {
   normalizeBookingStatusMutation,
   normalizeLegacyBookingNotes,
@@ -206,6 +207,46 @@ export async function duplicateClassSession(session) {
     public_visible: false,
     title: `${session.title} (copy)`
   });
+}
+
+// ─── Class template bank ──────────────────────────────────────────────────────
+
+function classTemplatesUnavailable(error) {
+  return ['42P01', 'PGRST205', 'PGRST202'].includes(error.code)
+    || /class_templates.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+}
+
+export async function getClassTemplates() {
+  const { data, error } = await supabase
+    .from('class_templates')
+    .select('*')
+    .order('name', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (!error) return { rows: data || [], available: true };
+  if (classTemplatesUnavailable(error)) return { rows: [], available: false };
+  throw new Error(error.message);
+}
+
+export async function createClassTemplate(template) {
+  const payload = normalizeClassTemplate(template);
+  const { data, error } = await supabase.from('class_templates').insert([payload]).select().single();
+  if (error) {
+    if (classTemplatesUnavailable(error)) throw new Error('The class bank becomes available after class_template_bank.sql is applied.');
+    throw new Error(error.message);
+  }
+  return data;
+}
+
+export async function updateClassTemplate(id, template) {
+  const payload = normalizeClassTemplate(template);
+  const { data, error } = await supabase.from('class_templates').update(payload).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function deleteClassTemplate(id) {
+  const { error } = await supabase.from('class_templates').delete().eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────

@@ -1020,6 +1020,7 @@ private struct XertNavigationRail: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: XertPrimaryDestination
+    let currentRoute: XertMemberRoute
     let isAdmin: Bool
     let statusSnapshot: XertNavigationStatusSnapshot
     let ownerPulse: XertOwnerNavigationPulse

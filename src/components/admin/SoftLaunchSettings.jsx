@@ -58,6 +58,9 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     setSettings(previous => {
       const next = { ...previous, [k]: v };
       if (k === 'bookings_enabled' && v === false) next.payments_enabled = false;
+      // Fitbox owns billing while the handoff is on, so the internal Stripe
+      // checkout switch always drops back to paused.
+      if (k === 'fitbox_enabled' && v === true) next.payments_enabled = false;
       return next;
     });
   };
@@ -185,13 +188,32 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
         <Toggle label="Prices coming soon" desc="When on, public session-pack pricing shows 'Coming soon' instead of amounts. Turn off to reveal real prices." field="prices_coming_soon" />
         <Toggle
           label="Session pack payments"
-          desc={settings.bookings_enabled
-            ? 'Master checkout switch for pack purchases. Keep off until Stripe launch checks pass.'
-            : 'Open bookings and complete the booking smoke test before enabling payments.'}
+          desc={settings.fitbox_enabled
+            ? 'Fitbox is handling payments — the internal checkout stays paused while the handoff is on.'
+            : settings.bookings_enabled
+              ? 'Master checkout switch for pack purchases. Keep off until Stripe launch checks pass.'
+              : 'Open bookings and complete the booking smoke test before enabling payments.'}
           field="payments_enabled"
-          disabled={!settings.bookings_enabled && !settings.payments_enabled}
+          disabled={settings.fitbox_enabled || (!settings.bookings_enabled && !settings.payments_enabled)}
         />
         <Toggle label="Announcement banner" desc="Shows a banner across the top of the public site." field="announcement_banner_enabled" />
+      </div>
+
+      <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6">
+        <h3 className="font-display text-sm text-xert-offwhite uppercase mb-1">Fitbox handoff</h3>
+        <p className="font-body text-xs text-xert-concrete/40 mb-2">
+          When on, public Book and Join buttons send people to your Fitbox member portal, and XERT&rsquo;s built-in checkout stays paused. Memberships, billing and class bookings then live in Fitbox.
+        </p>
+        <Toggle label="Bookings & payments via Fitbox" desc="Requires the member portal link below." field="fitbox_enabled" />
+        <div className="pt-4">
+          <label htmlFor="fitbox-booking-url" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Fitbox member portal link</label>
+          <input id="fitbox-booking-url" type="url" inputMode="url" value={settings.fitbox_booking_url || ''} onChange={e => set('fitbox_booking_url', e.target.value)}
+            placeholder="https://portal.fitboxcorp.com/your-gym"
+            className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
+          <p className="font-body text-xs text-xert-concrete/40 mt-2">
+            Paste the signup or booking link Fitbox gives you for XERT. It must start with https://.
+          </p>
+        </div>
       </div>
 
       <div className="bg-xert-ink border border-xert-steel/20 p-6 space-y-5 mb-6">

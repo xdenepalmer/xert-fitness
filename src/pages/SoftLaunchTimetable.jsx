@@ -1,104 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { CalendarDays, List } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import Countdown from '@/components/public/Countdown';
-import { DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
+import { DEFAULT_TARGET_LAUNCH_DATE, fitboxHandoff } from '@/lib/launchSettings';
 import BookingRequestForm from '@/components/public/BookingRequestForm';
 import PTRequestForm from '@/components/public/PTRequestForm';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
+import ClassSessionCard from '@/components/public/ClassSessionCard';
+import PublicClassCalendar from '@/components/public/PublicClassCalendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
-
-const CLASS_COLORS = {
-  'XERT Foundation': 'border-green-600/40 text-green-400',
-  'XERT Strength': 'border-blue-600/40 text-blue-400',
-  'XERT Engine': 'border-xert-orange/40 text-xert-orange',
-  'XERT Hybrid': 'border-purple-600/40 text-purple-400',
-  'XERT Event Prep': 'border-xert-red/40 text-xert-red',
-  'XERT Team': 'border-yellow-600/40 text-yellow-400',
-};
-
-function ClassCard({ session, bookingsEnabled, onBook }) {
-  const colorClass = CLASS_COLORS[session.class_type] || 'border-xert-steel/40 text-xert-concrete/60';
-  const isFull = session.status === 'full';
-
-  return (
-    <div className={`bg-xert-ink border-l-2 ${isFull ? 'border-xert-steel/30 opacity-60' : 'border-xert-red'} p-5 hover:bg-xert-charcoal transition-colors`}>
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`font-body text-xs border px-2 py-0.5 uppercase ${colorClass}`}>
-              {session.class_type}
-            </span>
-            {session.beginner_friendly && (
-              <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">
-                Beginner friendly
-              </span>
-            )}
-            {isFull && (
-              <span className="font-body text-xs bg-xert-steel/30 text-xert-concrete/50 px-2 py-0.5 uppercase">Full</span>
-            )}
-          </div>
-          <h3 className="font-display text-xl text-xert-offwhite uppercase">{session.title}</h3>
-        </div>
-        {session.intensity_level && (
-          <div className="text-right shrink-0">
-            <p className="font-body text-xs text-xert-concrete/40 uppercase">Intensity</p>
-            <p className="font-display text-sm text-xert-concrete/70 uppercase">{session.intensity_level}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Date</p>
-          <p className="font-display text-sm text-xert-offwhite tabular-nums">
-            {session.start_time ? new Date(session.start_time).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : 'TBC'}
-          </p>
-        </div>
-        <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Time</p>
-          <p className="font-display text-sm text-xert-offwhite tabular-nums">
-            {session.start_time ? new Date(session.start_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : 'TBC'}
-          </p>
-        </div>
-        <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Duration</p>
-          <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.duration_minutes || '—'}min</p>
-        </div>
-        <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Capacity</p>
-          <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.capacity || '—'}</p>
-        </div>
-      </div>
-
-      {session.coach_name && (
-        <p className="font-body text-sm text-xert-concrete/60 mb-4">
-          Coach: <span className="text-xert-concrete/80">{session.coach_name}</span>
-        </p>
-      )}
-
-      {bookingsEnabled && !isFull && (
-        <button onClick={() => onBook(session)}
-          className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
-          Request spot
-        </button>
-      )}
-      {bookingsEnabled && isFull && (
-        <button type="button" disabled aria-disabled="true"
-          className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
-          Class full
-        </button>
-      )}
-      {!bookingsEnabled && (
-        <a href="/#eoi"
-          className="xert-btn-ghost block text-center w-full py-3 font-display text-sm uppercase">
-          Register interest
-        </a>
-      )}
-    </div>
-  );
-}
 
 export default function SoftLaunchTimetable() {
   const [sessions, setSessions] = useState([]);
@@ -108,6 +20,8 @@ export default function SoftLaunchTimetable() {
   const [showPTForm, setShowPTForm] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [ptSuccess, setPTSuccess] = useState(false);
+  const [view, setView] = useState('calendar');
+  const fitbox = fitboxHandoff(settings);
 
   useEffect(() => {
     Promise.all([
@@ -154,13 +68,33 @@ export default function SoftLaunchTimetable() {
         {/* Classes */}
         <section className="py-16 px-6">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="font-display text-2xl text-xert-offwhite uppercase">Published Classes</h2>
-              {!settings.bookings_enabled && (
-                <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">
-                  Bookings not yet open
-                </span>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+              <h2 className="font-display text-2xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
+              <div className="flex flex-wrap items-center gap-3">
+                {fitbox.active ? (
+                  <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
+                    className="font-body text-xs text-xert-steel border border-xert-steel/40 px-3 py-1 uppercase hover:border-xert-steel transition-colors">
+                    Book via the XERT member portal
+                  </a>
+                ) : !settings.bookings_enabled && (
+                  <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">
+                    Bookings not yet open
+                  </span>
+                )}
+                <div className="flex" role="group" aria-label="Timetable view">
+                  {[
+                    { key: 'calendar', label: 'Calendar', icon: CalendarDays },
+                    { key: 'list', label: 'List', icon: List },
+                  ].map(option => (
+                    <button key={option.key} type="button" onClick={() => setView(option.key)} aria-pressed={view === option.key}
+                      className={`inline-flex min-h-11 items-center gap-1.5 border px-3 font-body text-xs uppercase tracking-wider transition-colors -ml-px first:ml-0
+                        ${view === option.key ? 'border-xert-steel bg-xert-steel/15 text-xert-offwhite' : 'border-xert-steel/25 text-xert-concrete/50 hover:border-xert-steel'}`}>
+                      <option.icon className="w-3.5 h-3.5" aria-hidden="true" />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {loading ? (
@@ -178,10 +112,17 @@ export default function SoftLaunchTimetable() {
                   Register interest
                 </a>
               </div>
+            ) : view === 'calendar' ? (
+              <PublicClassCalendar
+                sessions={sessions}
+                bookingsEnabled={settings.bookings_enabled}
+                onBook={setSelectedSession}
+                fitbox={fitbox}
+              />
             ) : (
               <div className="space-y-3">
                 {sessions.map(s => (
-                  <ClassCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} />
+                  <ClassSessionCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} fitbox={fitbox} />
                 ))}
               </div>
             )}

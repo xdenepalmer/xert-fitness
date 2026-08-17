@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods, getClassTemplates, createClassTemplate } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
+import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import ClassCalendarBoard from '@/components/admin/ClassCalendarBoard';
+import ClassBankManager from '@/components/admin/ClassBankManager';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -506,6 +509,26 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [attendanceSession, setAttendanceSession] = useState(null);
   const [attendanceDraft, setAttendanceDraft] = useState({});
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+  const [view, setView] = useState('calendar');
+  const [templates, setTemplates] = useState([]);
+  const [templatesAvailable, setTemplatesAvailable] = useState(true);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [showBankManager, setShowBankManager] = useState(false);
+  const [savingToBankId, setSavingToBankId] = useState(null);
+
+  const loadTemplates = async () => {
+    setTemplatesLoading(true);
+    try {
+      const result = await getClassTemplates();
+      setTemplates(result.rows);
+      setTemplatesAvailable(result.available);
+    } catch (error) {
+      setTemplates([]);
+      toast({ title: 'Could not load the class bank', description: error.message, variant: 'destructive' });
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
 
   const refreshWaitlistOverview = async () => {
     setWaitlistOverviewLoading(true);
@@ -533,6 +556,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           return [];
         }),
         refreshWaitlistOverview(),
+        loadTemplates(),
       ]);
       setSessions(loadedSessions);
       setBlackouts(loadedBlackouts);
@@ -576,6 +600,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       try {
         const { members } = await refreshBookings(target.id);
         if (!active) return;
+        setView('list');
         setTimeFilter(new Date(target.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
         setExpandedBookings(target.id);
         if (initialAction === 'attendance') {
@@ -616,6 +641,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const openWaitlistRoster = async sessionId => {
+    setView('list');
     setTimeFilter('upcoming');
     try {
       await refreshBookings(sessionId);
@@ -684,6 +710,52 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       await load();
     } catch (e) { toast({ title: 'Duplicate failed', description: e.message, variant: 'destructive' }); }
     finally { setDuplicatingSessionId(null); }
+  };
+
+  const openRosterFromBoard = async session => {
+    setView('list');
+    setTimeFilter(session.start_time && new Date(session.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
+    try {
+      await refreshBookings(session.id);
+      setExpandedBookings(session.id);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        document.getElementById(`class-session-${session.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+    } catch (error) {
+      toast({ title: 'Could not load class roster', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleQuickAdd = async (template, dayKey, options) => {
+    try {
+      const created = await createClassSession(classSessionFromTemplate(template, dayKey, options));
+      toast({
+        title: options?.publish ? 'Class published to the timetable' : 'Draft class added',
+        description: `${created.title} · ${new Date(created.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+      });
+      await load();
+    } catch (error) {
+      toast({ title: 'Could not add class', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleCreateCustomForDay = dayKey => {
+    setEditingSession(classSessionSeedForDate(dayKey));
+    setShowEditor(true);
+  };
+
+  const handleSaveToBank = async session => {
+    if (savingToBankId) return;
+    setSavingToBankId(session.id);
+    try {
+      const template = await createClassTemplate(classTemplateFromSession(session));
+      toast({ title: 'Saved to class bank', description: `${template.name} can now be dropped onto any date in one tap.` });
+      await loadTemplates();
+    } catch (error) {
+      toast({ title: 'Could not save to the bank', description: error.message, variant: 'destructive' });
+    } finally {
+      setSavingToBankId(null);
+    }
   };
 
   const handleCancel = async () => {
@@ -834,31 +906,57 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <h2 className="font-display text-lg text-xert-offwhite uppercase">Class Sessions</h2>
-          <div className="flex">
+        <div className="flex flex-wrap items-center gap-4">
+          <h2 className="font-display text-lg text-xert-offwhite uppercase">Class Calendar</h2>
+          <div className="flex" role="group" aria-label="Calendar view">
             {[
-              { key: 'upcoming', label: `Upcoming (${upcomingCount})` },
-              { key: 'past', label: `Past (${sessions.length - upcomingCount})` },
-              { key: 'all', label: 'All' },
-            ].map(t => (
-              <button key={t.key} onClick={() => setTimeFilter(t.key)}
-                className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+              { key: 'calendar', label: 'Calendar', icon: CalendarDays },
+              { key: 'list', label: 'List', icon: List },
+            ].map(option => (
+              <button key={option.key} onClick={() => setView(option.key)} aria-pressed={view === option.key}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
                 style={{
-                  borderColor: timeFilter === t.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
-                  backgroundColor: timeFilter === t.key ? 'rgba(123,167,188,0.12)' : 'transparent',
-                  color: timeFilter === t.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
+                  borderColor: view === option.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
+                  backgroundColor: view === option.key ? 'rgba(123,167,188,0.12)' : 'transparent',
+                  color: view === option.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
                   marginLeft: '-1px',
                 }}>
-                {t.label}
+                <option.icon className="w-3.5 h-3.5" aria-hidden="true" />
+                {option.label}
               </button>
             ))}
           </div>
+          {view === 'list' && (
+            <div className="flex">
+              {[
+                { key: 'upcoming', label: `Upcoming (${upcomingCount})` },
+                { key: 'past', label: `Past (${sessions.length - upcomingCount})` },
+                { key: 'all', label: 'All' },
+              ].map(t => (
+                <button key={t.key} onClick={() => setTimeFilter(t.key)}
+                  className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
+                  style={{
+                    borderColor: timeFilter === t.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
+                    backgroundColor: timeFilter === t.key ? 'rgba(123,167,188,0.12)' : 'transparent',
+                    color: timeFilter === t.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
+                    marginLeft: '-1px',
+                  }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
-          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
-          + New Class
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowBankManager(true)}
+            className="px-4 py-2.5 border border-xert-steel/40 text-xert-steel font-display text-sm uppercase hover:border-xert-steel transition-colors">
+            Class bank
+          </button>
+          <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
+            className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
+            + New Class
+          </button>
+        </div>
       </div>
 
       <WaitlistDesk
@@ -874,6 +972,24 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-xert-ink animate-pulse" />)}</div>
+      ) : view === 'calendar' ? (
+        <ClassCalendarBoard
+          sessions={sessions}
+          blackouts={blackouts}
+          templates={templates}
+          templatesAvailable={templatesAvailable}
+          templatesLoading={templatesLoading}
+          onQuickAdd={handleQuickAdd}
+          onCreateCustom={handleCreateCustomForDay}
+          onEditSession={session => { setEditingSession(session); setShowEditor(true); }}
+          onOpenRoster={openRosterFromBoard}
+          onDuplicateSession={handleDuplicate}
+          onCancelSession={setSessionToCancel}
+          onSaveToBank={handleSaveToBank}
+          onManageBank={() => setShowBankManager(true)}
+          duplicatingSessionId={duplicatingSessionId}
+          savingToBankId={savingToBankId}
+        />
       ) : filtered.length === 0 ? (
         <div className="py-16 text-center border border-xert-steel/20">
           <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
@@ -1045,6 +1161,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           session={repeating}
           onDone={() => { setRepeating(null); load(); }}
           onCancel={() => setRepeating(null)}
+        />
+      )}
+
+      {showBankManager && (
+        <ClassBankManager
+          templates={templates}
+          available={templatesAvailable}
+          loading={templatesLoading}
+          onChanged={loadTemplates}
+          onClose={() => setShowBankManager(false)}
+          onDirtyChange={onDirtyChange}
         />
       )}
 
