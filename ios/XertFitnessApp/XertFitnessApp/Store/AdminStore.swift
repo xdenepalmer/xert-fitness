@@ -349,9 +349,12 @@ final class AdminStore: ObservableObject {
     }
 
     private static let healthSources: Set<String> = ["schema health", "Stripe health", "push health"]
+    // Stripe checkout no longer gates the member launch: payments and
+    // memberships are handled in Fitbox, so the gate needs only the
+    // database contract, push, timetable and bookings-switch evidence.
     private static let launchGateSources: Set<String> = [
-        "schema health", "Stripe health", "push health",
-        "platform controls", "session packs", "full timetable"
+        "schema health", "push health",
+        "platform controls", "full timetable"
     ]
 
     private func healthSourceIsCurrent(_ source: String) -> Bool {

@@ -2,36 +2,31 @@ import XCTest
 @testable import XertFitness
 
 final class OwnerLaunchGateTests: XCTestCase {
-    func testPausedSwitchesCanBePreflightReady() {
-        XCTAssertEqual(resolve(bookings: false, payments: false).phase, .preflightReady)
-    }
-
-    func testEnabledSwitchesHaveDistinctLiveState() {
-        XCTAssertEqual(resolve(bookings: true, payments: true).phase, .liveReady)
-    }
-
-    func testBookingsCanOpenBeforeGuardedPayments() {
-        let gate = resolve(bookings: true, payments: false)
-        XCTAssertEqual(gate.phase, .bookingsOpen)
+    func testPausedBookingsCanBePreflightReady() {
+        let gate = resolve(bookings: false)
+        XCTAssertEqual(gate.phase, .preflightReady)
         XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks)
-        XCTAssertEqual(
-            gate.nextAction,
-            "Complete the booking smoke test, then activate session-pack payments."
-        )
+        XCTAssertNil(gate.nextAction)
     }
 
-    func testPaymentsWithoutBookingsBlockLaunch() {
-        let gate = resolve(bookings: false, payments: true)
-        XCTAssertEqual(gate.phase, .blocked)
-        XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks - 1)
+    func testOpenBookingsHaveDistinctLiveState() {
+        XCTAssertEqual(resolve(bookings: true).phase, .liveReady)
     }
 
     func testUnavailableEvidenceNeverProducesReady() {
         XCTAssertEqual(resolve(database: nil).phase, .verifying)
     }
 
+    func testUnknownBookingsSwitchFailsClosed() {
+        let gate = resolve(bookings: nil)
+        XCTAssertEqual(gate.phase, .verifying)
+        XCTAssertEqual(gate.completedChecks, XertOwnerLaunchGate.totalChecks - 1)
+    }
+
     func testFailedBookableClassGateBlocksLaunch() {
-        XCTAssertEqual(resolve(classes: false).phase, .blocked)
+        let gate = resolve(classes: false)
+        XCTAssertEqual(gate.phase, .blocked)
+        XCTAssertEqual(gate.nextAction, "Publish a member-bookable class with valid capacity.")
     }
 
     func testProductionPushFailureBlocksLaunch() {
@@ -47,21 +42,15 @@ final class OwnerLaunchGateTests: XCTestCase {
 
     private func resolve(
         database: Bool? = true,
-        stripe: Bool? = true,
         push: Bool? = true,
-        packs: Bool? = true,
         classes: Bool? = true,
-        bookings: Bool? = false,
-        payments: Bool? = false
+        bookings: Bool? = false
     ) -> XertOwnerLaunchGate {
         XertOwnerLaunchGate.resolve(
             databaseReady: database,
-            stripeReady: stripe,
             pushReady: push,
-            activeLinkedPacksReady: packs,
             bookableClassesReady: classes,
-            bookingsEnabled: bookings,
-            paymentsEnabled: payments
+            bookingsEnabled: bookings
         )
     }
 }
