@@ -1314,6 +1314,18 @@ struct AdminClassCancellationFollowUp: Identifiable, Hashable {
     }
 }
 
+/// Editors are re-initialised on every parent re-render, and their dirty state
+/// compares the live draft against a freshly computed baseline. A baseline
+/// built from the raw clock differs on every re-render, so an untouched editor
+/// turned permanently "dirty" within milliseconds and kept feeding the exit
+/// coordinator. Snapping the default start to the next top of the hour keeps
+/// the baseline stable for up to an hour (and is a nicer default anyway).
+func adminDraftDefaultStart(after now: Date, calendar: Calendar = .current) -> Date {
+    var components = calendar.dateComponents([.year, .month, .day, .hour], from: now)
+    components.hour = (components.hour ?? 0) + 1
+    return calendar.date(from: components) ?? now
+}
+
 struct AdminClassDraft: Codable, Hashable {
     static let classTypes = ["XERT Foundation", "XERT Strength", "XERT Engine", "XERT Hybrid", "XERT Event Prep", "XERT Team"]
     static let intensities = ["Low", "Moderate", "High", "Very high"]
@@ -1337,7 +1349,7 @@ struct AdminClassDraft: Codable, Hashable {
     var notes: String
 
     init(classSession: AdminClassSession? = nil, now: Date = Date()) {
-        let defaultStart = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let defaultStart = adminDraftDefaultStart(after: now)
         classType = classSession?.class_type ?? "XERT Foundation"
         title = classSession?.title ?? ""
         description = classSession?.description ?? ""
@@ -1430,7 +1442,7 @@ struct AdminAvailabilityDraft: Codable, Hashable {
     var isBookable: Bool
 
     init(block: AdminAvailabilityBlock? = nil, now: Date = Date()) {
-        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let start = adminDraftDefaultStart(after: now)
         startTime = block?.start_time ?? start
         endTime = block?.end_time ?? start.addingTimeInterval(3_600)
         type = block?.type ?? "PT available"
@@ -1460,7 +1472,7 @@ struct AdminBlackoutDraft: Codable, Hashable {
     var notes: String
 
     init(period: AdminBlackoutPeriod? = nil, now: Date = Date()) {
-        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let start = adminDraftDefaultStart(after: now)
         startTime = period?.start_time ?? start
         endTime = period?.end_time ?? start.addingTimeInterval(3_600)
         affects = period?.affects ?? "all"

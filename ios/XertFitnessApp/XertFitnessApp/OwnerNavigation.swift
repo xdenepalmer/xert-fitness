@@ -18,6 +18,7 @@ final class XertOwnerEditorExitCoordinator: ObservableObject {
             clear(id: state.id)
             return
         }
+        guard states[state.id] != state || order.last != state.id else { return }
         states[state.id] = state
         order.removeAll { $0 == state.id }
         order.append(state.id)
@@ -25,6 +26,7 @@ final class XertOwnerEditorExitCoordinator: ObservableObject {
     }
 
     func clear(id: UUID) {
+        guard states[id] != nil else { return }
         states[id] = nil
         order.removeAll { $0 == id }
         refreshActive()
@@ -33,11 +35,17 @@ final class XertOwnerEditorExitCoordinator: ObservableObject {
     func clearAll() {
         states.removeAll()
         order.removeAll()
-        active = nil
+        if active != nil { active = nil }
     }
 
+    // Every publish re-renders the whole Command Centre (the root view reads
+    // `active`), and that re-evaluation re-runs any presented editor's init.
+    // A clean editor's onAppear used to publish a nil-to-nil no-op, which fed
+    // that cycle back into itself until the watchdog killed the app — so no
+    // assignment may happen unless a value actually changed.
     private func refreshActive() {
-        active = order.reversed().compactMap { states[$0] }.first
+        let next = order.reversed().compactMap { states[$0] }.first
+        if next != active { active = next }
     }
 }
 

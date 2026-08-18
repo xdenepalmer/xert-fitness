@@ -5617,6 +5617,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(followUp.mailtoURL?.absoluteString.hasPrefix("mailto:") == true)
     }
 
+    func testUntouchedEditorDraftsStayStableAcrossReinitialisation() {
+        // Editors are re-initialised on every parent re-render; if two inits
+        // moments apart produce different baselines, an untouched editor turns
+        // permanently dirty and feeds the exit coordinator a render loop.
+        let base = Date(timeIntervalSince1970: 1_800_000_600)
+        let later = base.addingTimeInterval(90)
+        XCTAssertEqual(AdminClassDraft(now: base), AdminClassDraft(now: later))
+        XCTAssertEqual(AdminAvailabilityDraft(now: base), AdminAvailabilityDraft(now: later))
+        XCTAssertEqual(AdminBlackoutDraft(now: base), AdminBlackoutDraft(now: later))
+    }
+
     func testBlackoutDraftFindsOnlyPublishedOverlappingClasses() {
         let base = Date(timeIntervalSince1970: 1_800_000_000)
         var draft = AdminBlackoutDraft(now: base)
