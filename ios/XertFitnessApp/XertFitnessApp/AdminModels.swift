@@ -1357,6 +1357,58 @@ struct AdminClassDraft: Codable, Hashable {
     }
 }
 
+/// A reusable class preset from the shared class bank (`class_templates`),
+/// curated in the web Command Centre and quick-added from the app calendar.
+struct AdminClassTemplate: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    let class_type: String?
+    let title: String?
+    let description: String?
+    let coach_name: String?
+    let duration_minutes: Int?
+    let capacity: Int?
+    let location_zone: String?
+    let beginner_friendly: Bool?
+    let intensity_level: String?
+    let booking_mode: String?
+    let default_start_minute: Int?
+    let notes: String?
+
+    var defaultStartMinute: Int {
+        let minute = default_start_minute ?? 6 * 60
+        return (0...(24 * 60 - 1)).contains(minute) ? minute : 6 * 60
+    }
+
+    var resolvedTitle: String {
+        let trimmed = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? name : trimmed
+    }
+
+    func draft(on day: Date, startMinute: Int, publish: Bool, calendar: Calendar = .current) -> AdminClassDraft {
+        var draft = AdminClassDraft()
+        let start = calendar.startOfDay(for: day).addingTimeInterval(TimeInterval(startMinute * 60))
+        let duration = duration_minutes ?? 60
+        draft.classType = class_type ?? draft.classType
+        draft.title = resolvedTitle
+        draft.description = description ?? ""
+        draft.coachName = coach_name ?? ""
+        draft.startTime = start
+        draft.hasEndTime = true
+        draft.endTime = start.addingTimeInterval(TimeInterval(duration * 60))
+        draft.durationMinutes = duration
+        draft.capacity = capacity ?? 8
+        draft.location = location_zone ?? "Main floor"
+        draft.beginnerFriendly = beginner_friendly ?? false
+        draft.intensity = intensity_level ?? "Moderate"
+        draft.status = publish ? "published" : "draft"
+        draft.publicVisible = publish
+        draft.bookingMode = booking_mode ?? "request_to_book"
+        draft.notes = notes ?? ""
+        return draft
+    }
+}
+
 struct AdminAvailabilityBlock: Identifiable, Codable, Hashable {
     let id: UUID
     let start_time: Date

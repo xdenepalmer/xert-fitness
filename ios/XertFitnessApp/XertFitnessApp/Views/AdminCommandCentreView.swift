@@ -6919,7 +6919,9 @@ private struct AdminScheduleView: View {
     let session: AuthSession
     @State private var query = ""
     @State private var scope = AdminScheduleScope.upcoming
+    @State private var mode = AdminScheduleViewMode.calendar
     @State private var showingCreate = false
+    @State private var createInitialStart: Date?
     @State private var pendingCancellation: AdminClassSession?
     @State private var repeatingClass: AdminClassSession?
 
@@ -6977,18 +6979,31 @@ private struct AdminScheduleView: View {
     var body: some View {
         List {
             Section {
-                Picker("Timetable scope", selection: $scope) {
-                    ForEach(AdminScheduleScope.allCases) { option in
-                        Text("\(option.title) \(count(for: option))")
-                            .tag(option)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
+                Picker("Timetable view", selection: $mode) {
+                    ForEach(AdminScheduleViewMode.allCases) { option in
+                        Text(option.title).tag(option)
                     }
                 }
                 .pickerStyle(.segmented)
-                .accessibilityIdentifier("owner.timetable.scope")
+                .accessibilityIdentifier("owner.timetable.mode")
             }
             .listRowBackground(Color.xertInk)
+
+            if mode == .list {
+                Section {
+                    Picker("Timetable scope", selection: $scope) {
+                        ForEach(AdminScheduleScope.allCases) { option in
+                            Text("\(option.title) \(count(for: option))")
+                                .tag(option)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("owner.timetable.scope")
+                }
+                .listRowBackground(Color.xertInk)
+            }
 
             if let status = admin.classMutationStatusMessage {
                 Label(
@@ -7025,13 +7040,25 @@ private struct AdminScheduleView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.xertInk)
                 }
-                if rows.isEmpty {
-                    Text(emptyMessage)
-                        .foregroundStyle(Color.xertPale.opacity(0.65))
-                        .listRowBackground(Color.xertInk)
-                }
-                ForEach(rows) { item in
-                    classRow(item)
+                if mode == .calendar {
+                    AdminClassCalendarSections(
+                        admin: admin,
+                        session: session,
+                        timetableIsCurrent: timetableIsCurrent,
+                        onCreateClass: { start in
+                            createInitialStart = start
+                            showingCreate = true
+                        }
+                    )
+                } else {
+                    if rows.isEmpty {
+                        Text(emptyMessage)
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                            .listRowBackground(Color.xertInk)
+                    }
+                    ForEach(rows) { item in
+                        classRow(item)
+                    }
                 }
             }
         }
@@ -7041,7 +7068,10 @@ private struct AdminScheduleView: View {
         .searchable(text: $query, prompt: "Search timetable")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                Button {
+                    createInitialStart = nil
+                    showingCreate = true
+                } label: { Image(systemName: "plus") }
                     .accessibilityLabel("Create class")
                     .disabled(!timetableIsCurrent)
             }
@@ -7052,7 +7082,8 @@ private struct AdminScheduleView: View {
                     admin: admin,
                     session: session,
                     classSession: nil,
-                    mutationAllowed: timetableIsCurrent
+                    mutationAllowed: timetableIsCurrent,
+                    initialStartTime: createInitialStart
                 )
             }
         }
@@ -7431,7 +7462,7 @@ private struct AdminRecoveredCatalogueDraftNotice: View {
     }
 }
 
-private struct AdminClassEditor: View {
+struct AdminClassEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
@@ -7457,9 +7488,16 @@ private struct AdminClassEditor: View {
         admin: AdminStore,
         session: AuthSession,
         classSession: AdminClassSession?,
-        mutationAllowed: Bool
+        mutationAllowed: Bool,
+        initialStartTime: Date? = nil
     ) {
-        let baseline = AdminClassDraft(classSession: classSession)
+        var baseline = AdminClassDraft(classSession: classSession)
+        // A calendar day-press pre-fills the start without marking the editor
+        // dirty: the baseline carries the same time as the draft.
+        if classSession == nil, let initialStartTime {
+            baseline.startTime = initialStartTime
+            baseline.endTime = initialStartTime.addingTimeInterval(TimeInterval(baseline.durationMinutes * 60))
+        }
         let baselineToken = AdminCatalogueDraftStore.baselineToken(for: classSession)
         let recovered: AdminCatalogueDraftSnapshot<AdminClassDraft>? = AdminCatalogueDraftStore.load(
             kind: .classSession,

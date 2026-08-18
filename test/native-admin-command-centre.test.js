@@ -1989,7 +1989,7 @@ test('native schedule editors protect dirty work across local and command-centre
   ]);
   const ownerShell = view.slice(0, view.indexOf('private struct AdminWorkspaceSwitcher'));
   const classEditor = view.slice(
-    view.indexOf('private struct AdminClassEditor'),
+    view.indexOf('struct AdminClassEditor'),
     view.indexOf('private enum AdminScheduleRemoval'),
   );
   const scheduleEditors = view.slice(
