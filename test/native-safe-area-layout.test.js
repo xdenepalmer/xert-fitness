@@ -71,7 +71,7 @@ test('owner scheduling editors keep primary actions above the keyboard and home 
   const editorContracts = [
     {
       name: 'class',
-      start: 'private struct AdminClassEditor: View',
+      start: 'struct AdminClassEditor: View',
       end: 'private struct AdminAvailabilityView: View',
       bar: 'classSaveBar',
       identifier: 'owner.classEditor.save',

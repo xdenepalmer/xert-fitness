@@ -6919,7 +6919,9 @@ private struct AdminScheduleView: View {
     let session: AuthSession
     @State private var query = ""
     @State private var scope = AdminScheduleScope.upcoming
+    @State private var mode = AdminScheduleViewMode.calendar
     @State private var showingCreate = false
+    @State private var createInitialStart: Date?
     @State private var pendingCancellation: AdminClassSession?
     @State private var repeatingClass: AdminClassSession?
 
@@ -6977,18 +6979,31 @@ private struct AdminScheduleView: View {
     var body: some View {
         List {
             Section {
-                Picker("Timetable scope", selection: $scope) {
-                    ForEach(AdminScheduleScope.allCases) { option in
-                        Text("\(option.title) \(count(for: option))")
-                            .tag(option)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
+                Picker("Timetable view", selection: $mode) {
+                    ForEach(AdminScheduleViewMode.allCases) { option in
+                        Text(option.title).tag(option)
                     }
                 }
                 .pickerStyle(.segmented)
-                .accessibilityIdentifier("owner.timetable.scope")
+                .accessibilityIdentifier("owner.timetable.mode")
             }
             .listRowBackground(Color.xertInk)
+
+            if mode == .list {
+                Section {
+                    Picker("Timetable scope", selection: $scope) {
+                        ForEach(AdminScheduleScope.allCases) { option in
+                            Text("\(option.title) \(count(for: option))")
+                                .tag(option)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("owner.timetable.scope")
+                }
+                .listRowBackground(Color.xertInk)
+            }
 
             if let status = admin.classMutationStatusMessage {
                 Label(
@@ -7025,13 +7040,25 @@ private struct AdminScheduleView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .listRowBackground(Color.xertInk)
                 }
-                if rows.isEmpty {
-                    Text(emptyMessage)
-                        .foregroundStyle(Color.xertPale.opacity(0.65))
-                        .listRowBackground(Color.xertInk)
-                }
-                ForEach(rows) { item in
-                    classRow(item)
+                if mode == .calendar {
+                    AdminClassCalendarSections(
+                        admin: admin,
+                        session: session,
+                        timetableIsCurrent: timetableIsCurrent,
+                        onCreateClass: { start in
+                            createInitialStart = start
+                            showingCreate = true
+                        }
+                    )
+                } else {
+                    if rows.isEmpty {
+                        Text(emptyMessage)
+                            .foregroundStyle(Color.xertPale.opacity(0.65))
+                            .listRowBackground(Color.xertInk)
+                    }
+                    ForEach(rows) { item in
+                        classRow(item)
+                    }
                 }
             }
         }
@@ -7041,7 +7068,10 @@ private struct AdminScheduleView: View {
         .searchable(text: $query, prompt: "Search timetable")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showingCreate = true } label: { Image(systemName: "plus") }
+                Button {
+                    createInitialStart = nil
+                    showingCreate = true
+                } label: { Image(systemName: "plus") }
                     .accessibilityLabel("Create class")
                     .disabled(!timetableIsCurrent)
             }
@@ -7052,7 +7082,8 @@ private struct AdminScheduleView: View {
                     admin: admin,
                     session: session,
                     classSession: nil,
-                    mutationAllowed: timetableIsCurrent
+                    mutationAllowed: timetableIsCurrent,
+                    initialStartTime: createInitialStart
                 )
             }
         }
@@ -7431,7 +7462,7 @@ private struct AdminRecoveredCatalogueDraftNotice: View {
     }
 }
 
-private struct AdminClassEditor: View {
+struct AdminClassEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.adminEditorExitCoordinator) private var editorExitCoordinator
     @ObservedObject var admin: AdminStore
@@ -7457,9 +7488,16 @@ private struct AdminClassEditor: View {
         admin: AdminStore,
         session: AuthSession,
         classSession: AdminClassSession?,
-        mutationAllowed: Bool
+        mutationAllowed: Bool,
+        initialStartTime: Date? = nil
     ) {
-        let baseline = AdminClassDraft(classSession: classSession)
+        var baseline = AdminClassDraft(classSession: classSession)
+        // A calendar day-press pre-fills the start without marking the editor
+        // dirty: the baseline carries the same time as the draft.
+        if classSession == nil, let initialStartTime {
+            baseline.startTime = initialStartTime
+            baseline.endTime = initialStartTime.addingTimeInterval(TimeInterval(baseline.durationMinutes * 60))
+        }
         let baselineToken = AdminCatalogueDraftStore.baselineToken(for: classSession)
         let recovered: AdminCatalogueDraftSnapshot<AdminClassDraft>? = AdminCatalogueDraftStore.load(
             kind: .classSession,
@@ -13650,25 +13688,16 @@ private struct AdminOperationsHealthView: View {
     let session: AuthSession
     let onOpenTask: (XertOwnerTask) -> Void
     let onOpenWorkspace: (XertOwnerWorkspace) -> Void
-    @State private var pendingResolution: AdminCommerceHealth.WebhookDelivery.Incident?
-    @State private var pendingRetry: AdminCommerceHealth.WebhookDelivery.Incident?
-    @State private var copiedStripeEventID: String?
     @State private var confirmingOwnerPushTest = false
 
     private var unavailableHealthSources: [String] {
-        admin.refreshUnavailableSources.filter { ["schema health", "Stripe health", "push health"].contains($0) }
+        admin.refreshUnavailableSources.filter { ["schema health", "push health"].contains($0) }
     }
 
     private var databaseReady: Bool? {
         guard admin.loadedSources.contains("schema health"),
               !admin.refreshUnavailableSources.contains("schema health") else { return nil }
         return admin.missingSchemaCapabilities.isEmpty
-    }
-
-    private var stripeHealthIsCurrent: Bool {
-        admin.loadedSources.contains("Stripe health")
-            && !admin.refreshUnavailableSources.contains("Stripe health")
-            && admin.commerceHealth != nil
     }
 
     private var pushHealthIsCurrent: Bool {
@@ -13697,11 +13726,6 @@ private struct AdminOperationsHealthView: View {
         admin.loadedSources.contains(source) && !admin.refreshUnavailableSources.contains(source)
     }
 
-    private var activeLinkedPacksReady: Bool? {
-        guard sourceIsCurrent("session packs") else { return nil }
-        return admin.products.contains { $0.active && $0.hasStableStripePriceID }
-    }
-
     private var bookableClassesReady: Bool? {
         guard sourceIsCurrent("full timetable") else { return nil }
         let now = Date()
@@ -13714,46 +13738,32 @@ private struct AdminOperationsHealthView: View {
         }
     }
 
-    private var launchSwitches: (bookings: Bool?, payments: Bool?) {
-        guard sourceIsCurrent("platform controls"), let settings = admin.settings else { return (nil, nil) }
-        return (settings.bookings_enabled, settings.payments_enabled)
+    private var bookingsSwitch: Bool? {
+        guard sourceIsCurrent("platform controls"), let settings = admin.settings else { return nil }
+        return settings.bookings_enabled
     }
 
     private var memberLaunchGate: XertOwnerLaunchGate {
         guard admin.launchGateUpdatedAt != nil else {
             return XertOwnerLaunchGate.resolve(
                 databaseReady: nil,
-                stripeReady: nil,
                 pushReady: nil,
-                activeLinkedPacksReady: nil,
                 bookableClassesReady: nil,
-                bookingsEnabled: nil,
-                paymentsEnabled: nil
+                bookingsEnabled: nil
             )
         }
         return XertOwnerLaunchGate.resolve(
             databaseReady: databaseReady,
-            stripeReady: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
             pushReady: productionPushReady,
-            activeLinkedPacksReady: activeLinkedPacksReady,
             bookableClassesReady: bookableClassesReady,
-            bookingsEnabled: launchSwitches.bookings,
-            paymentsEnabled: launchSwitches.payments
+            bookingsEnabled: bookingsSwitch
         )
     }
 
     private var launchGateNextWorkspace: XertOwnerWorkspace? {
-        guard databaseReady == true,
-              stripeHealthIsCurrent,
-              admin.commerceHealth?.ready == true else { return nil }
+        guard databaseReady == true else { return nil }
         guard productionPushReady == true else { return nil }
-        if activeLinkedPacksReady == false { return .products }
-        guard activeLinkedPacksReady == true else { return nil }
         if bookableClassesReady == false { return .timetable }
-        guard bookableClassesReady == true else { return nil }
-        if let bookings = launchSwitches.bookings,
-           let payments = launchSwitches.payments,
-           bookings != payments { return .controls }
         return nil
     }
 
@@ -13828,8 +13838,6 @@ private struct AdminOperationsHealthView: View {
                             || admin.savingProductID != nil
                             || admin.savingClassID != nil
                             || admin.cancellingClassID != nil
-                            || admin.resolvingStripeIncidentID != nil
-                            || admin.retryingStripeIncidentID != nil
                     )
                     if let verifiedAt = admin.launchGateUpdatedAt {
                         Text("Verified \(verifiedAt.formatted(date: .abbreviated, time: .shortened))")
@@ -13858,11 +13866,6 @@ private struct AdminOperationsHealthView: View {
                     detail: databaseDetail
                 )
                 HealthStatusRow(
-                    title: "Stripe checkout",
-                    ready: stripeHealthIsCurrent ? admin.commerceHealth?.ready : nil,
-                    detail: commerceDetail
-                )
-                HealthStatusRow(
                     title: "Member push notifications",
                     ready: productionPushReady,
                     detail: pushDetail
@@ -13876,190 +13879,6 @@ private struct AdminOperationsHealthView: View {
                             .font(.subheadline).foregroundStyle(.orange)
                             .listRowBackground(Color.xertInk)
                     }
-                }
-            }
-            if let status = admin.stripeIncidentStatusMessage {
-                Section("Latest Stripe operation") {
-                    Label(
-                        status,
-                        systemImage: admin.stripeIncidentStatusIsWarning
-                            ? "checkmark.shield.fill"
-                            : "checkmark.circle.fill"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(admin.stripeIncidentStatusIsWarning ? Color.orange : Color.green)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .listRowBackground(Color.xertInk)
-                }
-            }
-            if let commerce = admin.commerceHealth, stripeHealthIsCurrent {
-                Section("Stripe launch checklist") {
-                    HealthValueRow(label: "Mode", value: commerce.mode?.uppercased() ?? "Unknown")
-                    HealthValueRow(
-                        label: "Payment switch",
-                        value: commerce.payment_switch?.state.uppercased() ?? "UNKNOWN"
-                    )
-                    HealthCheckRow(
-                        label: commerce.activation_receipt?.required == true
-                            ? "Activation receipt"
-                            : "Activation receipt (when enabled)",
-                        ready: commerce.activation_receipt?.ready == true
-                    )
-                    HealthCheckRow(
-                        label: "Live settings immutable",
-                        ready: commerce.activation_drift_guard_ready == true
-                    )
-                    if let activatedAt = commerce.activation_receipt?.activated_at {
-                        HealthValueRow(
-                            label: "Activated",
-                            value: activatedAt.formatted(date: .abbreviated, time: .shortened)
-                        )
-                    }
-                    HealthCheckRow(label: "Business verification", ready: commerce.account?.details_submitted == true)
-                    HealthCheckRow(label: "Charges enabled", ready: commerce.account?.charges_enabled == true)
-                    HealthCheckRow(label: "Payouts enabled", ready: commerce.account?.payouts_enabled == true)
-                    HealthCheckRow(
-                        label: "Active packs linked",
-                        ready: commerce.active_product_count > 0 && commerce.stripe_price_count == commerce.active_product_count
-                    )
-                    HealthCheckRow(label: "Webhook registered", ready: commerce.webhook?.ready == true)
-                    HealthCheckRow(label: "Webhook delivery ledger", ready: commerce.webhook_delivery?.ready == true)
-                    HealthCheckRow(label: "Refund reconciliation", ready: commerce.refund_reconciliation_ready == true)
-                    HealthCheckRow(label: "Checkout recovery", ready: commerce.checkout_reconciliation_ready == true)
-                    if let delivery = commerce.webhook_delivery {
-                        HealthCountRow(label: "Deliveries received (24h)", value: delivery.received)
-                        HealthCountRow(label: "Delivery retries (24h)", value: delivery.retries)
-                        HealthCountRow(label: "Failed or stalled", value: delivery.failed + delivery.stale_processing)
-                    }
-                }
-
-                if let incidents = commerce.webhook_delivery?.incidents, !incidents.isEmpty {
-                    Section("Unresolved Stripe incidents") {
-                        ForEach(incidents) { incident in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text(incident.status.uppercased())
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.red)
-                                    Text(incident.event_type)
-                                        .font(.caption)
-                                        .foregroundStyle(Color.xertPale.opacity(0.7))
-                                        .lineLimit(2)
-                                    Spacer()
-                                    Button {
-                                        UIPasteboard.general.string = incident.event_id
-                                        copiedStripeEventID = incident.event_id
-                                        XertHaptics.play(.success)
-                                        Task {
-                                            try? await Task.sleep(nanoseconds: 1_600_000_000)
-                                            guard !Task.isCancelled, copiedStripeEventID == incident.event_id else { return }
-                                            copiedStripeEventID = nil
-                                        }
-                                    } label: {
-                                        Image(systemName: copiedStripeEventID == incident.event_id ? "checkmark.circle.fill" : "doc.on.doc")
-                                            .frame(width: 44, height: 44)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(Color.xertSteel)
-                                    .accessibilityLabel(copiedStripeEventID == incident.event_id ? "Stripe Event ID copied" : "Copy Stripe Event ID")
-                                }
-                                Text(incident.event_id)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(Color.xertPale.opacity(0.55))
-                                    .textSelection(.enabled)
-                                if let orderID = incident.order_id {
-                                    Text("Order \(orderID.uuidString.lowercased())")
-                                        .font(.caption2.monospaced())
-                                        .foregroundStyle(Color.xertPale.opacity(0.45))
-                                        .textSelection(.enabled)
-                                }
-                                HStack(spacing: 12) {
-                                    Text("\(incident.attempts) attempt\(incident.attempts == 1 ? "" : "s")")
-                                    if let code = incident.error_code { Text(code) }
-                                    if let received = incident.last_received_at {
-                                        Text(received.formatted(date: .abbreviated, time: .shortened))
-                                    }
-                                }
-                                .font(.caption2)
-                                .foregroundStyle(Color.xertPale.opacity(0.45))
-                                if let resolution = incident.resolution {
-                                    Label(resolution, systemImage: "person.crop.circle.badge.exclamationmark")
-                                        .font(.caption)
-                                        .foregroundStyle(Color.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Button {
-                                        pendingResolution = incident
-                                    } label: {
-                                        Label("Mark handled", systemImage: "checkmark.seal")
-                                    }
-                                    .disabled(admin.resolvingStripeIncidentID != nil)
-                                } else {
-                                    Button {
-                                        pendingRetry = incident
-                                    } label: {
-                                        Label("Retry safely", systemImage: "arrow.triangle.2.circlepath")
-                                    }
-                                    .disabled(admin.retryingStripeIncidentID != nil)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .listRowBackground(Color.xertInk)
-                        }
-                    }
-                }
-
-                if let issues = commerce.issues, !issues.isEmpty {
-                    Section("Stripe actions required") {
-                        ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                            if let product = product(for: issue) {
-                                Button { onOpenTask(.product(product.id)) } label: {
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Image(systemName: "exclamationmark.triangle")
-                                            .foregroundStyle(Color.orange)
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(product.name)
-                                                .font(.headline)
-                                                .foregroundStyle(Color.xertOffWhite)
-                                            Text(issue.reason)
-                                                .font(.caption)
-                                                .foregroundStyle(Color.xertPale.opacity(0.68))
-                                        }
-                                        Spacer()
-                                        Image(systemName: "arrow.up.forward.square")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(Color.xertSteel)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("Opens the exact session pack blocking Stripe launch")
-                                .listRowBackground(Color.xertInk)
-                            } else if issue.slug == "activation-receipt" {
-                                Button { onOpenWorkspace(.controls) } label: {
-                                    launchIssueRow(issue, actionIcon: "switch.2")
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("Opens Platform Controls")
-                                .listRowBackground(Color.xertInk)
-                            } else {
-                                launchIssueRow(issue)
-                                    .listRowBackground(Color.xertInk)
-                            }
-                        }
-                    }
-                }
-            } else if let commerce = admin.commerceHealth {
-                Section("Stripe — last snapshot") {
-                    Label(
-                        "Live verification failed. Actions and readiness checkmarks stay hidden until Stripe health refreshes successfully.",
-                        systemImage: "lock.fill"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
-                    .listRowBackground(Color.xertInk)
-                    HealthValueRow(label: "Last mode", value: commerce.mode?.uppercased() ?? "Unknown")
-                    HealthCountRow(label: "Last active pack count", value: commerce.active_product_count)
-                    HealthCountRow(label: "Last Stripe-linked count", value: commerce.stripe_price_count)
                 }
             }
             if let push = admin.pushHealth, pushHealthIsCurrent {
@@ -14160,56 +13979,11 @@ private struct AdminOperationsHealthView: View {
         } message: {
             Text("This sends a private XERT launch test only to production devices registered to your owner account. It creates no member announcement.")
         }
-        .confirmationDialog(
-            "Mark Stripe incident handled?",
-            isPresented: Binding(
-                get: { pendingResolution != nil },
-                set: { if !$0 { pendingResolution = nil } }
-            ),
-            presenting: pendingResolution
-        ) { incident in
-            Button("Mark handled") {
-                Task {
-                    let succeeded = await admin.resolveStripeReview(session: session, incident: incident)
-                    XertHaptics.play(
-                        !succeeded
-                            ? .error
-                            : (admin.stripeIncidentStatusIsWarning ? .warning : .success)
-                    )
-                }
-            }
-            Button("Keep unresolved", role: .cancel) {}
-        } message: { incident in
-            Text("Confirm that \(incident.event_type) has been reviewed and any required member credit action is complete. Stripe and order records remain unchanged.")
-        }
-        .confirmationDialog(
-            "Retry Stripe event?",
-            isPresented: Binding(
-                get: { pendingRetry != nil },
-                set: { if !$0 { pendingRetry = nil } }
-            ),
-            presenting: pendingRetry
-        ) { incident in
-            Button("Retry event") {
-                Task {
-                    let succeeded = await admin.retryStripeEvent(session: session, incident: incident)
-                    XertHaptics.play(
-                        !succeeded
-                            ? .error
-                            : (admin.stripeIncidentStatusIsWarning ? .warning : .success)
-                    )
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { incident in
-            Text("Retrieve \(incident.event_id) directly from Stripe and run it through XERT's idempotent recovery path. XERT verifies its identity and payment mode before processing.")
-        }
     }
 
     private var launchGateIcon: String {
         switch memberLaunchGate.phase {
         case .preflightReady, .liveReady: return "checkmark.seal.fill"
-        case .bookingsOpen: return "calendar.badge.checkmark"
         case .blocked: return "hand.raised.fill"
         case .verifying: return "questionmark.circle.fill"
         }
@@ -14218,48 +13992,8 @@ private struct AdminOperationsHealthView: View {
     private var launchGateColor: Color {
         switch memberLaunchGate.phase {
         case .preflightReady, .liveReady: return .green
-        case .bookingsOpen: return Color.xertSteel
         case .blocked: return .red
         case .verifying: return .orange
-        }
-    }
-
-    private var commerceDetail: String {
-        guard stripeHealthIsCurrent, let health = admin.commerceHealth else {
-            return admin.commerceHealth == nil
-                ? "Stripe health could not be loaded. No readiness result is available."
-                : "Live Stripe health failed. A last snapshot is available below, with all actions disabled."
-        }
-        if !health.environment.missing.isEmpty {
-            return "Missing: \(health.environment.missing.joined(separator: ", "))."
-        }
-        let mode = health.mode?.uppercased() ?? "UNKNOWN"
-        let payout = health.account?.payouts_enabled == true ? "payouts ready" : "payouts need attention"
-        return "\(mode): \(health.active_product_count) active packs; \(health.stripe_price_count) Stripe-linked, \(health.dynamic_price_count) dynamic; \(payout)."
-    }
-
-    private func product(for issue: AdminCommerceHealth.Issue) -> AdminProduct? {
-        admin.products.first {
-            $0.slug.caseInsensitiveCompare(issue.slug) == .orderedSame
-        }
-    }
-
-    private func launchIssueRow(
-        _ issue: AdminCommerceHealth.Issue,
-        actionIcon: String? = nil
-    ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Color.orange)
-            Text(issue.reason)
-                .font(.subheadline)
-                .foregroundStyle(Color.xertPale)
-            Spacer(minLength: 8)
-            if let actionIcon {
-                Image(systemName: actionIcon)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.xertSteel)
-            }
         }
     }
 

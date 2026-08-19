@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const read = path => readFile(new URL(path, import.meta.url), 'utf8');
+
+test('native owner calendar mirrors the web class calendar with bank quick-add', async () => {
+  const [calendarView, scheduleHost, api, models] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminClassCalendarView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+  ]);
+
+  // The calendar is the owner's default view of the timetable workspace,
+  // with the classic list one segment away.
+  assert.match(scheduleHost, /@State private var mode = AdminScheduleViewMode\.calendar/);
+  assert.match(scheduleHost, /accessibilityIdentifier\("owner\.timetable\.mode"\)/);
+  assert.match(scheduleHost, /AdminClassCalendarSections\(/);
+  assert.match(scheduleHost, /initialStartTime: createInitialStart/);
+
+  // Pressing a date drives the day panel: manage that day's classes,
+  // quick-add a bank preset, or start a pre-filled custom class.
+  assert.match(calendarView, /Section\("Add from the class bank"\)/);
+  assert.match(calendarView, /Label\("New class this day"/);
+  assert.match(calendarView, /admin\.saveClass\(session: session, classSession: nil, draft: draft\)/);
+  assert.match(calendarView, /guard quickAddAllowed/);
+  assert.match(calendarView, /accessibilityIdentifier\("owner\.calendar\.newClassThisDay"\)/);
+
+  // Quick-add is blocked without a current timetable snapshot, and the bank
+  // fails soft with a retry when class_templates is missing.
+  assert.match(calendarView, /timetableIsCurrent && admin\.savingClassID == nil/);
+  assert.match(calendarView, /apply the class_template_bank migration/);
+
+  // The bank rides the same shared class_templates table as the web app.
+  assert.match(api, /func adminClassTemplates/);
+  assert.match(api, /\/rest\/v1\/class_templates/);
+  assert.match(models, /struct AdminClassTemplate: Identifiable, Codable, Hashable/);
+  assert.match(models, /func draft\(on day: Date, startMinute: Int, publish: Bool/);
+
+  // A pre-filled start date must not open the editor dirty.
+  assert.match(scheduleHost, /baseline\.startTime = initialStartTime/);
+});

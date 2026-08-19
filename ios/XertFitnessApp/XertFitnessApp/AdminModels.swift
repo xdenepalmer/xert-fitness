@@ -1314,6 +1314,18 @@ struct AdminClassCancellationFollowUp: Identifiable, Hashable {
     }
 }
 
+/// Editors are re-initialised on every parent re-render, and their dirty state
+/// compares the live draft against a freshly computed baseline. A baseline
+/// built from the raw clock differs on every re-render, so an untouched editor
+/// turned permanently "dirty" within milliseconds and kept feeding the exit
+/// coordinator. Snapping the default start to the next top of the hour keeps
+/// the baseline stable for up to an hour (and is a nicer default anyway).
+func adminDraftDefaultStart(after now: Date, calendar: Calendar = .current) -> Date {
+    var components = calendar.dateComponents([.year, .month, .day, .hour], from: now)
+    components.hour = (components.hour ?? 0) + 1
+    return calendar.date(from: components) ?? now
+}
+
 struct AdminClassDraft: Codable, Hashable {
     static let classTypes = ["XERT Foundation", "XERT Strength", "XERT Engine", "XERT Hybrid", "XERT Event Prep", "XERT Team"]
     static let intensities = ["Low", "Moderate", "High", "Very high"]
@@ -1337,7 +1349,7 @@ struct AdminClassDraft: Codable, Hashable {
     var notes: String
 
     init(classSession: AdminClassSession? = nil, now: Date = Date()) {
-        let defaultStart = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let defaultStart = adminDraftDefaultStart(after: now)
         classType = classSession?.class_type ?? "XERT Foundation"
         title = classSession?.title ?? ""
         description = classSession?.description ?? ""
@@ -1354,6 +1366,58 @@ struct AdminClassDraft: Codable, Hashable {
         publicVisible = classSession?.public_visible ?? false
         bookingMode = classSession?.booking_mode ?? "request_to_book"
         notes = classSession?.notes ?? ""
+    }
+}
+
+/// A reusable class preset from the shared class bank (`class_templates`),
+/// curated in the web Command Centre and quick-added from the app calendar.
+struct AdminClassTemplate: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    let class_type: String?
+    let title: String?
+    let description: String?
+    let coach_name: String?
+    let duration_minutes: Int?
+    let capacity: Int?
+    let location_zone: String?
+    let beginner_friendly: Bool?
+    let intensity_level: String?
+    let booking_mode: String?
+    let default_start_minute: Int?
+    let notes: String?
+
+    var defaultStartMinute: Int {
+        let minute = default_start_minute ?? 6 * 60
+        return (0...(24 * 60 - 1)).contains(minute) ? minute : 6 * 60
+    }
+
+    var resolvedTitle: String {
+        let trimmed = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? name : trimmed
+    }
+
+    func draft(on day: Date, startMinute: Int, publish: Bool, calendar: Calendar = .current) -> AdminClassDraft {
+        var draft = AdminClassDraft()
+        let start = calendar.startOfDay(for: day).addingTimeInterval(TimeInterval(startMinute * 60))
+        let duration = duration_minutes ?? 60
+        draft.classType = class_type ?? draft.classType
+        draft.title = resolvedTitle
+        draft.description = description ?? ""
+        draft.coachName = coach_name ?? ""
+        draft.startTime = start
+        draft.hasEndTime = true
+        draft.endTime = start.addingTimeInterval(TimeInterval(duration * 60))
+        draft.durationMinutes = duration
+        draft.capacity = capacity ?? 8
+        draft.location = location_zone ?? "Main floor"
+        draft.beginnerFriendly = beginner_friendly ?? false
+        draft.intensity = intensity_level ?? "Moderate"
+        draft.status = publish ? "published" : "draft"
+        draft.publicVisible = publish
+        draft.bookingMode = booking_mode ?? "request_to_book"
+        draft.notes = notes ?? ""
+        return draft
     }
 }
 
@@ -1378,7 +1442,7 @@ struct AdminAvailabilityDraft: Codable, Hashable {
     var isBookable: Bool
 
     init(block: AdminAvailabilityBlock? = nil, now: Date = Date()) {
-        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let start = adminDraftDefaultStart(after: now)
         startTime = block?.start_time ?? start
         endTime = block?.end_time ?? start.addingTimeInterval(3_600)
         type = block?.type ?? "PT available"
@@ -1408,7 +1472,7 @@ struct AdminBlackoutDraft: Codable, Hashable {
     var notes: String
 
     init(period: AdminBlackoutPeriod? = nil, now: Date = Date()) {
-        let start = Calendar.current.date(byAdding: .hour, value: 1, to: now) ?? now
+        let start = adminDraftDefaultStart(after: now)
         startTime = period?.start_time ?? start
         endTime = period?.end_time ?? start.addingTimeInterval(3_600)
         affects = period?.affects ?? "all"

@@ -166,31 +166,26 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /\/api\/admin-commerce-health/);
   assert.match(adminModels, /let refund_reconciliation_ready: Bool\?/);
   assert.match(adminModels, /let checkout_reconciliation_ready: Bool\?/);
-  assert.match(view, /HealthCheckRow\(label: "Refund reconciliation"/);
-  assert.match(view, /HealthCheckRow\(label: "Checkout recovery"/);
   assert.match(api, /\/api\/admin-push-health/);
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
-  assert.match(view, /Unresolved Stripe incidents/);
-  assert.match(view, /UIPasteboard\.general\.string = incident\.event_id/);
-  assert.match(view, /Copy Stripe Event ID/);
+  // Payments and memberships are handled in Fitbox: Operations Health no
+  // longer renders the Stripe checklist, incidents desk or launch checks.
+  assert.doesNotMatch(view, /Stripe launch checklist|Unresolved Stripe incidents|Latest Stripe operation|Stripe — last snapshot/);
+  assert.doesNotMatch(view, /Copy Stripe Event ID|Retry safely|Opens the exact session pack blocking Stripe launch/);
+  // The guarded incident-recovery plumbing stays in the API and store for the
+  // Stripe wind-down, even though the health screen no longer drives it.
   assert.match(adminModels, /let resolution: String\?/);
-  assert.match(view, /incident\.resolution/);
   assert.match(api, /adminResolveStripeReview/);
   assert.match(adminStore, /resolveStripeReview/);
-  assert.match(view, /Mark handled/);
   assert.match(api, /adminRetryStripeEvent/);
   assert.match(api, /action: "retry_stripe_event"/);
   assert.match(api, /confirmation: "RETRY EVENT"/);
   assert.match(adminStore, /retryingStripeIncidentID/);
   assert.match(adminStore, /func retryStripeEvent/);
-  assert.match(view, /Label\("Retry safely", systemImage: "arrow\.triangle\.2\.circlepath"\)/);
-  assert.match(view, /XERT verifies its identity and payment mode before processing/);
   assert.match(view, /AdminAuditView/);
   assert.match(view, /AdminProductsView/);
   assert.match(view, /AdminProductEditor/);
-  assert.match(view, /accessibilityHint\("Opens the exact session pack blocking Stripe launch"\)/);
-  assert.match(view, /issue\.slug == "activation-receipt"[\s\S]*onOpenWorkspace\(\.controls\)/);
   assert.match(view, /LIVE STRIPE READINESS/);
   assert.match(view, /liveBlockedProducts/);
   assert.match(view, /Session Packs & Pricing/);
@@ -274,8 +269,9 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func grantCredits/);
   assert.match(adminStore, /func setMemberRole/);
   assert.match(view, /AdminOrderDetailView/);
-  assert.match(view, /Payment switch/);
-  assert.match(view, /Activation receipt/);
+  // The Stripe launch checklist is gone from Operations Health (Fitbox owns
+  // payments); the guarded payment switch itself still lives in Controls.
+  assert.match(view, /Toggle\("Session pack payments", isOn: settingBinding\(\\\.payments_enabled\)\)/);
   assert.match(adminModels, /struct ActivationReceipt: Codable, Hashable/);
   assert.match(view, /Type REFUND to confirm/);
   assert.match(api, /func adminOrders/);
@@ -1021,13 +1017,11 @@ test('native platform controls and health recovery remain safe and reachable on 
   assert.match(store, /refreshUnavailableSources\.removeAll \{ \$0 == "platform controls" \}/);
   assert.match(store, /guard loadedSources\.contains\("platform controls"\),[\s\S]*Refresh Platform Controls before saving/);
   assert.match(platform, /XertHaptics\.play\(\.success\)/);
-  assert.match(health, /private var stripeHealthIsCurrent: Bool/);
   assert.match(health, /private var pushHealthIsCurrent: Bool/);
-  assert.match(health, /Stripe — last snapshot/);
-  assert.match(health, /Actions and readiness checkmarks stay hidden until Stripe health refreshes successfully/);
-  assert.match(health, /if let commerce = admin\.commerceHealth, stripeHealthIsCurrent/);
   assert.match(health, /if let push = admin\.pushHealth, pushHealthIsCurrent/);
   assert.match(health, /Retry health checks/);
+  // Fitbox owns payments: the health screen carries no Stripe snapshot UI.
+  assert.doesNotMatch(health, /stripeHealthIsCurrent|Stripe — last snapshot/);
 });
 
 test('native session-pack tools require a current catalogue before exposing mutations', async () => {
@@ -1995,7 +1989,7 @@ test('native schedule editors protect dirty work across local and command-centre
   ]);
   const ownerShell = view.slice(0, view.indexOf('private struct AdminWorkspaceSwitcher'));
   const classEditor = view.slice(
-    view.indexOf('private struct AdminClassEditor'),
+    view.indexOf('struct AdminClassEditor'),
     view.indexOf('private enum AdminScheduleRemoval'),
   );
   const scheduleEditors = view.slice(

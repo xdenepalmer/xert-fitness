@@ -403,6 +403,18 @@ final class XertAPI {
         )
     }
 
+    func adminClassTemplates(session auth: AuthSession) async throws -> [AdminClassTemplate] {
+        return try await restRequest(
+            path: "/rest/v1/class_templates",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,name,class_type,title,description,coach_name,duration_minutes,capacity,location_zone,beginner_friendly,intensity_level,booking_mode,default_start_minute,notes"),
+                URLQueryItem(name: "order", value: "name.asc"),
+                URLQueryItem(name: "limit", value: "200")
+            ],
+            auth: auth
+        )
+    }
+
     @discardableResult
     func adminCreateClass(session auth: AuthSession, draft: AdminClassDraft) async throws -> UUID {
         let payload = try adminClassPayload(draft)

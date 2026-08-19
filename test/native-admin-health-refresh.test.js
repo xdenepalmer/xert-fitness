@@ -56,10 +56,13 @@ test('native health retry preserves snapshots and updates only health availabili
   assert.match(healthRefresh, /!Task\.isCancelled/);
   assert.match(store, /healthRefreshGeneration &\+= 1[\s\S]*isSavingSettings = true/);
   assert.match(healthRefresh, /Self\.launchGateSources\.isSubset\(of: successfulSources\)/);
+  // Stripe checkout and session packs no longer gate the member launch —
+  // payments and memberships are handled in Fitbox.
   assert.match(
     store,
-    /launchGateSources: Set<String> = \[[\s\S]*"schema health", "Stripe health", "push health"[\s\S]*"platform controls", "session packs", "full timetable"/,
+    /launchGateSources: Set<String> = \[[\s\S]*"schema health", "push health"[\s\S]*"platform controls", "full timetable"/,
   );
+  assert.doesNotMatch(store, /launchGateSources: Set<String> = \[[\s\S]{0,200}"Stripe health"/);
 
   // Failed requests must not erase the previously verified payloads.
   assert.doesNotMatch(healthRefresh, /catch\s*\{[^}]*schemaCapabilities\s*=/s);
