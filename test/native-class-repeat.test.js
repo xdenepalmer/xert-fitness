@@ -46,7 +46,7 @@ test('native timetable repeat mutation rejects stale sources and forces reconcil
   assert.match(method, /plan\.makeDrafts\(from: currentClass\)/);
   assert.match(method, /api\.adminCreateClasses\(session: session, drafts: drafts\)/);
   assert.match(method, /markScheduleSourceUnavailable\("full timetable"\)/);
-  assert.match(method, /Do not repeat this block again; refresh Full Timetable/);
+  assert.match(method, /Do not repeat this block again; refresh Class Calendar/);
 });
 
 test('native repeat sheet exposes interval, count, publish choice, preview and busy protection', async () => {

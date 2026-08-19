@@ -3612,7 +3612,7 @@ final class AdminStore: ObservableObject {
             // owner cannot accidentally create the same repeat block twice.
             markScheduleSourceUnavailable("full timetable")
             classMutationStatusIsWarning = true
-            classMutationStatusMessage = "The repeat block was not confirmed. Refresh Full Timetable before trying again."
+            classMutationStatusMessage = "The repeat block was not confirmed. Refresh Class Calendar before trying again."
             errorMessage = "XERT could not confirm the repeat block. Refresh the timetable before trying again. \(error.localizedDescription)"
             return false
         }
@@ -3640,7 +3640,7 @@ final class AdminStore: ObservableObject {
             classMutationStatusMessage = "\(outcome). First receipt \(receipt)."
         } else {
             classMutationStatusIsWarning = true
-            classMutationStatusMessage = "\(outcome), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. First receipt \(receipt). Do not repeat this block again; refresh Full Timetable."
+            classMutationStatusMessage = "\(outcome), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. First receipt \(receipt). Do not repeat this block again; refresh Class Calendar."
         }
         lastUpdatedAt = Date()
         return true
