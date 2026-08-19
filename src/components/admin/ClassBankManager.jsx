@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/use-toast';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { createClassTemplate, deleteClassTemplate, updateClassTemplate } from '@/lib/adminData';
 import { classTemplateEditorForm, classTemplateEditorIsDirty, classTemplateValidationError, formatStartMinute } from '@/lib/classCalendar';
+import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -98,7 +99,7 @@ function TemplateEditor({ template, onSaved, onCancel, onDirtyChange }) {
         <div>
           <label htmlFor="bank-booking-mode" className={labelClass}>Booking mode</label>
           <select id="bank-booking-mode" value={form.booking_mode} onChange={e => set('booking_mode', e.target.value)} className={inputClass}>
-            {BOOKING_MODES.map(mode => <option key={mode} value={mode}>{mode.replaceAll('_', ' ')}</option>)}
+            {BOOKING_MODES.map(mode => <option key={mode} value={mode}>{BOOKING_MODE_LABELS[mode] || mode}</option>)}
           </select>
         </div>
       </div>

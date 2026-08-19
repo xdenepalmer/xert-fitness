@@ -11,6 +11,8 @@ import ClassSessionCard from '@/components/public/ClassSessionCard';
 import PublicClassCalendar from '@/components/public/PublicClassCalendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
+import { getPublicClassAvailability } from '@/lib/submitForms';
+import { classSignupState, signupOutcomeMessage } from '@/lib/classSignup';
 
 export default function SoftLaunchTimetable() {
   const [sessions, setSessions] = useState([]);
@@ -18,7 +20,8 @@ export default function SoftLaunchTimetable() {
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
   const [showPTForm, setShowPTForm] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(null);
+  const [availability, setAvailability] = useState({});
   const [ptSuccess, setPTSuccess] = useState(false);
   const [view, setView] = useState('calendar');
   const fitbox = fitboxHandoff(settings);
@@ -27,12 +30,30 @@ export default function SoftLaunchTimetable() {
     Promise.all([
       getClassSessions(true).catch(() => []),
       getSoftLaunchSettings().catch(() => getDefaultSettings()),
-    ]).then(([s, cfg]) => {
+      // Live remaining places. Failing here only hides spot counts; the
+      // database still refuses a sign-up once a class is full.
+      getPublicClassAvailability().catch(() => ({})),
+    ]).then(([s, cfg, places]) => {
       setSessions(s);
       setSettings(cfg);
+      setAvailability(places);
       setLoading(false);
     });
   }, []);
+
+  // Re-read remaining places after a sign-up so other visitors on this page
+  // see the spot disappear without a reload.
+  const refreshAvailability = () => {
+    getPublicClassAvailability().then(setAvailability).catch(() => {});
+  };
+
+  const selectedSignup = classSignupState({
+    session: selectedSession || {},
+    availability: selectedSession ? availability[selectedSession.id] : null,
+    bookingsEnabled: settings.bookings_enabled,
+    fitbox,
+  });
+  const successCopy = signupOutcomeMessage(bookingSuccess);
 
   return (
     <div className="bg-xert-black min-h-screen flex flex-col">
@@ -118,11 +139,13 @@ export default function SoftLaunchTimetable() {
                 bookingsEnabled={settings.bookings_enabled}
                 onBook={setSelectedSession}
                 fitbox={fitbox}
+                availability={availability}
               />
             ) : (
               <div className="space-y-3">
                 {sessions.map(s => (
-                  <ClassSessionCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled} onBook={setSelectedSession} fitbox={fitbox} />
+                  <ClassSessionCard key={s.id} session={s} bookingsEnabled={settings.bookings_enabled}
+                    onBook={setSelectedSession} fitbox={fitbox} availability={availability[s.id]} />
                 ))}
               </div>
             )}
@@ -158,20 +181,26 @@ export default function SoftLaunchTimetable() {
       </main>
 
       {/* Booking modal */}
-      <Dialog open={Boolean(selectedSession) && !bookingSuccess} onOpenChange={(open) => { if (!open) setSelectedSession(null); }}>
+      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => { if (!open) setSelectedSession(null); }}>
         <DialogContent
           aria-describedby={undefined}
           className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-y-auto p-6 gap-0"
         >
           <DialogHeader className="text-left mb-6">
             <DialogTitle className="font-display font-normal tracking-normal text-xl text-xert-offwhite uppercase">
-              Request spot
+              {selectedSignup.label}
             </DialogTitle>
           </DialogHeader>
           {selectedSession && (
             <BookingRequestForm
               session={selectedSession}
-              onSuccess={() => { setBookingSuccess(true); setSelectedSession(null); }}
+              submitLabel={selectedSignup.label}
+              busyLabel={selectedSignup.takesSpot ? 'Taking your spot...' : 'Submitting...'}
+              takesSpot={selectedSignup.takesSpot}
+              consentLabel={selectedSignup.takesSpot
+                ? 'I consent to XERT contacting me about this class.'
+                : 'I consent to XERT contacting me about this booking request.'}
+              onSuccess={result => { setBookingSuccess(result || {}); setSelectedSession(null); refreshAvailability(); }}
               onCancel={() => setSelectedSession(null)}
             />
           )}
@@ -179,18 +208,18 @@ export default function SoftLaunchTimetable() {
       </Dialog>
 
       {/* Booking success */}
-      <Dialog open={bookingSuccess} onOpenChange={(open) => { if (!open) setBookingSuccess(false); }}>
+      <Dialog open={Boolean(bookingSuccess)} onOpenChange={(open) => { if (!open) setBookingSuccess(null); }}>
         <DialogContent className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-sm p-8 gap-0 text-center">
           <div className="w-12 h-12 bg-xert-steel/20 border-2 border-xert-red rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-xert-red text-xl" aria-hidden="true">✓</span>
           </div>
           <DialogTitle className="font-display font-normal tracking-normal leading-none text-2xl text-xert-offwhite uppercase mb-2">
-            Request received.
+            {successCopy.title}
           </DialogTitle>
           <DialogDescription className="font-body text-sm text-xert-concrete/60 mb-6">
-            We'll confirm your spot before the class. Keep an eye on your email.
+            {successCopy.body}
           </DialogDescription>
-          <button onClick={() => setBookingSuccess(false)}
+          <button onClick={() => setBookingSuccess(null)}
             className="xert-btn-primary mx-auto px-6 py-3 font-display text-sm uppercase">
             Done
           </button>

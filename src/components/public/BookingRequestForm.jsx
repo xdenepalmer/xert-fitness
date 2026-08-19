@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { requestClassBooking } from '@/lib/submitForms';
+import { submitClassSignup } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
+import { friendlySignupError } from '@/lib/classSignup';
 
 function FieldLabel({ children, required = false, htmlFor = undefined }) {
   const Component = htmlFor ? 'label' : 'span';
@@ -19,7 +20,15 @@ function Input({ ...props }) {
 
 const TRAINING_LEVELS = ['New / beginner', 'Some gym experience', 'Regular trainer', 'Advanced'];
 
-export default function BookingRequestForm({ session, onSuccess, onCancel }) {
+export default function BookingRequestForm({
+  session,
+  onSuccess,
+  onCancel,
+  submitLabel = 'Request spot',
+  busyLabel = 'Requesting...',
+  consentLabel = 'I consent to XERT contacting me about this booking request.',
+  takesSpot = false,
+}) {
   const [form, setForm] = useState({
     full_name: '', email: '', phone: '', training_level: '',
     notes: '', consent_to_contact: false, company_website: '',
@@ -39,10 +48,10 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
     setLoading(true);
     setError('');
     try {
-      await requestClassBooking(form);
-      onSuccess?.();
-    } catch {
-      setError('Submission failed. Please try again.');
+      const result = await submitClassSignup(form);
+      onSuccess?.(result);
+    } catch (submitError) {
+      setError(friendlySignupError(submitError));
     } finally {
       setLoading(false);
     }
@@ -91,8 +100,14 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
           className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
       </div>
 
+      {takesSpot && (
+        <p className="font-body text-xs text-xert-pale/70">
+          Your spot is held as soon as you submit these details.
+        </p>
+      )}
+
       <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
-        I consent to XERT contacting me about this booking request.
+        {consentLabel}
       </FormCheckbox>
 
       {error && (
@@ -110,7 +125,7 @@ export default function BookingRequestForm({ session, onSuccess, onCancel }) {
         )}
         <button type="submit" disabled={loading}
           className="xert-btn-primary flex-1 py-3 font-display text-sm uppercase disabled:opacity-50">
-          {loading ? 'Requesting...' : 'Request spot'}
+          {loading ? busyLabel : submitLabel}
         </button>
       </div>
     </form>
