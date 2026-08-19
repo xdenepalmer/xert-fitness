@@ -57,8 +57,10 @@ enum AdminCatalogueDraftStore {
     ) -> AdminCatalogueDraftSnapshot<Draft>? {
         guard let ownerID else { return nil }
         let storageKey = key(kind: kind, ownerID: ownerID, recordID: recordID)
+        // Editors run this on every re-initialisation; with nothing stored it
+        // must stay a pure read (no removeObject write on the hot path).
+        guard let data = defaults.data(forKey: storageKey) else { return nil }
         guard
-            let data = defaults.data(forKey: storageKey),
             data.count <= maximumEncodedBytes,
             let snapshot = try? decoder.decode(AdminCatalogueDraftSnapshot<Draft>.self, from: data),
             snapshot.schemaVersion == AdminCatalogueDraftSnapshot<Draft>.currentSchemaVersion,
