@@ -3921,6 +3921,52 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testClassDiscoveryNarrowsToADayPressedOnTheCalendar() {
+        let now = queenslandDate(2026, 7, 13, 10, 0)
+        let sessions = [
+            classSession(spotsLeft: 4, title: "Morning", startTime: queenslandDate(2026, 7, 14, 6, 0)),
+            classSession(spotsLeft: 4, title: "Evening", startTime: queenslandDate(2026, 7, 14, 18, 0)),
+            classSession(spotsLeft: 4, title: "Next Day", startTime: queenslandDate(2026, 7, 15, 6, 0)),
+        ]
+        let chosenDay = queenslandDate(2026, 7, 14, 12, 0)
+
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, day: chosenDay, now: now).map(\.title),
+            ["Morning", "Evening"]
+        )
+        // No day chosen leaves every class visible.
+        XCTAssertEqual(ClassSessionDiscovery.sessions(from: sessions, now: now).count, 3)
+        // The day composes with the other filters rather than replacing them.
+        XCTAssertEqual(
+            ClassSessionDiscovery.sessions(from: sessions, search: "evening", day: chosenDay, now: now).map(\.title),
+            ["Evening"]
+        )
+    }
+
+    func testMonthCalendarGeometryPadsLeadingDaysAndRotatesWeekdays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.firstWeekday = 2 // Monday
+        calendar.timeZone = TimeZone(identifier: "Australia/Brisbane") ?? .current
+
+        // September 2026 starts on a Tuesday, so one blank precedes the 1st.
+        let anchor = queenslandDate(2026, 9, 15, 12, 0)
+        let cells = XertCalendarMonth.cells(for: anchor, calendar: calendar)
+        XCTAssertEqual(cells.count, 30 + 1)
+        XCTAssertNil(cells.first ?? nil)
+        XCTAssertEqual(cells.compactMap { $0 }.count, 30)
+
+        let symbols = XertCalendarMonth.weekdaySymbols(calendar: calendar)
+        XCTAssertEqual(symbols.count, 7)
+        XCTAssertEqual(symbols.first, calendar.veryShortStandaloneWeekdaySymbols[1])
+
+        XCTAssertEqual(
+            calendar.component(.month, from: XertCalendarMonth.shifted(anchor, by: 1, calendar: calendar)),
+            10
+        )
+        XCTAssertTrue(XertCalendarMonth.accessibilityLabel(for: anchor, count: 2).contains("2 classes"))
+        XCTAssertFalse(XertCalendarMonth.accessibilityLabel(for: anchor, count: 0).contains("class"))
+    }
+
     func testClassDiscoveryFiltersFitAndSortsDeterministically() {
         let start = queenslandDate(2026, 7, 14, 6, 0)
         let sessions = [

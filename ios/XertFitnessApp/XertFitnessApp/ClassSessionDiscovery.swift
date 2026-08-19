@@ -33,11 +33,15 @@ enum ClassSessionFit: String, CaseIterable, Identifiable {
 }
 
 enum ClassSessionDiscovery {
+    /// `day` narrows the list to a single date chosen on the month calendar.
+    /// It composes with the other filters rather than replacing them, so a
+    /// search term or fit still applies to the day the member pressed.
     static func sessions(
         from sessions: [ClassSession],
         search: String = "",
         dateWindow: ClassSessionDateWindow = .all,
         fit: ClassSessionFit = .all,
+        day: Date? = nil,
         now: Date = Date(),
         calendar: Calendar = EventItem.calendar
     ) -> [ClassSession] {
@@ -78,7 +82,9 @@ enum ClassSessionDiscovery {
                 matchesFit = session.beginner_friendly == true
             }
 
-            return matchesSearch && matchesDate && matchesFit
+            let matchesDay = day.map { calendar.isDate(session.start_time, inSameDayAs: $0) } ?? true
+
+            return matchesSearch && matchesDate && matchesFit && matchesDay
         }
         .sorted {
             if $0.start_time != $1.start_time { return $0.start_time < $1.start_time }
