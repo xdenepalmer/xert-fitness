@@ -1,3 +1,4 @@
+import ClassSignupRoster from '@/components/admin/ClassSignupRoster';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Archive, CalendarPlus, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { blackoutsOverlappingSession } from '@/lib/scheduling';
@@ -95,6 +96,15 @@ export default function ClassCalendarBoard({
   onCreateCustom,
   onEditSession,
   onOpenRoster,
+  rosterSessionId = null,
+  rosterSignups = [],
+  rosterMembers = [],
+  rosterLoading = false,
+  rosterStatuses = [],
+  rosterUpdatingId = null,
+  onRosterStatusChange,
+  onCloseRoster,
+  signupCounts = {},
   onDuplicateSession,
   onCancelSession,
   onSaveToBank,
@@ -283,11 +293,19 @@ export default function ClassCalendarBoard({
                       {session.end_time ? `–${chipTime(session.end_time)}` : ''} · {session.class_type}
                       {session.coach_name ? ` · ${session.coach_name}` : ''} · Cap {session.capacity}
                     </p>
+                    {signupCounts[session.id]?.taken > 0 && (
+                      <p className="mt-1 font-body text-xs text-xert-steel">
+                        {signupCounts[session.id].taken}
+                        {session.capacity ? ` / ${session.capacity}` : ''} signed up
+                        {signupCounts[session.id].pending > 0 ? ` · ${signupCounts[session.id].pending} awaiting decision` : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-2">
                     <button type="button" onClick={() => onOpenRoster(session)}
-                      className="min-h-11 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
-                      Roster
+                      aria-expanded={rosterSessionId === session.id}
+                      className={`min-h-11 border px-3 font-body text-xs transition-colors ${rosterSessionId === session.id ? 'border-xert-steel bg-xert-steel/15 text-xert-offwhite' : 'border-xert-steel/30 text-xert-concrete/60 hover:border-xert-steel'}`}>
+                      Sign-ups
                     </button>
                     <button type="button" onClick={() => onEditSession(session)}
                       className="min-h-11 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
@@ -312,6 +330,20 @@ export default function ClassCalendarBoard({
                       </button>
                     )}
                   </div>
+                  {rosterSessionId === session.id && (
+                    <div className="w-full">
+                      <ClassSignupRoster
+                        session={session}
+                        signups={rosterSignups}
+                        members={rosterMembers}
+                        loading={rosterLoading}
+                        statuses={rosterStatuses}
+                        updatingId={rosterUpdatingId}
+                        onStatusChange={onRosterStatusChange}
+                        onClose={onCloseRoster}
+                      />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

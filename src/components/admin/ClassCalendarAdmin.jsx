@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods, getClassTemplates, createClassTemplate } from '@/lib/adminData';
@@ -493,6 +493,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [boardRosterSessionId, setBoardRosterSessionId] = useState(null);
+  const [boardRosterLoading, setBoardRosterLoading] = useState(false);
+  const [allSignups, setAllSignups] = useState([]);
   const [waitlistOverview, setWaitlistOverview] = useState([]);
   const [waitlistOverviewAvailable, setWaitlistOverviewAvailable] = useState(true);
   const [waitlistOverviewError, setWaitlistOverviewError] = useState('');
@@ -547,20 +550,38 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
+  // Sign-ups grouped per class for the calendar's at-a-glance counts.
+  const signupCounts = useMemo(() => {
+    const byId = {};
+    for (const signup of allSignups) {
+      const key = signup?.class_session_id;
+      if (!key) continue;
+      if (!byId[key]) byId[key] = { taken: 0, pending: 0 };
+      if (signup.status === 'confirmed') byId[key].taken += 1;
+      else if (signup.status === 'requested') byId[key].pending += 1;
+    }
+    return byId;
+  }, [allSignups]);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [loadedSessions, loadedBlackouts] = await Promise.all([
+      const [loadedSessions, loadedBlackouts, loadedSignups] = await Promise.all([
         getClassSessions(false),
         getBlackoutPeriods().catch(error => {
           toast({ title: 'Blackout checks unavailable', description: error.message, variant: 'destructive' });
           return [];
         }),
+        // Sign-up counts for every class, so the calendar can show how full
+        // each one is without opening it. Counts are a convenience; a failure
+        // must not stop the timetable loading.
+        getClassBookings().catch(() => []),
         refreshWaitlistOverview(),
         loadTemplates(),
       ]);
       setSessions(loadedSessions);
       setBlackouts(loadedBlackouts);
+      setAllSignups(loadedSignups);
     } catch (error) {
       toast({ title: 'Could not load class sessions', description: error.message, variant: 'destructive' });
     } finally {
@@ -713,17 +734,22 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     finally { setDuplicatingSessionId(null); }
   };
 
+  // Opens the sign-up list in place, so managing attendees never costs the
+  // owner their position in the calendar.
   const openRosterFromBoard = async session => {
-    setView('list');
-    setTimeFilter(session.start_time && new Date(session.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
+    if (boardRosterSessionId === session.id) {
+      setBoardRosterSessionId(null);
+      return;
+    }
+    setBoardRosterSessionId(session.id);
+    setBoardRosterLoading(true);
     try {
       await refreshBookings(session.id);
-      setExpandedBookings(session.id);
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        document.getElementById(`class-session-${session.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }));
     } catch (error) {
-      toast({ title: 'Could not load class roster', description: error.message, variant: 'destructive' });
+      toast({ title: 'Could not load class sign-ups', description: error.message, variant: 'destructive' });
+      setBoardRosterSessionId(null);
+    } finally {
+      setBoardRosterLoading(false);
     }
   };
 
@@ -976,6 +1002,15 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       ) : view === 'calendar' ? (
         <ClassCalendarBoard
           sessions={sessions}
+          signupCounts={signupCounts}
+          rosterSessionId={boardRosterSessionId}
+          rosterSignups={bookings}
+          rosterMembers={roster}
+          rosterLoading={boardRosterLoading}
+          rosterStatuses={BOOKING_STATUSES}
+          rosterUpdatingId={updatingBookingId}
+          onRosterStatusChange={handleBookingStatus}
+          onCloseRoster={() => setBoardRosterSessionId(null)}
           blackouts={blackouts}
           templates={templates}
           templatesAvailable={templatesAvailable}

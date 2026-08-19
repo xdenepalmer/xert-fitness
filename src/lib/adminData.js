@@ -257,7 +257,7 @@ export async function getClassBookings(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('class_bookings')
-      .select('id, full_name, email, phone, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, full_name, email, phone, training_level, notes, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
