@@ -2,6 +2,11 @@
 
 Vite/React frontend for the XERT Fitness website and admin tools. The app is intended to deploy on Vercel and use Supabase for auth, form submissions, class sessions, bookings and admin settings.
 
+> Deployment note: the Vercel project runs on a Hobby plan, which only
+> auto-deploys this repository while it is public. If pushes stop deploying
+> and Vercel shows "Deployment Blocked", check the repo has not been switched
+> to private (that silently blocked every deploy between 13–19 Aug 2026).
+
 ## Prerequisites
 
 1. Install Node.js.
