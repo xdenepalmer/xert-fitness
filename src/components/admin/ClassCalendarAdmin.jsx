@@ -5,6 +5,7 @@ import { getClassSessions, createClassSession, createClassSessions, updateClassS
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
+import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
@@ -339,7 +340,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
               <label htmlFor="class-booking-mode" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Booking mode</label>
               <select id="class-booking-mode" value={form.booking_mode} onChange={e => set('booking_mode', e.target.value)}
                 className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {BOOKING_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                {BOOKING_MODES.map(m => <option key={m} value={m}>{BOOKING_MODE_LABELS[m] || m}</option>)}
               </select>
             </div>
           </div>

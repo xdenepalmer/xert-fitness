@@ -14,7 +14,7 @@ import {
 
 const chipTime = value => new Date(value).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook, fitbox = null }) {
+export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook, fitbox = null, availability = {} }) {
   const [month, setMonth] = useState(() => monthOf(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState(() => localDateKey(new Date()));
   const detailRef = useRef(null);
@@ -177,7 +177,7 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
         ) : (
           <div className="space-y-3">
             {selectedSessions.map(session => (
-              <ClassSessionCard key={session.id} session={session} bookingsEnabled={bookingsEnabled} onBook={onBook} fitbox={fitbox} />
+              <ClassSessionCard key={session.id} session={session} bookingsEnabled={bookingsEnabled} onBook={onBook} fitbox={fitbox} availability={availability[session.id]} />
             ))}
           </div>
         )}

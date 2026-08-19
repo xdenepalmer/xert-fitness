@@ -1,4 +1,5 @@
 import React from 'react';
+import { classSignupState } from '@/lib/classSignup';
 
 export const CLASS_COLORS = {
   'XERT Foundation': 'border-green-600/40 text-green-400',
@@ -18,9 +19,10 @@ export const CLASS_DOT_COLORS = {
   'XERT Team': 'bg-yellow-400',
 };
 
-export default function ClassSessionCard({ session, bookingsEnabled, onBook, fitbox = null }) {
+export default function ClassSessionCard({ session, bookingsEnabled, onBook, fitbox = null, availability = null }) {
   const colorClass = CLASS_COLORS[session.class_type] || 'border-xert-steel/40 text-xert-concrete/60';
-  const isFull = session.status === 'full';
+  const signup = classSignupState({ session, availability, bookingsEnabled, fitbox });
+  const isFull = signup.kind === 'full';
 
   return (
     <div className={`bg-xert-ink border-l-2 ${isFull ? 'border-xert-steel/30 opacity-60' : 'border-xert-red'} p-5 hover:bg-xert-charcoal transition-colors`}>
@@ -67,8 +69,14 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
           <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.duration_minutes || '—'}min</p>
         </div>
         <div>
-          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">Capacity</p>
-          <p className="font-display text-sm text-xert-offwhite tabular-nums">{session.capacity || '—'}</p>
+          <p className="font-body text-xs text-xert-concrete/40 uppercase tracking-wider">
+            {signup.spotsLeft === null ? 'Capacity' : 'Spots left'}
+          </p>
+          <p className="font-display text-sm text-xert-offwhite tabular-nums">
+            {signup.spotsLeft === null
+              ? (session.capacity || '—')
+              : `${signup.spotsLeft}${session.capacity ? ` / ${session.capacity}` : ''}`}
+          </p>
         </div>
       </div>
 
@@ -78,32 +86,36 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
         </p>
       )}
 
-      {fitbox?.active ? (
+      {signup.detail && (
+        <p className="font-body text-xs text-xert-concrete/50 mb-2">{signup.detail}</p>
+      )}
+
+      {signup.kind === 'fitbox' && (
         <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
           className="xert-btn-primary block text-center w-full py-3 font-display text-sm uppercase">
-          Book on the XERT member portal
+          {signup.label}
         </a>
-      ) : (
-        <>
-          {bookingsEnabled && !isFull && (
-            <button onClick={() => onBook(session)}
-              className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
-              Request spot
-            </button>
-          )}
-          {bookingsEnabled && isFull && (
-            <button type="button" disabled aria-disabled="true"
-              className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
-              Class full
-            </button>
-          )}
-          {!bookingsEnabled && (
-            <a href="/#eoi"
-              className="xert-btn-ghost block text-center w-full py-3 font-display text-sm uppercase">
-              Register interest
-            </a>
-          )}
-        </>
+      )}
+
+      {signup.kind === 'signup' && (
+        <button onClick={() => onBook(session)}
+          className="xert-btn-primary w-full py-3 font-display text-sm uppercase">
+          {signup.label}
+        </button>
+      )}
+
+      {(signup.kind === 'request' || signup.kind === 'interest') && (
+        <button onClick={() => onBook(session)}
+          className={`${signup.kind === 'request' ? 'xert-btn-primary' : 'xert-btn-ghost'} w-full py-3 font-display text-sm uppercase`}>
+          {signup.label}
+        </button>
+      )}
+
+      {(signup.kind === 'full' || signup.kind === 'past') && (
+        <button type="button" disabled aria-disabled="true"
+          className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
+          {signup.label}
+        </button>
       )}
     </div>
   );

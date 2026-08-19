@@ -7022,7 +7022,7 @@ private struct AdminScheduleView: View {
             if timetableIsLoading {
                 HStack(spacing: 10) {
                     ProgressView().tint(Color.xertSteel)
-                    Text("Loading the full timetable...")
+                    Text("Loading the class calendar...")
                         .foregroundStyle(Color.xertPale.opacity(0.68))
                 }
                 .frame(minHeight: 44)
@@ -7031,7 +7031,7 @@ private struct AdminScheduleView: View {
                 if !timetableIsCurrent {
                     Label(
                         admin.classSessions.isEmpty
-                            ? "The full timetable is unavailable. Refresh before managing classes."
+                            ? "The class calendar is unavailable. Refresh before managing classes."
                             : "Showing the last timetable snapshot. Refresh before editing or cancelling a class.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
@@ -7064,7 +7064,7 @@ private struct AdminScheduleView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.xertNavy)
-        .navigationTitle("Full Timetable")
+        .navigationTitle("Class Calendar")
         .searchable(text: $query, prompt: "Search timetable")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -8309,7 +8309,7 @@ private struct AdminBlackoutEditor: View {
                     )
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.orange)
-                    Text("Open a class below to reschedule it, or cancel it from Full Timetable.")
+                    Text("Open a class below to reschedule it, or cancel it from Class Calendar.")
                         .font(.caption)
                         .foregroundStyle(Color.xertPale.opacity(0.62))
                     ForEach(conflicts) { classSession in

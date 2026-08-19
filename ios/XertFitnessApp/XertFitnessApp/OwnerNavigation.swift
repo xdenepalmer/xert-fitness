@@ -94,7 +94,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .classDesk: return "Class Desk"
         case .workouts: return "Workout of the Day"
         case .bookingRequests: return "Booking Requests"
-        case .timetable: return "Full Timetable"
+        case .timetable: return "Class Calendar"
         case .availability: return "Availability"
         case .ptRequests: return "PT Requests"
         case .retention: return "Retention"
@@ -122,7 +122,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .classDesk: return "Run today's schedule and waitlists"
         case .workouts: return "Program the in-club TV display"
         case .bookingRequests: return "Resolve member and public requests"
-        case .timetable: return "Create, publish and cancel classes"
+        case .timetable: return "Month calendar, class bank and publishing"
         case .availability: return "Control bookable windows and blackouts"
         case .ptRequests: return "Approve and complete private training"
         case .retention: return "Contact members before they disengage"
@@ -190,7 +190,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .classDesk: return ["today", "class", "attendance", "roll call", "waitlist"]
         case .workouts: return ["workout", "wod", "program", "tv", "display", "training"]
         case .bookingRequests: return ["booking", "request", "approve", "decline"]
-        case .timetable: return ["schedule", "class", "publish", "cancel"]
+        // "timetable" stays a keyword so the old name still finds this workspace.
+        case .timetable: return ["schedule", "class", "publish", "cancel", "calendar", "month", "timetable", "bank", "template"]
         case .availability: return ["availability", "blackout", "booking window"]
         case .ptRequests: return ["personal training", "pt", "request"]
         case .retention: return ["retention", "follow up", "inactive", "contact"]
