@@ -10,6 +10,8 @@ struct BookingView: View {
     @State private var classSearch = ""
     @State private var classDateWindow: ClassSessionDateWindow = .all
     @State private var classFit: ClassSessionFit = .all
+    @State private var classCalendarMonth = Date()
+    @State private var selectedClassDay: Date?
     @State private var checkoutProductID: String?
     @State private var checkoutAttemptIDs: [String: UUID] = [:]
     @State private var checkoutErrorMessage: String?
@@ -33,7 +35,8 @@ struct BookingView: View {
             from: store.sessions,
             search: classSearch,
             dateWindow: classDateWindow,
-            fit: classFit
+            fit: classFit,
+            day: selectedClassDay
         )
         let activeBookings = BookingItem.activeBySession(store.bookings)
 
@@ -58,6 +61,7 @@ struct BookingView: View {
                     creditsSection
                     packsSection
                     classDiscoverySection
+                    classCalendarSection
                     classesSection(
                         visibleSessions: visibleSessions,
                         activeBookings: activeBookings
@@ -126,6 +130,7 @@ struct BookingView: View {
             classSearch = ""
             classDateWindow = .all
             classFit = .all
+            selectedClassDay = nil
             expandedSessionIDs.insert(sessionID)
             target = .session(sessionID)
         default: return
@@ -940,6 +945,58 @@ struct BookingView: View {
         classSearch = ""
         classDateWindow = .all
         classFit = .all
+        selectedClassDay = nil
+    }
+
+    /// Month calendar of published classes. Pressing a day narrows the list
+    /// below to that date, so the existing class cards — and every rule about
+    /// booking, waitlisting and registering interest — carry over untouched.
+    private var classCalendarSection: some View {
+        Section {
+            XertMonthCalendarView(
+                monthAnchor: $classCalendarMonth,
+                selectedDay: Binding(
+                    get: { selectedClassDay ?? Date() },
+                    set: { selectedClassDay = $0 }
+                ),
+                dotColors: { day in
+                    classes(on: day).map { session in
+                        session.isFull ? Color.xertMuted : Color.xertSteel
+                    }
+                },
+                dayCount: { classes(on: $0).count }
+            )
+            .padding(.vertical, 4)
+
+            if let selectedClassDay {
+                HStack {
+                    Text(selectedClassDay.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.xertOffWhite)
+                    Spacer()
+                    Button {
+                        self.selectedClassDay = nil
+                        XertHaptics.play(.softImpact)
+                    } label: {
+                        Label("Show all days", systemImage: "xmark.circle")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.xertSteel)
+                }
+            } else {
+                Text("Press a day to see just those classes.")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertMuted)
+            }
+        } header: {
+            Text("Class Calendar").xertEyebrow()
+        }
+        .listRowBackground(Color.xertInk)
+        .listRowSeparatorTint(Color.xertSteel.opacity(0.18))
+    }
+
+    private func classes(on day: Date) -> [ClassSession] {
+        store.sessions.filter { Calendar.current.isDate($0.start_time, inSameDayAs: day) }
     }
 
     private func classSectionTitle(count: Int) -> String {

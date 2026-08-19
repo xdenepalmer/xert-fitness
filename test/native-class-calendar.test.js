@@ -41,3 +41,32 @@ test('native owner calendar mirrors the web class calendar with bank quick-add',
   // A pre-filled start date must not open the editor dirty.
   assert.match(scheduleHost, /baseline\.startTime = initialStartTime/);
 });
+
+test('the member app gets its own month calendar over the shared grid', async () => {
+  const [booking, grid, discovery] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/BookingView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/XertMonthCalendar.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/ClassSessionDiscovery.swift'),
+  ]);
+
+  // Pressing a day narrows the existing class list rather than rendering a
+  // second set of cards, so every booking rule carries over untouched.
+  assert.match(discovery, /day: Date\? = nil/);
+  assert.match(discovery, /let matchesDay = day\.map \{ calendar\.isDate\(session\.start_time, inSameDayAs: \$0\) \} \?\? true/);
+  assert.match(booking, /day: selectedClassDay/);
+  assert.match(booking, /ForEach\(visibleSessions\)/);
+
+  // The calendar sits between the filters and the class list.
+  assert.match(booking, /classDiscoverySection\s+classCalendarSection\s+classesSection\(/);
+  assert.match(booking, /Text\("Class Calendar"\)\.xertEyebrow\(\)/);
+  assert.match(booking, /Show all days/);
+
+  // Clearing filters also clears the chosen day.
+  assert.match(booking, /private func resetClassDiscovery\(\)[\s\S]*selectedClassDay = nil/);
+
+  // Grid geometry is shared, pure and locale-aware.
+  assert.match(grid, /enum XertCalendarMonth/);
+  assert.match(grid, /static func cells\(for anchor: Date/);
+  assert.match(grid, /calendar\.firstWeekday/);
+  assert.match(grid, /struct XertMonthCalendarView: View/);
+});
