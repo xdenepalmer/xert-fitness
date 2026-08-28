@@ -73,3 +73,25 @@ test('native command centre has a first-class forms workspace and editor', async
   assert.match(api, /func adminFormResponses/);
   assert.doesNotMatch(view, /client linking|competition|spinner|wheel/i);
 });
+
+test('choice breakdowns name the people behind each option', async () => {
+  const source = await readFile(new URL('../src/components/admin/FormsSurveysManager.jsx', import.meta.url), 'utf8');
+
+  // Each option keeps its respondents, not just a tally: "who said no" is the
+  // question staff actually need answered.
+  assert.match(source, /const people = responses\.filter\(item => \{/);
+  assert.match(source, /\(Array\.isArray\(answer\) \? answer : \[answer\]\)\.map\(String\)\.includes\(String\(label\)\)/);
+  assert.match(source, /return \{ label, count: people\.length, people \};/);
+
+  // The row shows share as well as count, and opens to the names.
+  assert.match(source, /function OptionBreakdown\(/);
+  assert.match(source, /const share = total \? Math\.round\(\(count \/ total\) \* 100\) : 0;/);
+  assert.match(source, /aria-expanded=\{isOpen\}/);
+  assert.match(source, /person\.respondent_name \|\| 'Anonymous response'/);
+  assert.match(source, /href=\{`mailto:\$\{person\.respondent_email\}`\}/);
+  assert.match(source, /href=\{`tel:\$\{String\(person\.respondent_phone\)\.replace\(\/\\s\+\/g, ''\)\}`\}/);
+
+  // An option nobody chose cannot be opened.
+  assert.match(source, /disabled=\{count === 0\}/);
+  assert.match(source, /select an option to see who/);
+});

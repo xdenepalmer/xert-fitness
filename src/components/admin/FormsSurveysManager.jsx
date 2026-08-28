@@ -71,7 +71,40 @@ function FormEditor({ draft, setDraft, onSave, onCancel, saving, error }) {
     </div>}
   </div>;
 }
-function MiniBar({ label, count, maximum }) { return <div className="grid grid-cols-[minmax(6rem,1fr)_3fr_auto] items-center gap-3 text-sm"><span className="truncate text-xert-pale">{label}</span><span className="h-2 bg-xert-deep"><span className="block h-full bg-xert-steel" style={{ width: `${maximum ? count / maximum * 100 : 0}%` }} /></span><span className="w-8 text-right tabular-nums text-white">{count}</span></div>; }
+/**
+ * One option inside a question breakdown. Shows how many chose it and what
+ * share of answers that is, and opens to name the people who chose it —
+ * "how many said no" is rarely the real question; "who said no" is.
+ */
+function OptionBreakdown({ label, count, total, maximum, people, isOpen, onToggle }) {
+  const share = total ? Math.round((count / total) * 100) : 0;
+  const rowLabel = `${label}: ${count} of ${total} (${share}%)`;
+  return (
+    <div>
+      <button type="button" onClick={onToggle} disabled={count === 0} aria-expanded={isOpen}
+        aria-label={count === 0 ? `${rowLabel}. Nobody chose this.` : `${rowLabel}. Show who chose this.`}
+        className="grid w-full grid-cols-[minmax(5rem,1fr)_2fr_auto] items-center gap-3 py-1 text-left text-sm disabled:cursor-default">
+        <span className="flex min-w-0 items-center gap-1.5">
+          {count > 0 && <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-xert-steel transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />}
+          <span className="truncate text-xert-pale">{label}</span>
+        </span>
+        <span className="h-2 bg-xert-deep"><span className="block h-full bg-xert-steel" style={{ width: `${maximum ? count / maximum * 100 : 0}%` }} /></span>
+        <span className="whitespace-nowrap text-right tabular-nums text-white">{count}<span className="ml-1 text-xs text-xert-pale/50">({share}%)</span></span>
+      </button>
+      {isOpen && (
+        <ul className="mb-2 mt-1 space-y-1 border-l-2 border-xert-steel/35 pl-3">
+          {people.map(person => (
+            <li key={person.id} className="text-xs leading-5 text-xert-pale">
+              <span className="text-white">{person.respondent_name || 'Anonymous response'}</span>
+              {person.respondent_email && <> · <a className="text-xert-steel" href={`mailto:${person.respondent_email}`}>{person.respondent_email}</a></>}
+              {person.respondent_phone && <> · <a className="text-xert-steel" href={`tel:${String(person.respondent_phone).replace(/\s+/g, '')}`}>{person.respondent_phone}</a></>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function Analytics({ form, onBack }) {
   const [responses, setResponses] = useState([]);
@@ -84,6 +117,7 @@ function Analytics({ form, onBack }) {
   const [updatingResponseID, setUpdatingResponseID] = useState(null);
   const [responseToArchive, setResponseToArchive] = useState(null);
   const [responseQuery, setResponseQuery] = useState('');
+  const [openOption, setOpenOption] = useState(null);
   const [responseStatus, setResponseStatus] = useState('all');
 
   useEffect(() => {
@@ -182,8 +216,18 @@ function Analytics({ form, onBack }) {
       if (CHARTABLE_TYPES.has(question.type)) {
         const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String);
         const labels = question.type === 'yes_no' ? ['Yes','No'] : question.type === 'star_rating' ? ['1','2','3','4','5'] : question.type === 'nps' ? Array.from({length:11},(_,i) => String(i)) : question.options || [...new Set(flattened)];
-        const rows = labels.map(label => ({ label, count: flattened.filter(value => value === String(label)).length })); const maximum = Math.max(1, ...rows.map(row => row.count));
-        return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-4 text-xs text-xert-pale/40">{values.length} answers</p><div className="space-y-3">{rows.map(row => <MiniBar key={row.label} {...row} maximum={maximum} />)}</div></section>;
+        // Keep the respondents behind each option, not just the tally, so staff
+        // can act on an answer (who declined photography, who needs clearance).
+        const rows = labels.map(label => {
+          const people = responses.filter(item => {
+            const answer = item.answers?.[question.id];
+            if (answer === undefined || answer === null || answer === '') return false;
+            return (Array.isArray(answer) ? answer : [answer]).map(String).includes(String(label));
+          });
+          return { label, count: people.length, people };
+        });
+        const maximum = Math.max(1, ...rows.map(row => row.count));
+        return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-4 text-xs text-xert-pale/40">{values.length} answers · select an option to see who</p><div className="space-y-1">{rows.map(row => <OptionBreakdown key={row.label} {...row} total={values.length} maximum={maximum} isOpen={openOption === `${question.id}:${row.label}`} onToggle={() => setOpenOption(current => current === `${question.id}:${row.label}` ? null : `${question.id}:${row.label}`)} />)}</div></section>;
       }
       return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-3 text-xs text-xert-pale/40">{values.length} answers</p><div className="max-h-56 space-y-2 overflow-y-auto">{values.slice(0,20).map((value,index) => <p key={index} className="border-l-2 border-xert-steel/35 pl-3 text-sm text-xert-pale">{typeof value === 'object' ? Object.values(value).filter(Boolean).join(', ') : String(value)}</p>)}</div></section>;
     })}</div> : tab === 'responses' ? <div className="space-y-4">
