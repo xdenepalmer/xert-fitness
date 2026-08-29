@@ -208,6 +208,11 @@ export default function BookingRequestsTable() {
         </button>
       </div>
 
+      <p className="mb-4 font-body text-xs leading-relaxed text-xert-concrete/45">
+        These are requests for a specific class, from the public timetable or the member app.
+        Website expression-of-interest enquiries are not shown here — they live under Member Leads.
+      </p>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search member, contact or class" aria-label="Search bookings"
           className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
@@ -217,7 +222,7 @@ export default function BookingRequestsTable() {
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} aria-label="Filter bookings by source" className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-          <option value="all">All sources</option><option value="member">Member credit</option><option value="enquiry">Enquiry form</option>
+          <option value="all">All sources</option><option value="member">Member credit</option><option value="enquiry">Timetable class request</option>
         </select>
         <div className="flex gap-2">
           <select value={daysFilter} onChange={e => setDaysFilter(e.target.value)} aria-label="Filter bookings by age" className="flex-1 min-w-0 bg-xert-ink border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
@@ -275,20 +280,24 @@ export default function BookingRequestsTable() {
         <div className="space-y-2">
           {visibleBookings.map(b => (
             <div key={`${b.source}-${b.id}`} className="bg-xert-ink border border-xert-steel/20 p-4">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="flex flex-1 min-w-0 items-start gap-3">
                 <input type="checkbox" checked={selectedKeys.has(bookingSelectionKey(b))} onChange={event => setSelectedKeys(current => selectedBookingKeys(current, [b], event.target.checked))} disabled={bulkSaving} aria-label={`Select booking for ${b.full_name || b.email}`} className="mt-1 accent-xert-red" />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-body text-base text-xert-offwhite">{b.full_name}</span>
-                    <span className={`font-body text-xs px-2 py-0.5 ${STATUS_COLORS[b.status] || ''}`}>{b.status}</span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                    <span className="font-body text-base text-xert-offwhite break-words">{b.full_name}</span>
+                    <span className={`shrink-0 font-body text-xs px-2 py-0.5 ${STATUS_COLORS[b.status] || ''}`}>{b.status}</span>
                   </div>
                   <p className="font-body text-xs text-xert-concrete/50">
                     <a href={`mailto:${b.email}`} className="hover:text-xert-steel">{b.email}</a>
                     {b.phone && <> · <a href={`tel:${b.phone}`} className="hover:text-xert-steel">{b.phone}</a></>}
                   </p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
-                      {b.source === 'member' ? 'Member credit booking' : 'Enquiry form'}
+                    <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40"
+                      title={b.source === 'member'
+                        ? 'Booked in the member app or website using a class credit.'
+                        : 'Submitted from a class on the public timetable. Website expression-of-interest forms appear under Member Leads.'}>
+                      {b.source === 'member' ? 'Member credit booking' : 'Timetable class request'}
                     </span>
                     {b.source === 'member' && b.credit_batch_id && (
                       <span className="font-body text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-xert-steel/30 text-xert-concrete/40">
@@ -303,7 +312,8 @@ export default function BookingRequestsTable() {
                   )}
                   {b.admin_notes && <p className="font-body text-xs text-xert-concrete/30 mt-1 italic">{b.admin_notes}</p>}
                 </div>
-                <div className="flex gap-2 flex-wrap justify-end shrink-0">
+                </div>
+                <div className="flex flex-wrap gap-2 sm:justify-end sm:shrink-0">
                   {b.status === 'requested' && (
                     <>
                       <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
