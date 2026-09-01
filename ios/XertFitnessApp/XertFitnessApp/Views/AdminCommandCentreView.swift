@@ -67,6 +67,7 @@ struct AdminCommandCentreView: View {
     @State private var pendingCreateFormNavigation = false
     @State private var foregroundPresentationRefreshTask: Task<Void, Never>?
     @State private var showingAllWorkspaces = false
+    @State private var showingBusinessPulse = false
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
     @State private var presentedQuickAction: AdminOwnerQuickAction?
@@ -885,13 +886,13 @@ struct AdminCommandCentreView: View {
                         refreshOwnerData(session: session)
                     }
                 }
-                priorityQueue
                 nextClassFocus
+                priorityQueue
                 attentionGrid
                 quickTools
-                businessPulse
                 pinnedDirectory
                 managementDirectory
+                businessPulse
             }
             .frame(maxWidth: 880)
             .padding(.horizontal, 18)
@@ -2307,40 +2308,71 @@ struct AdminCommandCentreView: View {
             ?? XertOwnerRoute(workspace: .classDesk)
     }
 
+    // Revenue and totals are review material, not shift work, so they sit last
+    // and stay collapsed by default. The disclosure mirrors the management
+    // directory so both closing sections behave identically.
     private var businessPulse: some View {
         VStack(alignment: .leading, spacing: 12) {
-            adminHeading("Business pulse")
-            LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
-                AdminMoneyTile(
-                    title: "This month",
-                    cents: admin.monthRevenueCents,
-                    dataState: dashboardDataState(for: "orders")
-                ) {
-                    openWorkspaceWithFeedback(.finance)
+            Button {
+                XertHaptics.play(.selection)
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                    showingBusinessPulse.toggle()
                 }
-                AdminMoneyTile(
-                    title: "Total revenue",
-                    cents: admin.totalRevenueCents,
-                    dataState: dashboardDataState(for: "orders")
-                ) {
-                    openWorkspaceWithFeedback(.finance)
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        adminHeading("Business pulse")
+                        Text(showingBusinessPulse
+                             ? "Hide revenue, members and orders"
+                             : "Revenue, members and orders")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.6))
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: showingBusinessPulse ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.xertSteel)
                 }
-                AdminMetricTile(
-                    title: "Members",
-                    value: admin.memberCount,
-                    icon: "person.2",
-                    dataState: dashboardDataState(for: "members")
-                ) {
-                    openWorkspaceWithFeedback(.members)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showingBusinessPulse ? "Hide business pulse" : "Show business pulse")
+
+            if showingBusinessPulse {
+                LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
+                    AdminMoneyTile(
+                        title: "This month",
+                        cents: admin.monthRevenueCents,
+                        dataState: dashboardDataState(for: "orders")
+                    ) {
+                        openWorkspaceWithFeedback(.finance)
+                    }
+                    AdminMoneyTile(
+                        title: "Total revenue",
+                        cents: admin.totalRevenueCents,
+                        dataState: dashboardDataState(for: "orders")
+                    ) {
+                        openWorkspaceWithFeedback(.finance)
+                    }
+                    AdminMetricTile(
+                        title: "Members",
+                        value: admin.memberCount,
+                        icon: "person.2",
+                        dataState: dashboardDataState(for: "members")
+                    ) {
+                        openWorkspaceWithFeedback(.members)
+                    }
+                    AdminMetricTile(
+                        title: "Paid orders",
+                        value: admin.paidOrders.count,
+                        icon: "creditcard",
+                        dataState: dashboardDataState(for: "orders")
+                    ) {
+                        openWorkspaceWithFeedback(.orders)
+                    }
                 }
-                AdminMetricTile(
-                    title: "Paid orders",
-                    value: admin.paidOrders.count,
-                    icon: "creditcard",
-                    dataState: dashboardDataState(for: "orders")
-                ) {
-                    openWorkspaceWithFeedback(.orders)
-                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }

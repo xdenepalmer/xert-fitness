@@ -13,7 +13,7 @@ test('compact owner overview keeps priority work in the page instead of stacking
 
   assert.match(
     dashboard,
-    /ownerHeader[\s\S]*AdminRefreshDataWarning[\s\S]*priorityQueue[\s\S]*nextClassFocus[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*businessPulse[\s\S]*pinnedDirectory[\s\S]*managementDirectory/,
+    /ownerHeader[\s\S]*AdminRefreshDataWarning[\s\S]*nextClassFocus[\s\S]*priorityQueue[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*pinnedDirectory[\s\S]*managementDirectory[\s\S]*businessPulse/,
   );
   assert.doesNotMatch(dashboard, /safeAreaInset|ownerRunNextDock|stripeLaunchRunway|incidentControl/);
   assert.match(dashboard, /frame\(maxWidth: 880\)/);
@@ -339,7 +339,7 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   const dashboard = view.slice(view.indexOf('private func dashboard(session:'), view.indexOf('private var accessDenied:'));
   assert.match(
     dashboard,
-    /priorityQueue[\s\S]*nextClassFocus[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*businessPulse[\s\S]*pinnedDirectory[\s\S]*managementDirectory/,
+    /nextClassFocus[\s\S]*priorityQueue[\s\S]*attentionGrid[\s\S]*quickTools[\s\S]*pinnedDirectory[\s\S]*managementDirectory[\s\S]*businessPulse/,
   );
   assert.doesNotMatch(dashboard, /shiftBriefing|stripeLaunchRunway|incidentControl|activationPulse|todayDesk/);
   assert.match(view, /private var operationalPriorities: \[AdminPriorityAction\]/);
@@ -1288,7 +1288,12 @@ test('native class operations surface one freshness-gated run-next action', asyn
   assert.match(models, /if operation\.attendance_due \{[\s\S]*return \(0, operation\)/);
   assert.match(models, /operation\.start_time <= now, assumedEnd > now[\s\S]*return \(1, operation\)/);
   assert.match(models, /operation\.start_time > now[\s\S]*return \(2, operation\)/);
-  assert.match(view, /priorityQueue[\s\S]*nextClassFocus[\s\S]*shiftBriefing/);
+  assert.match(view, /private var nextClassFocus: some View/);
+  assert.match(
+    view,
+    /AdminClassOperationalFocus\.resolve\([\s\S]*sourceIsCurrent: dashboardDataState\(for: "today's classes"\) == \.current/,
+    'the run-next action stays gated on fresh class data',
+  );
   assert.match(view, /accessibilityIdentifier\("owner\.nextClassFocus"\)/);
   assert.match(view, /dashboardDataState\(for: "today's classes"\) == \.current/);
   assert.match(view, /nextClassActionTitle\(focus, hasSetupIssues:/);

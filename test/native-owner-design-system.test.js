@@ -73,3 +73,27 @@ test('the command centre primitives delegate to the system rather than re-implem
   assert.ok(!sms.includes('adminSmsHeading'), 'the SMS screen uses the shared heading, not a private copy');
   assert.match(sms, /XertOwnerHeading\(/);
 });
+
+test('the command centre home leads with the shift, not the dashboard', async () => {
+  const view = await read('Views/AdminCommandCentreView.swift');
+  const dashboard = view.slice(
+    view.indexOf('private func dashboard('),
+    view.indexOf('private var ownerRunNextDock'),
+  );
+
+  // The class about to run is the first thing on the screen; revenue is the
+  // last. Anything else means the owner scrolls past dashboards mid-shift.
+  const order = ['nextClassFocus', 'priorityQueue', 'attentionGrid', 'quickTools',
+                 'pinnedDirectory', 'managementDirectory', 'businessPulse'];
+  const positions = order.map(section => dashboard.indexOf(section));
+  positions.forEach((position, index) => {
+    assert.notEqual(position, -1, `${order[index]} must still be on the home screen`);
+  });
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b), `home sections must read ${order.join(' → ')}`);
+
+  // Both closing sections stay collapsed so navigation is reachable without
+  // scrolling through review material.
+  assert.match(view, /@State private var showingBusinessPulse = false/);
+  assert.match(view, /@State private var showingAllWorkspaces = false/);
+  assert.match(view, /if showingBusinessPulse \{[\s\S]{0,200}LazyVGrid/);
+});
